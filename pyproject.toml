@@ -1,7 +1,7 @@
 [project]
 name = "op_system"
 version = "0.1.0"
-description = "Multiphysics integration system for ODEs and PDEs using implicit-explicit operator splitting"
+description = "Config bashed system builder for ODEs and PDEs"
 readme = "README.md"
 requires-python = ">=3.11,<3.15"
 license = { file = "LICENSE" }
