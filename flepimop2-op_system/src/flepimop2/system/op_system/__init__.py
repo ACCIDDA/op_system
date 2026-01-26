@@ -18,4 +18,4 @@ class OpSystemFlepimop2System(_OpSystemFlepimop2SystemImpl):  # noqa: RUF067
     """Public op_system-backed flepimop2 System (default-build enabled)."""
 
 
-__all__ = ["OpSystemeFlepimop2System"]
+__all__ = ["OpSystemeFlepimop2System"]  # noqa: F822
