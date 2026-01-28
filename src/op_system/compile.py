@@ -51,6 +51,24 @@ class CompiledRhs:
     param_names: tuple[str, ...]
     eval_fn: Callable[[np.float64, Float64Array], Float64Array]
 
+    def bind(
+        self, params: Mapping[str, object]
+    ) -> Callable[[np.float64, Float64Array], Float64Array]:
+        """Bind parameter values and return a 2-arg RHS: rhs(t, y) -> dydt.
+
+        Args:
+            params: Mapping of parameter names to values.
+
+        Returns:
+            A callable `rhs(t, y)` that evaluates the RHS with `params` fixed.
+        """
+        params_dict = dict(params)
+
+        def rhs(t: np.float64, y: Float64Array) -> Float64Array:
+            return self.eval_fn(t, y, **params_dict)
+
+        return rhs
+
 
 # -----------------------------------------------------------------------------
 # AST validation (very conservative v1)
@@ -85,7 +103,6 @@ _ALLOWED_NODES: tuple[type[ast.AST], ...] = (
     ast.BoolOp,
     ast.IfExp,
 )
-
 
 _ALLOWED_CALL_ROOTS: tuple[str, ...] = ("np",)
 _ALLOWED_CALL_FUNCS: frozenset[str] = frozenset({
@@ -231,7 +248,9 @@ def _resolve_aliases(
         for name, codeobj in list(pending.items()):
             try:
                 # Restricted eval; AST already validated.
-                val = eval(codeobj, {"__builtins__": {}}, {**base_env, **out})  # noqa: S307
+                val = eval(  # noqa: S307
+                    codeobj, {"__builtins__": {}}, {**base_env, **out}
+                )
             except NameError:
                 continue
             except (ValueError, TypeError, ArithmeticError) as exc:
@@ -246,11 +265,55 @@ def _resolve_aliases(
         if not progressed:
             break
 
-    # If anything remains, it's an unresolved dependency/cycle.
     raise_invalid_expression(
         detail=f"could not resolve alias dependencies: {sorted(pending.keys())}"
     )
     return {}  # pragma: no cover
+
+
+def _make_eval_fn(
+    *,
+    state_names: tuple[str, ...],
+    aliases: Mapping[str, str],
+    equations: tuple[str, ...],
+) -> Callable[[np.float64, Float64Array], Float64Array]:
+    n_state = len(state_names)
+    name_to_idx = {s: i for i, s in enumerate(state_names)}
+    alias_code = _collect_alias_code(aliases)
+    eq_code = _collect_eq_code(equations)
+
+    def eval_fn(t: np.float64, y: Float64Array, **params: object) -> Float64Array:
+        y_arr = np.asarray(y, dtype=np.float64)
+        if y_arr.ndim != 1:
+            raise_state_shape_error(name="state", expected="1D array", got=y_arr.shape)
+        if y_arr.size != n_state:
+            raise_state_shape_error(
+                name="state",
+                expected=f"(n_state={n_state},)",
+                got=y_arr.shape,
+            )
+
+        env: dict[str, object] = {"np": np, "t": np.float64(t)}
+        for s, i in name_to_idx.items():
+            env[s] = np.float64(y_arr[i])
+        env.update(params)
+
+        if alias_code:
+            env.update(_resolve_aliases(alias_code, base_env=env))
+
+        out = np.empty((n_state,), dtype=np.float64)
+        for i, codeobj in enumerate(eq_code):
+            try:
+                val = eval(codeobj, {"__builtins__": {}}, env)  # noqa: S307
+            except NameError as exc:
+                raise_parameter_error(detail=f"unknown symbol in equation: {exc!s}")
+            except (ValueError, TypeError, ArithmeticError) as exc:
+                raise_invalid_expression(detail=f"equation evaluation failed: {exc!r}")
+            out[i] = np.float64(val)
+
+        return out
+
+    return eval_fn
 
 
 # -----------------------------------------------------------------------------
@@ -265,7 +328,7 @@ def compile_rhs(rhs: NormalizedRhs) -> CompiledRhs:
         rhs: Normalized RHS produced by `op_system.specs.normalize_rhs`.
 
     Returns:
-        A `CompiledRhs` containing an `eval_fn(t, y) -> dydt`.
+        A `CompiledRhs` containing an `eval_fn(t, y, **params) -> dydt`.
     """
     if rhs.kind not in {"expr", "transitions"}:
         raise_unsupported_feature(
@@ -273,50 +336,14 @@ def compile_rhs(rhs: NormalizedRhs) -> CompiledRhs:
             detail="Only 'expr' and 'transitions' are supported in v1.",
         )
 
-    state_names = rhs.state_names
-    n_state = len(state_names)
-    name_to_idx = {s: i for i, s in enumerate(state_names)}
-
-    alias_code = _collect_alias_code(rhs.aliases)
-    eq_code = _collect_eq_code(rhs.equations)
-
-    def eval_fn(t: np.float64, y: Float64Array, **params: object) -> Float64Array:
-        # Shape checks
-        y_arr = np.asarray(y, dtype=np.float64)
-        if y_arr.ndim != 1:
-            raise_state_shape_error(name="state", expected="1D array", got=y_arr.shape)
-        if y_arr.size != n_state:
-            raise_state_shape_error(
-                name="state",
-                expected=f"(n_state={n_state},)",
-                got=y_arr.shape,
-            )
-
-        # Base environment: state vector mapped by name + numpy namespace + params
-        env: dict[str, object] = {"np": np, "t": np.float64(t)}
-        for s, i in name_to_idx.items():
-            env[s] = np.float64(y_arr[i])
-        env.update(params)
-
-        # Evaluate aliases (may depend on state/params and earlier aliases)
-        if alias_code:
-            env.update(_resolve_aliases(alias_code, base_env=env))
-
-        out = np.empty((n_state,), dtype=np.float64)
-        for i, codeobj in enumerate(eq_code):
-            try:
-                # Restricted eval; AST already validated.
-                val = eval(codeobj, {"__builtins__": {}}, env)  # noqa: S307
-            except NameError as exc:
-                raise_parameter_error(detail=f"unknown symbol in equation: {exc!s}")
-            except (ValueError, TypeError, ArithmeticError) as exc:
-                raise_invalid_expression(detail=f"equation evaluation failed: {exc!r}")
-            out[i] = np.float64(val)
-
-        return out
+    eval_fn = _make_eval_fn(
+        state_names=rhs.state_names,
+        aliases=rhs.aliases,
+        equations=rhs.equations,
+    )
 
     return CompiledRhs(
-        state_names=state_names,
+        state_names=rhs.state_names,
         param_names=rhs.param_names,
         eval_fn=eval_fn,
     )

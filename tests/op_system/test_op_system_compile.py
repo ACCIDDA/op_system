@@ -3,6 +3,7 @@
 These tests cover:
 - compile_rhs produces an eval_fn callable
 - eval_fn evaluates expr correctly
+- CompiledRhs.bind returns a 2-arg RHS with parameters fixed
 - shape validation uses op_system.errors messages
 - missing symbols raise parameter errors
 - invalid syntax is rejected during normalization (specs) in v1
@@ -22,13 +23,13 @@ from op_system.specs import normalize_rhs
 
 def _cause_code(exc: BaseException) -> ErrorCode | None:
     """
-    Extract the ErrorCode from the cause chain of an exception.
+    Extract the ErrorCode from an exception's cause chain.
 
     Args:
         exc: The exception to inspect.
 
     Returns:
-        The ErrorCode if an OpSystemError is found in the cause chain; otherwise, None
+        The ErrorCode if found, otherwise None.
     """
     cause = getattr(exc, "__cause__", None)
     if isinstance(cause, OpSystemError):
@@ -52,6 +53,24 @@ def test_compile_rhs_expr_happy_path_and_eval() -> None:
         a=2.0,
         b=1.0,
     )
+    assert out.dtype == np.float64
+    assert out.shape == (2,)
+    assert np.allclose(out, np.array([4.0, 6.0], dtype=np.float64))
+
+
+def test_compiledrhs_bind_binds_params() -> None:
+    """CompiledRhs.bind returns a 2-arg callable with parameters fixed."""
+    spec = {
+        "kind": "expr",
+        "state": ["x", "y"],
+        "equations": {"x": "a * x", "y": "x + y + b"},
+    }
+    rhs = normalize_rhs(spec)
+    compiled = compile_rhs(rhs)
+
+    bound = compiled.bind({"a": 2.0, "b": 1.0})
+    out = bound(np.float64(0.0), np.array([2.0, 3.0], dtype=np.float64))
+
     assert out.dtype == np.float64
     assert out.shape == (2,)
     assert np.allclose(out, np.array([4.0, 6.0], dtype=np.float64))
