@@ -153,18 +153,6 @@ marimo/_lsp/
 __marimo__/
 
 # ================================
-# macOS / Apple filesystem junk
-# ================================
-.DS_Store
-.AppleDouble
-.LSOverride
-._*
-.Spotlight-V100
-.Trashes
-.VolumeIcon.icns
-.fseventsd
-
-# ================================
 # Example output artifacts
 # ================================
 
