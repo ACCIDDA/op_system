@@ -13,10 +13,6 @@ Core data structures:
 - `NormalizedRhs`
 - `CompiledRhs`
 
-Error handling:
-- Built-in exceptions are raised with `OpSystemError` chained as the cause.
-- Machine-readable classification via `ErrorCode`.
-
 Design guarantees:
 - No dependency on provider/adapters (eg flepimop2).
 - Stable interface for downstream engines.
@@ -83,19 +79,11 @@ __all__ = [
     "EXPERIMENTAL_FEATURES",
     "SUPPORTED_RHS_KINDS",
     "CompiledRhs",
-    "ErrorCode",
     "NormalizedRhs",
-    "OpSystemError",
     "__version__",
     "compile_rhs",
     "compile_spec",
     "normalize_expr_rhs",
     "normalize_rhs",
     "normalize_transitions_rhs",
-    "raise_compilation_error",
-    "raise_invalid_expression",
-    "raise_invalid_rhs_spec",
-    "raise_parameter_error",
-    "raise_state_shape_error",
-    "raise_unsupported_feature",
 ]
