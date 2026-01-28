@@ -204,10 +204,7 @@ def _collect_alias_code(aliases: Mapping[str, str]) -> dict[str, CodeType]:
     Returns:
         Dictionary mapping alias name to compiled code object.
     """
-    out: dict[str, CodeType] = {}
-    for name, expr in aliases.items():
-        out[name] = _compile_expr(expr)
-    return out
+    return {name: _compile_expr(expr) for name, expr in aliases.items()}
 
 
 def _collect_eq_code(equations: tuple[str, ...]) -> list[CodeType]:
