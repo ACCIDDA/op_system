@@ -1,7 +1,7 @@
 [project]
 name = "op_system"
 version = "0.1.0"
-description = "Config bashed system builder for ODEs and PDEs"
+description = "Config-based RHS specification + compilation utilities for ODE/PDE systems"
 readme = "README.md"
 requires-python = ">=3.11,<3.15"
 license = { file = "LICENSE" }
@@ -12,7 +12,6 @@ authors = [
 ]
 dependencies = [
     "numpy>=1.26",
-    "scipy>=1.11",
 ]
 
 classifiers = [
@@ -33,6 +32,12 @@ data = [
     "pandas>=2.2",
     "pyarrow>=16.0",
 ]
+op_engine = [
+    "op_engine>=0.1.0",
+]
+flepimop2 = [
+    "flepimop2>=0.1.0",
+]
 
 [build-system]
 requires = ["hatchling"]
@@ -45,7 +50,6 @@ dev = [
     "pytest>=8.4.2",
     "ruff>=0.13.3",
     "sybil[pytest]>=9.2.0",
-    "scipy-stubs>=0.5.0",
 ]
 
 [tool.pytest.ini_options]
@@ -53,9 +57,6 @@ testpaths = [
     "docs/",
     "src/op_system/",
     "tests/",
-]
-markers = [
-    "flepimop2: (deprecated) marker previously used for op_system.flepimop2 integration tests; move these to flepimop2-op_system",
 ]
 
 [tool.ruff.format]
