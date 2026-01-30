@@ -9,13 +9,4 @@ Why:
   defined *in this module* and generates `build()` automatically.
 """
 
-from __future__ import annotations
-
-from .system import _OpSystemFlepimop2SystemImpl
-
-
-class OpSystemFlepimop2System(_OpSystemFlepimop2SystemImpl):  # noqa: RUF067
-    """Public op_system-backed flepimop2 System (default-build enabled)."""
-
-
-__all__ = ["OpSystemeFlepimop2System"]
+__version__ = "0.1.0"

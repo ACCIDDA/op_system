@@ -2,26 +2,33 @@
 default: format check pytest mypy
 
 # -------------------------------------------------
-# Formatting
+# Local venv + deps (explicit step)
 # -------------------------------------------------
 
+# Create/refresh the main venv and install dev deps.
+venv:
+	uv venv --clear
+	uv sync --dev
+
+# -------------------------------------------------
+# Formatting / linting
+# -------------------------------------------------
+
+# Tool-only execution (does not require resolving project deps).
 format:
-	uv run ruff format --preview
+	uvx ruff format --preview
 
 check:
-	uv run ruff check --preview --fix
-
+	uvx ruff check --preview --fix
 
 # -------------------------------------------------
 # Provider venv + deps (explicit step)
 # -------------------------------------------------
 
 # Create/refresh the provider venv and install all deps (including dev group).
-# Run this once before running provider pytest/mypy if you aren't using `ci`.
 provider-sync:
 	cd flepimop2-op_system && uv venv --clear
 	cd flepimop2-op_system && uv sync --dev
-
 
 # -------------------------------------------------
 # Tests
@@ -30,14 +37,13 @@ provider-sync:
 pytest-core:
 	uv run pytest --doctest-modules
 
-# Assumes `flepimop2-op_system/.venv` already exists (run `just provider-sync` or `just ci` first).
-pytest-provider:
+# Ensure provider venv exists before running provider tests.
+pytest-provider: provider-sync
 	cd flepimop2-op_system && .venv/bin/python -m pytest --doctest-modules
 
 pytest:
 	just pytest-core
 	just pytest-provider
-
 
 # -------------------------------------------------
 # Type checking
@@ -46,26 +52,24 @@ pytest:
 mypy-core:
 	uv run mypy --strict src/op_system
 
-# Assumes `flepimop2-op_system/.venv` already exists (run `just provider-sync` or `just ci` first).
-mypy-provider:
+# Ensure provider venv exists before running provider mypy.
+mypy-provider: provider-sync
 	cd flepimop2-op_system && .venv/bin/python -m mypy --strict src/flepimop2
 
 mypy:
 	just mypy-core
 	just mypy-provider
 
-
 # -------------------------------------------------
 # CI aggregate
 # -------------------------------------------------
 
 ci:
-	uv run ruff format --preview --check
-	uv run ruff check --preview --no-fix
+	uvx ruff format --preview --check
+	uvx ruff check --preview --no-fix
 	just provider-sync
 	just pytest
 	just mypy
-
 
 # -------------------------------------------------
 # Utilities
