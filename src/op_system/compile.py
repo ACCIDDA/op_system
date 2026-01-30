@@ -1,5 +1,4 @@
-"""
-op_system.compile.
+"""op_system.compile.
 
 Compile normalized RHS specifications into efficient, runnable callables.
 
@@ -9,26 +8,23 @@ Contract
 --------
 - Accepts `NormalizedRhs` (from `op_system.specs`) and produces a `CompiledRhs`
   object containing an `eval_fn` suitable for numerical backends.
-- Raises built-in exceptions and chains `OpSystemError` as the cause via helpers
-  in `op_system.errors`.
+- Raises built-in exceptions with standardized messages.
+
+Security note
+-------------
+This module uses `eval()` on code objects compiled from user-provided strings.
+To reduce risk, expressions are parsed and validated with a conservative AST
+whitelist, and evaluation runs with empty builtins.
 """
 
 from __future__ import annotations
 
 import ast
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, NoReturn
 
 import numpy as np
 from numpy.typing import NDArray
-
-from .errors import (
-    raise_compilation_error,
-    raise_invalid_expression,
-    raise_parameter_error,
-    raise_state_shape_error,
-    raise_unsupported_feature,
-)
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
@@ -37,6 +33,90 @@ if TYPE_CHECKING:
     from .specs import NormalizedRhs
 
 Float64Array = NDArray[np.float64]
+
+# -----------------------------------------------------------------------------
+# Error message constants
+# -----------------------------------------------------------------------------
+
+INVALID_EXPRESSION_PREFIX = "Invalid op_system expression."
+COMPILATION_FAILED_PREFIX = "op_system compilation failed."
+INVALID_STATE_SHAPE_PREFIX = "state has an invalid shape/value."
+INVALID_PARAMETERS_PREFIX = "Invalid parameters for op_system."
+UNSUPPORTED_FEATURE_PREFIX = "Unsupported op_system feature."
+
+DISALLOWED_ATTRIBUTE_ACCESS = "disallowed attribute access"
+ONLY_ATTRIBUTE_CALLS_ALLOWED = "only attribute calls allowed"
+DISALLOWED_FUNCTION_CALL = "disallowed function call"
+
+
+def _raise_invalid_expression(*, detail: str) -> NoReturn:
+    """Raise a standardized expression error.
+
+    Args:
+        detail: Error detail.
+
+    Raises:
+        ValueError: Always.
+    """
+    msg = f"{INVALID_EXPRESSION_PREFIX} Detail: {detail}"
+    raise ValueError(msg)
+
+
+def _raise_compilation_error(*, detail: str) -> NoReturn:
+    """Raise a standardized compilation error.
+
+    Args:
+        detail: Error detail.
+
+    Raises:
+        RuntimeError: Always.
+    """
+    msg = f"{COMPILATION_FAILED_PREFIX} Detail: {detail}"
+    raise RuntimeError(msg)
+
+
+def _raise_state_shape_error(*, expected: str, got: object) -> NoReturn:
+    """Raise a standardized state shape/value error.
+
+    Args:
+        expected: Expected shape/format description.
+        got: Observed shape/value.
+
+    Raises:
+        ValueError: Always.
+    """
+    msg = f"{INVALID_STATE_SHAPE_PREFIX} Expected {expected}. Got: {got!r}."
+    raise ValueError(msg)
+
+
+def _raise_parameter_error(*, detail: str) -> NoReturn:
+    """Raise a standardized parameter/type error.
+
+    Args:
+        detail: Error detail.
+
+    Raises:
+        TypeError: Always.
+    """
+    msg = f"{INVALID_PARAMETERS_PREFIX} {detail}"
+    raise TypeError(msg)
+
+
+def _raise_unsupported_feature(*, feature: str, detail: str | None = None) -> NoReturn:
+    """Raise a standardized unsupported feature error.
+
+    Args:
+        feature: Feature identifier.
+        detail: Optional additional detail.
+
+    Raises:
+        NotImplementedError: Always.
+    """
+    msg = f"{UNSUPPORTED_FEATURE_PREFIX} Feature '{feature}' is not supported."
+    if detail:
+        msg = f"{msg} Detail: {detail}"
+    raise NotImplementedError(msg)
+
 
 # -----------------------------------------------------------------------------
 # Public compiled RHS container
@@ -106,7 +186,7 @@ _ALLOWED_NODES: tuple[type[ast.AST], ...] = (
 
 _ALLOWED_CALL_ROOTS: tuple[str, ...] = ("np",)
 _ALLOWED_CALL_FUNCS: frozenset[str] = frozenset({
-    # NumPy scalar math; keep small initially
+    # NumPy scalar math; keep small initially.
     "abs",
     "exp",
     "log",
@@ -120,8 +200,7 @@ _ALLOWED_CALL_FUNCS: frozenset[str] = frozenset({
 
 
 def _parse_expr(expr: str) -> ast.AST:
-    """
-    Parse a Python expression and return the AST.
+    """Parse a Python expression and return the AST.
 
     Args:
         expr: Expression string.
@@ -132,7 +211,7 @@ def _parse_expr(expr: str) -> ast.AST:
     try:
         return ast.parse(expr, mode="eval")
     except SyntaxError as exc:  # pragma: no cover
-        raise_invalid_expression(detail=f"invalid expression syntax: {exc.msg}")
+        _raise_invalid_expression(detail=f"invalid expression syntax: {exc.msg}")
 
 
 def _validate_ast(tree: ast.AST, *, expr: str) -> None:
@@ -144,39 +223,40 @@ def _validate_ast(tree: ast.AST, *, expr: str) -> None:
     """
     for node in ast.walk(tree):
         if not isinstance(node, _ALLOWED_NODES):
-            raise_invalid_expression(
+            _raise_invalid_expression(
                 detail=f"disallowed AST node {type(node).__name__} in {expr!r}"
             )
 
         # Explicitly reject constructs that could slip through via allowed nodes.
         if isinstance(node, ast.Name) and node.id in {"__import__", "__builtins__"}:
-            raise_invalid_expression(detail=f"disallowed name: {node.id!r}")
+            _raise_invalid_expression(detail=f"disallowed name: {node.id!r}")
 
         if isinstance(node, ast.Attribute) and (
             not isinstance(node.value, ast.Name) or node.value.id != "np"
         ):
-            raise_invalid_expression(detail=f"disallowed attribute access in {expr!r}")
+            _raise_invalid_expression(
+                detail=f"{DISALLOWED_ATTRIBUTE_ACCESS} in {expr!r}"
+            )
 
         if isinstance(node, ast.Call):
             func = node.func
             if not isinstance(func, ast.Attribute):
-                raise_invalid_expression(
-                    detail=f"only attribute calls allowed in {expr!r}"
+                _raise_invalid_expression(
+                    detail=f"{ONLY_ATTRIBUTE_CALLS_ALLOWED} in {expr!r}"
                 )
             if not isinstance(func.value, ast.Name):
-                raise_invalid_expression(detail=f"invalid call root in {expr!r}")
+                _raise_invalid_expression(detail=f"invalid call root in {expr!r}")
 
             root = str(func.value.id)
             name = str(func.attr)
             if root not in _ALLOWED_CALL_ROOTS or name not in _ALLOWED_CALL_FUNCS:
-                raise_invalid_expression(
-                    detail=f"disallowed function call: {root}.{name}"
+                _raise_invalid_expression(
+                    detail=f"{DISALLOWED_FUNCTION_CALL}: {root}.{name}"
                 )
 
 
 def _compile_expr(expr: str) -> CodeType:
-    """
-    Parse, validate, and compile an expression into a code object.
+    """Parse, validate, and compile an expression into a code object.
 
     Args:
         expr: Expression string.
@@ -189,14 +269,13 @@ def _compile_expr(expr: str) -> CodeType:
     try:
         return compile(tree, filename="<op_system>", mode="eval")
     except (ValueError, TypeError, SyntaxError) as exc:  # pragma: no cover
-        raise_compilation_error(
+        _raise_compilation_error(
             detail=f"failed to compile expression {expr!r}: {exc!r}"
         )
 
 
 def _collect_alias_code(aliases: Mapping[str, str]) -> dict[str, CodeType]:
-    """
-    Compile alias expressions into code objects.
+    """Compile alias expressions into code objects.
 
     Args:
         aliases: Mapping from alias name to expression string.
@@ -208,8 +287,7 @@ def _collect_alias_code(aliases: Mapping[str, str]) -> dict[str, CodeType]:
 
 
 def _collect_eq_code(equations: tuple[str, ...]) -> list[CodeType]:
-    """
-    Compile equation expressions into code objects.
+    """Compile equation expressions into code objects.
 
     Args:
         equations: Tuple of equation expression strings.
@@ -244,14 +322,13 @@ def _resolve_aliases(
         progressed = False
         for name, codeobj in list(pending.items()):
             try:
-                # Restricted eval; AST already validated.
                 val = eval(  # noqa: S307
                     codeobj, {"__builtins__": {}}, {**base_env, **out}
                 )
             except NameError:
                 continue
             except (ValueError, TypeError, ArithmeticError) as exc:
-                raise_invalid_expression(
+                _raise_invalid_expression(
                     detail=f"alias {name!r} evaluation failed: {exc!r}"
                 )
             out[name] = val
@@ -262,10 +339,9 @@ def _resolve_aliases(
         if not progressed:
             break
 
-    raise_invalid_expression(
+    _raise_invalid_expression(
         detail=f"could not resolve alias dependencies: {sorted(pending.keys())}"
     )
-    return {}  # pragma: no cover
 
 
 def _make_eval_fn(
@@ -282,13 +358,9 @@ def _make_eval_fn(
     def eval_fn(t: np.float64, y: Float64Array, **params: object) -> Float64Array:
         y_arr = np.asarray(y, dtype=np.float64)
         if y_arr.ndim != 1:
-            raise_state_shape_error(name="state", expected="1D array", got=y_arr.shape)
+            _raise_state_shape_error(expected="1D array", got=y_arr.shape)
         if y_arr.size != n_state:
-            raise_state_shape_error(
-                name="state",
-                expected=f"(n_state={n_state},)",
-                got=y_arr.shape,
-            )
+            _raise_state_shape_error(expected=f"(n_state={n_state},)", got=y_arr.shape)
 
         env: dict[str, object] = {"np": np, "t": np.float64(t)}
         for s, i in name_to_idx.items():
@@ -303,9 +375,9 @@ def _make_eval_fn(
             try:
                 val = eval(codeobj, {"__builtins__": {}}, env)  # noqa: S307
             except NameError as exc:
-                raise_parameter_error(detail=f"unknown symbol in equation: {exc!s}")
+                _raise_parameter_error(detail=f"unknown symbol in equation: {exc!s}")
             except (ValueError, TypeError, ArithmeticError) as exc:
-                raise_invalid_expression(detail=f"equation evaluation failed: {exc!r}")
+                _raise_invalid_expression(detail=f"equation evaluation failed: {exc!r}")
             out[i] = np.float64(val)
 
         return out
@@ -328,7 +400,7 @@ def compile_rhs(rhs: NormalizedRhs) -> CompiledRhs:
         A `CompiledRhs` containing an `eval_fn(t, y, **params) -> dydt`.
     """
     if rhs.kind not in {"expr", "transitions"}:
-        raise_unsupported_feature(
+        _raise_unsupported_feature(
             feature=f"rhs.kind={rhs.kind}",
             detail="Only 'expr' and 'transitions' are supported in v1.",
         )

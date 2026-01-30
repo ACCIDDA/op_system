@@ -22,16 +22,6 @@ Design guarantees:
 from __future__ import annotations
 
 from .compile import CompiledRhs, compile_rhs
-from .errors import (
-    ErrorCode,
-    OpSystemError,
-    raise_compilation_error,
-    raise_invalid_expression,
-    raise_invalid_rhs_spec,
-    raise_parameter_error,
-    raise_state_shape_error,
-    raise_unsupported_feature,
-)
 from .specs import (
     NormalizedRhs,
     normalize_expr_rhs,

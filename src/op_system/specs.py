@@ -37,16 +37,68 @@ from __future__ import annotations
 
 import ast
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, NoReturn
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping
 
-from .errors import (
-    raise_invalid_expression,
-    raise_invalid_rhs_spec,
-    raise_unsupported_feature,
-)
+# -----------------------------------------------------------------------------
+# Error message constants
+# -----------------------------------------------------------------------------
+
+_INVALID_RHS_SPEC_PREFIX = "Invalid op_system RHS specification."
+_INVALID_EXPRESSION_PREFIX = "Invalid op_system expression."
+_UNSUPPORTED_FEATURE_PREFIX = "Unsupported op_system feature."
+
+
+def _raise_invalid_rhs_spec(
+    *, missing: list[str] | None = None, detail: str | None = None
+) -> NoReturn:
+    """Raise a standardized RHS specification error.
+
+    Args:
+        missing: Optional list of missing field names.
+        detail: Optional additional detail string.
+
+    Raises:
+        ValueError: Always.
+    """
+    parts: list[str] = [_INVALID_RHS_SPEC_PREFIX]
+    if missing:
+        parts.append(f"Missing required field(s): {sorted(set(missing))}.")
+    if detail:
+        parts.append(f"Detail: {detail}")
+    raise ValueError(" ".join(parts))
+
+
+def _raise_invalid_expression(*, detail: str) -> NoReturn:
+    """Raise a standardized expression error.
+
+    Args:
+        detail: Error detail.
+
+    Raises:
+        ValueError: Always.
+    """
+    msg = f"{_INVALID_EXPRESSION_PREFIX} Detail: {detail}"
+    raise ValueError(msg)
+
+
+def _raise_unsupported_feature(*, feature: str, detail: str | None = None) -> NoReturn:
+    """Raise a standardized unsupported feature error.
+
+    Args:
+        feature: Feature identifier.
+        detail: Optional additional detail.
+
+    Raises:
+        NotImplementedError: Always.
+    """
+    msg = f"{_UNSUPPORTED_FEATURE_PREFIX} Feature '{feature}' is not supported."
+    if detail:
+        msg = f"{msg} Detail: {detail}"
+    raise NotImplementedError(msg)
+
 
 # -----------------------------------------------------------------------------
 # Normalized RHS representation (backend-facing)
@@ -84,7 +136,7 @@ def _parse_expr(expr: str) -> ast.AST:
     try:
         return ast.parse(expr, mode="eval")
     except SyntaxError as exc:  # pragma: no cover
-        raise_invalid_expression(detail=f"invalid expression syntax: {exc.msg}")
+        _raise_invalid_expression(detail=f"invalid expression syntax: {exc.msg}")
 
 
 def _collect_names(tree: ast.AST) -> set[str]:
@@ -116,11 +168,11 @@ def _ensure_str_list(x: object, *, name: str) -> list[str]:
         List of stripped, non-empty strings.
     """
     if not isinstance(x, (list, tuple)):
-        raise_invalid_rhs_spec(detail=f"{name} must be a list of strings")
+        _raise_invalid_rhs_spec(detail=f"{name} must be a list of strings")
     out: list[str] = []
     for i, v in enumerate(x):
         if not isinstance(v, str) or not v.strip():
-            raise_invalid_rhs_spec(detail=f"{name}[{i}] must be a non-empty string")
+            _raise_invalid_rhs_spec(detail=f"{name}[{i}] must be a non-empty string")
         out.append(v.strip())
     return out
 
@@ -139,13 +191,13 @@ def _ensure_str_dict(x: object, *, name: str) -> dict[str, str]:
     if x is None:
         return {}
     if not isinstance(x, dict):
-        raise_invalid_rhs_spec(detail=f"{name} must be a mapping of string->string")
+        _raise_invalid_rhs_spec(detail=f"{name} must be a mapping of string->string")
     out: dict[str, str] = {}
     for k, v in x.items():
         if not isinstance(k, str) or not k.strip():
-            raise_invalid_rhs_spec(detail=f"{name} keys must be non-empty strings")
+            _raise_invalid_rhs_spec(detail=f"{name} keys must be non-empty strings")
         if not isinstance(v, str) or not v.strip():
-            raise_invalid_rhs_spec(detail=f"{name}[{k!r}] must be a non-empty string")
+            _raise_invalid_rhs_spec(detail=f"{name}[{k!r}] must be a non-empty string")
         out[k.strip()] = v.strip()
     return out
 
@@ -167,14 +219,11 @@ def normalize_rhs(spec: Mapping[str, Any] | None) -> NormalizedRhs:
     Args:
         spec: Raw RHS specification mapping.
 
-    Raises:
-        RuntimeError: If an unsupported RHS kind is specified.
-
     Returns:
-        NormalizedRhs: Backend-facing normalized RHS representation.
+        Backend-facing normalized RHS representation.
     """
     if spec is None:
-        raise_invalid_rhs_spec(detail="rhs specification is required")
+        _raise_invalid_rhs_spec(detail="rhs specification is required")
 
     kind = str(spec.get("kind", "expr")).strip().lower()
 
@@ -184,12 +233,10 @@ def normalize_rhs(spec: Mapping[str, Any] | None) -> NormalizedRhs:
     if kind == "transitions":  # diagram-style hazards
         return normalize_transitions_rhs(spec)
 
-    raise_unsupported_feature(
+    _raise_unsupported_feature(
         feature=f"rhs.kind={kind}",
         detail="Only 'expr' and 'transitions' are supported in v1.",
     )
-    msg = "unreachable"
-    raise RuntimeError(msg)  # pragma: no cover
 
 
 # -----------------------------------------------------------------------------
@@ -205,15 +252,15 @@ def normalize_expr_rhs(spec: Mapping[str, Any]) -> NormalizedRhs:
         spec: Raw RHS specification mapping.
 
     Returns:
-        NormalizedRhs: Backend-facing normalized RHS representation.
+        Backend-facing normalized RHS representation.
     """
     state = _ensure_str_list(spec.get("state"), name="state")
     if len(state) != len(set(state)):
-        raise_invalid_rhs_spec(detail="state contains duplicate names")
+        _raise_invalid_rhs_spec(detail="state contains duplicate names")
 
     equations_map = spec.get("equations")
     if not isinstance(equations_map, dict):
-        raise_invalid_rhs_spec(detail="equations must be a mapping of state->expr")
+        _raise_invalid_rhs_spec(detail="equations must be a mapping of state->expr")
 
     aliases = _ensure_str_dict(spec.get("aliases"), name="aliases")
 
@@ -224,12 +271,12 @@ def normalize_expr_rhs(spec: Mapping[str, Any]) -> NormalizedRhs:
 
     missing = [s for s in state if s not in equations_map]
     if missing:
-        raise_invalid_rhs_spec(missing=missing, detail="Missing equation(s) for state")
+        _raise_invalid_rhs_spec(missing=missing, detail="Missing equation(s) for state")
 
     state_set = set(state)
     unknown = [k for k in equations_map if k not in state_set]
     if unknown:
-        raise_invalid_rhs_spec(detail=f"unknown equation key(s): {sorted(unknown)}")
+        _raise_invalid_rhs_spec(detail=f"unknown equation key(s): {sorted(unknown)}")
 
     eqs: list[str] = []
     all_syms: set[str] = set()
@@ -241,7 +288,7 @@ def normalize_expr_rhs(spec: Mapping[str, Any]) -> NormalizedRhs:
     for s in state:
         expr = equations_map[s]
         if not isinstance(expr, str) or not expr.strip():
-            raise_invalid_rhs_spec(
+            _raise_invalid_rhs_spec(
                 detail=f"equations[{s!r}] must be a non-empty string"
             )
         expr_s = expr.strip()
@@ -269,15 +316,36 @@ def normalize_expr_rhs(spec: Mapping[str, Any]) -> NormalizedRhs:
 
 
 def _validate_transition_mapping(tr: object, *, idx: int) -> Mapping[str, Any]:
+    """
+    Validate and return a transition mapping.
+
+    Args:
+        tr: Transition object.
+        idx: Transition index (for error messages).
+
+    Returns:
+        Transition mapping.
+    """
     if not isinstance(tr, dict):
-        raise_invalid_rhs_spec(detail=f"transitions[{idx}] must be a mapping")
+        _raise_invalid_rhs_spec(detail=f"transitions[{idx}] must be a mapping")
     return tr
 
 
 def _get_required_str(tr: Mapping[str, Any], *, idx: int, key: str) -> str:
+    """
+    Fetch a required string field from a transition mapping.
+
+    Args:
+        tr: Transition mapping.
+        idx: Transition index (for error messages).
+        key: Field key.
+
+    Returns:
+        Stripped string value.
+    """
     val = tr.get(key)
     if not isinstance(val, str) or not val.strip():
-        raise_invalid_rhs_spec(detail=f"transitions[{idx}].{key} must be a string")
+        _raise_invalid_rhs_spec(detail=f"transitions[{idx}].{key} must be a string")
     return val.strip()
 
 
@@ -289,14 +357,17 @@ def _apply_transition(
     all_syms: set[str],
     d_terms: dict[str, list[str]],
 ) -> None:
+    """Apply a transition to the derivative-term accumulator."""
     frm_s = _get_required_str(tr, idx=idx, key="from")
     to_s = _get_required_str(tr, idx=idx, key="to")
     rate_s = _get_required_str(tr, idx=idx, key="rate")
 
     if frm_s not in state_set:
-        raise_invalid_rhs_spec(detail=f"transitions[{idx}].from={frm_s!r} not in state")
+        _raise_invalid_rhs_spec(
+            detail=f"transitions[{idx}].from={frm_s!r} not in state"
+        )
     if to_s not in state_set:
-        raise_invalid_rhs_spec(detail=f"transitions[{idx}].to={to_s!r} not in state")
+        _raise_invalid_rhs_spec(detail=f"transitions[{idx}].to={to_s!r} not in state")
 
     tree = _parse_expr(rate_s)
     all_syms |= _collect_names(tree)
@@ -314,15 +385,15 @@ def normalize_transitions_rhs(spec: Mapping[str, Any]) -> NormalizedRhs:
         spec: Raw RHS specification mapping.
 
     Returns:
-        NormalizedRhs: Backend-facing normalized RHS representation.
+        Backend-facing normalized RHS representation.
     """
     state = _ensure_str_list(spec.get("state"), name="state")
     if len(state) != len(set(state)):
-        raise_invalid_rhs_spec(detail="state contains duplicate names")
+        _raise_invalid_rhs_spec(detail="state contains duplicate names")
 
     transitions = spec.get("transitions")
     if not isinstance(transitions, list) or not transitions:
-        raise_invalid_rhs_spec(detail="transitions must be a non-empty list")
+        _raise_invalid_rhs_spec(detail="transitions must be a non-empty list")
 
     aliases = _ensure_str_dict(spec.get("aliases"), name="aliases")
 

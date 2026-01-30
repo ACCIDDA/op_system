@@ -3,7 +3,7 @@ name = "op_system"
 version = "0.1.0"
 description = "Config-based RHS specification + compilation utilities for ODE/PDE systems"
 readme = "README.md"
-requires-python = ">=3.11,<3.15"
+requires-python = ">=3.11,<3.14"
 license = { file = "LICENSE" }
 authors = [
     { name = "Joshua Macdonald", email = "jmacdo16@jh.edu" },
@@ -31,12 +31,6 @@ classifiers = [
 data = [
     "pandas>=2.2",
     "pyarrow>=16.0",
-]
-op_engine = [
-    "op_engine>=0.1.0",
-]
-flepimop2 = [
-    "flepimop2>=0.1.0",
 ]
 
 [build-system]
