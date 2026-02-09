@@ -81,7 +81,7 @@ dR/dt += gamma * I
 
 ## Basic Usage
 
-### Option A — One-step API (recommended)
+### Option A — One-step API 
 
 ```python
 from op_system import compile_spec
