@@ -1,5 +1,5 @@
 # Run all default tasks for local development
-default: format check pytest mypy
+default: format check provider-sync pytest-core pytest-provider-nosync mypy-core mypy-provider-nosync
 
 # -------------------------------------------------
 # Local venv + deps (explicit step)
@@ -41,9 +41,14 @@ pytest-core:
 pytest-provider: provider-sync
 	cd flepimop2-op_system && .venv/bin/python -m pytest --doctest-modules
 
+# Provider tests assuming the venv already exists (used by ci for speed).
+pytest-provider-nosync:
+	cd flepimop2-op_system && .venv/bin/python -m pytest --doctest-modules
+
 pytest:
+	just provider-sync
 	just pytest-core
-	just pytest-provider
+	just pytest-provider-nosync
 
 # -------------------------------------------------
 # Type checking
@@ -56,9 +61,14 @@ mypy-core:
 mypy-provider: provider-sync
 	cd flepimop2-op_system && .venv/bin/python -m mypy --strict src/flepimop2
 
+# Provider mypy assuming the venv already exists (used by ci for speed).
+mypy-provider-nosync:
+	cd flepimop2-op_system && .venv/bin/python -m mypy --strict src/flepimop2
+
 mypy:
+	just provider-sync
 	just mypy-core
-	just mypy-provider
+	just mypy-provider-nosync
 
 # -------------------------------------------------
 # CI aggregate
@@ -68,8 +78,10 @@ ci:
 	uvx ruff format --preview --check
 	uvx ruff check --preview --no-fix
 	just provider-sync
-	just pytest
-	just mypy
+	just pytest-core
+	just pytest-provider-nosync
+	just mypy-core
+	just mypy-provider-nosync
 
 # -------------------------------------------------
 # Utilities
