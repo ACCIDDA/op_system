@@ -69,6 +69,7 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*" = ["INP001", "S101"]
+"flepimop2-op_system/src/flepimop2/system/op_system/__init__.py" = ["RUF067"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
