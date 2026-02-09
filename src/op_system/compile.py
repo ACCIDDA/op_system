@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import ast
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, NoReturn, cast
+from typing import TYPE_CHECKING, NoReturn
 
 import numpy as np
 from numpy.typing import NDArray
@@ -185,23 +185,21 @@ _ALLOWED_NODES: tuple[type[ast.AST], ...] = (
 )
 
 _ALLOWED_CALL_ROOTS: tuple[str, ...] = ("np",)
-_ALLOWED_CALL_FUNCS: frozenset[str] = frozenset(
-    {
-        # NumPy scalar math; keep small initially.
-        "abs",
-        "exp",
-        "log",
-        "log1p",
-        "sqrt",
-        "maximum",
-        "minimum",
-        "clip",
-        "where",
-    }
-)
+_ALLOWED_CALL_FUNCS: frozenset[str] = frozenset({
+    # NumPy scalar math; keep small initially.
+    "abs",
+    "exp",
+    "log",
+    "log1p",
+    "sqrt",
+    "maximum",
+    "minimum",
+    "clip",
+    "where",
+})
 
 
-def _parse_expr(expr: str) -> ast.AST:
+def _parse_expr(expr: str) -> ast.Expression:
     """Parse a Python expression and return the AST.
 
     Args:
@@ -253,7 +251,7 @@ def _validate_ast(tree: ast.AST, *, expr: str) -> None:
             name = str(func.attr)
             if root not in _ALLOWED_CALL_ROOTS or name not in _ALLOWED_CALL_FUNCS:
                 _raise_invalid_expression(
-                    detail=f"{_DISALLOWED_FUNCTION_CALL}: {root}.{name}"
+                    detail=f"{DISALLOWED_FUNCTION_CALL}: {root}.{name}"
                 )
 
 
@@ -269,7 +267,7 @@ def _compile_expr(expr: str) -> CodeType:
     tree = _parse_expr(expr)
     _validate_ast(tree, expr=expr)
     try:
-        return cast(CodeType, compile(tree, filename="<op_system>", mode="eval"))
+        return compile(tree, filename="<op_system>", mode="eval")
     except (ValueError, TypeError, SyntaxError) as exc:  # pragma: no cover
         _raise_compilation_error(
             detail=f"failed to compile expression {expr!r}: {exc!r}"
