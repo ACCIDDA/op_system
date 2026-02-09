@@ -1,32 +1,26 @@
 # op_system
 
-**Domain-agnostic RHS specification and compilation utilities for scientific simulation systems.**
+Lightweight, domain-agnostic RHS specification and compilation utilities. Write your model once in a YAML/JSON-friendly form; `op_system` validates it, normalizes it, and compiles it into a fast NumPy-friendly RHS callable for solvers.
 
-`op_system` provides a lightweight, backend-neutral way to:
+## Why use it?
+- Clean separation of model specification from numerical engines (works with `op_engine`, SciPy, or custom solvers).
+- Two spec styles built in: explicit expressions (`kind: expr`) and transition diagrams (`kind: transitions`).
+- Conservative AST validation and NumPy-only dependency.
+- Forward-compatible IR that preserves reserved blocks for multiphysics (sources/operators/couplings/constraints).
 
-1. Define system dynamics in a YAML/JSON-friendly format  
-2. Normalize those specifications into a structured representation  
-3. Compile them into fast callable right-hand-side (RHS) functions usable by numerical engines  
+## Installation
 
-It is designed to integrate cleanly with `op_engine` and external orchestration systems (eg flepimop2) while remaining standalone and dependency-minimal.
+```bash
+pip install op_system
+```
 
----
+## Quickstart
 
-## Core Concepts
-
-### 1. RHS Specification
-
-Users define system dynamics using a dictionary (or YAML equivalent).
-
-Two RHS styles are supported in v1:
-
----
-
-### Expression Style (`kind: expr`)
-
-Directly specify derivatives:
+Expression RHS:
 
 ```python
+from op_system import compile_spec
+
 spec = {
     "kind": "expr",
     "state": ["S", "I", "R"],
@@ -37,15 +31,16 @@ spec = {
         "R": "gamma * I",
     },
 }
+
+rhs = compile_spec(spec)
+dydt = rhs.eval_fn(0.0, [999.0, 1.0, 0.0], beta=0.3, gamma=0.1)
 ```
 
----
-
-### Transition Style (`kind: transitions`)
-
-Diagram-oriented hazard formulation:
+Transition RHS (hazard/flow style):
 
 ```python
+from op_system import compile_spec
+
 spec = {
     "kind": "transitions",
     "state": ["S", "I", "R"],
@@ -55,175 +50,44 @@ spec = {
         {"from": "I", "to": "R", "rate": "gamma"},
     ],
 }
+
+rhs = compile_spec(spec)
 ```
 
-This is internally converted to conservation-law equations:
+## Public API
+- `compile_spec(spec)` — validate, normalize, and compile in one step.
+- `normalize_rhs(spec)` — spec → `NormalizedRhs` (backend-facing IR).
+- `compile_rhs(rhs)` — `NormalizedRhs` → `CompiledRhs` with `eval_fn(t, y, **params)`.
+- Convenience: `normalize_expr_rhs`, `normalize_transitions_rhs`.
 
-```
-dS/dt -= (beta * I / N) * S
-dI/dt += (beta * I / N) * S - gamma * I
-dR/dt += gamma * I
-```
+Core data:
+- `NormalizedRhs`: `kind`, `state_names`, `equations`, `aliases`, `param_names`, `all_symbols`, `meta` (carries reserved fields like `sources`, `operators`, `couplings`, `constraints`, `transitions`).
+- `CompiledRhs`: `state_names`, `param_names`, `eval_fn`, plus `bind(params)` for solver-friendly `rhs(t, y)`.
 
----
+## Safety and validation
+- Expressions parsed with `ast` and validated against a small allowlist (arithmetic, comparisons, boolean ops, ternary, selected `np.*` scalar math).
+- Evaluation runs with empty builtins; only `np` and provided symbols are available.
+- Shapes checked at runtime for `y` and equation counts; descriptive `ValueError`/`TypeError`/`NotImplementedError` messages on invalid input.
 
-## Basic Usage
+## IR and forward compatibility
+- Current kinds: `expr`, `transitions`.
+- Normalization preserves reserved blocks in `meta` so future multiphysics/PDE/operator specs can be added without breaking existing callers.
+- Works out of the box for ODE-style RHS; adapters can add operator blocks for IMEX/PDE backends.
 
-### Option A — One-step API (recommended)
+## Development
 
-```python
-from op_system import compile_spec
+Clone and install dev tools:
 
-compiled = compile_spec(spec)
-
-dydt = compiled.eval_fn(
-    t=0.0,
-    y=[999.0, 1.0, 0.0],
-    beta=0.3,
-    gamma=0.1,
-)
-```
-
----
-
-### Option B — Two-step API (advanced control)
-
-```python
-from op_system import normalize_rhs, compile_rhs
-
-rhs = normalize_rhs(spec)
-compiled = compile_rhs(rhs)
-
-dydt = compiled.eval_fn(0.0, [999, 1, 0], beta=0.3, gamma=0.1)
+```bash
+uv sync --dev
 ```
 
----
+Run checks:
 
-## Output Object
-
-`compile_rhs` returns a `CompiledRhs` container:
-
-```python
-CompiledRhs(
-    state_names = ("S", "I", "R"),
-    param_names = ("beta", "gamma"),
-    eval_fn = callable
-)
+```bash
+just ci
 ```
 
-This matches the function signature expected by most ODE solvers:
+## License
 
-```
-rhs(t, y) -> dydt
-```
-
----
-
-## Safety & Validation
-
-### Expression Security
-
-Expressions are parsed with Python `ast` and restricted to:
-
-- Arithmetic operations
-- Named variables
-- Selected NumPy math functions (`np.exp`, `np.log`, etc)
-
-Disallowed operations (imports, attribute access, function injection) are rejected.
-
----
-
-### Error Handling
-
-All user-facing errors:
-
-- Raise built-in Python exceptions (`ValueError`, `TypeError`, etc)
-- Chain an `OpSystemError` as the cause with a machine-readable `ErrorCode`
-
-Example:
-
-```python
-try:
-    compiled.eval_fn(0.0, [1, 2])
-except ValueError as exc:
-    code = exc.__cause__.code
-    print(code)
-```
-
----
-
-## Design Principles
-
-### Domain Agnostic
-
-`op_system`:
-
-- Does NOT import flepimop2
-- Does NOT depend on op_engine
-- Does NOT impose solver semantics
-
-It only defines RHS structure and compilation.
-
----
-
-### Backend Friendly
-
-Compiled RHS functions are compatible with:
-
-- op_engine
-- scipy.integrate
-- custom solvers
-- GPU backends (via wrapping)
-
----
-
-### Forward Compatible
-
-Reserved fields are preserved during normalization:
-
-```yaml
-sources:
-operators:
-couplings:
-constraints:
-```
-
-This allows future multiphysics extensions without breaking the API.
-
----
-
-## Public API Summary
-
-```python
-compile_spec(spec)         # one-step entrypoint
-normalize_rhs(spec)        # spec → NormalizedRhs
-compile_rhs(rhs)           # NormalizedRhs → CompiledRhs
-```
-
-Data types:
-
-```python
-NormalizedRhs
-CompiledRhs
-ErrorCode
-OpSystemError
-```
-
----
-
-## Status
-
-Version: `0.1.0`
-
-Current scope:
-
-- ODE RHS
-- Algebraic expressions
-- Compartment transitions
-
-Planned:
-
-- Operator splitting
-- PDE operators
-- Multiphysics coupling
-- Engine adapters
+GPL-3.0

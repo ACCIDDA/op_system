@@ -38,15 +38,15 @@ Float64Array = NDArray[np.float64]
 # Error message constants
 # -----------------------------------------------------------------------------
 
-INVALID_EXPRESSION_PREFIX = "Invalid op_system expression."
-COMPILATION_FAILED_PREFIX = "op_system compilation failed."
-INVALID_STATE_SHAPE_PREFIX = "state has an invalid shape/value."
-INVALID_PARAMETERS_PREFIX = "Invalid parameters for op_system."
-UNSUPPORTED_FEATURE_PREFIX = "Unsupported op_system feature."
+_INVALID_EXPRESSION_PREFIX = "Invalid op_system expression."
+_COMPILATION_FAILED_PREFIX = "op_system compilation failed."
+_INVALID_STATE_SHAPE_PREFIX = "state has an invalid shape/value."
+_INVALID_PARAMETERS_PREFIX = "Invalid parameters for op_system."
+_UNSUPPORTED_FEATURE_PREFIX = "Unsupported op_system feature."
 
-DISALLOWED_ATTRIBUTE_ACCESS = "disallowed attribute access"
-ONLY_ATTRIBUTE_CALLS_ALLOWED = "only attribute calls allowed"
-DISALLOWED_FUNCTION_CALL = "disallowed function call"
+_DISALLOWED_ATTRIBUTE_ACCESS = "disallowed attribute access"
+_ONLY_ATTRIBUTE_CALLS_ALLOWED = "only attribute calls allowed"
+_DISALLOWED_FUNCTION_CALL = "disallowed function call"
 
 
 def _raise_invalid_expression(*, detail: str) -> NoReturn:
@@ -58,7 +58,7 @@ def _raise_invalid_expression(*, detail: str) -> NoReturn:
     Raises:
         ValueError: Always.
     """
-    msg = f"{INVALID_EXPRESSION_PREFIX} Detail: {detail}"
+    msg = f"{_INVALID_EXPRESSION_PREFIX} Detail: {detail}"
     raise ValueError(msg)
 
 
@@ -71,7 +71,7 @@ def _raise_compilation_error(*, detail: str) -> NoReturn:
     Raises:
         RuntimeError: Always.
     """
-    msg = f"{COMPILATION_FAILED_PREFIX} Detail: {detail}"
+    msg = f"{_COMPILATION_FAILED_PREFIX} Detail: {detail}"
     raise RuntimeError(msg)
 
 
@@ -85,7 +85,7 @@ def _raise_state_shape_error(*, expected: str, got: object) -> NoReturn:
     Raises:
         ValueError: Always.
     """
-    msg = f"{INVALID_STATE_SHAPE_PREFIX} Expected {expected}. Got: {got!r}."
+    msg = f"{_INVALID_STATE_SHAPE_PREFIX} Expected {expected}. Got: {got!r}."
     raise ValueError(msg)
 
 
@@ -98,7 +98,7 @@ def _raise_parameter_error(*, detail: str) -> NoReturn:
     Raises:
         TypeError: Always.
     """
-    msg = f"{INVALID_PARAMETERS_PREFIX} {detail}"
+    msg = f"{_INVALID_PARAMETERS_PREFIX} {detail}"
     raise TypeError(msg)
 
 
@@ -112,7 +112,7 @@ def _raise_unsupported_feature(*, feature: str, detail: str | None = None) -> No
     Raises:
         NotImplementedError: Always.
     """
-    msg = f"{UNSUPPORTED_FEATURE_PREFIX} Feature '{feature}' is not supported."
+    msg = f"{_UNSUPPORTED_FEATURE_PREFIX} Feature '{feature}' is not supported."
     if detail:
         msg = f"{msg} Detail: {detail}"
     raise NotImplementedError(msg)
@@ -186,7 +186,6 @@ _ALLOWED_NODES: tuple[type[ast.AST], ...] = (
 
 _ALLOWED_CALL_ROOTS: tuple[str, ...] = ("np",)
 _ALLOWED_CALL_FUNCS: frozenset[str] = frozenset({
-    # NumPy scalar math; keep small initially.
     "abs",
     "exp",
     "log",
@@ -235,14 +234,14 @@ def _validate_ast(tree: ast.AST, *, expr: str) -> None:
             not isinstance(node.value, ast.Name) or node.value.id != "np"
         ):
             _raise_invalid_expression(
-                detail=f"{DISALLOWED_ATTRIBUTE_ACCESS} in {expr!r}"
+                detail=f"{_DISALLOWED_ATTRIBUTE_ACCESS} in {expr!r}"
             )
 
         if isinstance(node, ast.Call):
             func = node.func
             if not isinstance(func, ast.Attribute):
                 _raise_invalid_expression(
-                    detail=f"{ONLY_ATTRIBUTE_CALLS_ALLOWED} in {expr!r}"
+                    detail=f"{_ONLY_ATTRIBUTE_CALLS_ALLOWED} in {expr!r}"
                 )
             if not isinstance(func.value, ast.Name):
                 _raise_invalid_expression(detail=f"invalid call root in {expr!r}")
@@ -251,7 +250,7 @@ def _validate_ast(tree: ast.AST, *, expr: str) -> None:
             name = str(func.attr)
             if root not in _ALLOWED_CALL_ROOTS or name not in _ALLOWED_CALL_FUNCS:
                 _raise_invalid_expression(
-                    detail=f"{DISALLOWED_FUNCTION_CALL}: {root}.{name}"
+                    detail=f"{_DISALLOWED_FUNCTION_CALL}: {root}.{name}"
                 )
 
 
