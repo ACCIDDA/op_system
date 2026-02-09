@@ -10,21 +10,24 @@ pydantic BaseModel subclass is defined here, flepimop2 auto-generates a
 
 from __future__ import annotations
 
-from typing import Literal, Self
+from typing import TYPE_CHECKING, Any, Literal, Self
+
+if TYPE_CHECKING:
+    from flepimop2.typing import Float64NDArray
 
 import numpy as np
 from flepimop2.configuration import ModuleModel
 from flepimop2.system.abc import SystemABC
 from pydantic import ConfigDict, Field, model_validator
 
-from op_system import compile_spec
+from op_system import compile_spec  # type: ignore[attr-defined]
 
 __version__ = "0.1.0"
 
 
 class OpSystemSystem(ModuleModel, SystemABC):  # noqa: D101
     module: Literal["flepimop2.system.op_system"] = "flepimop2.system.op_system"
-    spec: dict = Field(description="op_system RHS specification")
+    spec: dict[str, object] = Field(description="op_system RHS specification")
 
     model_config = ConfigDict(extra="allow")
 
@@ -33,7 +36,11 @@ class OpSystemSystem(ModuleModel, SystemABC):  # noqa: D101
         compiled = compile_spec(self.spec)
         n_state = len(compiled.state_names)
 
-        def _stepper(t: np.float64, state: np.ndarray, **params: object) -> np.ndarray:
+        def _stepper(
+            time: np.float64,
+            state: Float64NDArray,
+            **kwargs: Any,  # noqa: ANN401
+        ) -> Float64NDArray:
             state_arr = np.asarray(state, dtype=np.float64)
             if state_arr.ndim != 1 or state_arr.size != n_state:
                 msg = (
@@ -42,7 +49,7 @@ class OpSystemSystem(ModuleModel, SystemABC):  # noqa: D101
                 )
                 raise ValueError(msg)
             return np.asarray(
-                compiled.eval_fn(np.float64(t), state_arr, **params),
+                compiled.eval_fn(np.float64(time), state_arr, **kwargs),
                 dtype=np.float64,
             )
 
