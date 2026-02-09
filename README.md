@@ -8,7 +8,7 @@
 2. Normalize those specifications into a structured representation  
 3. Compile them into fast callable right-hand-side (RHS) functions usable by numerical engines  
 
-It is designed to integrate cleanly with `op_engine` and external orchestration systems (eg flepimop2) while remaining standalone and dependency-minimal.
+It is designed to integrate cleanly with `op_engine` and external orchestration systems (e.g. flepimop2) while remaining standalone and dependency-minimal.
 
 ---
 
@@ -16,7 +16,7 @@ It is designed to integrate cleanly with `op_engine` and external orchestration 
 
 ### 1. RHS Specification
 
-Users define system dynamics using a dictionary (or YAML equivalent).
+Users define system dynamics using a dictionary (or YAML equivalent). Specs can be provided inline or loaded from `spec_file` (YAML/JSON) when using the flepimop2 adapter.
 
 Two RHS styles are supported in v1:
 
@@ -94,6 +94,26 @@ from op_system import normalize_rhs, compile_rhs
 rhs = normalize_rhs(spec)
 compiled = compile_rhs(rhs)
 
+### Option C — Load from file (YAML/JSON)
+
+```yaml
+# sir.yaml
+kind: expr
+state: [S, I, R]
+aliases:
+    N: "S + I + R"
+equations:
+    S: "-beta * S * I / N"
+    I: "beta * S * I / N - gamma * I"
+    R: "gamma * I"
+```
+
+```python
+from op_system import compile_spec
+
+compiled = compile_spec(None, spec_file="sir.yaml")
+```
+
 dydt = compiled.eval_fn(0.0, [999, 1, 0], beta=0.3, gamma=0.1)
 ```
 
@@ -107,7 +127,8 @@ dydt = compiled.eval_fn(0.0, [999, 1, 0], beta=0.3, gamma=0.1)
 CompiledRhs(
     state_names = ("S", "I", "R"),
     param_names = ("beta", "gamma"),
-    eval_fn = callable
+    eval_fn = callable,
+    meta = {"axes": [...], "mixing": [...], "operators": [...]}
 )
 ```
 
@@ -115,6 +136,8 @@ This matches the function signature expected by most ODE solvers:
 
 ```
 rhs(t, y) -> dydt
+
+`CompiledRhs.meta` preserves optional blocks (axes, mixing, operators, sources, couplings, constraints) for adapters to consume.
 ```
 
 ---
@@ -179,16 +202,7 @@ Compiled RHS functions are compatible with:
 
 ### Forward Compatible
 
-Reserved fields are preserved during normalization:
-
-```yaml
-sources:
-operators:
-couplings:
-constraints:
-```
-
-This allows future multiphysics extensions without breaking the API.
+Reserved fields are preserved during normalization and exposed via `CompiledRhs.meta` so future multiphysics extensions and adapters can read axes, mixing kernels, and operator metadata without breaking the API.
 
 ---
 
