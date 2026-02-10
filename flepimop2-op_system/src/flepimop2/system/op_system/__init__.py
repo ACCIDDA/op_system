@@ -135,11 +135,7 @@ class OpSystemSystem(ModuleModel, SystemABC):  # noqa: D101
 
     @staticmethod
     def _as_float(val: object, *, name: str) -> float:
-        try:
-            return float(val)  # type: ignore[arg-type]
-        except (TypeError, ValueError) as exc:  # pragma: no cover - defensive
-            msg = f"{name} must be convertible to float"
-            raise TypeError(msg) from exc
+        return float(val)  # type: ignore[arg-type]
 
     @staticmethod
     def _generate_kernel(
