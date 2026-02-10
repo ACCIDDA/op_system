@@ -33,6 +33,7 @@ if TYPE_CHECKING:
     from .specs import NormalizedRhs
 
 Float64Array = NDArray[np.float64]
+_SAFE_BUILTINS = {"__import__": __import__}
 
 # -----------------------------------------------------------------------------
 # Error message constants
@@ -185,18 +186,20 @@ _ALLOWED_NODES: tuple[type[ast.AST], ...] = (
 )
 
 _ALLOWED_CALL_ROOTS: tuple[str, ...] = ("np",)
-_ALLOWED_CALL_FUNCS: frozenset[str] = frozenset({
-    # NumPy scalar math; keep small initially.
-    "abs",
-    "exp",
-    "log",
-    "log1p",
-    "sqrt",
-    "maximum",
-    "minimum",
-    "clip",
-    "where",
-})
+_ALLOWED_CALL_FUNCS: frozenset[str] = frozenset(
+    {
+        # NumPy scalar math; keep small initially.
+        "abs",
+        "exp",
+        "log",
+        "log1p",
+        "sqrt",
+        "maximum",
+        "minimum",
+        "clip",
+        "where",
+    }
+)
 
 
 def _parse_expr(expr: str) -> ast.Expression:
@@ -323,7 +326,9 @@ def _resolve_aliases(
         for name, codeobj in list(pending.items()):
             try:
                 val = eval(  # noqa: S307
-                    codeobj, {"__builtins__": {}}, {**base_env, **out}
+                    codeobj,
+                    {"__builtins__": _SAFE_BUILTINS},
+                    {**base_env, **out},
                 )
             except NameError:
                 continue
@@ -373,7 +378,7 @@ def _make_eval_fn(
         out = np.empty((n_state,), dtype=np.float64)
         for i, codeobj in enumerate(eq_code):
             try:
-                val = eval(codeobj, {"__builtins__": {}}, env)  # noqa: S307
+                val = eval(codeobj, {"__builtins__": _SAFE_BUILTINS}, env)  # noqa: S307
             except NameError as exc:
                 _raise_parameter_error(detail=f"unknown symbol in equation: {exc!s}")
             except (ValueError, TypeError, ArithmeticError) as exc:

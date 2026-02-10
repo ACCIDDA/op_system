@@ -1,6 +1,6 @@
 [project]
 name = "op_system"
-version = "0.1.0"
+version = "0.1.1"
 description = "Config-based RHS specification + compilation utilities for ODE/PDE systems"
 readme = "README.md"
 requires-python = ">=3.11,<3.14"
