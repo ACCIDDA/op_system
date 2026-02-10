@@ -10,19 +10,12 @@ pydantic BaseModel subclass is defined here, flepimop2 auto-generates a
 
 from __future__ import annotations
 
-import json
-from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, NamedTuple, Self
 
 import numpy as np
 from flepimop2.configuration import ModuleModel
 from flepimop2.system.abc import SystemABC
 from pydantic import ConfigDict, Field, model_validator
-
-try:  # Optional dependency; surface a clear error if missing when spec_file is used
-    import yaml  # type: ignore[import-untyped]
-except ImportError:  # pragma: no cover
-    yaml = None
 
 from op_system import CompiledRhs, compile_spec  # type: ignore[attr-defined]
 
@@ -43,17 +36,21 @@ class _AxesMeta(NamedTuple):
 class OpSystemSystem(ModuleModel, SystemABC):  # noqa: D101
     module: Literal["flepimop2.system.op_system"] = "flepimop2.system.op_system"
     spec: dict[str, object] | None = Field(
-        default=None, description="Inline op_system RHS specification"
-    )
-    spec_file: str | None = Field(
-        default=None, description="Path to op_system RHS specification (YAML/JSON)"
+        default=None, description="Inline op_system RHS specification (already loaded)"
     )
 
     model_config = ConfigDict(extra="allow")
 
     @model_validator(mode="after")
     def _compile_and_bind(self) -> Self:
-        spec_obj = self._load_spec()
+        if self.spec is None:
+            message = "spec must be provided as an already loaded mapping"
+            raise ValueError(message)
+        if not isinstance(self.spec, dict):
+            message = "spec must be a mapping (dict)"
+            raise TypeError(message)
+
+        spec_obj = self.spec
         compiled = compile_spec(spec_obj)
         n_state = len(compiled.state_names)
 
@@ -93,43 +90,6 @@ class OpSystemSystem(ModuleModel, SystemABC):  # noqa: D101
         self._stepper = _stepper
         self._compiled_rhs = compiled  # handy for debugging/adapters
         return self
-
-    def _load_spec(self) -> dict[str, object]:
-        if (self.spec is None) == (self.spec_file is None):
-            message = "Provide exactly one of spec or spec_file for op_system system"
-            raise ValueError(message)
-
-        if self.spec is not None:
-            if not isinstance(self.spec, dict):
-                message = "spec must be a mapping (dict)"
-                raise TypeError(message)
-            return self.spec
-
-        if self.spec_file is None:  # defensive: caller promised spec or spec_file
-            message = "spec_file must be provided when spec is omitted"
-            raise ValueError(message)
-        path = Path(self.spec_file).expanduser()
-        if not path.is_file():
-            message = f"spec_file not found: {path}"
-            raise FileNotFoundError(message)
-        text = path.read_text(encoding="utf-8")
-        if yaml is not None:
-            return self._ensure_mapping(yaml.safe_load(text))
-        try:
-            return self._ensure_mapping(json.loads(text))
-        except json.JSONDecodeError as exc:
-            message = (
-                "spec_file requires PyYAML for non-JSON content; install pyyaml "
-                "or provide JSON"
-            )
-            raise ValueError(message) from exc
-
-    @staticmethod
-    def _ensure_mapping(obj: object) -> dict[str, object]:
-        if not isinstance(obj, dict):
-            message = "spec must resolve to a mapping (dict)"
-            raise TypeError(message)
-        return obj
 
     @staticmethod
     def _extract_axes_meta(compiled: CompiledRhs) -> _AxesMeta:
