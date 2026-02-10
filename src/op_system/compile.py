@@ -199,7 +199,7 @@ _ALLOWED_CALL_FUNCS: frozenset[str] = frozenset({
 })
 
 
-def _parse_expr(expr: str) -> ast.AST:
+def _parse_expr(expr: str) -> ast.Expression:
     """Parse a Python expression and return the AST.
 
     Args:

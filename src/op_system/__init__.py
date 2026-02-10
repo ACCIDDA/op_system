@@ -45,7 +45,7 @@ EXPERIMENTAL_FEATURES: frozenset[str] = frozenset()  # noqa: RUF067
 # -----------------------------------------------------------------------------
 
 
-def compile_spec(spec: dict) -> CompiledRhs:  # noqa: RUF067
+def compile_spec(spec: dict[str, object]) -> CompiledRhs:  # noqa: RUF067
     """
     Validate, normalize, and compile a RHS specification in one call.
 
