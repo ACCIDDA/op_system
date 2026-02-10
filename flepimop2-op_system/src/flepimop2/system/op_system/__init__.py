@@ -134,7 +134,7 @@ class OpSystemSystem(ModuleModel, SystemABC):  # noqa: D101
         return kernels
 
     @staticmethod
-    def _as_float(val: object, *, name: str) -> float:
+    def _as_float(val: object) -> float:
         return float(val)  # type: ignore[arg-type]
 
     @staticmethod
@@ -156,7 +156,7 @@ class OpSystemSystem(ModuleModel, SystemABC):  # noqa: D101
         coords1 = _axis_coords(axes[1]) if len(axes) > 1 else coords0
         dx = np.abs(coords0[:, None] - coords1[None, :])
         form_l = form.lower()
-        scale = OpSystemSystem._as_float(params.get("scale", 1.0), name="scale")
+        scale = OpSystemSystem._as_float(params.get("scale", 1.0))
         if form_l == "custom_value":
             val = params.get("value")
             if val is None:
@@ -180,7 +180,7 @@ class OpSystemSystem(ModuleModel, SystemABC):  # noqa: D101
     def _kernel_erfc(
         dx: np.ndarray, params: dict[str, object], scale: float
     ) -> np.ndarray:
-        sigma = OpSystemSystem._as_float(params.get("sigma", 1.0), name="sigma")
+        sigma = OpSystemSystem._as_float(params.get("sigma", 1.0))
         result = scale * np.erfc(dx / sigma)  # type: ignore[attr-defined]
         return np.asarray(result, dtype=np.float64)
 
@@ -188,7 +188,7 @@ class OpSystemSystem(ModuleModel, SystemABC):  # noqa: D101
     def _kernel_gaussian(
         dx: np.ndarray, params: dict[str, object], scale: float
     ) -> np.ndarray:
-        sigma = OpSystemSystem._as_float(params.get("sigma", 1.0), name="sigma")
+        sigma = OpSystemSystem._as_float(params.get("sigma", 1.0))
         denom = 2.0 * sigma * sigma
         result = scale * np.exp(-(dx**2) / denom)
         return np.asarray(result, dtype=np.float64)
@@ -197,9 +197,7 @@ class OpSystemSystem(ModuleModel, SystemABC):  # noqa: D101
     def _kernel_exponential(
         dx: np.ndarray, params: dict[str, object], scale: float
     ) -> np.ndarray:
-        lambda_param = OpSystemSystem._as_float(
-            params.get("lambda", 1.0), name="lambda"
-        )
+        lambda_param = OpSystemSystem._as_float(params.get("lambda", 1.0))
         result = scale * np.exp(-dx / lambda_param)
         return np.asarray(result, dtype=np.float64)
 
@@ -207,8 +205,8 @@ class OpSystemSystem(ModuleModel, SystemABC):  # noqa: D101
     def _kernel_gamma(
         dx: np.ndarray, params: dict[str, object], scale: float
     ) -> np.ndarray:
-        k_param = OpSystemSystem._as_float(params.get("k", 1.0), name="k")
-        theta = OpSystemSystem._as_float(params.get("theta", 1.0), name="theta")
+        k_param = OpSystemSystem._as_float(params.get("k", 1.0))
+        theta = OpSystemSystem._as_float(params.get("theta", 1.0))
         dx_safe = np.clip(dx, 1e-12, None)
         result = scale * (dx_safe / theta) ** (k_param - 1.0) * np.exp(-dx_safe / theta)
         return np.asarray(result, dtype=np.float64)
@@ -217,8 +215,8 @@ class OpSystemSystem(ModuleModel, SystemABC):  # noqa: D101
     def _kernel_power_law(
         dx: np.ndarray, params: dict[str, object], scale: float
     ) -> np.ndarray:
-        sigma = OpSystemSystem._as_float(params.get("sigma", 1.0), name="sigma")
-        p_param = OpSystemSystem._as_float(params.get("p", 1.0), name="p")
+        sigma = OpSystemSystem._as_float(params.get("sigma", 1.0))
+        p_param = OpSystemSystem._as_float(params.get("p", 1.0))
         result = scale * (1.0 + dx / sigma) ** (-p_param)
         return np.asarray(result, dtype=np.float64)
 
