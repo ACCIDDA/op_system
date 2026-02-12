@@ -356,6 +356,54 @@ def test_kernels_and_operator_meta_preserved() -> None:
     assert operators_meta[0].get("axis") == "age"
 
 
+def test_operator_requires_kind_and_preserves_bc() -> None:
+    """Operators must declare kind; optional bc is preserved as a string."""
+    spec_missing_kind = {
+        "kind": "expr",
+        "axes": [
+            {
+                "name": "x",
+                "type": "continuous",
+                "domain": {"lb": 0.0, "ub": 1.0},
+                "size": 2,
+            },
+        ],
+        "operators": [
+            {"name": "op0", "axis": "x"},
+        ],
+        "state": ["u"],
+        "equations": {"u": "0.0"},
+    }
+
+    with pytest.raises(
+        ValueError, match=r"operators\[0\]\.kind must be a non-empty string"
+    ):
+        normalize_expr_rhs(spec_missing_kind)
+
+    spec_with_bc = {
+        "kind": "expr",
+        "axes": [
+            {
+                "name": "x",
+                "type": "continuous",
+                "domain": {"lb": 0.0, "ub": 1.0},
+                "size": 2,
+            },
+        ],
+        "operators": [
+            {"name": "op0", "axis": "x", "kind": "advection", "bc": "periodic"},
+        ],
+        "state": ["u"],
+        "equations": {"u": "0.0"},
+    }
+
+    out = normalize_expr_rhs(spec_with_bc)
+    operators_meta = out.meta.get("operators")
+    assert isinstance(operators_meta, list)
+    assert operators_meta[0]["kind"] == "advection"
+    assert operators_meta[0]["bc"] == "periodic"
+
+
 def test_state_axes_validation_errors() -> None:
     """state_axes must reference known axes and avoid duplicates."""
     spec_unknown_axis = {

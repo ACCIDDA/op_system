@@ -650,8 +650,24 @@ def _normalize_operators(
             _raise_invalid_rhs_spec(
                 detail=f"operators[{idx}] references unknown axis {axis_name_s!r}"
             )
+        kind_val = op_map.get("kind")
+        if not isinstance(kind_val, str) or not kind_val.strip():
+            _raise_invalid_rhs_spec(
+                detail=(
+                    f"operators[{idx}].kind must be a non-empty string "
+                    "(e.g., diffusion/advection)"
+                )
+            )
+        bc_val = op_map.get("bc")
+        if bc_val is not None and (not isinstance(bc_val, str) or not bc_val.strip()):
+            _raise_invalid_rhs_spec(
+                detail=f"operators[{idx}].bc must be a non-empty string if provided"
+            )
         op_out = dict(op_map)
         op_out["axis"] = axis_name_s
+        op_out["kind"] = kind_val.strip()
+        if bc_val is not None:
+            op_out["bc"] = bc_val.strip()
         out.append(op_out)
     return out
 

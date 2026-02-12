@@ -134,12 +134,14 @@ system:
       operators:
         - name: diff
           axis: x
-          kind: laplacian
+          kind: diffusion  # physical operator (solver chooses discretization)
+          bc: dirichlet
       equations:
         u: "0.0"
 ```
 
 Integrate along continuous axes with `integrate_over(axis=var, expr)`, which uses trapezoidal weights derived from the axis `coords` (non-uniform spacing respected).
+Operators describe the physical intent (`kind` such as diffusion/advection and `bc` such as dirichlet/neumann/periodic); numerical discretization is left to backends like `op_engine`.
 Normalized metadata preserves kernels in `meta["kernels"]` and operators in `meta["operators"]` alongside axes and state axes.
 
 ### Transitions (hazard/flow style)
