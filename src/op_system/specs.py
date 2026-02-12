@@ -303,6 +303,34 @@ def _normalize_axis_coords(
     return coords, len(coords)
 
 
+def _compute_axis_deltas(coords: list[float], *, idx: int) -> list[float]:
+    """Compute integration weights (trapezoidal) for a continuous axis.
+
+    Weights are half-interval widths at boundaries and centered widths inside.
+    Raises if any interval width is non-positive.
+
+    Returns:
+        List of trapezoidal weights matching coords length.
+    """
+    if len(coords) < 2:
+        _raise_invalid_rhs_spec(detail=f"axes[{idx}] continuous requires >=2 coords")
+
+    deltas: list[float] = []
+    for i in range(len(coords)):
+        if i == 0:
+            width = (coords[1] - coords[0]) / 2.0
+        elif i == len(coords) - 1:
+            width = (coords[-1] - coords[-2]) / 2.0
+        else:
+            width = (coords[i + 1] - coords[i - 1]) / 2.0
+        if width <= 0.0:
+            _raise_invalid_rhs_spec(
+                detail=f"axes[{idx}] coords must be strictly increasing for integration"
+            )
+        deltas.append(width)
+    return deltas
+
+
 def _generate_continuous_coords(
     *, domain: object, size_obj: object, spacing: str, idx: int
 ) -> tuple[list[float], int]:
@@ -385,6 +413,8 @@ def _normalize_single_axis(
         "coords": coords,
         "size": resolved_size,
     }
+    if ax_type == "continuous":
+        axis_out["deltas"] = _compute_axis_deltas(coords, idx=idx)
     if domain is not None:
         axis_out["domain"] = domain
     if spacing:
@@ -665,10 +695,13 @@ def _normalize_common_meta(
     return aliases, state_axes, mixing_meta, operators_meta
 
 
-def _collect_alias_symbols(aliases: Mapping[str, str]) -> set[str]:
+def _collect_alias_symbols(
+    aliases: Mapping[str, str], *, axes: list[dict[str, Any]]
+) -> set[str]:
     symbols: set[str] = set()
     for expr in aliases.values():
-        tree = _parse_expr(expr)
+        expr_s = _expand_helpers(expr, axes=axes)
+        tree = _parse_expr(expr_s)
         symbols |= _collect_names(tree)
     return symbols
 
@@ -806,7 +839,7 @@ def _resolve_template_equation(
                 _raise_invalid_rhs_spec(
                     detail=(f"equations[{template_key!r}] must be a non-empty string")
                 )
-            expr_s = _expand_sum_over(expr.strip(), axes=axes)
+            expr_s = _expand_helpers(expr.strip(), axes=axes)
             expr_s = _apply_template_substitutions(
                 expr_s, assignment=assignment, template_map=template_map
             )
@@ -814,6 +847,69 @@ def _resolve_template_equation(
             all_syms |= _collect_names(tree)
             return expr_s
     return None
+
+
+def _expand_integrate_over(expr: str, *, axes: list[dict[str, Any]]) -> str:
+    """Expand integrate_over(axis=var, inner_expr) for continuous axes.
+
+    Uses trapezoidal weights derived from axis coords; rejects categorical axes.
+
+    Returns:
+        Expression string with integrate_over expanded to weighted sums.
+    """
+
+    def _axis_coords_and_deltas(ax_name: str) -> tuple[list[str], list[float]]:
+        for ax in axes:
+            if ax.get("name") == ax_name:
+                if ax.get("type") != "continuous":
+                    _raise_invalid_rhs_spec(
+                        detail=f"integrate_over axis {ax_name!r} must be continuous"
+                    )
+                coords = [str(c) for c in ax.get("coords", [])]
+                deltas = ax.get("deltas") or []
+                if not coords or not deltas or len(coords) != len(deltas):
+                    _raise_invalid_rhs_spec(
+                        detail=f"integrate_over axis {ax_name!r} missing coords/deltas"
+                    )
+                return coords, [float(d) for d in deltas]
+        _raise_invalid_rhs_spec(detail=f"integrate_over axis {ax_name!r} not found")
+
+    pattern = re.compile(
+        r"integrate_over\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*([A-Za-z_][A-Za-z0-9_]*)\s*,\s*(.*?)\)",
+        re.DOTALL,
+    )
+
+    out = expr
+    while True:
+        m = pattern.search(out)
+        if not m:
+            break
+        axis_name = m.group(1)
+        var_name = m.group(2)
+        inner = m.group(3)
+        coords, deltas = _axis_coords_and_deltas(axis_name)
+        terms: list[str] = []
+        for coord, delta in zip(coords, deltas, strict=True):
+            replaced = re.sub(
+                rf"\b{re.escape(var_name)}\b",
+                str(coord),
+                inner,
+            )
+
+            def _template_replacer(
+                match: Match[str], *, axis: str = axis_name, coord_val: str = str(coord)
+            ) -> str:
+                return f"{match.group(1)}__{axis}_{_sanitize_fragment(coord_val)}"
+
+            replaced = re.sub(
+                rf"([A-Za-z_][A-Za-z0-9_]*)\[\s*{re.escape(axis_name)}\s*=\s*{re.escape(str(coord))}\s*\]",
+                _template_replacer,
+                replaced,
+            )
+            terms.append(f"({delta})*({replaced})")
+        replacement = " + ".join(terms)
+        out = out[: m.start()] + f"({replacement})" + out[m.end() :]
+    return out
 
 
 def _expand_sum_over(expr: str, *, axes: list[dict[str, Any]]) -> str:
@@ -883,6 +979,15 @@ def _expand_sum_over(expr: str, *, axes: list[dict[str, Any]]) -> str:
     return out
 
 
+def _expand_helpers(expr: str, *, axes: list[dict[str, Any]]) -> str:
+    """Expand helper calls (integrate_over, sum_over) before AST parse.
+
+    Returns:
+        Expression string with helper calls expanded.
+    """
+    return _expand_sum_over(_expand_integrate_over(expr, axes=axes), axes=axes)
+
+
 def _gather_equations(
     state: list[str],
     equations_map: Mapping[str, Any],
@@ -900,7 +1005,7 @@ def _gather_equations(
                 _raise_invalid_rhs_spec(
                     detail=f"equations[{name!r}] must be a non-empty string"
                 )
-            expr_s = _expand_sum_over(expr.strip(), axes=axes)
+            expr_s = _expand_helpers(expr.strip(), axes=axes)
             tree = _parse_expr(expr_s)
             all_syms |= _collect_names(tree)
             eqs.append(expr_s)
@@ -1115,7 +1220,7 @@ def normalize_expr_rhs(spec: Mapping[str, Any]) -> NormalizedRhs:
             detail=f"unknown equation key(s): {sorted(unknown_keys)}"
         )
 
-    all_syms = _collect_alias_symbols(aliases)
+    all_syms = _collect_alias_symbols(aliases, axes=axes_meta)
     eqs = _gather_equations(
         state_expanded,
         equations_map,
@@ -1157,6 +1262,12 @@ def _validate_transition_mapping(tr: object, *, idx: int) -> Mapping[str, Any]:
     """
     if not isinstance(tr, dict):
         _raise_invalid_rhs_spec(detail=f"transitions[{idx}] must be a mapping")
+    if "name" in tr:
+        name_val = tr.get("name")
+        if not isinstance(name_val, str) or not name_val.strip():
+            _raise_invalid_rhs_spec(
+                detail=f"transitions[{idx}].name must be a non-empty string"
+            )
     return tr
 
 
@@ -1256,7 +1367,7 @@ def normalize_transitions_rhs(spec: Mapping[str, Any]) -> NormalizedRhs:
 
     state_set = set(state)
     d_terms: dict[str, list[str]] = {s: [] for s in state}
-    all_syms = _collect_alias_symbols(aliases)
+    all_syms = _collect_alias_symbols(aliases, axes=axes_meta)
 
     chains = spec.get("chain") or []
     if chains:
@@ -1271,9 +1382,9 @@ def normalize_transitions_rhs(spec: Mapping[str, Any]) -> NormalizedRhs:
     for idx, tr_map in enumerate(transitions_raw):
         tr_valid = _validate_transition_mapping(tr_map, idx=idx)
         rate_expr = tr_valid.get("rate")
-        if isinstance(rate_expr, str) and "sum_over" in rate_expr:
+        if isinstance(rate_expr, str):
             tr_valid = dict(tr_valid)
-            tr_valid["rate"] = _expand_sum_over(rate_expr, axes=axes_meta)
+            tr_valid["rate"] = _expand_helpers(rate_expr, axes=axes_meta)
         _apply_transition(
             idx=idx,
             tr=tr_valid,

@@ -43,9 +43,9 @@ system:
       kind: expr
       state: [S, I, R]
       equations:
-        S: "-beta * S * I / sum_state()"
-        I: "beta * S * I / sum_state() - gamma * I"
-        R: "gamma * I"
+        S: -beta * S * I / sum_state()
+        I: beta * S * I / sum_state() - gamma * I
+        R: gamma * I
 
   sir_linear_chain:
     module: op_system
@@ -53,9 +53,12 @@ system:
       kind: expr
       state: [S, I1, I2, I3, R]
       chain:
-        - {name: I, length: 3, forward: gamma, to: R}
+        - name: I
+          length: 3
+          forward: gamma
+          to: R
       equations:
-        S: "-beta * S * sum_prefix('I') / sum_state()"
+        S: -beta * S * sum_prefix('I') / sum_state()
 ```
 
 ### Two-population SIR (templates + sum_over)
@@ -66,14 +69,15 @@ system:
     spec:
       kind: expr
       axes:
-        - {name: pop, coords: [p1, p2]}
+        - name: pop
+          coords: [p1, p2]
       state: [S[pop], I[pop], R[pop]]
       aliases:
-        N: "sum_state()"
+        N: sum_state()
       equations:
-        S[pop]: "-beta * S[pop] * sum_over(pop=j, c_pop_j * I[pop=j] / N)"
-        I[pop]: "beta * S[pop] * sum_over(pop=j, c_pop_j * I[pop=j] / N) - gamma * I[pop]"
-        R[pop]: "gamma * I[pop]"
+        S[pop]: -beta * S[pop] * sum_over(pop=j, c_pop_j * I[pop=j] / N)
+        I[pop]: beta * S[pop] * sum_over(pop=j, c_pop_j * I[pop=j] / N) - gamma * I[pop]
+        R[pop]: gamma * I[pop]
 ```
 
 Parameter names for contacts expand as you choose (e.g., `c_pop_j` → `c_p1_p1`, `c_p1_p2`, ... when binding params).
@@ -86,17 +90,32 @@ system:
     spec:
       kind: expr
       axes:
-        - {name: x, type: continuous, domain: {lb: 0.0, ub: 10.0}, size: 5, spacing: linear}
+        - name: x
+          type: continuous
+          domain:
+            lb: 0.0
+            ub: 10.0
+          size: 5
+          spacing: linear
       state: [u]
       state_axes:
         u: [x]
       mixing:
-        - {name: K, axes: [x], form: gaussian, params: {scale: 1.0, sigma: 0.5}}
+        - name: K
+          axes: [x]
+          form: gaussian
+          params:
+            scale: 1.0
+            sigma: 0.5
       operators:
-        - {name: diff, axis: x, kind: laplacian}
+        - name: diff
+          axis: x
+          kind: laplacian
       equations:
         u: "0.0"
 ```
+
+Integrate along continuous axes with `integrate_over(axis=var, expr)`, which uses trapezoidal weights derived from the axis `coords` (non-uniform spacing respected).
 
 ### Transitions (hazard/flow style)
 
@@ -107,10 +126,15 @@ system:
       kind: transitions
       state: [S, I, R]
       aliases:
-        N: "S + I + R"
+        N: S + I + R
       transitions:
-        - {from: S, to: I, rate: "beta * I / N"}
-        - {from: I, to: R, rate: "gamma"}
+        - name: infect
+          from: S
+          to: I
+          rate: beta * I / N
+        - from: I
+          to: R
+          rate: gamma
 ```
 
 ---
@@ -138,8 +162,10 @@ just mypy
 ## Features
 
 - RHS kinds: `expr` (explicit equations) and `transitions` (hazard/flow style).
+- Transitions support optional `name` metadata preserved in `meta.transitions`.
 - Templates: `State[axis,...]` expand over categorical axes; equations may be written once per template.
 - `sum_over(axis=var, expr)`: unrolls over categorical coords; continuous axes are rejected.
+- `integrate_over(axis=var, expr)`: trapezoidal integrate along continuous axes using axis-derived deltas (non-uniform spacing supported).
 - Chain helper: `chain` block auto-fills staged compartments (expr or transitions kinds).
 - Reducers in expressions: `sum_state()`, `sum_prefix(prefix)`.
 - Axes: categorical or continuous; continuous can be generated via `domain` + `size` + `spacing` (linear/log/geom).

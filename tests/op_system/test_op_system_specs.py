@@ -86,6 +86,38 @@ def test_normalize_transitions_rhs_happy_path() -> None:
     assert len(out.meta["transitions"]) == 2
 
 
+def test_transitions_accepts_optional_name_and_preserves_meta() -> None:
+    """Transitions may include an optional name that is preserved in meta."""
+    spec = {
+        "kind": "transitions",
+        "state": ["S", "I", "R"],
+        "transitions": [
+            {"name": "infect", "from": "S", "to": "I", "rate": "beta"},
+            {"from": "I", "to": "R", "rate": "gamma"},
+        ],
+    }
+
+    out = normalize_transitions_rhs(spec)
+    transitions_meta = out.meta.get("transitions")
+    assert isinstance(transitions_meta, list)
+    assert transitions_meta[0]["name"] == "infect"
+    assert "name" not in transitions_meta[1]
+
+
+def test_transitions_rejects_nonstring_name() -> None:
+    """Transition names must be non-empty strings when provided."""
+    spec = {
+        "kind": "transitions",
+        "state": ["S", "I"],
+        "transitions": [
+            {"name": 3, "from": "S", "to": "I", "rate": "beta"},
+        ],
+    }
+
+    with pytest.raises(ValueError, match=r"name must be a non-empty string"):
+        normalize_transitions_rhs(spec)
+
+
 def test_normalize_rhs_preserves_reserved_blocks_in_meta() -> None:
     """Test that reserved future blocks are preserved in meta."""
     spec = {
@@ -138,6 +170,55 @@ def test_sum_over_rejects_continuous_axis() -> None:
         "equations": {"S[age]": "-sum_over(age=i, S[age])"},
     }
     with pytest.raises(ValueError, match=r"sum_over axis .* must be categorical"):
+        normalize_expr_rhs(spec)
+
+
+def test_integrate_over_expands_with_continuous_deltas() -> None:
+    """integrate_over uses trapezoidal weights from continuous axis coords."""
+    spec = {
+        "kind": "expr",
+        "axes": [
+            {
+                "name": "x",
+                "type": "continuous",
+                "coords": [0.0, 1.0, 3.0],
+            }
+        ],
+        "state": ["u[x]", "v"],
+        "equations": {
+            "u[x]": "0.0",
+            "v": "integrate_over(x=i, u[x=i])",
+        },
+    }
+
+    out = normalize_expr_rhs(spec)
+    axes_meta = out.meta["axes"]
+    assert axes_meta[0]["deltas"] == [0.5, 1.5, 1.0]
+
+    eq_v = out.equations[-1]
+    assert "0.5" in eq_v
+    assert "1.5" in eq_v
+    assert "1.0" in eq_v
+    assert "u__x_0_0" in eq_v
+    assert "u__x_1_0" in eq_v
+    assert "u__x_3_0" in eq_v
+
+
+def test_integrate_over_rejects_categorical_axis() -> None:
+    """integrate_over on a categorical axis should raise an error."""
+    spec = {
+        "kind": "expr",
+        "axes": [
+            {
+                "name": "g",
+                "coords": ["a", "b"],
+            }
+        ],
+        "state": ["x"],
+        "equations": {"x": "integrate_over(g=i, x)"},
+    }
+
+    with pytest.raises(ValueError, match=r"must be continuous"):
         normalize_expr_rhs(spec)
 
 
