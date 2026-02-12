@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import ast
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, NoReturn
+from typing import TYPE_CHECKING, Any, NoReturn, cast
 
 import numpy as np
 from numpy.typing import NDArray
@@ -186,20 +186,33 @@ _ALLOWED_NODES: tuple[type[ast.AST], ...] = (
 )
 
 _ALLOWED_CALL_ROOTS: tuple[str, ...] = ("np",)
-_ALLOWED_CALL_FUNCS: frozenset[str] = frozenset(
-    {
-        # NumPy scalar math; keep small initially.
-        "abs",
-        "exp",
-        "log",
-        "log1p",
-        "sqrt",
-        "maximum",
-        "minimum",
-        "clip",
-        "where",
-    }
-)
+_ALLOWED_CALL_FUNCS: frozenset[str] = frozenset({
+    # NumPy scalar math; keep small initially.
+    "abs",
+    "exp",
+    "expm1",
+    "log",
+    "log1p",
+    "log2",
+    "log10",
+    "sqrt",
+    "maximum",
+    "minimum",
+    "clip",
+    "where",
+    # Trig and hyperbolic.
+    "sin",
+    "cos",
+    "tan",
+    "sinh",
+    "cosh",
+    "tanh",
+    # Geometry-ish.
+    "hypot",
+    "arctan2",
+})
+
+_ALLOWED_HELPER_FUNCS: frozenset[str] = frozenset({"sum_state", "sum_prefix"})
 
 
 def _parse_expr(expr: str) -> ast.Expression:
@@ -217,6 +230,30 @@ def _parse_expr(expr: str) -> ast.Expression:
         _raise_invalid_expression(detail=f"invalid expression syntax: {exc.msg}")
 
 
+def _validate_call(node: ast.Call, *, expr: str) -> None:
+    func = node.func
+    if isinstance(func, ast.Attribute):
+        if not isinstance(func.value, ast.Name):
+            _raise_invalid_expression(detail=f"invalid call root in {expr!r}")
+        root = str(func.value.id)
+        name = str(func.attr)
+        if root not in _ALLOWED_CALL_ROOTS or name not in _ALLOWED_CALL_FUNCS:
+            _raise_invalid_expression(
+                detail=f"{DISALLOWED_FUNCTION_CALL}: {root}.{name}"
+            )
+        return
+
+    if isinstance(func, ast.Name):
+        helper_name = str(func.id)
+        if helper_name not in _ALLOWED_HELPER_FUNCS:
+            _raise_invalid_expression(
+                detail=f"{DISALLOWED_FUNCTION_CALL}: {helper_name}"
+            )
+        return
+
+    _raise_invalid_expression(detail=f"{ONLY_ATTRIBUTE_CALLS_ALLOWED} in {expr!r}")
+
+
 def _validate_ast(tree: ast.AST, *, expr: str) -> None:
     """Validate that an expression AST only contains allowed constructs.
 
@@ -230,7 +267,6 @@ def _validate_ast(tree: ast.AST, *, expr: str) -> None:
                 detail=f"disallowed AST node {type(node).__name__} in {expr!r}"
             )
 
-        # Explicitly reject constructs that could slip through via allowed nodes.
         if isinstance(node, ast.Name) and node.id in {"__import__", "__builtins__"}:
             _raise_invalid_expression(detail=f"disallowed name: {node.id!r}")
 
@@ -242,20 +278,7 @@ def _validate_ast(tree: ast.AST, *, expr: str) -> None:
             )
 
         if isinstance(node, ast.Call):
-            func = node.func
-            if not isinstance(func, ast.Attribute):
-                _raise_invalid_expression(
-                    detail=f"{ONLY_ATTRIBUTE_CALLS_ALLOWED} in {expr!r}"
-                )
-            if not isinstance(func.value, ast.Name):
-                _raise_invalid_expression(detail=f"invalid call root in {expr!r}")
-
-            root = str(func.value.id)
-            name = str(func.attr)
-            if root not in _ALLOWED_CALL_ROOTS or name not in _ALLOWED_CALL_FUNCS:
-                _raise_invalid_expression(
-                    detail=f"{DISALLOWED_FUNCTION_CALL}: {root}.{name}"
-                )
+            _validate_call(node, expr=expr)
 
 
 def _compile_expr(expr: str) -> CodeType:
@@ -349,6 +372,42 @@ def _resolve_aliases(
     )
 
 
+def _validate_state_vector(y_arr: np.ndarray, *, n_state: int) -> np.ndarray:
+    """Validate shape of the state vector.
+
+    Returns:
+        State vector coerced to shape (n_state,).
+    """
+    if y_arr.ndim != 1:
+        _raise_state_shape_error(expected="1D array", got=y_arr.shape)
+    if y_arr.size != n_state:
+        _raise_state_shape_error(expected=f"(n_state={n_state},)", got=y_arr.shape)
+    return y_arr
+
+
+def _evaluate_equations(
+    *,
+    eq_code: list[CodeType],
+    env: Mapping[str, object],
+    n_state: int,
+) -> Float64Array:
+    """Evaluate equation code objects against an environment.
+
+    Returns:
+        Derivative vector aligned to the provided state ordering.
+    """
+    out = np.empty((n_state,), dtype=np.float64)
+    for i, codeobj in enumerate(eq_code):
+        try:
+            val = eval(codeobj, {"__builtins__": _SAFE_BUILTINS}, env)  # noqa: S307
+        except NameError as exc:
+            _raise_parameter_error(detail=f"unknown symbol in equation: {exc!s}")
+        except (ValueError, TypeError, ArithmeticError) as exc:
+            _raise_invalid_expression(detail=f"equation evaluation failed: {exc!r}")
+        out[i] = np.float64(val)
+    return out
+
+
 def _make_eval_fn(
     *,
     state_names: tuple[str, ...],
@@ -360,32 +419,42 @@ def _make_eval_fn(
     alias_code = _collect_alias_code(aliases)
     eq_code = _collect_eq_code(equations)
 
-    def eval_fn(t: np.float64, y: Float64Array, **params: object) -> Float64Array:
-        y_arr = np.asarray(y, dtype=np.float64)
-        if y_arr.ndim != 1:
-            _raise_state_shape_error(expected="1D array", got=y_arr.shape)
-        if y_arr.size != n_state:
-            _raise_state_shape_error(expected=f"(n_state={n_state},)", got=y_arr.shape)
+    def _sum_state(env: Mapping[str, object]) -> np.float64:
+        values = [
+            np.float64(float(cast("Any", v)))
+            for k, v in env.items()
+            if k in name_to_idx
+        ]
+        return np.float64(sum(values))
 
+    def _sum_prefix(prefix: str, env: Mapping[str, object]) -> np.float64:
+        values = [
+            np.float64(float(cast("Any", v)))
+            for k, v in env.items()
+            if k.startswith(prefix) and k in name_to_idx
+        ]
+        return np.float64(sum(values))
+
+    def _build_env(
+        t: np.float64, y_arr: Float64Array, params: Mapping[str, object]
+    ) -> dict[str, object]:
         env: dict[str, object] = {"np": np, "t": np.float64(t)}
         for s, i in name_to_idx.items():
             env[s] = np.float64(y_arr[i])
         env.update(params)
+        env["sum_state"] = lambda: _sum_state(env)
+        env["sum_prefix"] = lambda prefix: _sum_prefix(str(prefix), env)
+        return env
+
+    def eval_fn(t: np.float64, y: Float64Array, **params: object) -> Float64Array:
+        y_arr = _validate_state_vector(np.asarray(y, dtype=np.float64), n_state=n_state)
+
+        env = _build_env(np.float64(t), y_arr, params)
 
         if alias_code:
             env.update(_resolve_aliases(alias_code, base_env=env))
 
-        out = np.empty((n_state,), dtype=np.float64)
-        for i, codeobj in enumerate(eq_code):
-            try:
-                val = eval(codeobj, {"__builtins__": _SAFE_BUILTINS}, env)  # noqa: S307
-            except NameError as exc:
-                _raise_parameter_error(detail=f"unknown symbol in equation: {exc!s}")
-            except (ValueError, TypeError, ArithmeticError) as exc:
-                _raise_invalid_expression(detail=f"equation evaluation failed: {exc!r}")
-            out[i] = np.float64(val)
-
-        return out
+        return _evaluate_equations(eq_code=eq_code, env=env, n_state=n_state)
 
     return eval_fn
 

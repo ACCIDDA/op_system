@@ -4,11 +4,11 @@
 
 `op_system` provides a lightweight, backend-neutral way to:
 
-1. Define system dynamics in a YAML/JSON-friendly format
-2. Normalize those specifications into a structured representation
+1. Define system dynamics in a YAML/JSON-friendly format (with axes, templates, helpers)
+2. Normalize those specifications into a structured representation (with preserved metadata)
 3. Compile them into fast callable right-hand-side (RHS) functions usable by numerical engines
 
-It is designed to integrate cleanly with `op_engine` and external orchestration systems (e.g. flepimop2) while remaining standalone and dependency-minimal.
+It is designed to integrate cleanly with `op_engine` and orchestration systems (e.g. flepimop2) while remaining standalone and dependency-minimal.
 
 ---
 
@@ -65,6 +65,37 @@ dI/dt += (beta * I / N) * S - gamma * I
 dR/dt += gamma * I
 ```
 
+### Templated State Names and `sum_over`
+
+- **Templated states**: use `State[axis_a, axis_b]` in `state` and provide categorical axes; they expand into concrete names like `State__axis_a_a0__axis_b_b1`.
+- **`sum_over(axis=var, expr)`**: unrolls over categorical axes at normalization time, replacing template references accordingly.
+- Continuous axes are rejected in `sum_over`.
+
+Example:
+
+```python
+spec = {
+  "kind": "expr",
+  "axes": [{"name": "pop", "coords": ["p1", "p2"]}],
+  "state": ["S[pop]", "I[pop]"],
+  "equations": {
+    "S[pop]": "-beta * S[pop] * sum_over(pop=j, I[pop=j])",
+    "I[pop]": "beta * S[pop] * sum_over(pop=j, I[pop=j]) - gamma * I[pop]",
+  },
+}
+```
+
+### Chain Helper (expr + transitions)
+
+Optional `chain` blocks auto-fill missing equations or transitions for staged compartments:
+
+```python
+"chain": [{"name": "I", "length": 3, "forward": "gamma", "to": "R"}]
+```
+
+- For `expr`, missing stage equations are generated.
+- For `transitions`, missing internal transitions and optional sink transitions are appended.
+
 ---
 
 ## Axes & Mixing (preserved metadata)
@@ -72,6 +103,8 @@ dR/dt += gamma * I
 - Axes: categorical or continuous. Continuous axes can be specified via explicit `coords` or via `domain`+`size`+`spacing` (linear/log/geom). Resolved axis names, coords, and sizes are placed in `NormalizedRhs.meta["axes"]`.
 - Mixing kernels: optional `mixing` blocks support `form` values `erfc`, `gaussian`, `exponential`, `gamma`, `power_law`, and `custom_value`, with validated parameters. Normalized kernels are placed in `NormalizedRhs.meta["mixing"]` for adapters to consume (e.g., flepimop2 builds `mixing_kernels`).
 - Operators: `operators` metadata is normalized and preserved in `NormalizedRhs.meta["operators"]`; wiring into solvers is future-facing (not yet consumed by op_engine).
+
+State-axis mapping: optional `state_axes` maps state names to axes; validation ensures referenced axes exist and are not duplicated.
 
 ---
 
@@ -179,11 +212,12 @@ mixing_meta = rhs.meta["mixing"]    # List of normalized mixing kernels
 
 Expressions are parsed with Python `ast` and restricted to:
 
-- Arithmetic operations
-- Named variables
-- Selected NumPy math functions (`np.exp`, `np.log`, etc)
+- Arithmetic operations, comparisons, ternary expressions, bool ops
+- Named variables and constants
+- Selected NumPy math functions with `np.` root: `abs`, `exp`, `expm1`, `log`, `log1p`, `log2`, `log10`, `sqrt`, `maximum`, `minimum`, `clip`, `where`, `sin`, `cos`, `tan`, `sinh`, `cosh`, `tanh`, `hypot`, `arctan2`
+- Built-in helpers: `sum_state()`, `sum_prefix(prefix)`
 
-Disallowed operations (imports, attribute access, function injection) are rejected.
+Disallowed operations include non-`np` attribute access, non-whitelisted helpers, imports, and other AST node types. Validation errors raise descriptive built-in exceptions (`ValueError`, `TypeError`).
 
 Validation errors raise descriptive built-in exceptions (`ValueError`, `TypeError`); no custom error wrapper is shipped.
 

@@ -148,7 +148,15 @@ def test_invalid_expression_syntax_rejected_during_normalize() -> None:
 
 def test_compile_rejects_disallowed_function_calls() -> None:
     """Disallowed function calls (e.g., np.sin) should be rejected."""
-    spec = {"kind": "expr", "state": ["x"], "equations": {"x": "np.sin(x)"}}
+    spec = {"kind": "expr", "state": ["x"], "equations": {"x": "np.floor(x)"}}
+    rhs = normalize_rhs(spec)
+    with pytest.raises(ValueError, match=r"disallowed function call"):
+        compile_rhs(rhs)
+
+
+def test_compile_rejects_nonwhitelisted_helper() -> None:
+    """Bare helper calls must be whitelisted; unknown helpers are rejected."""
+    spec = {"kind": "expr", "state": ["x"], "equations": {"x": "foo(x)"}}
     rhs = normalize_rhs(spec)
     with pytest.raises(ValueError, match=r"disallowed function call"):
         compile_rhs(rhs)
@@ -173,6 +181,89 @@ def test_eval_allows_whitelisted_np_calls() -> None:
     compiled = compile_rhs(rhs)
     out = compiled.eval_fn(np.float64(0.0), np.array([-2.0], dtype=np.float64))
     assert np.allclose(out, np.array([0.0], dtype=np.float64))
+
+
+def test_eval_allows_expanded_np_whitelist() -> None:
+    """Expanded whitelist functions should parse, compile, and evaluate."""
+    expr = (
+        "np.sin(x) + np.cos(x) + np.tan(x) + np.sinh(x) + np.cosh(x) + "
+        "np.tanh(x) + np.expm1(x) + np.log2(x) + np.log10(x) + np.hypot(x, 2.0) + "
+        "np.arctan2(x, 2.0)"
+    )
+    spec = {"kind": "expr", "state": ["x"], "equations": {"x": expr}}
+    rhs = normalize_rhs(spec)
+    compiled = compile_rhs(rhs)
+    x_val = np.array([1.0], dtype=np.float64)
+    out = compiled.eval_fn(np.float64(0.0), x_val)
+    expected = np.array(
+        [
+            np.sin(1.0)
+            + np.cos(1.0)
+            + np.tan(1.0)
+            + np.sinh(1.0)
+            + np.cosh(1.0)
+            + np.tanh(1.0)
+            + np.expm1(1.0)
+            + np.log2(1.0)
+            + np.log10(1.0)
+            + np.hypot(1.0, 2.0)
+            + np.arctan2(1.0, 2.0)
+        ],
+        dtype=np.float64,
+    )
+    assert out.dtype == np.float64
+    assert out.shape == (1,)
+    assert np.allclose(out, expected)
+
+
+def test_templates_and_sum_over_compile_and_eval() -> None:
+    """Templated states with sum_over compile and evaluate end-to-end."""
+    spec = {
+        "kind": "expr",
+        "axes": [{"name": "pop", "coords": ["p1", "p2"]}],
+        "state": ["S[pop]", "I[pop]"],
+        "equations": {
+            "S[pop]": "-beta * S[pop] * sum_over(pop=j, I[pop=j])",
+            "I[pop]": "beta * S[pop] * sum_over(pop=j, I[pop=j]) - gamma * I[pop]",
+        },
+    }
+    rhs = normalize_rhs(spec)
+    compiled = compile_rhs(rhs)
+
+    # State ordering after expansion: S__pop_p1, S__pop_p2, I__pop_p1, I__pop_p2
+    y = np.array([10.0, 20.0, 1.0, 2.0], dtype=np.float64)
+    out = compiled.eval_fn(np.float64(0.0), y, beta=0.5, gamma=0.1)
+
+    inf_total = 1.0 + 2.0
+    expected = np.array(
+        [
+            -0.5 * 10.0 * inf_total,
+            -0.5 * 20.0 * inf_total,
+            0.5 * 10.0 * inf_total - 0.1 * 1.0,
+            0.5 * 20.0 * inf_total - 0.1 * 2.0,
+        ],
+        dtype=np.float64,
+    )
+    assert out.shape == (4,)
+    assert out.dtype == np.float64
+    assert np.allclose(out, expected)
+
+
+def test_reducer_helpers_sum_state_and_prefix() -> None:
+    """sum_state and sum_prefix are available in equations/aliases."""
+    spec = {
+        "kind": "expr",
+        "state": ["x", "y"],
+        "aliases": {"tot": "sum_state()"},
+        "equations": {
+            "x": "sum_state()",  # x+y
+            "y": "sum_prefix('x')",  # just x
+        },
+    }
+    rhs = normalize_rhs(spec)
+    compiled = compile_rhs(rhs)
+    out = compiled.eval_fn(np.float64(0.0), np.array([2.0, 3.0], dtype=np.float64))
+    assert np.allclose(out, np.array([5.0, 2.0], dtype=np.float64))
 
 
 def test_alias_dependency_resolution() -> None:

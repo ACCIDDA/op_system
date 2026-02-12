@@ -36,11 +36,14 @@ Future-facing (not implemented, but reserved)
 from __future__ import annotations
 
 import ast
+import re
 from dataclasses import dataclass
+from itertools import product
 from typing import TYPE_CHECKING, Any, NoReturn
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping
+    from re import Match
 
 # -----------------------------------------------------------------------------
 # Error message constants
@@ -670,23 +673,351 @@ def _collect_alias_symbols(aliases: Mapping[str, str]) -> set[str]:
     return symbols
 
 
+def _sanitize_fragment(val: object) -> str:
+    """Sanitize coord fragments into identifier-friendly pieces.
+
+    Returns:
+        A safe identifier fragment with non-alphanumerics replaced by underscores.
+    """
+    s = str(val)
+    return re.sub(r"[^0-9A-Za-z]+", "_", s).strip("_") or "_"
+
+
+def _expand_state_templates(
+    state_raw: list[str],
+    *,
+    axes: list[dict[str, Any]],
+) -> tuple[list[str], dict[str, list[tuple[str, dict[str, str]]]]]:
+    """Expand state templates with categorical axes into concrete names.
+
+    Returns:
+        A tuple of (expanded_state_names, template_map) where template_map maps
+        template keys to lists of (expanded_name, assignment dict).
+    """
+    axis_lookup: dict[str, list[str]] = {
+        ax["name"]: [str(c) for c in ax.get("coords", [])] for ax in axes
+    }
+
+    expanded: list[str] = []
+    template_map: dict[str, list[tuple[str, dict[str, str]]]] = {}
+
+    for entry in state_raw:
+        if "[" not in entry or "]" not in entry:
+            expanded.append(entry)
+            continue
+        m = re.fullmatch(r"\s*([A-Za-z_][A-Za-z0-9_]*)\[(.+)\]\s*", entry)
+        if not m:
+            _raise_invalid_rhs_spec(detail=f"invalid state template: {entry!r}")
+        base = m.group(1)
+        placeholders = [p.strip() for p in m.group(2).split(",")]
+        if not all(placeholders):
+            _raise_invalid_rhs_spec(detail=f"invalid state template axes in {entry!r}")
+        coords_lists: list[list[str]] = []
+        for ph in placeholders:
+            if ph not in axis_lookup:
+                _raise_invalid_rhs_spec(
+                    detail=f"state template axis {ph!r} not defined"
+                )
+            coords_lists.append(axis_lookup[ph])
+        combos = list(product(*coords_lists))
+        template_key = f"{base}[{','.join(placeholders)}]"
+        template_map[template_key] = []
+        for combo in combos:
+            parts = [
+                f"{placeholders[i]}_{_sanitize_fragment(combo[i])}"
+                for i in range(len(placeholders))
+            ]
+            name = base + "__" + "__".join(parts)
+            template_map[template_key].append((
+                name,
+                {placeholders[i]: combo[i] for i in range(len(placeholders))},
+            ))
+            expanded.append(name)
+
+    return expanded, template_map
+
+
+def _parse_template_key(template_key: str) -> tuple[str, list[str]]:
+    """Parse a template key like "S[pop,age]" into (base, placeholders).
+
+    Returns:
+        Tuple of (base, placeholder list). Returns (template_key, []) if it
+        does not match the expected format.
+    """
+    m = re.fullmatch(r"\s*([A-Za-z_][A-Za-z0-9_]*)\[(.+)\]\s*", template_key)
+    if not m:
+        return template_key, []
+    base = m.group(1)
+    placeholders = [p.strip() for p in m.group(2).split(",") if p.strip()]
+    return base, placeholders
+
+
+def _render_template_name(
+    base: str, placeholders: list[str], assignment: Mapping[str, str]
+) -> str:
+    """Render an expanded name from base + placeholders using assignment.
+
+    Returns:
+        Concrete state name (e.g., S__pop_p1__age_0_5).
+    """
+    parts = [f"{ph}_{_sanitize_fragment(assignment[ph])}" for ph in placeholders]
+    return base + "__" + "__".join(parts)
+
+
+def _apply_template_substitutions(
+    expr_s: str,
+    *,
+    assignment: Mapping[str, str],
+    template_map: Mapping[str, list[tuple[str, dict[str, str]]]],
+) -> str:
+    """Replace any template references in expr_s using a concrete assignment.
+
+    Returns:
+        Expression with template tokens replaced using the provided assignment.
+    """
+    for template_key in template_map:
+        base, placeholders = _parse_template_key(template_key)
+        if not placeholders or any(ph not in assignment for ph in placeholders):
+            continue
+        rendered = _render_template_name(base, placeholders, assignment)
+        expr_s = re.sub(re.escape(template_key), rendered, expr_s)
+    return expr_s
+
+
+def _resolve_template_equation(
+    *,
+    name: str,
+    equations_map: Mapping[str, Any],
+    axes: list[dict[str, Any]],
+    template_map: Mapping[str, list[tuple[str, dict[str, str]]]],
+    all_syms: set[str],
+) -> str | None:
+    """Resolve an equation for a templated state name.
+
+    Returns:
+        Expanded expression string if found, otherwise None.
+    """
+    for template_key, variants in template_map.items():
+        for expanded_name, assignment in variants:
+            if expanded_name != name or template_key not in equations_map:
+                continue
+            expr = equations_map[template_key]
+            if not isinstance(expr, str) or not expr.strip():
+                _raise_invalid_rhs_spec(
+                    detail=(f"equations[{template_key!r}] must be a non-empty string")
+                )
+            expr_s = _expand_sum_over(expr.strip(), axes=axes)
+            expr_s = _apply_template_substitutions(
+                expr_s, assignment=assignment, template_map=template_map
+            )
+            tree = _parse_expr(expr_s)
+            all_syms |= _collect_names(tree)
+            return expr_s
+    return None
+
+
+def _expand_sum_over(expr: str, *, axes: list[dict[str, Any]]) -> str:
+    """Expand sum_over(axis=var, inner_expr) for categorical axes.
+
+    This is a simple string-level unroller; it does not support nested
+    sum_over inside the inner_expr beyond repeated passes. Continuous axes
+    are rejected.
+
+    Returns:
+        Expression string with sum_over expanded to explicit sums.
+    """
+
+    def _axis_coords(ax_name: str) -> list[str]:
+        for ax in axes:
+            if ax.get("name") == ax_name:
+                if ax.get("type") != "categorical":
+                    _raise_invalid_rhs_spec(
+                        detail=f"sum_over axis {ax_name!r} must be categorical"
+                    )
+                coords = ax.get("coords", [])
+                if not coords:
+                    _raise_invalid_rhs_spec(
+                        detail=f"sum_over axis {ax_name!r} has no coords"
+                    )
+                return [str(c) for c in coords]
+        _raise_invalid_rhs_spec(detail=f"sum_over axis {ax_name!r} not found")
+
+    pattern = re.compile(
+        r"sum_over\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*([A-Za-z_][A-Za-z0-9_]*)\s*,\s*(.*?)\)",
+        re.DOTALL,
+    )
+
+    out = expr
+    # Iterate until no more matches to handle multiple sum_over occurrences.
+    while True:
+        m = pattern.search(out)
+        if not m:
+            break
+        axis_name = m.group(1)
+        var_name = m.group(2)
+        inner = m.group(3)
+        coords = _axis_coords(axis_name)
+        terms: list[str] = []
+        for coord in coords:
+            # Replace var_name occurrences with coord (as identifier-safe string)
+            replaced = re.sub(
+                rf"\b{re.escape(var_name)}\b",
+                str(coord),
+                inner,
+            )
+            coord_s = str(coord)
+
+            def _template_replacer(
+                match: Match[str], *, axis: str = axis_name, coord: str = coord_s
+            ) -> str:
+                return f"{match.group(1)}__{axis}_{_sanitize_fragment(coord)}"
+
+            replaced = re.sub(
+                rf"([A-Za-z_][A-Za-z0-9_]*)\[\s*{re.escape(axis_name)}\s*=\s*{re.escape(coord_s)}\s*\]",
+                _template_replacer,
+                replaced,
+            )
+            terms.append(f"({replaced})")
+        replacement = " + ".join(terms)
+        out = out[: m.start()] + f"({replacement})" + out[m.end() :]
+    return out
+
+
 def _gather_equations(
     state: list[str],
     equations_map: Mapping[str, Any],
     all_syms: set[str],
+    *,
+    axes: list[dict[str, Any]],
+    template_map: Mapping[str, list[tuple[str, dict[str, str]]]] | None = None,
 ) -> list[str]:
     eqs: list[str] = []
+    template_map = template_map or {}
     for name in state:
-        expr = equations_map[name]
-        if not isinstance(expr, str) or not expr.strip():
-            _raise_invalid_rhs_spec(
-                detail=f"equations[{name!r}] must be a non-empty string"
-            )
-        expr_s = expr.strip()
-        tree = _parse_expr(expr_s)
-        all_syms |= _collect_names(tree)
-        eqs.append(expr_s)
+        if name in equations_map:
+            expr = equations_map[name]
+            if not isinstance(expr, str) or not expr.strip():
+                _raise_invalid_rhs_spec(
+                    detail=f"equations[{name!r}] must be a non-empty string"
+                )
+            expr_s = _expand_sum_over(expr.strip(), axes=axes)
+            tree = _parse_expr(expr_s)
+            all_syms |= _collect_names(tree)
+            eqs.append(expr_s)
+            continue
+
+        expr_res = _resolve_template_equation(
+            name=name,
+            equations_map=equations_map,
+            axes=axes,
+            template_map=template_map,
+            all_syms=all_syms,
+        )
+        if expr_res is None:
+            _raise_invalid_rhs_spec(detail=f"Missing equation for state {name!r}")
+        eqs.append(expr_res)
     return eqs
+
+
+def _validate_chain_entry(
+    *,
+    chain: Mapping[str, Any],
+    idx: int,
+    state_set: set[str],
+    allow_templates: bool,
+) -> tuple[list[str], str, str | None]:
+    """Validate a chain entry and return stage names, rate, and sink.
+
+    Returns:
+        (stage_names, rate_expr, sink_name or None).
+    """
+    if not isinstance(chain, dict):
+        _raise_invalid_rhs_spec(detail=f"chain[{idx}] must be a mapping")
+    cname = _get_required_str(chain, idx=idx, key="name")
+    length_obj = chain.get("length")
+    if not isinstance(length_obj, (int, float)) or isinstance(length_obj, bool):
+        _raise_invalid_rhs_spec(detail=f"chain[{idx}].length must be an integer >= 2")
+    clen = int(length_obj)
+    if clen < 2:
+        _raise_invalid_rhs_spec(detail=f"chain[{idx}].length must be >= 2")
+    rate_expr = _get_required_str(chain, idx=idx, key="forward")
+    sink = chain.get("to")
+    stage_names = [f"{cname}{i}" for i in range(1, clen + 1)]
+    missing = [s for s in stage_names if s not in state_set]
+    if missing:
+        tail = "Define them in state."
+        if allow_templates:
+            tail = "Define them (or templates) in state."
+        _raise_invalid_rhs_spec(
+            detail=(f"chain[{idx}] references missing states: {missing}. {tail}")
+        )
+    sink_s: str | None = None
+    if sink is not None:
+        sink_s = sink.strip() if isinstance(sink, str) else None
+        if not sink_s:
+            _raise_invalid_rhs_spec(
+                detail=f"chain[{idx}].to must be a non-empty string"
+            )
+        if sink_s not in state_set:
+            _raise_invalid_rhs_spec(detail=f"chain[{idx}].to={sink_s!r} not in state")
+    return stage_names, rate_expr, sink_s
+
+
+def _apply_expr_chains(
+    *,
+    chains: list[Any],
+    state_expanded: list[str],
+    equations_map: dict[str, Any],
+) -> None:
+    """Apply chain helper for expr kind by auto-filling equations when missing."""
+    state_set = set(state_expanded)
+    for c_idx, chain in enumerate(chains):
+        stage_names, rate_expr, sink_s = _validate_chain_entry(
+            chain=chain,
+            idx=c_idx,
+            state_set=state_set,
+            allow_templates=True,
+        )
+        if stage_names[0] not in equations_map:
+            equations_map[stage_names[0]] = f"-({rate_expr})*{stage_names[0]}"
+        for i in range(1, len(stage_names)):
+            if stage_names[i] not in equations_map:
+                equations_map[stage_names[i]] = (
+                    f"({rate_expr})*{stage_names[i - 1]} - "
+                    f"({rate_expr})*{stage_names[i]}"
+                )
+        if sink_s is not None and sink_s not in equations_map:
+            equations_map[sink_s] = f"({rate_expr})*{stage_names[-1]}"
+
+
+def _apply_transition_chains(
+    *,
+    chains: list[Any],
+    transitions_raw: list[dict[str, Any]],
+    state_set: set[str],
+) -> None:
+    """Apply chain helper for transitions kind by appending transitions."""
+    for c_idx, chain in enumerate(chains):
+        stage_names, rate_expr, sink_s = _validate_chain_entry(
+            chain=chain,
+            idx=c_idx,
+            state_set=state_set,
+            allow_templates=False,
+        )
+        transitions_raw.extend(
+            {
+                "from": stage_names[i],
+                "to": stage_names[i + 1],
+                "rate": rate_expr,
+            }
+            for i in range(len(stage_names) - 1)
+        )
+        if sink_s is not None:
+            transitions_raw.append({
+                "from": stage_names[-1],
+                "to": sink_s,
+                "rate": rate_expr,
+            })
 
 
 # -----------------------------------------------------------------------------
@@ -736,8 +1067,8 @@ def normalize_expr_rhs(spec: Mapping[str, Any]) -> NormalizedRhs:
     Returns:
         Backend-facing normalized RHS representation.
     """
-    state = _ensure_str_list(spec.get("state"), name="state")
-    if len(state) != len(set(state)):
+    state_raw = _ensure_str_list(spec.get("state"), name="state")
+    if len(state_raw) != len(set(state_raw)):
         _raise_invalid_rhs_spec(detail="state contains duplicate names")
 
     equations_map = spec.get("equations")
@@ -745,10 +1076,10 @@ def normalize_expr_rhs(spec: Mapping[str, Any]) -> NormalizedRhs:
         _raise_invalid_rhs_spec(detail="equations must be a mapping of state->expr")
 
     axes_meta = _normalize_axes(spec.get("axes"))
-    axis_names_set: set[str] = {"subgroup"} | {ax["name"] for ax in axes_meta}
-    state_set = set(state)
     aliases, state_axes, mixing_meta, operators_meta = _normalize_common_meta(
-        spec, axis_names=axis_names_set, state_set=state_set
+        spec,
+        axis_names={"subgroup"} | {ax["name"] for ax in axes_meta},
+        state_set=set(state_raw),
     )
 
     meta: dict[str, Any] = {
@@ -761,31 +1092,48 @@ def normalize_expr_rhs(spec: Mapping[str, Any]) -> NormalizedRhs:
         if reserved_key in spec:
             meta[reserved_key] = spec.get(reserved_key)
 
-    missing_eqs = [s for s in state if s not in equations_map]
-    if missing_eqs:
-        _raise_invalid_rhs_spec(
-            missing=missing_eqs, detail="Missing equation(s) for state"
+    state_expanded, template_map = _expand_state_templates(state_raw, axes=axes_meta)
+    if len(state_expanded) != len(set(state_expanded)):
+        _raise_invalid_rhs_spec(detail="expanded state contains duplicates")
+
+    chains = spec.get("chain") or []
+    if chains:
+        if not isinstance(chains, list):
+            _raise_invalid_rhs_spec(detail="chain must be a list if provided")
+        _apply_expr_chains(
+            chains=chains,
+            state_expanded=state_expanded,
+            equations_map=equations_map,
         )
 
-    unknown_keys = [k for k in equations_map if k not in state_set]
+    # Validate equation keys: allow either concrete states or template keys
+    unknown_keys = [
+        k for k in equations_map if k not in state_expanded and k not in template_map
+    ]
     if unknown_keys:
         _raise_invalid_rhs_spec(
             detail=f"unknown equation key(s): {sorted(unknown_keys)}"
         )
 
     all_syms = _collect_alias_symbols(aliases)
-    eqs = _gather_equations(state, equations_map, all_syms)
-
-    params = _sorted_unique(
-        sym for sym in all_syms if sym not in state_set and sym not in aliases
+    eqs = _gather_equations(
+        state_expanded,
+        equations_map,
+        all_syms,
+        axes=axes_meta,
+        template_map=template_map,
     )
 
     return NormalizedRhs(
         kind="expr",
-        state_names=tuple(state),
+        state_names=tuple(state_expanded),
         equations=tuple(eqs),
         aliases=aliases,
-        param_names=params,
+        param_names=_sorted_unique(
+            sym
+            for sym in all_syms
+            if sym not in set(state_expanded) and sym not in aliases
+        ),
         all_symbols=frozenset(all_syms | set(aliases.keys())),
         meta=meta,
     )
@@ -875,21 +1223,17 @@ def _build_transition_equations(
 
 
 def normalize_transitions_rhs(spec: Mapping[str, Any]) -> NormalizedRhs:
-    """
-    Normalize a transition-based RHS specification (diagram/hazard semantics).
-
-    Args:
-        spec: Raw RHS specification mapping.
+    """Normalize a transition-based RHS specification (diagram/hazard semantics).
 
     Returns:
-        Backend-facing normalized RHS representation.
+        Backend-facing normalized RHS representation for transitions kind.
     """
     state = _ensure_str_list(spec.get("state"), name="state")
     if len(state) != len(set(state)):
         _raise_invalid_rhs_spec(detail="state contains duplicate names")
 
-    transitions = spec.get("transitions")
-    if not isinstance(transitions, list) or not transitions:
+    transitions_raw = spec.get("transitions")
+    if not isinstance(transitions_raw, list) or not transitions_raw:
         _raise_invalid_rhs_spec(detail="transitions must be a non-empty list")
 
     axes_meta = _normalize_axes(spec.get("axes"))
@@ -901,7 +1245,7 @@ def normalize_transitions_rhs(spec: Mapping[str, Any]) -> NormalizedRhs:
     )
 
     meta: dict[str, Any] = {
-        "transitions": transitions,
+        "transitions": transitions_raw,
         "axes": axes_meta,
         "mixing": mixing_meta,
         "operators": operators_meta,
@@ -914,27 +1258,38 @@ def normalize_transitions_rhs(spec: Mapping[str, Any]) -> NormalizedRhs:
     d_terms: dict[str, list[str]] = {s: [] for s in state}
     all_syms = _collect_alias_symbols(aliases)
 
-    for idx, tr_map in enumerate(transitions):
+    chains = spec.get("chain") or []
+    if chains:
+        if not isinstance(chains, list):
+            _raise_invalid_rhs_spec(detail="chain must be a list if provided")
+        _apply_transition_chains(
+            chains=chains,
+            transitions_raw=transitions_raw,
+            state_set=state_set,
+        )
+
+    for idx, tr_map in enumerate(transitions_raw):
+        tr_valid = _validate_transition_mapping(tr_map, idx=idx)
+        rate_expr = tr_valid.get("rate")
+        if isinstance(rate_expr, str) and "sum_over" in rate_expr:
+            tr_valid = dict(tr_valid)
+            tr_valid["rate"] = _expand_sum_over(rate_expr, axes=axes_meta)
         _apply_transition(
             idx=idx,
-            tr=_validate_transition_mapping(tr_map, idx=idx),
+            tr=tr_valid,
             state_set=state_set,
             all_syms=all_syms,
             d_terms=d_terms,
         )
 
-    equations = _build_transition_equations(state, d_terms)
-
-    params = _sorted_unique(
-        sym for sym in all_syms if sym not in state_set and sym not in aliases
-    )
-
     return NormalizedRhs(
         kind="transitions",
         state_names=tuple(state),
-        equations=tuple(equations),
+        equations=tuple(_build_transition_equations(state, d_terms)),
         aliases=aliases,
-        param_names=params,
+        param_names=_sorted_unique(
+            sym for sym in all_syms if sym not in state_set and sym not in aliases
+        ),
         all_symbols=frozenset(all_syms | set(aliases.keys())),
         meta=meta,
     )

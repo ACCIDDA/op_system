@@ -103,6 +103,227 @@ def test_normalize_rhs_preserves_reserved_blocks_in_meta() -> None:
     assert out.meta.get("sources") == {"S": "0.0"}
 
 
+def test_expr_template_expansion_and_sum_over() -> None:
+    """Templates over categorical axes expand state and equations; sum_over unrolls."""
+    spec = {
+        "kind": "expr",
+        "axes": [{"name": "pop", "coords": ["p1", "p2"]}],
+        "state": ["S[pop]", "I[pop]"],
+        "equations": {
+            "S[pop]": "-beta * S[pop] * sum_over(pop=j, I[pop=j])",
+            "I[pop]": "beta * S[pop] * sum_over(pop=j, I[pop=j]) - gamma * I[pop]",
+        },
+    }
+
+    out = normalize_expr_rhs(spec)
+    assert set(out.state_names) == {"S__pop_p1", "S__pop_p2", "I__pop_p1", "I__pop_p2"}
+    # sum_over should be unrolled to explicit sums
+    assert any("I__pop_p1" in eq and "I__pop_p2" in eq for eq in out.equations)
+    assert out.param_names == ("beta", "gamma")
+
+
+def test_sum_over_rejects_continuous_axis() -> None:
+    """sum_over on a continuous axis should raise an error."""
+    spec = {
+        "kind": "expr",
+        "axes": [
+            {
+                "name": "age",
+                "type": "continuous",
+                "domain": {"lb": 0.0, "ub": 10.0},
+                "size": 3,
+            }
+        ],
+        "state": ["S[age]"],
+        "equations": {"S[age]": "-sum_over(age=i, S[age])"},
+    }
+    with pytest.raises(ValueError, match=r"sum_over axis .* must be categorical"):
+        normalize_expr_rhs(spec)
+
+
+def test_axes_generate_continuous_linear_and_log() -> None:
+    """Continuous axes generate coords from domain/size for linear and log spacing."""
+    spec_linear = {
+        "kind": "expr",
+        "axes": [
+            {
+                "name": "x",
+                "type": "continuous",
+                "domain": {"lb": 0.0, "ub": 10.0},
+                "size": 3,
+                "spacing": "linear",
+            }
+        ],
+        "state": ["u"],
+        "equations": {"u": "0.0"},
+    }
+    out_linear = normalize_expr_rhs(spec_linear)
+    coords_linear = out_linear.meta["axes"][0]["coords"]
+    assert coords_linear == [0.0, 5.0, 10.0]
+
+    spec_log = {
+        "kind": "expr",
+        "axes": [
+            {
+                "name": "r",
+                "type": "continuous",
+                "domain": {"lb": 1.0, "ub": 100.0},
+                "size": 3,
+                "spacing": "log",
+            }
+        ],
+        "state": ["v"],
+        "equations": {"v": "0.0"},
+    }
+    out_log = normalize_expr_rhs(spec_log)
+    coords_log = out_log.meta["axes"][0]["coords"]
+    assert coords_log == pytest.approx([1.0, 10.0, 100.0])
+
+
+def test_categorical_missing_coords_and_continuous_monotonicity() -> None:
+    """Categorical axes require coords; continuous coords must be non-decreasing."""
+    spec_missing_coords = {
+        "kind": "expr",
+        "axes": [{"name": "cat", "type": "categorical"}],
+        "state": ["x"],
+        "equations": {"x": "0.0"},
+    }
+    with pytest.raises(ValueError, match=r"categorical requires coords"):
+        normalize_expr_rhs(spec_missing_coords)
+
+    spec_bad_order = {
+        "kind": "expr",
+        "axes": [
+            {
+                "name": "z",
+                "type": "continuous",
+                "coords": [0.0, -1.0],
+            }
+        ],
+        "state": ["x"],
+        "equations": {"x": "0.0"},
+    }
+    with pytest.raises(ValueError, match=r"non-decreasing"):
+        normalize_expr_rhs(spec_bad_order)
+
+
+def test_mixing_and_operator_meta_preserved() -> None:
+    """Mixing kernels and operators metadata are normalized and preserved in meta."""
+    spec = {
+        "kind": "expr",
+        "axes": [
+            {"name": "age", "coords": ["a", "b"]},
+        ],
+        "mixing": [
+            {"name": "k_fixed", "value": 0.5, "axes": ["age"]},
+            {
+                "name": "k_gauss",
+                "form": "gaussian",
+                "params": {"scale": 1.0, "sigma": 0.5},
+            },
+        ],
+        "operators": [
+            {"name": "diff", "axis": "age", "kind": "laplacian"},
+        ],
+        "state": ["S"],
+        "equations": {"S": "0.0"},
+    }
+
+    out = normalize_expr_rhs(spec)
+    mixing_meta = out.meta.get("mixing")
+    assert isinstance(mixing_meta, list)
+    assert {mk["name"] for mk in mixing_meta} == {"k_fixed", "k_gauss"}
+    assert any(mk.get("value") == 0.5 for mk in mixing_meta)
+    assert any(mk.get("form") == "gaussian" for mk in mixing_meta)
+
+    operators_meta = out.meta.get("operators")
+    assert isinstance(operators_meta, list)
+    assert operators_meta[0].get("axis") == "age"
+
+
+def test_state_axes_validation_errors() -> None:
+    """state_axes must reference known axes and avoid duplicates."""
+    spec_unknown_axis = {
+        "kind": "expr",
+        "axes": [{"name": "pop", "coords": ["p1"]}],
+        "state": ["S"],
+        "state_axes": {"S": ["age"]},
+        "equations": {"S": "0.0"},
+    }
+    with pytest.raises(ValueError, match=r"references unknown axis"):
+        normalize_expr_rhs(spec_unknown_axis)
+
+    spec_duplicate_axis = {
+        "kind": "expr",
+        "axes": [{"name": "pop", "coords": ["p1"]}],
+        "state": ["S"],
+        "state_axes": {"S": ["pop", "pop"]},
+        "equations": {"S": "0.0"},
+    }
+    with pytest.raises(ValueError, match=r"duplicate axis"):
+        normalize_expr_rhs(spec_duplicate_axis)
+
+
+def test_transitions_chain_helper_appends_transitions() -> None:
+    """Chain helper adds internal transitions for transitions kind."""
+    spec = {
+        "kind": "transitions",
+        "state": ["S", "I1", "I2", "R"],
+        "transitions": [
+            {"from": "S", "to": "I1", "rate": "beta"},
+        ],
+        "chain": [{"name": "I", "length": 2, "forward": "gamma", "to": "R"}],
+    }
+
+    out = normalize_transitions_rhs(spec)
+    # Expect added transitions I1->I2 and I2->R
+    assert len(out.meta["transitions"]) == 3
+    eqs = out.equations
+    assert any("I1" in eq and "gamma" in eq for eq in eqs)
+    assert any("I2" in eq and "gamma" in eq for eq in eqs)
+
+
+def test_expr_chain_helper_autofills_missing_equations() -> None:
+    """Chain helper under expr fills missing stage equations when provided."""
+    spec = {
+        "kind": "expr",
+        "state": ["S", "I1", "I2", "R"],
+        "equations": {
+            "S": "-beta * I1",
+            "R": "gamma * I2",
+        },
+        "chain": [{"name": "I", "length": 2, "forward": "gamma", "to": "R"}],
+    }
+
+    out = normalize_expr_rhs(spec)
+    assert set(out.state_names) == {"S", "I1", "I2", "R"}
+    # Auto-generated equations for I1 and I2 should be present
+    assert any(eq.startswith("-") and "I1" in eq for eq in out.equations)
+    assert any("I2" in eq for eq in out.equations)
+    assert "gamma" in " ".join(out.equations)
+
+
+def test_expr_chain_helper_rejects_invalid_lengths_and_missing_states() -> None:
+    """Chain helper should reject length < 2 and missing stage definitions."""
+    spec_short = {
+        "kind": "expr",
+        "state": ["S", "R"],
+        "equations": {"S": "0.0", "R": "0.0"},
+        "chain": [{"name": "I", "length": 1, "forward": "gamma"}],
+    }
+    with pytest.raises(ValueError, match=r"length must be >= 2"):
+        normalize_expr_rhs(spec_short)
+
+    spec_missing = {
+        "kind": "expr",
+        "state": ["S", "R"],
+        "equations": {"S": "0.0", "R": "0.0"},
+        "chain": [{"name": "I", "length": 2, "forward": "gamma"}],
+    }
+    with pytest.raises(ValueError, match=r"references missing states"):
+        normalize_expr_rhs(spec_missing)
+
+
 def test_transitions_requires_nonempty_list() -> None:
     """Test that transitions kind requires non-empty transitions list."""
     spec = {"kind": "transitions", "state": ["S", "I"], "transitions": []}
@@ -120,6 +341,18 @@ def test_transitions_rejects_unknown_state_names() -> None:
         "transitions": [{"from": "S", "to": "R", "rate": "beta"}],
     }
     with pytest.raises(ValueError, match=r"not in state"):
+        normalize_transitions_rhs(spec)
+
+
+def test_transitions_chain_invalid_sink_rejected() -> None:
+    """Transitions chain helper should reject invalid sink targets."""
+    spec = {
+        "kind": "transitions",
+        "state": ["S", "I1", "I2"],
+        "transitions": [{"from": "S", "to": "I1", "rate": "beta"}],
+        "chain": [{"name": "I", "length": 2, "forward": "gamma", "to": "R"}],
+    }
+    with pytest.raises(ValueError, match=r"to='R' not in state"):
         normalize_transitions_rhs(spec)
 
 
