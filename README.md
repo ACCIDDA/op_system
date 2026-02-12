@@ -224,6 +224,80 @@ system:
         # External seeding for unvaccinated age18to49 (match original intent)
         E[unvaccinated,age18to49]: lambda_ext  # add to existing E flow
 ```
+### Transitions version: 
+```yaml
+system:
+  usa_flu:
+    module: op_system
+    spec:
+      kind: transitions
+      axes:
+        - name: vacc
+          coords: [unvaccinated, dose1, waned]
+        - name: age
+          coords: [age0to4, age5to17, age18to49, age50to64, age65to100]
+
+      state: [S[vacc,age], E[vacc,age], I1[vacc,age], I2[vacc,age], I3[vacc,age], R[vacc,age]]
+
+      aliases:
+        nu1[age]: nu1_path[age]
+        theta1[age]: 1 - ve1[age]
+        thetaW[age]: 1 - veW[age]
+        lambda[vacc,age]: r0 * gamma * (
+          sum_over(age=j, I1[vacc=j, age=j] + I2[vacc=j, age=j] + I3[vacc=j, age=j])
+        ) * (
+          theta1[age] if vacc == 'dose1'
+          else thetaW[age] if vacc == 'waned'
+          else 1
+        )
+
+      transitions:
+        # Infection S -> E (per vacc, age)
+        - from: S[vacc,age]
+          to: E[vacc,age]
+          rate: lambda[vacc,age]
+
+        # Progression E -> I1 -> I2 -> I3 -> R
+        - from: E[vacc,age]
+          to: I1[vacc,age]
+          rate: sigma_AllFlu
+        - from: I1[vacc,age]
+          to: I2[vacc,age]
+          rate: 3*gamma
+        - from: I2[vacc,age]
+          to: I3[vacc,age]
+          rate: 3*gamma
+        - from: I3[vacc,age]
+          to: R[vacc,age]
+          rate: 3*gamma
+
+        # Vaccination: unvaccinated -> dose1 (apply to S/E/R)
+        - from: S[unvaccinated,age]
+          to: S[dose1,age]
+          rate: nu1[age]
+        - from: E[unvaccinated,age]
+          to: E[dose1,age]
+          rate: nu1[age]
+        - from: R[unvaccinated,age]
+          to: R[dose1,age]
+          rate: nu1[age]
+
+        # Waning: dose1 -> waned (apply to S/E/R)
+        - from: S[dose1,age]
+          to: S[waned,age]
+          rate: epsilon
+        - from: E[dose1,age]
+          to: E[waned,age]
+          rate: epsilon
+        - from: R[dose1,age]
+          to: R[waned,age]
+          rate: epsilon
+
+        # External seeding: unvaccinated, age18to49
+        - from: S[unvaccinated,age18to49]
+          to: E[unvaccinated,age18to49]
+          rate: lambda_ext
+```
 ---
 
 ## Installation
