@@ -322,14 +322,14 @@ def test_categorical_missing_coords_and_continuous_monotonicity() -> None:
         normalize_expr_rhs(spec_bad_order)
 
 
-def test_mixing_and_operator_meta_preserved() -> None:
-    """Mixing kernels and operators metadata are normalized and preserved in meta."""
+def test_kernels_and_operator_meta_preserved() -> None:
+    """Kernel and operator metadata are normalized and preserved in meta."""
     spec = {
         "kind": "expr",
         "axes": [
             {"name": "age", "coords": ["a", "b"]},
         ],
-        "mixing": [
+        "kernels": [
             {"name": "k_fixed", "value": 0.5, "axes": ["age"]},
             {
                 "name": "k_gauss",
@@ -345,11 +345,11 @@ def test_mixing_and_operator_meta_preserved() -> None:
     }
 
     out = normalize_expr_rhs(spec)
-    mixing_meta = out.meta.get("mixing")
-    assert isinstance(mixing_meta, list)
-    assert {mk["name"] for mk in mixing_meta} == {"k_fixed", "k_gauss"}
-    assert any(mk.get("value") == 0.5 for mk in mixing_meta)
-    assert any(mk.get("form") == "gaussian" for mk in mixing_meta)
+    kernels_meta = out.meta.get("kernels")
+    assert isinstance(kernels_meta, list)
+    assert {mk["name"] for mk in kernels_meta} == {"k_fixed", "k_gauss"}
+    assert any(mk.get("value") == 0.5 for mk in kernels_meta)
+    assert any(mk.get("form") == "gaussian" for mk in kernels_meta)
 
     operators_meta = out.meta.get("operators")
     assert isinstance(operators_meta, list)

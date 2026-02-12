@@ -4,7 +4,7 @@ Domain-agnostic RHS specification and compilation for ODE-style models with temp
 
 ## Statement of Need
 
-Modelers often mix compartment-style hazards, templated populations, and metadata (axes, mixing, operators) that must be validated and preserved for downstream solvers. `op_system` provides:
+Modelers often combine compartment-style hazards, templated populations, and metadata such as axes, kernels, and operators that must be validated and preserved for downstream solvers. `op_system` provides:
 - YAML/JSON-friendly specs for RHS definitions (expr and transitions styles).
 - Normalization with strict validation and metadata preservation.
 - Compilation to safe, fast callables usable by engines like `op_engine` or custom integrators.
@@ -106,7 +106,7 @@ system:
 ```
 Expands to `beta__age_child`, `beta__age_adult`, `offset__age_child`, etc., so you only bind concrete parameters when running.
 
-### Continuous axis + mixing/operator meta + state_axes
+### Continuous axis + kernel/operator meta + state_axes
 
 ```yaml
 system:
@@ -124,7 +124,7 @@ system:
       state: [u]
       state_axes:
         u: [x]
-      mixing:
+      kernels:
         - name: K
           axes: [x]
           form: gaussian
@@ -140,6 +140,7 @@ system:
 ```
 
 Integrate along continuous axes with `integrate_over(axis=var, expr)`, which uses trapezoidal weights derived from the axis `coords` (non-uniform spacing respected).
+Normalized metadata preserves kernels in `meta["kernels"]` and operators in `meta["operators"]` alongside axes and state axes.
 
 ### Transitions (hazard/flow style)
 
@@ -323,7 +324,7 @@ just mypy
 ## Features
 
 - RHS kinds: `expr` (explicit equations) and `transitions` (hazard/flow style).
-- Transitions support optional `name` metadata preserved in `meta.transitions`.
+- Transitions support optional `name` metadata preserved in `meta.transitions`; templated transitions expand before hazard assembly with metadata intact.
 - Templates: `State[axis,...]` expand over categorical axes; equations may be written once per template.
 - Aliases and inline placeholders like `theta[age]` expand over categorical axes using the same assignments, removing per-axis parameter duplication.
 - Transitions now accept templated states and rates over categorical axes; templated `from`/`to`/`rate` are expanded before hazard assembly.
@@ -332,7 +333,7 @@ just mypy
 - Chain helper: `chain` block auto-fills staged compartments (expr or transitions kinds).
 - Reducers in expressions: `sum_state()`, `sum_prefix(prefix)`.
 - Axes: categorical or continuous; continuous can be generated via `domain` + `size` + `spacing` (linear/log/geom).
-- Metadata passthrough: axes, state_axes, mixing, operators, reserved blocks (`sources`, `couplings`, `constraints`) in `NormalizedRhs.meta`.
+- Metadata passthrough: axes, state_axes, kernels, operators, reserved blocks (`sources`, `couplings`, `constraints`) in `NormalizedRhs.meta`.
 
 ## Validation & AST guardrails
 
@@ -348,7 +349,7 @@ Disallowed: non-`np` attribute access, non-whitelisted helpers, imports, or othe
 - `compile_spec(spec) -> CompiledRhs`: normalize + compile in one step.
 - `normalize_rhs(spec) -> NormalizedRhs`: validation + metadata preservation.
 - `compile_rhs(rhs) -> CompiledRhs`: compile a pre-normalized RHS.
-- `NormalizedRhs.meta`: access normalized metadata (axes, state_axes, mixing, operators, reserved blocks).
+- `NormalizedRhs.meta`: access normalized metadata (axes, state_axes, kernels, operators, reserved blocks).
 
 ## License & support
 

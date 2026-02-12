@@ -53,7 +53,7 @@ _INVALID_RHS_SPEC_PREFIX = "Invalid op_system RHS specification."
 _INVALID_EXPRESSION_PREFIX = "Invalid op_system expression."
 _UNSUPPORTED_FEATURE_PREFIX = "Unsupported op_system feature."
 
-_ALLOWED_MIXING_FORMS: dict[str, tuple[str, ...]] = {
+_ALLOWED_KERNEL_FORMS: dict[str, tuple[str, ...]] = {
     "erfc": ("scale", "sigma"),
     "gaussian": ("scale", "sigma"),
     "exponential": ("scale", "lambda"),
@@ -492,51 +492,51 @@ def _normalize_state_axes(
     return out
 
 
-def _normalize_mixing_axes_field(
+def _normalize_kernel_axes_field(
     axes_field: object, *, idx: int, axis_names: set[str]
 ) -> tuple[str, ...] | None:
     if axes_field is None:
         return None
     if not isinstance(axes_field, (list, tuple)) or not axes_field:
         _raise_invalid_rhs_spec(
-            detail=f"mixing[{idx}].axes must be a non-empty list if provided"
+            detail=f"kernels[{idx}].axes must be a non-empty list if provided"
         )
     resolved_axes: list[str] = []
     for ax_idx, ax in enumerate(axes_field):
         if not isinstance(ax, str) or not ax.strip():
             _raise_invalid_rhs_spec(
-                detail=f"mixing[{idx}].axes[{ax_idx}] must be a non-empty string"
+                detail=f"kernels[{idx}].axes[{ax_idx}] must be a non-empty string"
             )
         ax_name = ax.strip()
         if ax_name not in axis_names:
             _raise_invalid_rhs_spec(
-                detail=f"mixing[{idx}] references unknown axis {ax_name!r}"
+                detail=f"kernels[{idx}] references unknown axis {ax_name!r}"
             )
         resolved_axes.append(ax_name)
     return tuple(resolved_axes)
 
 
-def _normalize_mixing_form_and_params(
+def _normalize_kernel_form_and_params(
     *, value: object, form: object, params_field: object, idx: int
 ) -> tuple[str, Mapping[str, Any] | None]:
     if value is None:
         if not isinstance(form, str) or not form.strip():
             _raise_invalid_rhs_spec(
-                detail=(f"mixing[{idx}].form is required when value is not provided")
+                detail=(f"kernels[{idx}].form is required when value is not provided")
             )
         form_name = form.strip().lower()
-        if form_name not in _ALLOWED_MIXING_FORMS:
+        if form_name not in _ALLOWED_KERNEL_FORMS:
             _raise_invalid_rhs_spec(
-                detail=f"mixing[{idx}] form {form_name!r} is not supported"
+                detail=f"kernels[{idx}] form {form_name!r} is not supported"
             )
-        required_keys = _ALLOWED_MIXING_FORMS[form_name]
+        required_keys = _ALLOWED_KERNEL_FORMS[form_name]
         params_map_required = _ensure_mapping(
-            params_field, name=f"mixing[{idx}].params"
+            params_field, name=f"kernels[{idx}].params"
         )
         for req in required_keys:
             if req not in params_map_required:
                 _raise_invalid_rhs_spec(
-                    detail=f"mixing[{idx}].params missing required key {req!r}"
+                    detail=f"kernels[{idx}].params missing required key {req!r}"
                 )
         return form_name, params_map_required
 
@@ -545,21 +545,21 @@ def _normalize_mixing_form_and_params(
         if isinstance(form, str) and form.strip()
         else "custom_value"
     )
-    if form_name and form_name not in _ALLOWED_MIXING_FORMS:
+    if form_name and form_name not in _ALLOWED_KERNEL_FORMS:
         _raise_invalid_rhs_spec(
-            detail=f"mixing[{idx}] form {form_name!r} is not supported"
+            detail=f"kernels[{idx}] form {form_name!r} is not supported"
         )
     params_map_optional: Mapping[str, Any] | None
     if params_field is not None:
         params_map_optional = _ensure_mapping(
-            params_field, name=f"mixing[{idx}].params"
+            params_field, name=f"kernels[{idx}].params"
         )
     else:
         params_map_optional = None
     return form_name, params_map_optional
 
 
-def _normalize_single_mixing(
+def _normalize_single_kernel(
     mk_map: Mapping[str, Any],
     *,
     idx: int,
@@ -568,13 +568,13 @@ def _normalize_single_mixing(
 ) -> dict[str, Any]:
     name = _get_required_str(mk_map, idx=idx, key="name")
     if name in seen:
-        _raise_invalid_rhs_spec(detail=f"duplicate mixing name: {name!r}")
+        _raise_invalid_rhs_spec(detail=f"duplicate kernel name: {name!r}")
     seen.add(name)
 
-    axes_resolved = _normalize_mixing_axes_field(
+    axes_resolved = _normalize_kernel_axes_field(
         mk_map.get("axes"), idx=idx, axis_names=axis_names
     )
-    form_name, params_map = _normalize_mixing_form_and_params(
+    form_name, params_map = _normalize_kernel_form_and_params(
         value=mk_map.get("value"),
         form=mk_map.get("form"),
         params_field=mk_map.get("params"),
@@ -595,27 +595,27 @@ def _normalize_single_mixing(
     return mk_out
 
 
-def _normalize_mixing(
-    raw_mixing: object,
+def _normalize_kernels(
+    raw_kernels: object,
     *,
     axis_names: set[str],
 ) -> list[dict[str, Any]]:
-    """Normalize mixing kernel metadata.
+    """Normalize kernel metadata.
 
     Returns:
-        List of normalized mixing kernel definitions.
+        List of normalized kernel definitions.
     """
-    if raw_mixing is None:
+    if raw_kernels is None:
         return []
-    if not isinstance(raw_mixing, list):
-        _raise_invalid_rhs_spec(detail="mixing must be a list")
+    if not isinstance(raw_kernels, list):
+        _raise_invalid_rhs_spec(detail="kernels must be a list")
 
     seen: set[str] = set()
     out: list[dict[str, Any]] = []
 
-    for idx, mk in enumerate(raw_mixing):
-        mk_map = _ensure_mapping(mk, name=f"mixing[{idx}]")
-        mk_out = _normalize_single_mixing(
+    for idx, mk in enumerate(raw_kernels):
+        mk_map = _ensure_mapping(mk, name=f"kernels[{idx}]")
+        mk_out = _normalize_single_kernel(
             mk_map, idx=idx, axis_names=axis_names, seen=seen
         )
         out.append(mk_out)
@@ -682,8 +682,8 @@ def _normalize_common_meta(
         if state_set is not None
         else {}
     )
-    mixing_meta = _normalize_mixing(
-        spec.get("mixing") or _get_meta_field(spec, "mixing"),
+    kernels_meta = _normalize_kernels(
+        spec.get("kernels") or _get_meta_field(spec, "kernels"),
         axis_names=axis_names,
     )
     operators_raw = spec.get("operators") or _get_meta_field(spec, "operators")
@@ -692,7 +692,7 @@ def _normalize_common_meta(
         if isinstance(operators_raw, list)
         else operators_raw
     )
-    return aliases, state_axes, mixing_meta, operators_meta
+    return aliases, state_axes, kernels_meta, operators_meta
 
 
 def _collect_alias_symbols(
@@ -1347,7 +1347,7 @@ def normalize_expr_rhs(spec: Mapping[str, Any]) -> NormalizedRhs:  # noqa: PLR09
         _raise_invalid_rhs_spec(detail="equations must be a mapping of state->expr")
 
     axes_meta = _normalize_axes(spec.get("axes"))
-    aliases_raw, state_axes, mixing_meta, operators_meta = _normalize_common_meta(
+    aliases_raw, state_axes, kernels_meta, operators_meta = _normalize_common_meta(
         spec,
         axis_names={"subgroup"} | {ax["name"] for ax in axes_meta},
         state_set=set(state_raw),
@@ -1356,7 +1356,7 @@ def normalize_expr_rhs(spec: Mapping[str, Any]) -> NormalizedRhs:  # noqa: PLR09
     meta: dict[str, Any] = {
         "axes": axes_meta,
         "state_axes": state_axes,
-        "mixing": mixing_meta,
+        "kernels": kernels_meta,
         "operators": operators_meta,
     }
     for reserved_key in ("sources", "couplings", "constraints"):
@@ -1524,7 +1524,7 @@ def normalize_transitions_rhs(spec: Mapping[str, Any]) -> NormalizedRhs:  # noqa
 
     axes_meta = _normalize_axes(spec.get("axes"))
 
-    aliases_raw, _, mixing_meta, operators_meta = _normalize_common_meta(
+    aliases_raw, _, kernels_meta, operators_meta = _normalize_common_meta(
         spec,
         axis_names={"subgroup"} | {ax["name"] for ax in axes_meta},
         state_set=None,
@@ -1533,7 +1533,7 @@ def normalize_transitions_rhs(spec: Mapping[str, Any]) -> NormalizedRhs:  # noqa
     meta: dict[str, Any] = {
         "transitions": transitions_raw,
         "axes": axes_meta,
-        "mixing": mixing_meta,
+        "kernels": kernels_meta,
         "operators": operators_meta,
     }
     for reserved_key in ("sources", "couplings", "constraints"):
