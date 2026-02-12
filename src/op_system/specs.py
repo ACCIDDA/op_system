@@ -817,6 +817,106 @@ def _expand_alias_templates(
     return aliases_out, alias_template_map
 
 
+def _extract_placeholders_from_expr(expr: str) -> set[str]:
+    """Extract placeholder symbols found inside [...] tokens in an expression.
+
+    Returns:
+        Set of placeholder names referenced inside bracket templates.
+    """
+    placeholders: set[str] = set()
+    for match in re.finditer(r"[A-Za-z_][A-Za-z0-9_]*\[(.*?)\]", expr):
+        inner = match.group(1)
+        for part in inner.split(","):
+            part_s = part.strip()
+            if part_s:
+                placeholders.add(part_s)
+    return placeholders
+
+
+def _render_template_or_literal(name_s: str, assignment: Mapping[str, str]) -> str:
+    base, placeholders = _parse_template_key(name_s)
+    if not placeholders or any(ph not in assignment for ph in placeholders):
+        return name_s
+    return _render_template_name(base, placeholders, assignment)
+
+
+def _expand_transition_templates(  # noqa: PLR0914
+    transitions_raw: list[Mapping[str, Any]],
+    *,
+    axes: list[dict[str, Any]],
+    template_map: Mapping[str, list[tuple[str, dict[str, str]]]],
+) -> list[dict[str, Any]]:
+    """Expand templated transitions over categorical axes.
+
+    Supports placeholders in from/to/name/rate fields (e.g., S[vacc,age]).
+
+    Returns:
+        List of expanded transition mappings with concrete names and rates.
+    """
+    axis_lookup: dict[str, list[str]] = {
+        ax["name"]: [str(c) for c in ax.get("coords", [])] for ax in axes
+    }
+
+    expanded: list[dict[str, Any]] = []
+
+    for idx, tr_map in enumerate(transitions_raw):
+        tr_valid = _validate_transition_mapping(tr_map, idx=idx)
+        frm_s = _get_required_str(tr_valid, idx=idx, key="from")
+        to_s = _get_required_str(tr_valid, idx=idx, key="to")
+        rate_s = _get_required_str(tr_valid, idx=idx, key="rate")
+        name_s = tr_valid.get("name") if isinstance(tr_valid.get("name"), str) else None
+
+        placeholders: set[str] = set()
+        placeholders |= set(_parse_template_key(frm_s)[1])
+        placeholders |= set(_parse_template_key(to_s)[1])
+        placeholders |= _extract_placeholders_from_expr(rate_s)
+        if name_s:
+            placeholders |= _extract_placeholders_from_expr(name_s)
+
+        if not placeholders:
+            rate_expanded = _expand_helpers(rate_s, axes=axes)
+            tr_out = dict(tr_valid)
+            tr_out["from"] = frm_s
+            tr_out["to"] = to_s
+            tr_out["rate"] = rate_expanded
+            expanded.append(tr_out)
+            continue
+
+        coords_lists: list[list[str]] = []
+        for ph in placeholders:
+            if ph not in axis_lookup:
+                _raise_invalid_rhs_spec(
+                    detail=f"transition placeholder {ph!r} references unknown axis"
+                )
+            coords_lists.append(axis_lookup[ph])
+
+        combos = list(product(*coords_lists))
+        for combo in combos:
+            assignment = {ph: combo[i] for i, ph in enumerate(placeholders)}
+
+            frm_render = _render_template_or_literal(frm_s, assignment)
+            to_render = _render_template_or_literal(to_s, assignment)
+
+            rate_sub = _apply_template_substitutions(
+                rate_s,
+                assignment=assignment,
+                template_map=template_map,
+            )
+            rate_expanded = _expand_helpers(rate_sub, axes=axes)
+
+            tr_expanded: dict[str, Any] = dict(tr_valid)
+            tr_expanded["from"] = frm_render
+            tr_expanded["to"] = to_render
+            tr_expanded["rate"] = rate_expanded
+            if name_s:
+                tr_expanded["name"] = _apply_template_substitutions(
+                    name_s, assignment=assignment, template_map=template_map
+                )
+            expanded.append(tr_expanded)
+
+    return expanded
+
+
 def _parse_template_key(template_key: str) -> tuple[str, list[str]]:
     """Parse a template key like "S[pop,age]" into (base, placeholders).
 
@@ -1414,8 +1514,8 @@ def normalize_transitions_rhs(spec: Mapping[str, Any]) -> NormalizedRhs:  # noqa
     Returns:
         Backend-facing normalized RHS representation for transitions kind.
     """
-    state = _ensure_str_list(spec.get("state"), name="state")
-    if len(state) != len(set(state)):
+    state_raw = _ensure_str_list(spec.get("state"), name="state")
+    if len(state_raw) != len(set(state_raw)):
         _raise_invalid_rhs_spec(detail="state contains duplicate names")
 
     transitions_raw = spec.get("transitions")
@@ -1440,11 +1540,19 @@ def normalize_transitions_rhs(spec: Mapping[str, Any]) -> NormalizedRhs:  # noqa
         if reserved_key in spec:
             meta[reserved_key] = spec.get(reserved_key)
 
-    state_set = set(state)
-    aliases, _alias_template_map = _expand_alias_templates(
-        aliases_raw, axes=axes_meta, template_map_seed={}
+    state_expanded, state_template_map = _expand_state_templates(
+        state_raw, axes=axes_meta
     )
-    d_terms: dict[str, list[str]] = {s: [] for s in state}
+    if len(state_expanded) != len(set(state_expanded)):
+        _raise_invalid_rhs_spec(detail="expanded state contains duplicates")
+
+    aliases, alias_template_map = _expand_alias_templates(
+        aliases_raw, axes=axes_meta, template_map_seed=state_template_map
+    )
+    template_map_all = {**state_template_map, **alias_template_map}
+
+    state_set = set(state_expanded)
+    d_terms: dict[str, list[str]] = {s: [] for s in state_expanded}
     all_syms = _collect_alias_symbols(aliases, axes=axes_meta)
 
     chains = spec.get("chain") or []
@@ -1457,12 +1565,14 @@ def normalize_transitions_rhs(spec: Mapping[str, Any]) -> NormalizedRhs:  # noqa
             state_set=state_set,
         )
 
-    for idx, tr_map in enumerate(transitions_raw):
+    transitions_expanded = _expand_transition_templates(
+        transitions_raw,
+        axes=axes_meta,
+        template_map=template_map_all,
+    )
+
+    for idx, tr_map in enumerate(transitions_expanded):
         tr_valid = _validate_transition_mapping(tr_map, idx=idx)
-        rate_expr = tr_valid.get("rate")
-        if isinstance(rate_expr, str):
-            tr_valid = dict(tr_valid)
-            tr_valid["rate"] = _expand_helpers(rate_expr, axes=axes_meta)
         _apply_transition(
             idx=idx,
             tr=tr_valid,
@@ -1473,12 +1583,12 @@ def normalize_transitions_rhs(spec: Mapping[str, Any]) -> NormalizedRhs:  # noqa
 
     return NormalizedRhs(
         kind="transitions",
-        state_names=tuple(state),
-        equations=tuple(_build_transition_equations(state, d_terms)),
+        state_names=tuple(state_expanded),
+        equations=tuple(_build_transition_equations(state_expanded, d_terms)),
         aliases=aliases,
         param_names=_sorted_unique(
             sym for sym in all_syms if sym not in state_set and sym not in aliases
         ),
         all_symbols=frozenset(all_syms | set(aliases.keys())),
-        meta=meta,
+        meta={**meta, "transitions": transitions_expanded},
     )

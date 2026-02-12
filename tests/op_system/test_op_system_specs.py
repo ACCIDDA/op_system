@@ -398,6 +398,41 @@ def test_transitions_chain_helper_appends_transitions() -> None:
     assert any("I2" in eq and "gamma" in eq for eq in eqs)
 
 
+def test_transitions_template_expansion_over_axes() -> None:
+    """Transitions expand templated states and rates over categorical axes."""
+    spec = {
+        "kind": "transitions",
+        "axes": [{"name": "age", "coords": ["a", "b"]}],
+        "state": ["S[age]", "I[age]", "R[age]"],
+        "aliases": {
+            "beta[age]": "b0 * k[age]",
+            "k[age]": "k_base",
+        },
+        "transitions": [
+            {"from": "S[age]", "to": "I[age]", "rate": "beta[age]"},
+            {"from": "I[age]", "to": "R[age]", "rate": "gamma"},
+        ],
+    }
+
+    out = normalize_transitions_rhs(spec)
+
+    assert set(out.state_names) == {
+        "S__age_a",
+        "S__age_b",
+        "I__age_a",
+        "I__age_b",
+        "R__age_a",
+        "R__age_b",
+    }
+
+    # Equations should reference expanded alias names
+    assert any("beta__age_a" in eq for eq in out.equations)
+    assert any("beta__age_b" in eq for eq in out.equations)
+
+    expected_params = {"b0", "gamma", "k_base"}
+    assert set(out.param_names) == expected_params
+
+
 def test_expr_chain_helper_autofills_missing_equations() -> None:
     """Chain helper under expr fills missing stage equations when provided."""
     spec = {

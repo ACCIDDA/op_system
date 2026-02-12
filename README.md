@@ -189,6 +189,7 @@ just mypy
 - Transitions support optional `name` metadata preserved in `meta.transitions`.
 - Templates: `State[axis,...]` expand over categorical axes; equations may be written once per template.
 - Aliases and inline placeholders like `theta[age]` expand over categorical axes using the same assignments, removing per-axis parameter duplication.
+- Transitions now accept templated states and rates over categorical axes; templated `from`/`to`/`rate` are expanded before hazard assembly.
 - `sum_over(axis=var, expr)`: unrolls over categorical coords; continuous axes are rejected.
 - `integrate_over(axis=var, expr)`: trapezoidal integrate along continuous axes using axis-derived deltas (non-uniform spacing supported).
 - Chain helper: `chain` block auto-fills staged compartments (expr or transitions kinds).
