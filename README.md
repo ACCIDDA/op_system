@@ -161,6 +161,69 @@ system:
           rate: gamma
 ```
 
+### Complex structure 
+```yaml
+system:
+  usa_flu:
+    module: op_system
+    spec:
+      kind: expr
+      axes:
+        - name: vacc
+          coords: [unvaccinated, dose1, waned]
+        - name: age
+          coords: [age0to4, age5to17, age18to49, age50to64, age65to100]
+
+      state:
+        - S[vacc,age]
+        - E[vacc,age]
+        - I1[vacc,age]
+        - I2[vacc,age]
+        - I3[vacc,age]
+        - R[vacc,age]
+
+      aliases:
+        # Per-age vaccination intensity (timeseries params you bind)
+        nu1[age]: nu1_path[age]
+
+        # Per-age VE (set ve1[...] and veW[...] params)
+        theta1[age]: 1 - ve1[age]
+        thetaW[age]: 1 - veW[age]
+
+        # Force of infection with age-/vacc-specific VE
+        lambda[vacc,age]: r0 * gamma * (
+          sum_over(age=j, I1[vacc=j, age=j] + I2[vacc=j, age=j] + I3[vacc=j, age=j])
+        ) * (
+          theta1[age] if vacc == 'dose1'
+          else thetaW[age] if vacc == 'waned'
+          else 1
+        )
+
+      equations:
+        # Infection and progression
+        S[vacc,age]: -lambda[vacc,age] * S[vacc,age]
+        E[vacc,age]: lambda[vacc,age] * S[vacc,age] - sigma_AllFlu * E[vacc,age]
+        I1[vacc,age]: sigma_AllFlu * E[vacc,age] - 3*gamma * I1[vacc,age]
+        I2[vacc,age]: 3*gamma * I1[vacc,age] - 3*gamma * I2[vacc,age]
+        I3[vacc,age]: 3*gamma * I2[vacc,age] - 3*gamma * I3[vacc,age]
+        R[vacc,age]: 3*gamma * I3[vacc,age]
+
+        # Vaccination flow: unvaccinated -> dose1
+        S[unvaccinated,age]: -nu1[age] * S[unvaccinated,age]
+        E[unvaccinated,age]: -nu1[age] * E[unvaccinated,age]
+        R[unvaccinated,age]: -nu1[age] * R[unvaccinated,age]
+        S[dose1,age]: nu1[age] * S[unvaccinated,age] - epsilon * S[dose1,age]
+        E[dose1,age]: nu1[age] * E[unvaccinated,age] - epsilon * E[dose1,age]
+        R[dose1,age]: nu1[age] * R[unvaccinated,age] - epsilon * R[dose1,age]
+
+        # Waning: dose1 -> waned
+        S[waned,age]: epsilon * S[dose1,age]
+        E[waned,age]: epsilon * E[dose1,age]
+        R[waned,age]: epsilon * R[dose1,age]
+
+        # External seeding for unvaccinated age18to49 (match original intent)
+        E[unvaccinated,age18to49]: lambda_ext  # add to existing E flow
+```
 ---
 
 ## Installation
