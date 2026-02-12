@@ -154,6 +154,40 @@ def test_expr_template_expansion_and_sum_over() -> None:
     assert out.param_names == ("beta", "gamma")
 
 
+def test_alias_and_param_templates_expand_over_axes() -> None:
+    """Alias names and inline param placeholders expand over axis assignments."""
+    spec = {
+        "kind": "expr",
+        "axes": [{"name": "age", "coords": ["y", "o"]}],
+        "state": ["S[age]", "I[age]"],
+        "aliases": {
+            "beta[age]": "b0 * k[age]",
+            "k[age]": "k_base * (1 + offset[age])",
+        },
+        "equations": {
+            "S[age]": "-beta[age] * S[age]",
+            "I[age]": "beta[age] * S[age] - gamma * I[age]",
+        },
+    }
+
+    out = normalize_expr_rhs(spec)
+
+    expected_aliases = {"beta__age_y", "beta__age_o", "k__age_y", "k__age_o"}
+    assert set(out.aliases) == expected_aliases
+
+    assert any("beta__age_y" in eq for eq in out.equations)
+    assert any("beta__age_o" in eq for eq in out.equations)
+
+    expected_params = {
+        "b0",
+        "gamma",
+        "k_base",
+        "offset__age_y",
+        "offset__age_o",
+    }
+    assert set(out.param_names) == expected_params
+
+
 def test_sum_over_rejects_continuous_axis() -> None:
     """sum_over on a continuous axis should raise an error."""
     spec = {

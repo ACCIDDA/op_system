@@ -770,6 +770,53 @@ def _expand_state_templates(
     return expanded, template_map
 
 
+def _expand_alias_templates(
+    aliases_raw: Mapping[str, str],
+    *,
+    axes: list[dict[str, Any]],
+    template_map_seed: Mapping[str, list[tuple[str, dict[str, str]]]],
+) -> tuple[dict[str, str], dict[str, list[tuple[str, dict[str, str]]]]]:
+    """Expand templated alias names and substitute inline placeholders.
+
+    Args:
+        aliases_raw: Mapping of alias name (templated or concrete) to expr.
+        axes: Normalized axis definitions.
+        template_map_seed: Existing template map (e.g., state templates) to use
+            for substitutions inside alias expressions.
+
+    Returns:
+        A tuple of (expanded_aliases, alias_template_map).
+    """
+    alias_names = list(aliases_raw.keys())
+    alias_expanded, alias_template_map = _expand_state_templates(alias_names, axes=axes)
+    if len(alias_expanded) != len(set(alias_expanded)):
+        _raise_invalid_rhs_spec(detail="expanded aliases contain duplicates")
+
+    combined_template_map = {**template_map_seed, **alias_template_map}
+    aliases_out: dict[str, str] = {}
+
+    for raw_name, expr in aliases_raw.items():
+        expr_s = expr.strip()
+        if not expr_s:
+            _raise_invalid_rhs_spec(
+                detail=f"aliases[{raw_name!r}] must be a non-empty string"
+            )
+        expr_s = _expand_helpers(expr_s, axes=axes)
+
+        if raw_name in alias_template_map:
+            for expanded_name, assignment in alias_template_map[raw_name]:
+                substituted = _apply_template_substitutions(
+                    expr_s,
+                    assignment=assignment,
+                    template_map=combined_template_map,
+                )
+                aliases_out[expanded_name] = substituted
+        else:
+            aliases_out[raw_name] = expr_s
+
+    return aliases_out, alias_template_map
+
+
 def _parse_template_key(template_key: str) -> tuple[str, list[str]]:
     """Parse a template key like "S[pop,age]" into (base, placeholders).
 
@@ -803,18 +850,37 @@ def _apply_template_substitutions(
     assignment: Mapping[str, str],
     template_map: Mapping[str, list[tuple[str, dict[str, str]]]],
 ) -> str:
-    """Replace any template references in expr_s using a concrete assignment.
+    """Replace template references in ``expr_s`` using a concrete assignment.
+
+    Handles both explicit template keys (e.g., ``S[age]`` present in a template
+    map) and inline placeholder syntax like ``theta[age,pop]`` when the
+    placeholders are covered by ``assignment``.
 
     Returns:
         Expression with template tokens replaced using the provided assignment.
     """
+    expr_out = expr_s
+
+    # Explicit template keys (e.g., from state or alias template maps)
     for template_key in template_map:
         base, placeholders = _parse_template_key(template_key)
         if not placeholders or any(ph not in assignment for ph in placeholders):
             continue
         rendered = _render_template_name(base, placeholders, assignment)
-        expr_s = re.sub(re.escape(template_key), rendered, expr_s)
-    return expr_s
+        expr_out = re.sub(re.escape(template_key), rendered, expr_out)
+
+    # Inline placeholder syntax without explicit template map entry
+    pattern = re.compile(r"([A-Za-z_][A-Za-z0-9_]*)\[(.*?)\]")
+
+    def _inline_replacer(match: Match[str]) -> str:
+        base = match.group(1)
+        inner = match.group(2)
+        placeholders = [p.strip() for p in inner.split(",") if p.strip()]
+        if not placeholders or any(ph not in assignment for ph in placeholders):
+            return match.group(0)
+        return _render_template_name(base, placeholders, assignment)
+
+    return pattern.sub(_inline_replacer, expr_out)
 
 
 def _resolve_template_equation(
@@ -1162,7 +1228,7 @@ def normalize_rhs(spec: Mapping[str, Any] | None) -> NormalizedRhs:
 # -----------------------------------------------------------------------------
 
 
-def normalize_expr_rhs(spec: Mapping[str, Any]) -> NormalizedRhs:
+def normalize_expr_rhs(spec: Mapping[str, Any]) -> NormalizedRhs:  # noqa: PLR0914
     """
     Normalize an expression-based RHS specification.
 
@@ -1181,7 +1247,7 @@ def normalize_expr_rhs(spec: Mapping[str, Any]) -> NormalizedRhs:
         _raise_invalid_rhs_spec(detail="equations must be a mapping of state->expr")
 
     axes_meta = _normalize_axes(spec.get("axes"))
-    aliases, state_axes, mixing_meta, operators_meta = _normalize_common_meta(
+    aliases_raw, state_axes, mixing_meta, operators_meta = _normalize_common_meta(
         spec,
         axis_names={"subgroup"} | {ax["name"] for ax in axes_meta},
         state_set=set(state_raw),
@@ -1197,9 +1263,16 @@ def normalize_expr_rhs(spec: Mapping[str, Any]) -> NormalizedRhs:
         if reserved_key in spec:
             meta[reserved_key] = spec.get(reserved_key)
 
-    state_expanded, template_map = _expand_state_templates(state_raw, axes=axes_meta)
+    state_expanded, state_template_map = _expand_state_templates(
+        state_raw, axes=axes_meta
+    )
     if len(state_expanded) != len(set(state_expanded)):
         _raise_invalid_rhs_spec(detail="expanded state contains duplicates")
+
+    aliases, alias_template_map = _expand_alias_templates(
+        aliases_raw, axes=axes_meta, template_map_seed=state_template_map
+    )
+    template_map_all = {**state_template_map, **alias_template_map}
 
     chains = spec.get("chain") or []
     if chains:
@@ -1213,7 +1286,9 @@ def normalize_expr_rhs(spec: Mapping[str, Any]) -> NormalizedRhs:
 
     # Validate equation keys: allow either concrete states or template keys
     unknown_keys = [
-        k for k in equations_map if k not in state_expanded and k not in template_map
+        k
+        for k in equations_map
+        if k not in state_expanded and k not in template_map_all
     ]
     if unknown_keys:
         _raise_invalid_rhs_spec(
@@ -1226,7 +1301,7 @@ def normalize_expr_rhs(spec: Mapping[str, Any]) -> NormalizedRhs:
         equations_map,
         all_syms,
         axes=axes_meta,
-        template_map=template_map,
+        template_map=template_map_all,
     )
 
     return NormalizedRhs(
@@ -1333,7 +1408,7 @@ def _build_transition_equations(
     return equations
 
 
-def normalize_transitions_rhs(spec: Mapping[str, Any]) -> NormalizedRhs:
+def normalize_transitions_rhs(spec: Mapping[str, Any]) -> NormalizedRhs:  # noqa: PLR0914
     """Normalize a transition-based RHS specification (diagram/hazard semantics).
 
     Returns:
@@ -1349,7 +1424,7 @@ def normalize_transitions_rhs(spec: Mapping[str, Any]) -> NormalizedRhs:
 
     axes_meta = _normalize_axes(spec.get("axes"))
 
-    aliases, _, mixing_meta, operators_meta = _normalize_common_meta(
+    aliases_raw, _, mixing_meta, operators_meta = _normalize_common_meta(
         spec,
         axis_names={"subgroup"} | {ax["name"] for ax in axes_meta},
         state_set=None,
@@ -1366,6 +1441,9 @@ def normalize_transitions_rhs(spec: Mapping[str, Any]) -> NormalizedRhs:
             meta[reserved_key] = spec.get(reserved_key)
 
     state_set = set(state)
+    aliases, _alias_template_map = _expand_alias_templates(
+        aliases_raw, axes=axes_meta, template_map_seed={}
+    )
     d_terms: dict[str, list[str]] = {s: [] for s in state}
     all_syms = _collect_alias_symbols(aliases, axes=axes_meta)
 

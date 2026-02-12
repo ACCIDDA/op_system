@@ -82,6 +82,28 @@ system:
 
 Parameter names for contacts expand as you choose (e.g., `c_pop_j` → `c_p1_p1`, `c_p1_p2`, ... when binding params).
 
+### Templated aliases/parameters (per-axis)
+
+Write aliases and parameters once with inline placeholders; they expand to concrete names for each categorical coordinate.
+
+```yaml
+system:
+  - module: op_system
+    spec:
+      kind: expr
+      axes:
+        - name: age
+          coords: [child, adult]
+      state: [S[age], I[age]]
+      aliases:
+        beta[age]: b0 * k[age]
+        k[age]: k_base * (1 + offset[age])
+      equations:
+        S[age]: -beta[age] * S[age]
+        I[age]: beta[age] * S[age] - gamma * I[age]
+```
+Expands to `beta__age_child`, `beta__age_adult`, `offset__age_child`, etc., so you only bind concrete parameters when running.
+
 ### Continuous axis + mixing/operator meta + state_axes
 
 ```yaml
@@ -164,6 +186,7 @@ just mypy
 - RHS kinds: `expr` (explicit equations) and `transitions` (hazard/flow style).
 - Transitions support optional `name` metadata preserved in `meta.transitions`.
 - Templates: `State[axis,...]` expand over categorical axes; equations may be written once per template.
+- Aliases and inline placeholders like `theta[age]` expand over categorical axes using the same assignments, removing per-axis parameter duplication.
 - `sum_over(axis=var, expr)`: unrolls over categorical coords; continuous axes are rejected.
 - `integrate_over(axis=var, expr)`: trapezoidal integrate along continuous axes using axis-derived deltas (non-uniform spacing supported).
 - Chain helper: `chain` block auto-fills staged compartments (expr or transitions kinds).
