@@ -153,7 +153,7 @@ system:
         # chain fills I1->I2->I3->R at rate gamma
 ```
 
-### Biogeo-style grazing (templated transitions + kernels + mass balance)
+### Biogeocheical network (templated transitions + kernels + mass balance)
 
 ```yaml
 system:
@@ -198,7 +198,7 @@ system:
           rate: delta_Z[z]
 ```
 
-This showcases: axes templates, kernel metadata, templated transitions, optional external supply (`Source` → `N`), and closed mass balance via N.
+
 ---
 
 ## Installation
