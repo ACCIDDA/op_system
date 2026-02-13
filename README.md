@@ -28,9 +28,6 @@ spec = {
 compiled = compile_spec(spec)
 dydt = compiled.eval_fn(0.0, [999.0, 1.0, 0.0], beta=0.3, gamma=0.1)
 ```
-
----
-
 ## YAML examples (feature coverage)
 
 ### Classic vs linear-chain SIR (reducers + chain helper)
@@ -63,7 +60,7 @@ system:
         R: gamma * I3
 ```
 
-### Two-population SIR (templates + sum_over)
+### Two-population SIR (templates + sum_over + contact matrix params)
 
 ```yaml
 system:
@@ -76,17 +73,14 @@ system:
       state: [S[pop], I[pop], R[pop]]
       aliases:
         N: sum_state()
+        c[pop,pop2]: c_base * m[pop,pop2]  # params expand to m__pop_p1__pop2_p2, etc.
       equations:
-        S[pop]: -beta * S[pop] * sum_over(pop=j, c_pop_j * I[pop=j] / N)
-        I[pop]: beta * S[pop] * sum_over(pop=j, c_pop_j * I[pop=j] / N) - gamma * I[pop]
-        R[pop]: gamma * I[pop]
+        S[pop]: -beta * S[pop] * sum_over(pop2=j, c[pop,j] * I[pop=j] / N)
+        I[pop]:  beta * S[pop] * sum_over(pop2=j, c[pop,j] * I[pop=j] / N) - gamma * I[pop]
+        R[pop]:  gamma * I[pop]
 ```
 
-Parameter names for contacts expand as you choose (e.g., `c_pop_j` → `c_p1_p1`, `c_p1_p2`, ... when binding params).
-
 ### Templated aliases/parameters (per-axis)
-
-Write aliases and parameters once with inline placeholders; they expand to concrete names for each categorical coordinate.
 
 ```yaml
 system:
@@ -104,9 +98,9 @@ system:
         S[age]: -beta[age] * S[age]
         I[age]: beta[age] * S[age] - gamma * I[age]
 ```
-Expands to `beta__age_child`, `beta__age_adult`, `offset__age_child`, etc., so you only bind concrete parameters when running.
+Expands to `beta__age_child`, `beta__age_adult`, `offset__age_child`, etc.; you bind only the concrete parameter names.
 
-### Continuous axis + kernel/operator meta + state_axes
+### Continuous axis + integrate_over (with kernel meta)
 
 ```yaml
 system:
@@ -121,7 +115,7 @@ system:
             ub: 10.0
           size: 5
           spacing: linear
-      state: [u]
+      state: [u[x]]
       state_axes:
         u: [x]
       kernels:
@@ -131,176 +125,80 @@ system:
           params:
             scale: 1.0
             sigma: 0.5
-      operators:
-        - name: diff
-          axis: x
-          kind: diffusion  # physical operator (solver chooses discretization)
-          bc: dirichlet
       equations:
-        u: "0.0"
+        u[x]: integrate_over(x=xi, K[xi] * u[xi]) - decay * u[x]
 ```
 
-Integrate along continuous axes with `integrate_over(axis=var, expr)`, which uses trapezoidal weights derived from the axis `coords` (non-uniform spacing respected).
-Operators describe the physical intent (`kind` such as diffusion/advection and `bc` such as dirichlet/neumann/periodic); numerical discretization is left to backends like `op_engine`.
-Normalized metadata preserves kernels in `meta["kernels"]` and operators in `meta["operators"]` alongside axes and state axes.
+`integrate_over` uses trapezoidal weights derived from `axes[0].coords`; non-uniform spacing is respected. Kernel/operator metadata is preserved in `meta` for downstream solvers.
 
-### Transitions (hazard/flow style)
+### Transitions (hazard/flow) with chain helper
 
 ```yaml
 system:
   - module: op_system
     spec:
       kind: transitions
-      state: [S, I, R]
+      state: [S, I1, I2, I3, R]
       aliases:
-        N: S + I + R
-      transitions:
-        - name: infect
-          from: S
-          to: I
-          rate: beta * I / N
-        - from: I
+        N: sum_state()
+      chain:
+        - name: I
+          length: 3
+          forward: gamma
           to: R
-          rate: gamma
+      transitions:
+        - from: S
+          to: I1
+          rate: beta * I1 / N
+        # chain fills I1->I2->I3->R at rate gamma
 ```
 
-### Complex structure 
+### Biogeo-style grazing (templated transitions + kernels + mass balance)
+
 ```yaml
 system:
-  usa_flu:
-    module: op_system
-    spec:
-      kind: expr
-      axes:
-        - name: vacc
-          coords: [unvaccinated, dose1, waned]
-        - name: age
-          coords: [age0to4, age5to17, age18to49, age50to64, age65to100]
-
-      state:
-        - S[vacc,age]
-        - E[vacc,age]
-        - I1[vacc,age]
-        - I2[vacc,age]
-        - I3[vacc,age]
-        - R[vacc,age]
-
-      aliases:
-        # Per-age vaccination intensity (timeseries params you bind)
-        nu1[age]: nu1_path[age]
-
-        # Per-age VE (set ve1[...] and veW[...] params)
-        theta1[age]: 1 - ve1[age]
-        thetaW[age]: 1 - veW[age]
-
-        # Force of infection with age-/vacc-specific VE
-        lambda[vacc,age]: r0 * gamma * (
-          sum_over(age=j, I1[vacc=j, age=j] + I2[vacc=j, age=j] + I3[vacc=j, age=j])
-        ) * (
-          theta1[age] if vacc == 'dose1'
-          else thetaW[age] if vacc == 'waned'
-          else 1
-        )
-
-      equations:
-        # Infection and progression
-        S[vacc,age]: -lambda[vacc,age] * S[vacc,age]
-        E[vacc,age]: lambda[vacc,age] * S[vacc,age] - sigma_AllFlu * E[vacc,age]
-        I1[vacc,age]: sigma_AllFlu * E[vacc,age] - 3*gamma * I1[vacc,age]
-        I2[vacc,age]: 3*gamma * I1[vacc,age] - 3*gamma * I2[vacc,age]
-        I3[vacc,age]: 3*gamma * I2[vacc,age] - 3*gamma * I3[vacc,age]
-        R[vacc,age]: 3*gamma * I3[vacc,age]
-
-        # Vaccination flow: unvaccinated -> dose1
-        S[unvaccinated,age]: -nu1[age] * S[unvaccinated,age]
-        E[unvaccinated,age]: -nu1[age] * E[unvaccinated,age]
-        R[unvaccinated,age]: -nu1[age] * R[unvaccinated,age]
-        S[dose1,age]: nu1[age] * S[unvaccinated,age] - epsilon * S[dose1,age]
-        E[dose1,age]: nu1[age] * E[unvaccinated,age] - epsilon * E[dose1,age]
-        R[dose1,age]: nu1[age] * R[unvaccinated,age] - epsilon * R[dose1,age]
-
-        # Waning: dose1 -> waned
-        S[waned,age]: epsilon * S[dose1,age]
-        E[waned,age]: epsilon * E[dose1,age]
-        R[waned,age]: epsilon * R[dose1,age]
-
-        # External seeding for unvaccinated age18to49 (match original intent)
-        E[unvaccinated,age18to49]: lambda_ext  # add to existing E flow
-```
-### Transitions version: 
-```yaml
-system:
-  usa_flu:
-    module: op_system
+  - module: op_system
     spec:
       kind: transitions
       axes:
-        - name: vacc
-          coords: [unvaccinated, dose1, waned]
-        - name: age
-          coords: [age0to4, age5to17, age18to49, age50to64, age65to100]
-
-      state: [S[vacc,age], E[vacc,age], I1[vacc,age], I2[vacc,age], I3[vacc,age], R[vacc,age]]
-
+        - name: P_size
+          coords: [p0, p1]
+        - name: Z_size
+          coords: [z0, z1]
+      kernels:
+        - name: feed
+          axes: [P_size, Z_size]
+          form: gaussian
+          params:
+            scale: 1.0
+            sigma: 0.5
+      state: [N, P[P_size], Z[Z_size], Source]
       aliases:
-        nu1[age]: nu1_path[age]
-        theta1[age]: 1 - ve1[age]
-        thetaW[age]: 1 - veW[age]
-        lambda[vacc,age]: r0 * gamma * (
-          sum_over(age=j, I1[vacc=j, age=j] + I2[vacc=j, age=j] + I3[vacc=j, age=j])
-        ) * (
-          theta1[age] if vacc == 'dose1'
-          else thetaW[age] if vacc == 'waned'
-          else 1
-        )
-
+        season: 1 + sea * np.sin(2*np.pi*t/365)
       transitions:
-        # Infection S -> E (per vacc, age)
-        - from: S[vacc,age]
-          to: E[vacc,age]
-          rate: lambda[vacc,age]
-
-        # Progression E -> I1 -> I2 -> I3 -> R
-        - from: E[vacc,age]
-          to: I1[vacc,age]
-          rate: sigma_AllFlu
-        - from: I1[vacc,age]
-          to: I2[vacc,age]
-          rate: 3*gamma
-        - from: I2[vacc,age]
-          to: I3[vacc,age]
-          rate: 3*gamma
-        - from: I3[vacc,age]
-          to: R[vacc,age]
-          rate: 3*gamma
-
-        # Vaccination: unvaccinated -> dose1 (apply to S/E/R)
-        - from: S[unvaccinated,age]
-          to: S[dose1,age]
-          rate: nu1[age]
-        - from: E[unvaccinated,age]
-          to: E[dose1,age]
-          rate: nu1[age]
-        - from: R[unvaccinated,age]
-          to: R[dose1,age]
-          rate: nu1[age]
-
-        # Waning: dose1 -> waned (apply to S/E/R)
-        - from: S[dose1,age]
-          to: S[waned,age]
-          rate: epsilon
-        - from: E[dose1,age]
-          to: E[waned,age]
-          rate: epsilon
-        - from: R[dose1,age]
-          to: R[waned,age]
-          rate: epsilon
-
-        # External seeding: unvaccinated, age18to49
-        - from: S[unvaccinated,age18to49]
-          to: E[unvaccinated,age18to49]
-          rate: lambda_ext
+        - name: N_in
+          from: Source
+          to: N
+          rate: n_t
+        - name: uptake[p]
+          from: N
+          to: P[P_size=p]
+          rate: season * mu_max_P[p] * P[P_size=p] / (kn_P[p] + N)
+        - name: graze[p,z]
+          from: P[P_size=p]
+          to: Z[Z_size=z]
+          rate: gamma * g_Z[z] * feed[P_size=p,Z_size=z] * Z[Z_size=z]
+        - name: P_loss[p]
+          from: P[P_size=p]
+          to: N
+          rate: lam
+        - name: Z_loss[z]
+          from: Z[Z_size=z]
+          to: N
+          rate: delta_Z[z]
 ```
+
+This showcases: axes templates, kernel metadata, templated transitions, optional external supply (`Source` → `N`), and closed mass balance via N.
 ---
 
 ## Installation
