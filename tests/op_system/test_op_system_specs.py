@@ -11,6 +11,7 @@ These tests cover:
 from __future__ import annotations
 
 import re
+from math import isclose
 
 import pytest
 
@@ -348,7 +349,10 @@ def test_kernels_and_operator_meta_preserved() -> None:
     kernels_meta = out.meta.get("kernels")
     assert isinstance(kernels_meta, list)
     assert {mk["name"] for mk in kernels_meta} == {"k_fixed", "k_gauss"}
-    assert any(mk.get("value") == 0.5 for mk in kernels_meta)
+    assert any(
+        (val := mk.get("value")) is not None and isclose(float(val), 0.5)
+        for mk in kernels_meta
+    )
     assert any(mk.get("form") == "gaussian" for mk in kernels_meta)
 
     operators_meta = out.meta.get("operators")
