@@ -105,10 +105,10 @@ system:
         R[age,vax]: gamma[vax] * I[age,vax]
 ```
 
-      What differs:
-      - In the symmetric config, the force term is `lambda[age]` (no `vax` index), so vaccinated and unvaccinated groups within the same age use the same infection pressure and recovery rate.
-      - In the asymmetric config, vaccine-specific terms are introduced (`ve[vax]`, `gamma[vax]`), so dynamics can diverge by vaccination status.
-      - The structural template (`S[age,vax]`, `I[age,vax]`, `R[age,vax]`) is identical in both; only the rate expressions change.
+  What differs:
+  - In the symmetric config, the force term is `lambda[age]` (no `vax` index), so vaccinated and unvaccinated groups within the same age use the same infection pressure and recovery rate.
+  - In the asymmetric config, vaccine-specific terms are introduced (`ve[vax]`, `gamma[vax]`), so dynamics can diverge by vaccination status.
+  - The structural template (`S[age,vax]`, `I[age,vax]`, `R[age,vax]`) is identical in both; only the rate expressions change.
 
 **Symmetric vs asymmetric using `transitions` rates**
 ```yaml
