@@ -1,11 +1,11 @@
 # op_system
 
-Domain-agnostic RHS specification and compilation for ODE-style models with templates, helpers, and preserved metadata.
+Domain-agnostic model specification and compilation for ODE, PDE, and multi-physics/multi-scale hybrids, with templates, helpers, and preserved metadata.
 
 ## Statement of Need
 
 Modelers often combine compartment-style hazards, templated populations, and metadata such as axes, kernels, and operators that must be validated and preserved for downstream solvers. `op_system` provides:
-- YAML/JSON-friendly specs for RHS definitions (expr and transitions styles).
+- YAML/JSON-friendly specs for model definitions (expr and transitions styles).
 - Normalization with strict validation and metadata preservation.
 - Compilation to safe, fast callables usable by engines like `op_engine` or custom integrators.
 
@@ -105,6 +105,11 @@ system:
         R[age,vax]: gamma[vax] * I[age,vax]
 ```
 
+      What differs:
+      - In the symmetric config, the force term is `lambda[age]` (no `vax` index), so vaccinated and unvaccinated groups within the same age use the same infection pressure and recovery rate.
+      - In the asymmetric config, vaccine-specific terms are introduced (`ve[vax]`, `gamma[vax]`), so dynamics can diverge by vaccination status.
+      - The structural template (`S[age,vax]`, `I[age,vax]`, `R[age,vax]`) is identical in both; only the rate expressions change.
+
 **Symmetric vs asymmetric using `transitions` rates**
 ```yaml
 # symmetric
@@ -143,6 +148,11 @@ spec:
       to: R[age,vax]
       rate: gamma[vax]
 ```
+
+Transitions pathway interpretation is the same:
+- Symmetric: transition rates omit `vax` dependence (or depend only through shared aggregates).
+- Asymmetric: transition rates include explicit `vax`-indexed terms.
+- There is no implicit symmetry constraint; symmetry/asymmetry is determined entirely by your rate expressions.
 
 ### 3) Multi-axis templates + helpers in both pathways
 
@@ -288,14 +298,14 @@ just mypy
 
 ## Features
 
-- RHS kinds: `expr` (explicit equations) and `transitions` (hazard/flow style).
+- Model kinds: `expr` (explicit equations) and `transitions` (hazard/flow style).
 - Transitions support optional `name` metadata preserved in `meta.transitions`; templated transitions expand before hazard assembly with metadata intact.
 - Templates: `State[axis,...]` expand over categorical axes; equations may be written once per template.
 - Aliases and inline placeholders like `theta[age]` expand over categorical axes using the same assignments, removing per-axis parameter duplication.
 - Transitions now accept templated states and rates over categorical axes; templated `from`/`to`/`rate` are expanded before hazard assembly.
 - `sum_over(axis=var, expr)`: unrolls over categorical coords; continuous axes are rejected.
 - `integrate_over(axis=var, expr)`: trapezoidal integrate along continuous axes using axis-derived deltas (non-uniform spacing supported).
-- Chain helper: `chain` block auto-fills equations/transitions for staged compartments (expr or transitions kinds), and staged states (`I1..Ik`) are synthesized automatically when omitted from `state`.
+- Chain helper: `chain` block auto-fills equations/transitions for staged compartments (expr or transitions kinds). Keep your base model structure explicit (for example `I[age,vax]` where applicable), while staged chain internals (`I1..Ik`) are synthesized automatically and do not need explicit `state` entries.
 - Reducers in expressions: `sum_state()`, `sum_prefix(prefix)`.
 - Axes: categorical or continuous; continuous can be generated via `domain` + `size` + `spacing` (linear/log/geom).
 - Metadata passthrough: axes, state_axes, kernels, operators, reserved blocks (`sources`, `couplings`, `constraints`) in `NormalizedRhs.meta`.
@@ -306,7 +316,7 @@ just mypy
 - Multi-axis grouping: forms like `S[age,vax,strain]` are supported when all listed axes are defined in `axes`.
 - Axis asymmetry (`expr`): states/equations may use different axis subsets (for example `S[age]`, `I[age,strain]`), and substitutions only apply where placeholders are present.
 - Axis asymmetry (`transitions`): placeholder expansion uses all placeholders appearing in `from`, `to`, `rate`, and optional `name`, then renders each field with its own placeholders.
-- Chain helper state behavior: `chain` synthesizes staged names from `name` and `length`, and can generate the first infection transition via `entry` so transitions specs do not need a manual `S -> I1` edge.
+- Chain helper state behavior: `chain` synthesizes staged names from `name` and `length`, but does not replace explicit top-level state/axis declarations in your model. It can generate the first infection transition via `entry` so transitions specs do not need a manual `S -> I1` edge.
 
 ## Chain schema
 
@@ -337,7 +347,7 @@ Disallowed: non-`np` attribute access, non-whitelisted helpers, imports, or othe
 
 - `compile_spec(spec) -> CompiledRhs`: normalize + compile in one step.
 - `normalize_rhs(spec) -> NormalizedRhs`: validation + metadata preservation.
-- `compile_rhs(rhs) -> CompiledRhs`: compile a pre-normalized RHS.
+- `compile_rhs(rhs) -> CompiledRhs`: compile a pre-normalized model specification.
 - `NormalizedRhs.meta`: access normalized metadata (axes, state_axes, kernels, operators, reserved blocks).
 
 ## License & support
