@@ -56,7 +56,7 @@ system:
           to: R
       equations:
         S: -beta * S * sum_prefix('I') / sum_state()
-        I: -beta * S * sum_prefix('I') / sum_state() - gamma * I3
+        I: beta * S * sum_prefix('I') / sum_state() - gamma * I3
         R: gamma * I3
 ```
 
