@@ -153,7 +153,7 @@ system:
         # chain fills I1->I2->I3->R at rate gamma
 ```
 
-### Biogeocheical network (templated transitions + kernels + mass balance)
+### Biogeochemical network (templated transitions + kernels + mass balance)
 
 ```yaml
 system:
