@@ -28,14 +28,16 @@ spec = {
 compiled = compile_spec(spec)
 dydt = compiled.eval_fn(0.0, [999.0, 1.0, 0.0], beta=0.3, gamma=0.1)
 ```
-## YAML examples (feature coverage)
+## YAML examples (organized and API-current)
 
-### Classic vs linear-chain SIR (reducers + chain helper)
+The example set below is intentionally small but complete: each core modeling pattern is shown for both `expr` and `transitions` pathways where applicable.
 
+### 1) Baseline SIR in both pathways
+
+**`expr`**
 ```yaml
 system:
-  sir_classic:
-    module: op_system
+  - module: op_system
     spec:
       kind: expr
       state: [S, I, R]
@@ -43,45 +45,27 @@ system:
         S: -beta * S * I / sum_state()
         I: beta * S * I / sum_state() - gamma * I
         R: gamma * I
-
-  sir_linear_chain:
-    module: op_system
-    spec:
-      kind: expr
-      state: [S, I1, I2, I3, R]
-      chain:
-        - name: I
-          length: 3
-          forward: gamma
-          to: R
-      equations:
-        S: -beta * S * sum_prefix('I') / sum_state()
-        I: beta * S * sum_prefix('I') / sum_state() - gamma * I3
-        R: gamma * I3
 ```
 
-### Two-population SIR (templates + sum_over + contact matrix params)
-
+**`transitions`**
 ```yaml
 system:
   - module: op_system
     spec:
-      kind: expr
-      axes:
-        - name: pop
-          coords: [p1, p2]
-      state: [S[pop], I[pop], R[pop]]
-      aliases:
-        N: sum_state()
-        c[pop,pop2]: c_base * m[pop,pop2]  # params expand to m__pop_p1__pop2_p2, etc.
-      equations:
-        S[pop]: -beta * S[pop] * sum_over(pop2=j, c[pop,j] * I[pop=j] / N)
-        I[pop]:  beta * S[pop] * sum_over(pop2=j, c[pop,j] * I[pop=j] / N) - gamma * I[pop]
-        R[pop]:  gamma * I[pop]
+      kind: transitions
+      state: [S, I, R]
+      transitions:
+        - from: S
+          to: I
+          rate: beta * I / sum_state()
+        - from: I
+          to: R
+          rate: gamma
 ```
 
-### Templated aliases/parameters (per-axis)
+### 2) Vaccination symmetry vs asymmetry (age × vax)
 
+**Symmetric across `vax` within each `age` (`expr`)**
 ```yaml
 system:
   - module: op_system
@@ -90,20 +74,79 @@ system:
       axes:
         - name: age
           coords: [child, adult]
-      state: [S[age], I[age]]
+        - name: vax
+          coords: [u, v]
+      state: [S[age,vax], I[age,vax], R[age,vax]]
       aliases:
-        beta[age]: b0 * k[age]
-        k[age]: k_base * (1 + offset[age])
+        lambda[age]: beta * sum_over(vax=j, I[age,j]) / sum_state()
       equations:
-        S[age]: -beta[age] * S[age]
-        I[age]: beta[age] * S[age] - gamma * I[age]
+        S[age,vax]: -lambda[age] * S[age,vax]
+        I[age,vax]: lambda[age] * S[age,vax] - gamma * I[age,vax]
+        R[age,vax]: gamma * I[age,vax]
 ```
-Expands to `beta__age_child`, `beta__age_adult`, `offset__age_child`, etc.; you bind only the concrete parameter names.
 
-Use `aliases` for readable reusable symbolic groups (e.g., force of infection terms, axis-specific coefficients), not for introducing extra runtime state variables.
+**Asymmetric by `vax` (`expr`)**
+```yaml
+system:
+  - module: op_system
+    spec:
+      kind: expr
+      axes:
+        - name: age
+          coords: [child, adult]
+        - name: vax
+          coords: [u, v]
+      state: [S[age,vax], I[age,vax], R[age,vax]]
+      aliases:
+        lambda[age,vax]: beta * (1 - ve[vax]) * sum_over(vax=j, I[age,j]) / sum_state()
+      equations:
+        S[age,vax]: -lambda[age,vax] * S[age,vax]
+        I[age,vax]: lambda[age,vax] * S[age,vax] - gamma[vax] * I[age,vax]
+        R[age,vax]: gamma[vax] * I[age,vax]
+```
 
-### Multi-axis templates (age, vaccination, strain)
+**Symmetric vs asymmetric using `transitions` rates**
+```yaml
+# symmetric
+spec:
+  kind: transitions
+  axes:
+    - name: age
+      coords: [child, adult]
+    - name: vax
+      coords: [u, v]
+  state: [S[age,vax], I[age,vax], R[age,vax]]
+  aliases:
+    lambda[age]: beta * sum_over(vax=j, I[age,j]) / sum_state()
+  transitions:
+    - from: S[age,vax]
+      to: I[age,vax]
+      rate: lambda[age]
+    - from: I[age,vax]
+      to: R[age,vax]
+      rate: gamma
 
+# asymmetric
+spec:
+  kind: transitions
+  axes:
+    - name: age
+      coords: [child, adult]
+    - name: vax
+      coords: [u, v]
+  state: [S[age,vax], I[age,vax], R[age,vax]]
+  transitions:
+    - from: S[age,vax]
+      to: I[age,vax]
+      rate: beta * (1 - ve[vax]) * sum_over(vax=j, I[age,j]) / sum_state()
+    - from: I[age,vax]
+      to: R[age,vax]
+      rate: gamma[vax]
+```
+
+### 3) Multi-axis templates + helpers in both pathways
+
+**`expr` (age × vax × strain; asymmetric axis membership)**
 ```yaml
 system:
   - module: op_system
@@ -118,16 +161,78 @@ system:
           coords: [wt, var]
       state: [S[age,vax], I[age,vax,strain], R[age,vax]]
       aliases:
-        lambda[age,vax,strain]: beta[strain] * I[age,vax,strain] / sum_state()
+        foi[age,vax,strain]: beta[strain] * I[age,vax,strain] / sum_state()
       equations:
-        S[age,vax]: -sum_over(strain=s, lambda[age,vax,s] * S[age,vax])
-        I[age,vax,strain]: lambda[age,vax,strain] * S[age,vax] - gamma[strain] * I[age,vax,strain]
+        S[age,vax]: -sum_over(strain=s, foi[age,vax,s] * S[age,vax])
+        I[age,vax,strain]: foi[age,vax,strain] * S[age,vax] - gamma[strain] * I[age,vax,strain]
         R[age,vax]: sum_over(strain=s, gamma[strain] * I[age,vax,s])
 ```
 
-Each template expands over the listed axes only, so different states can legitimately use different axis sets.
+**`transitions` (same axis pattern)**
+```yaml
+system:
+  - module: op_system
+    spec:
+      kind: transitions
+      axes:
+        - name: age
+          coords: [child, adult]
+        - name: vax
+          coords: [u, v]
+        - name: strain
+          coords: [wt, var]
+      state: [S[age,vax], I[age,vax,strain], R[age,vax]]
+      transitions:
+        - from: S[age,vax]
+          to: I[age,vax,strain]
+          rate: beta[strain] * I[age,vax,strain] / sum_state()
+        - from: I[age,vax,strain]
+          to: R[age,vax]
+          rate: gamma[strain]
+```
 
-### Continuous axis + integrate_over (with kernel meta)
+### 4) Chain helper in both pathways (no predeclared `I1..Ik`)
+
+**`expr` chain with synthesized staged states**
+```yaml
+system:
+  - module: op_system
+    spec:
+      kind: expr
+      state: [S, R]
+      chain:
+        - name: I
+          length: 3
+          forward: [gamma12, gamma23]
+          exit:
+            to: R
+            rate: gamma3r
+      equations:
+        S: -beta * S * I1 / sum_state()
+        R: gamma3r * I3
+```
+
+**`transitions` chain-only flow generation**
+```yaml
+system:
+  - module: op_system
+    spec:
+      kind: transitions
+      state: [S, R]
+      chain:
+        - name: I
+          length: 3
+          entry:
+            from: S
+            rate: beta * S / sum_state()
+          forward: [gamma12, gamma23]
+          exit:
+            to: R
+            rate: gamma3r
+      transitions: []
+```
+
+### 5) Continuous axis + `integrate_over` (expr pathway)
 
 ```yaml
 system:
@@ -156,96 +261,7 @@ system:
         u[x]: integrate_over(x=xi, K[xi] * u[xi]) - decay * u[x]
 ```
 
-`integrate_over` uses trapezoidal weights derived from `axes[0].coords`; non-uniform spacing is respected. Kernel/operator metadata is preserved in `meta` for downstream solvers.
-
-### Transitions (hazard/flow) with chain helper
-
-```yaml
-system:
-  - module: op_system
-    spec:
-      kind: transitions
-      state: [S, R]
-      aliases:
-        N: sum_state()
-      chain:
-        - name: I
-          length: 3
-          entry:
-            from: S
-            rate: beta * sum_prefix('I') / N
-          forward: gamma
-          exit:
-            to: R
-      transitions: []
-      # chain fills S->I1 plus I1->I2->I3->R
-```
-
-### Transitions with heterogeneous chain stage rates
-
-```yaml
-system:
-  - module: op_system
-    spec:
-      kind: transitions
-      state: [S, R]
-      chain:
-        - name: I
-          length: 3
-          entry:
-            from: S
-            rate: beta
-          forward: [gamma12, gamma23]
-          exit:
-            to: R
-            rate: gamma3r
-      transitions: []
-```
-
-### Biogeochemical network (templated transitions + kernels + mass balance)
-
-```yaml
-system:
-  - module: op_system
-    spec:
-      kind: transitions
-      axes:
-        - name: P_size
-          coords: [p0, p1]
-        - name: Z_size
-          coords: [z0, z1]
-      kernels:
-        - name: feed
-          axes: [P_size, Z_size]
-          form: gaussian
-          params:
-            scale: 1.0
-            sigma: 0.5
-      state: [N, P[P_size], Z[Z_size], Source]
-      aliases:
-        season: 1 + sea * np.sin(2*np.pi*t/365)
-      transitions:
-        - name: N_in
-          from: Source
-          to: N
-          rate: n_t
-        - name: uptake[p]
-          from: N
-          to: P[P_size=p]
-          rate: season * mu_max_P[p] * P[P_size=p] / (kn_P[p] + N)
-        - name: graze[p,z]
-          from: P[P_size=p]
-          to: Z[Z_size=z]
-          rate: gamma * g_Z[z] * feed[P_size=p,Z_size=z] * Z[Z_size=z]
-        - name: P_loss[p]
-          from: P[P_size=p]
-          to: N
-          rate: lam
-        - name: Z_loss[z]
-          from: Z[Z_size=z]
-          to: N
-          rate: delta_Z[z]
-```
+`integrate_over` uses trapezoidal weights derived from axis coordinates; non-uniform spacing is respected.
 
 
 ---
