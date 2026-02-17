@@ -100,6 +100,33 @@ system:
 ```
 Expands to `beta__age_child`, `beta__age_adult`, `offset__age_child`, etc.; you bind only the concrete parameter names.
 
+Use `aliases` for readable reusable symbolic groups (e.g., force of infection terms, axis-specific coefficients), not for introducing extra runtime state variables.
+
+### Multi-axis templates (age, vaccination, strain)
+
+```yaml
+system:
+  - module: op_system
+    spec:
+      kind: expr
+      axes:
+        - name: age
+          coords: [child, adult]
+        - name: vax
+          coords: [u, v]
+        - name: strain
+          coords: [wt, var]
+      state: [S[age,vax], I[age,vax,strain], R[age,vax]]
+      aliases:
+        lambda[age,vax,strain]: beta[strain] * I[age,vax,strain] / sum_state()
+      equations:
+        S[age,vax]: -sum_over(strain=s, lambda[age,vax,s] * S[age,vax])
+        I[age,vax,strain]: lambda[age,vax,strain] * S[age,vax] - gamma[strain] * I[age,vax,strain]
+        R[age,vax]: sum_over(strain=s, gamma[strain] * I[age,vax,s])
+```
+
+Each template expands over the listed axes only, so different states can legitimately use different axis sets.
+
 ### Continuous axis + integrate_over (with kernel meta)
 
 ```yaml
@@ -138,19 +165,41 @@ system:
   - module: op_system
     spec:
       kind: transitions
-      state: [S, I1, I2, I3, R]
+      state: [S, R]
       aliases:
         N: sum_state()
       chain:
         - name: I
           length: 3
+          entry:
+            from: S
+            rate: beta * sum_prefix('I') / N
           forward: gamma
-          to: R
-      transitions:
-        - from: S
-          to: I1
-          rate: beta * I1 / N
-        # chain fills I1->I2->I3->R at rate gamma
+          exit:
+            to: R
+      transitions: []
+      # chain fills S->I1 plus I1->I2->I3->R
+```
+
+### Transitions with heterogeneous chain stage rates
+
+```yaml
+system:
+  - module: op_system
+    spec:
+      kind: transitions
+      state: [S, R]
+      chain:
+        - name: I
+          length: 3
+          entry:
+            from: S
+            rate: beta
+          forward: [gamma12, gamma23]
+          exit:
+            to: R
+            rate: gamma3r
+      transitions: []
 ```
 
 ### Biogeochemical network (templated transitions + kernels + mass balance)
@@ -230,10 +279,34 @@ just mypy
 - Transitions now accept templated states and rates over categorical axes; templated `from`/`to`/`rate` are expanded before hazard assembly.
 - `sum_over(axis=var, expr)`: unrolls over categorical coords; continuous axes are rejected.
 - `integrate_over(axis=var, expr)`: trapezoidal integrate along continuous axes using axis-derived deltas (non-uniform spacing supported).
-- Chain helper: `chain` block auto-fills staged compartments (expr or transitions kinds).
+- Chain helper: `chain` block auto-fills equations/transitions for staged compartments (expr or transitions kinds), and staged states (`I1..Ik`) are synthesized automatically when omitted from `state`.
 - Reducers in expressions: `sum_state()`, `sum_prefix(prefix)`.
 - Axes: categorical or continuous; continuous can be generated via `domain` + `size` + `spacing` (linear/log/geom).
 - Metadata passthrough: axes, state_axes, kernels, operators, reserved blocks (`sources`, `couplings`, `constraints`) in `NormalizedRhs.meta`.
+
+## Specification behavior notes
+
+- Alias usage: aliases are expanded expressions evaluated against state, params, and earlier aliases; they are best used to reduce repeated symbolic expressions.
+- Multi-axis grouping: forms like `S[age,vax,strain]` are supported when all listed axes are defined in `axes`.
+- Axis asymmetry (`expr`): states/equations may use different axis subsets (for example `S[age]`, `I[age,strain]`), and substitutions only apply where placeholders are present.
+- Axis asymmetry (`transitions`): placeholder expansion uses all placeholders appearing in `from`, `to`, `rate`, and optional `name`, then renders each field with its own placeholders.
+- Chain helper state behavior: `chain` synthesizes staged names from `name` and `length`, and can generate the first infection transition via `entry` so transitions specs do not need a manual `S -> I1` edge.
+
+## Chain schema
+
+```yaml
+chain:
+  - name: I
+    length: 3
+    entry: {from: S, rate: beta * force}  # optional
+    forward: gamma                         # scalar broadcast
+    # or forward: [gamma12, gamma23]       # per internal edge, length-1 values
+    exit: {to: R, rate: gamma3r}           # optional; rate defaults to last forward rate
+```
+
+- `forward` may be scalar or a list of `length - 1` rates.
+- `entry` is optional and, when provided, generates `entry.from -> I1`.
+- `exit` is optional and, when provided, generates `I_last -> exit.to`.
 
 ## Validation & AST guardrails
 

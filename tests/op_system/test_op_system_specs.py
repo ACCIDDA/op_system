@@ -348,7 +348,11 @@ def test_kernels_and_operator_meta_preserved() -> None:
     kernels_meta = out.meta.get("kernels")
     assert isinstance(kernels_meta, list)
     assert {mk["name"] for mk in kernels_meta} == {"k_fixed", "k_gauss"}
-    assert any(mk.get("value") == 0.5 for mk in kernels_meta)
+    assert any(
+        isinstance(mk.get("value"), (int, float))
+        and float(mk["value"]) == pytest.approx(0.5)
+        for mk in kernels_meta
+    )
     assert any(mk.get("form") == "gaussian" for mk in kernels_meta)
 
     operators_meta = out.meta.get("operators")
@@ -431,17 +435,25 @@ def test_transitions_chain_helper_appends_transitions() -> None:
     """Chain helper adds internal transitions for transitions kind."""
     spec = {
         "kind": "transitions",
-        "state": ["S", "I1", "I2", "R"],
-        "transitions": [
-            {"from": "S", "to": "I1", "rate": "beta"},
+        "state": ["S", "R"],
+        "transitions": [],
+        "chain": [
+            {
+                "name": "I",
+                "length": 2,
+                "entry": {"from": "S", "rate": "beta"},
+                "forward": "gamma",
+                "exit": {"to": "R"},
+            }
         ],
-        "chain": [{"name": "I", "length": 2, "forward": "gamma", "to": "R"}],
     }
 
     out = normalize_transitions_rhs(spec)
-    # Expect added transitions I1->I2 and I2->R
+    # Expect synthesized states and transitions S->I1, I1->I2, I2->R
+    assert set(out.state_names) == {"S", "I1", "I2", "R"}
     assert len(out.meta["transitions"]) == 3
     eqs = out.equations
+    assert any("beta" in eq and "S" in eq for eq in eqs)
     assert any("I1" in eq and "gamma" in eq for eq in eqs)
     assert any("I2" in eq and "gamma" in eq for eq in eqs)
 
@@ -485,12 +497,12 @@ def test_expr_chain_helper_autofills_missing_equations() -> None:
     """Chain helper under expr fills missing stage equations when provided."""
     spec = {
         "kind": "expr",
-        "state": ["S", "I1", "I2", "R"],
+        "state": ["S", "R"],
         "equations": {
             "S": "-beta * I1",
             "R": "gamma * I2",
         },
-        "chain": [{"name": "I", "length": 2, "forward": "gamma", "to": "R"}],
+        "chain": [{"name": "I", "length": 2, "forward": "gamma", "exit": {"to": "R"}}],
     }
 
     out = normalize_expr_rhs(spec)
@@ -502,7 +514,7 @@ def test_expr_chain_helper_autofills_missing_equations() -> None:
 
 
 def test_expr_chain_helper_rejects_invalid_lengths_and_missing_states() -> None:
-    """Chain helper should reject length < 2 and missing stage definitions."""
+    """Chain helper should reject invalid lengths and invalid targets."""
     spec_short = {
         "kind": "expr",
         "state": ["S", "R"],
@@ -512,21 +524,22 @@ def test_expr_chain_helper_rejects_invalid_lengths_and_missing_states() -> None:
     with pytest.raises(ValueError, match=r"length must be >= 2"):
         normalize_expr_rhs(spec_short)
 
-    spec_missing = {
+    spec_bad_exit = {
         "kind": "expr",
         "state": ["S", "R"],
         "equations": {"S": "0.0", "R": "0.0"},
-        "chain": [{"name": "I", "length": 2, "forward": "gamma"}],
+        "chain": [{"name": "I", "length": 2, "forward": "gamma", "exit": {"to": "X"}}],
     }
-    with pytest.raises(ValueError, match=r"references missing states"):
-        normalize_expr_rhs(spec_missing)
+    with pytest.raises(ValueError, match=r"exit.to='X' not in state"):
+        normalize_expr_rhs(spec_bad_exit)
 
 
 def test_transitions_requires_nonempty_list() -> None:
-    """Test that transitions kind requires non-empty transitions list."""
+    """Transitions may be empty in input but not after chain expansion."""
     spec = {"kind": "transitions", "state": ["S", "I"], "transitions": []}
     with pytest.raises(
-        ValueError, match=re.escape("transitions must be a non-empty list")
+        ValueError,
+        match=re.escape("transitions must be non-empty after applying chain expansion"),
     ):
         normalize_transitions_rhs(spec)
 
@@ -546,11 +559,63 @@ def test_transitions_chain_invalid_sink_rejected() -> None:
     """Transitions chain helper should reject invalid sink targets."""
     spec = {
         "kind": "transitions",
-        "state": ["S", "I1", "I2"],
-        "transitions": [{"from": "S", "to": "I1", "rate": "beta"}],
-        "chain": [{"name": "I", "length": 2, "forward": "gamma", "to": "R"}],
+        "state": ["S"],
+        "transitions": [],
+        "chain": [
+            {
+                "name": "I",
+                "length": 2,
+                "entry": {"from": "S", "rate": "beta"},
+                "forward": "gamma",
+                "exit": {"to": "R"},
+            }
+        ],
     }
-    with pytest.raises(ValueError, match=r"to='R' not in state"):
+    with pytest.raises(ValueError, match=r"exit.to='R' not in state"):
+        normalize_transitions_rhs(spec)
+
+
+def test_transitions_chain_supports_heterogeneous_rates() -> None:
+    """Per-stage forward lists and exit rates are honored in transitions chains."""
+    spec = {
+        "kind": "transitions",
+        "state": ["S", "R"],
+        "transitions": [],
+        "chain": [
+            {
+                "name": "I",
+                "length": 3,
+                "entry": {"from": "S", "rate": "beta"},
+                "forward": ["g12", "g23"],
+                "exit": {"to": "R", "rate": "g3r"},
+            }
+        ],
+    }
+
+    out = normalize_transitions_rhs(spec)
+    transitions_meta = out.meta["transitions"]
+    assert len(transitions_meta) == 4
+    assert {tr["rate"] for tr in transitions_meta} == {"beta", "g12", "g23", "g3r"}
+
+
+def test_chain_forward_list_length_must_match_internal_edges() -> None:
+    """Forward list length must equal length-1 for chain definitions."""
+    spec = {
+        "kind": "transitions",
+        "state": ["S", "R"],
+        "transitions": [],
+        "chain": [
+            {
+                "name": "I",
+                "length": 3,
+                "entry": {"from": "S", "rate": "beta"},
+                "forward": ["g12"],
+                "exit": {"to": "R"},
+            }
+        ],
+    }
+
+    with pytest.raises(ValueError, match=r"forward list length must be 2"):
         normalize_transitions_rhs(spec)
 
 

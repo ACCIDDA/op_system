@@ -1206,17 +1206,123 @@ def _gather_equations(
     return eqs
 
 
+def _chain_rate_expr(value: object, *, field: str) -> str:
+    """Normalize a chain rate value into an expression string.
+
+    Returns:
+        A non-empty expression string.
+    """
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return str(float(value))
+    _raise_invalid_rhs_spec(detail=f"{field} must be a non-empty string or number")
+
+
+def _normalize_chain_forward_rates(
+    forward_raw: object,
+    *,
+    idx: int,
+    length: int,
+) -> list[str]:
+    """Normalize chain forward rates into per-edge expressions.
+
+    Returns:
+        A list of length ``length - 1``.
+    """
+    if isinstance(forward_raw, (str, int, float)) and not isinstance(forward_raw, bool):
+        expr = _chain_rate_expr(forward_raw, field=f"chain[{idx}].forward")
+        return [expr] * (length - 1)
+
+    if not isinstance(forward_raw, (list, tuple)):
+        _raise_invalid_rhs_spec(
+            detail=(
+                f"chain[{idx}].forward must be a string/number or a list of "
+                f"{length - 1} rates"
+            )
+        )
+
+    rates = [
+        _chain_rate_expr(v, field=f"chain[{idx}].forward[{i}]")
+        for i, v in enumerate(forward_raw)
+    ]
+    if len(rates) != length - 1:
+        _raise_invalid_rhs_spec(
+            detail=(
+                f"chain[{idx}].forward list length must be {length - 1} "
+                f"for chain length {length}"
+            )
+        )
+    return rates
+
+
+def _normalize_chain_entry(
+    chain: Mapping[str, Any], *, idx: int
+) -> tuple[str, str] | None:
+    """Normalize optional chain entry block.
+
+    Returns:
+        Tuple ``(from_state, rate_expr)`` or ``None`` if no entry provided.
+    """
+    entry_raw = chain.get("entry")
+    if entry_raw is None:
+        return None
+    entry_map = _ensure_mapping(entry_raw, name=f"chain[{idx}].entry")
+    frm = entry_map.get("from")
+    if not isinstance(frm, str) or not frm.strip():
+        _raise_invalid_rhs_spec(
+            detail=f"chain[{idx}].entry.from must be a non-empty string"
+        )
+    rate = _chain_rate_expr(entry_map.get("rate"), field=f"chain[{idx}].entry.rate")
+    return frm.strip(), rate
+
+
+def _normalize_chain_exit(
+    chain: Mapping[str, Any],
+    *,
+    idx: int,
+) -> tuple[str, str | None] | None:
+    """Normalize optional chain exit configuration.
+
+    Accepts either ``exit: {to, rate?}`` or legacy ``to``.
+
+    Returns:
+        Tuple ``(to_state, rate_expr_or_none)`` or ``None``.
+    """
+    exit_raw = chain.get("exit")
+    if exit_raw is not None:
+        exit_map = _ensure_mapping(exit_raw, name=f"chain[{idx}].exit")
+        to_raw = exit_map.get("to")
+        if not isinstance(to_raw, str) or not to_raw.strip():
+            _raise_invalid_rhs_spec(
+                detail=f"chain[{idx}].exit.to must be a non-empty string"
+            )
+        rate_raw = exit_map.get("rate")
+        rate_expr = (
+            _chain_rate_expr(rate_raw, field=f"chain[{idx}].exit.rate")
+            if rate_raw is not None
+            else None
+        )
+        return to_raw.strip(), rate_expr
+
+    to_legacy = chain.get("to")
+    if to_legacy is None:
+        return None
+    if not isinstance(to_legacy, str) or not to_legacy.strip():
+        _raise_invalid_rhs_spec(detail=f"chain[{idx}].to must be a non-empty string")
+    return to_legacy.strip(), None
+
+
 def _validate_chain_entry(
     *,
     chain: Mapping[str, Any],
     idx: int,
     state_set: set[str],
-    allow_templates: bool,
-) -> tuple[list[str], str, str | None]:
-    """Validate a chain entry and return stage names, rate, and sink.
+) -> tuple[list[str], list[str], tuple[str, str] | None, tuple[str, str | None] | None]:
+    """Validate a chain entry and return normalized chain configuration.
 
     Returns:
-        (stage_names, rate_expr, sink_name or None).
+        (stage_names, forward_rates, entry, exit_cfg).
     """
     if not isinstance(chain, dict):
         _raise_invalid_rhs_spec(detail=f"chain[{idx}] must be a mapping")
@@ -1227,27 +1333,28 @@ def _validate_chain_entry(
     clen = int(length_obj)
     if clen < 2:
         _raise_invalid_rhs_spec(detail=f"chain[{idx}].length must be >= 2")
-    rate_expr = _get_required_str(chain, idx=idx, key="forward")
-    sink = chain.get("to")
+
+    forward_rates = _normalize_chain_forward_rates(
+        chain.get("forward"),
+        idx=idx,
+        length=clen,
+    )
+
     stage_names = [f"{cname}{i}" for i in range(1, clen + 1)]
-    missing = [s for s in stage_names if s not in state_set]
-    if missing:
-        tail = "Define them in state."
-        if allow_templates:
-            tail = "Define them (or templates) in state."
+
+    entry_cfg = _normalize_chain_entry(chain, idx=idx)
+    if entry_cfg is not None and entry_cfg[0] not in state_set:
         _raise_invalid_rhs_spec(
-            detail=(f"chain[{idx}] references missing states: {missing}. {tail}")
+            detail=f"chain[{idx}].entry.from={entry_cfg[0]!r} not in state"
         )
-    sink_s: str | None = None
-    if sink is not None:
-        sink_s = sink.strip() if isinstance(sink, str) else None
-        if not sink_s:
-            _raise_invalid_rhs_spec(
-                detail=f"chain[{idx}].to must be a non-empty string"
-            )
-        if sink_s not in state_set:
-            _raise_invalid_rhs_spec(detail=f"chain[{idx}].to={sink_s!r} not in state")
-    return stage_names, rate_expr, sink_s
+
+    exit_cfg = _normalize_chain_exit(chain, idx=idx)
+    if exit_cfg is not None and exit_cfg[0] not in state_set:
+        _raise_invalid_rhs_spec(
+            detail=f"chain[{idx}] exit.to={exit_cfg[0]!r} not in state"
+        )
+
+    return stage_names, forward_rates, entry_cfg, exit_cfg
 
 
 def _apply_expr_chains(
@@ -1259,51 +1366,79 @@ def _apply_expr_chains(
     """Apply chain helper for expr kind by auto-filling equations when missing."""
     state_set = set(state_expanded)
     for c_idx, chain in enumerate(chains):
-        stage_names, rate_expr, sink_s = _validate_chain_entry(
+        stage_names, forward_rates, _, exit_cfg = _validate_chain_entry(
             chain=chain,
             idx=c_idx,
             state_set=state_set,
-            allow_templates=True,
         )
+        exit_rate = exit_cfg[1] if exit_cfg is not None else None
+        final_out_rate = exit_rate or forward_rates[-1]
+        for stage_name in stage_names:
+            if stage_name not in state_set:
+                state_expanded.append(stage_name)
+                state_set.add(stage_name)
+
         if stage_names[0] not in equations_map:
-            equations_map[stage_names[0]] = f"-({rate_expr})*{stage_names[0]}"
+            equations_map[stage_names[0]] = f"-({forward_rates[0]})*{stage_names[0]}"
         for i in range(1, len(stage_names)):
             if stage_names[i] not in equations_map:
-                equations_map[stage_names[i]] = (
-                    f"({rate_expr})*{stage_names[i - 1]} - "
-                    f"({rate_expr})*{stage_names[i]}"
+                out_rate = (
+                    forward_rates[i] if i < len(stage_names) - 1 else final_out_rate
                 )
-        if sink_s is not None and sink_s not in equations_map:
-            equations_map[sink_s] = f"({rate_expr})*{stage_names[-1]}"
+                equations_map[stage_names[i]] = (
+                    f"({forward_rates[i - 1]})*{stage_names[i - 1]} - "
+                    f"({out_rate})*{stage_names[i]}"
+                )
+        if exit_cfg is not None:
+            sink_s, sink_rate = exit_cfg
+            out_rate = sink_rate or forward_rates[-1]
+            if sink_s not in equations_map:
+                equations_map[sink_s] = f"({out_rate})*{stage_names[-1]}"
 
 
 def _apply_transition_chains(
     *,
     chains: list[Any],
+    state_expanded: list[str],
     transitions_raw: list[dict[str, Any]],
     state_set: set[str],
 ) -> None:
     """Apply chain helper for transitions kind by appending transitions."""
     for c_idx, chain in enumerate(chains):
-        stage_names, rate_expr, sink_s = _validate_chain_entry(
+        stage_names, forward_rates, entry_cfg, exit_cfg = _validate_chain_entry(
             chain=chain,
             idx=c_idx,
             state_set=state_set,
-            allow_templates=False,
         )
+
+        for stage_name in stage_names:
+            if stage_name not in state_set:
+                state_expanded.append(stage_name)
+                state_set.add(stage_name)
+
+        if entry_cfg is not None:
+            entry_from, entry_rate = entry_cfg
+            transitions_raw.append({
+                "from": entry_from,
+                "to": stage_names[0],
+                "rate": entry_rate,
+            })
+
         transitions_raw.extend(
             {
                 "from": stage_names[i],
                 "to": stage_names[i + 1],
-                "rate": rate_expr,
+                "rate": forward_rates[i],
             }
             for i in range(len(stage_names) - 1)
         )
-        if sink_s is not None:
+
+        if exit_cfg is not None:
+            sink_s, sink_rate = exit_cfg
             transitions_raw.append({
                 "from": stage_names[-1],
                 "to": sink_s,
-                "rate": rate_expr,
+                "rate": sink_rate or forward_rates[-1],
             })
 
 
@@ -1524,7 +1659,9 @@ def _build_transition_equations(
     return equations
 
 
-def normalize_transitions_rhs(spec: Mapping[str, Any]) -> NormalizedRhs:  # noqa: PLR0914
+def normalize_transitions_rhs(  # noqa: C901, PLR0914
+    spec: Mapping[str, Any],
+) -> NormalizedRhs:
     """Normalize a transition-based RHS specification (diagram/hazard semantics).
 
     Returns:
@@ -1534,9 +1671,13 @@ def normalize_transitions_rhs(spec: Mapping[str, Any]) -> NormalizedRhs:  # noqa
     if len(state_raw) != len(set(state_raw)):
         _raise_invalid_rhs_spec(detail="state contains duplicate names")
 
-    transitions_raw = spec.get("transitions")
-    if not isinstance(transitions_raw, list) or not transitions_raw:
-        _raise_invalid_rhs_spec(detail="transitions must be a non-empty list")
+    transitions_raw_obj = spec.get("transitions")
+    if transitions_raw_obj is None:
+        transitions_raw = []
+    elif isinstance(transitions_raw_obj, list):
+        transitions_raw = list(transitions_raw_obj)
+    else:
+        _raise_invalid_rhs_spec(detail="transitions must be a list")
 
     axes_meta = _normalize_axes(spec.get("axes"))
 
@@ -1577,8 +1718,17 @@ def normalize_transitions_rhs(spec: Mapping[str, Any]) -> NormalizedRhs:  # noqa
             _raise_invalid_rhs_spec(detail="chain must be a list if provided")
         _apply_transition_chains(
             chains=chains,
+            state_expanded=state_expanded,
             transitions_raw=transitions_raw,
             state_set=state_set,
+        )
+
+    for state_name in state_expanded:
+        d_terms.setdefault(state_name, [])
+
+    if not transitions_raw:
+        _raise_invalid_rhs_spec(
+            detail="transitions must be non-empty after applying chain expansion"
         )
 
     transitions_expanded = _expand_transition_templates(

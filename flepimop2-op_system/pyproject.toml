@@ -81,3 +81,7 @@ dev = [
   "ruff>=0.13.3",
   "mypy>=1.18.2",
 ]
+
+[[tool.mypy.overrides]]
+module = ["flepimop2.typing"]
+ignore_missing_imports = true
