@@ -1,6 +1,23 @@
 ---
 site_name: "OP System Documentation"
+
+theme: material
+plugins:
+  - search        # Standard search plugin (usually enabled by default)
+  - mkdocstrings: # Pulls documentation from your source code
+      handlers:
+        python:
+          paths: [src/op_system/] # Points to where your op_system code lives
+
 nav:
-  - Home: "index.md"
+  - Home: index.md
+  - Explanation:
+      - Basic usage: explanation/Basic_usage.md
+      - Core Concepts: explanation/concepts.md
+      - Design Prinicples: explanation/design_principles.md
+      - Metadata Preservation: explanation/metadata_preservation.md
+      - Safety & Validation: explanation/safety_&_validation.md
   - Guides:
-      - Getting Started: "guides/getting-started.md"
+      - Getting Started: guides/getting-started.md
+  - Reference:
+      - API: reference/api.md

@@ -44,6 +44,8 @@ dev = [
     "pytest>=8.4.2",
     "ruff>=0.13.3",
     "sybil[pytest]>=9.2.0",
+    "mkdocstrings[python] (>=1.0.3,<2.0.0)",
+    "mkdocs-material (>=9.7.1,<10.0.0)",
 ]
 
 [tool.pytest.ini_options]
