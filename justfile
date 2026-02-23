@@ -1,5 +1,5 @@
 # Run all default tasks for local development
-default: format check pytest mypy
+default: format check pytest mypy docs
 
 # -------------------------------------------------
 # Local venv + deps (explicit step)
@@ -76,14 +76,21 @@ ci:
 # -------------------------------------------------
 
 clean:
+	rm -rf site
 	rm -f uv.lock
 	rm -rf .*_cache
 	rm -rf .venv
 	rm -rf flepimop2-op_system/.venv
 	rm -f flepimop2-op_system/uv.lock
 
-docs:
+# Build API reference for the documentation using `mkdocstrings`
+api-reference:
+    uv run scripts/api-reference.py
+
+# Build the documentation using `mkdocs`
+docs: api-reference
 	uv run mkdocs build --verbose --strict
 
-serve:
+# Serve the documentation locally using `mkdocs`
+serve: api-reference
 	uv run mkdocs serve

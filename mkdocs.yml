@@ -1,6 +1,51 @@
 ---
-site_name: "OP System Documentation"
+# Site information
+site_name: op_system Documentation
+site_url: https://accidda.github.io/op_system/
+
+# Repository information
+repo_name: ACCIDDA/op_system
+repo_url: https://github.com/ACCIDDA/op_system
+edit_uri: ''
+
+# Theme information
+theme:
+  name: material
+  custom_dir: overrides
+
+# Plugins
+plugins:
+  - search
+  - autorefs
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            docstring_style: google
+            show_source: true
+            show_root_heading: true
+            show_root_full_path: false
+            merge_init_into_class: true
+            heading_level: 2
+
+# Extras
+extra:
+  version:
+    provider: mike
+
+# Markdown extensions
+markdown_extensions:
+  - toc:
+      permalink: true
+      toc_depth: 4
+  - attr_list
+
+# Navigation structure
 nav:
-  - Home: "index.md"
+  - Home: index.md
   - Guides:
-      - Getting Started: "guides/getting-started.md"
+      - Getting Started: guides/getting-started.md
+  - API Reference:
+      - OP System: api-reference/op-system.md
+      - Compile: api-reference/compile.md
+      - Specs: api-reference/specs.md
