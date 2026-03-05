@@ -207,6 +207,56 @@ system:
           rate: gamma[strain]
 ```
 
+### 3b) Axis available only for a subgroup (no empty compartments)
+
+When an axis should apply only to a subset (for example vaccination only for 65+), keep that axis off ineligible states to avoid empty compartments, and stratify only the eligible subgroup.
+
+**`transitions` with vax only for 65+**
+```yaml
+axes:
+  - name: age
+    coords: [u65, o65]
+  - name: vax
+    coords: [u, v]
+
+state:
+  - S_u65
+  - I_u65
+  - R_u65
+  - S_o65[vax]
+  - I_o65[vax]
+  - R_o65[vax]
+
+aliases:
+  I_total: sum_prefix("I_")
+
+transitions:
+  # under 65 (unstratified by vax)
+  - from: S_u65
+    to: I_u65
+    rate: beta_u65 * I_total / sum_state()
+  - from: I_u65
+    to: R_u65
+    rate: gamma_u65
+
+  # 65+ (stratified by vax)
+  - from: S_o65[vax]
+    to: I_o65[vax]
+    rate: beta_o65[vax] * I_total / sum_state()
+  - from: I_o65[vax]
+    to: R_o65[vax]
+    rate: gamma_o65[vax]
+
+  # vaccination only available to 65+
+  - from: S_o65[u]
+    to: S_o65[v]
+    rate: vax_rate_o65
+```
+
+Key points:
+- No coordinate-level masking exists today; adding an axis to a state expands over all its coordinates.
+- To avoid empty vaccinated compartments for ineligible groups, split states so only eligible subpopulations carry that axis.
+
 ### 4) Chain helper in both pathways (no predeclared `I1..Ik`)
 
 Even when using `chain`, declare the base staged compartment name in `state` (for example `I` below); the helper synthesizes `I1..Ik` so you do not enumerate them.
