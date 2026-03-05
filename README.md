@@ -34,6 +34,8 @@ The example set below is intentionally small but complete: each core modeling pa
 
 ### 1) Baseline SIR in both pathways
 
+Smallest valid SIR written once; demonstrates `expr` vs `transitions` parity.
+
 **`expr`**
 ```yaml
 system:
@@ -64,6 +66,8 @@ system:
 ```
 
 ### 2) Vaccination symmetry vs asymmetry (age × vax)
+
+Shows how axis templates keep model structure concise while rate terms decide symmetry.
 
 **Symmetric across `vax` within each `age` (`expr`)**
 ```yaml
@@ -156,6 +160,8 @@ Transitions pathway interpretation is the same:
 
 ### 3) Multi-axis templates + helpers in both pathways
 
+Highlights asymmetric axis membership and reuse of helper expressions across pathways.
+
 **`expr` (age × vax × strain; asymmetric axis membership)**
 ```yaml
 system:
@@ -203,13 +209,15 @@ system:
 
 ### 4) Chain helper in both pathways (no predeclared `I1..Ik`)
 
+Even when using `chain`, declare the base staged compartment name in `state` (for example `I` below); the helper synthesizes `I1..Ik` so you do not enumerate them.
+
 **`expr` chain with synthesized staged states**
 ```yaml
 system:
   - module: op_system
     spec:
       kind: expr
-      state: [S, R]
+      state: [S, I, R]
       chain:
         - name: I
           length: 3
@@ -228,7 +236,7 @@ system:
   - module: op_system
     spec:
       kind: transitions
-      state: [S, R]
+      state: [S, I, R]
       chain:
         - name: I
           length: 3
@@ -305,7 +313,7 @@ just mypy
 - Transitions now accept templated states and rates over categorical axes; templated `from`/`to`/`rate` are expanded before hazard assembly.
 - `sum_over(axis=var, expr)`: unrolls over categorical coords; continuous axes are rejected.
 - `integrate_over(axis=var, expr)`: trapezoidal integrate along continuous axes using axis-derived deltas (non-uniform spacing supported).
-- Chain helper: `chain` block auto-fills equations/transitions for staged compartments (expr or transitions kinds). Keep your base model structure explicit (for example `I[age,vax]` where applicable), while staged chain internals (`I1..Ik`) are synthesized automatically and do not need explicit `state` entries.
+- Chain helper: `chain` block auto-fills equations/transitions for staged compartments (expr or transitions kinds). Keep your base model structure explicit (for example `I` or `I[age,vax]` must appear in `state`), while staged chain internals (`I1..Ik`) are synthesized automatically and do not need explicit `state` entries.
 - Reducers in expressions: `sum_state()`, `sum_prefix(prefix)`.
 - Axes: categorical or continuous; continuous can be generated via `domain` + `size` + `spacing` (linear/log/geom).
 - Metadata passthrough: axes, state_axes, kernels, operators, reserved blocks (`sources`, `couplings`, `constraints`) in `NormalizedRhs.meta`.
