@@ -109,7 +109,7 @@ def test_eval_rejects_non_1d_state_shape() -> None:
     compiled = compile_rhs(rhs)
 
     y_bad = np.zeros((1, 1), dtype=np.float64)
-    msg = "state has an invalid shape/value. Expected 1D array."
+    msg = "state has an invalid shape/value. Expected (n_state=1,)."
     with pytest.raises(ValueError, match=re.escape(msg)):
         compiled.eval_fn(np.float64(0.0), y_bad)
 

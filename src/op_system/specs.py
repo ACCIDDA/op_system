@@ -45,6 +45,19 @@ if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping
     from re import Match
 
+
+_STATE_TEMPLATE_RE = re.compile(r"\s*([A-Za-z_][A-Za-z0-9_]*)\[(.+)\]\s*")
+_INLINE_TEMPLATE_RE = re.compile(r"([A-Za-z_][A-Za-z0-9_]*)\[(.*?)\]")
+_INTEGRATE_OVER_RE = re.compile(
+    r"integrate_over\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*([A-Za-z_][A-Za-z0-9_]*)\s*,\s*(.*?)\)",
+    re.DOTALL,
+)
+_SUM_OVER_RE = re.compile(
+    r"sum_over\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*([A-Za-z_][A-Za-z0-9_]*)\s*,\s*(.*?)\)",
+    re.DOTALL,
+)
+_PLACEHOLDER_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\[(.*?)\]")
+
 # -----------------------------------------------------------------------------
 # Error message constants
 # -----------------------------------------------------------------------------
@@ -754,7 +767,7 @@ def _expand_state_templates(
         if "[" not in entry or "]" not in entry:
             expanded.append(entry)
             continue
-        m = re.fullmatch(r"\s*([A-Za-z_][A-Za-z0-9_]*)\[(.+)\]\s*", entry)
+        m = _STATE_TEMPLATE_RE.fullmatch(entry)
         if not m:
             _raise_invalid_rhs_spec(detail=f"invalid state template: {entry!r}")
         base = m.group(1)
@@ -840,7 +853,7 @@ def _extract_placeholders_from_expr(expr: str) -> set[str]:
         Set of placeholder names referenced inside bracket templates.
     """
     placeholders: set[str] = set()
-    for match in re.finditer(r"[A-Za-z_][A-Za-z0-9_]*\[(.*?)\]", expr):
+    for match in _PLACEHOLDER_RE.finditer(expr):
         inner = match.group(1)
         for part in inner.split(","):
             part_s = part.strip()
@@ -856,7 +869,70 @@ def _render_template_or_literal(name_s: str, assignment: Mapping[str, str]) -> s
     return _render_template_name(base, placeholders, assignment)
 
 
-def _expand_transition_templates(  # noqa: PLR0914
+def _expand_single_transition(
+    tr_map: Mapping[str, Any],
+    *,
+    axes: list[dict[str, Any]],
+    template_map: Mapping[str, list[tuple[str, dict[str, str]]]],
+    axis_lookup: Mapping[str, list[str]],
+) -> list[dict[str, Any]]:
+    tr_valid = _validate_transition_mapping(tr_map, idx=0)
+    frm_s = _get_required_str(tr_valid, idx=0, key="from")
+    to_s = _get_required_str(tr_valid, idx=0, key="to")
+    rate_s = _get_required_str(tr_valid, idx=0, key="rate")
+    name_s = tr_valid.get("name") if isinstance(tr_valid.get("name"), str) else None
+
+    placeholders: set[str] = set()
+    placeholders |= set(_parse_template_key(frm_s)[1])
+    placeholders |= set(_parse_template_key(to_s)[1])
+    placeholders |= _extract_placeholders_from_expr(rate_s)
+    if name_s:
+        placeholders |= _extract_placeholders_from_expr(name_s)
+
+    if not placeholders:
+        rate_expanded = _expand_helpers(rate_s, axes=axes)
+        tr_out = dict(tr_valid)
+        tr_out["from"] = frm_s
+        tr_out["to"] = to_s
+        tr_out["rate"] = rate_expanded
+        return [tr_out]
+
+    coords_lists: list[list[str]] = []
+    for ph in placeholders:
+        if ph not in axis_lookup:
+            _raise_invalid_rhs_spec(
+                detail=f"transition placeholder {ph!r} references unknown axis"
+            )
+        coords_lists.append(axis_lookup[ph])
+
+    expanded: list[dict[str, Any]] = []
+    for combo in product(*coords_lists):
+        assignment = {ph: combo[i] for i, ph in enumerate(placeholders)}
+
+        frm_render = _render_template_or_literal(frm_s, assignment)
+        to_render = _render_template_or_literal(to_s, assignment)
+
+        rate_sub = _apply_template_substitutions(
+            rate_s,
+            assignment=assignment,
+            template_map=template_map,
+        )
+        rate_expanded = _expand_helpers(rate_sub, axes=axes)
+
+        tr_expanded: dict[str, Any] = dict(tr_valid)
+        tr_expanded["from"] = frm_render
+        tr_expanded["to"] = to_render
+        tr_expanded["rate"] = rate_expanded
+        if name_s:
+            tr_expanded["name"] = _apply_template_substitutions(
+                name_s, assignment=assignment, template_map=template_map
+            )
+        expanded.append(tr_expanded)
+
+    return expanded
+
+
+def _expand_transition_templates(
     transitions_raw: list[Mapping[str, Any]],
     *,
     axes: list[dict[str, Any]],
@@ -875,60 +951,15 @@ def _expand_transition_templates(  # noqa: PLR0914
 
     expanded: list[dict[str, Any]] = []
 
-    for idx, tr_map in enumerate(transitions_raw):
-        tr_valid = _validate_transition_mapping(tr_map, idx=idx)
-        frm_s = _get_required_str(tr_valid, idx=idx, key="from")
-        to_s = _get_required_str(tr_valid, idx=idx, key="to")
-        rate_s = _get_required_str(tr_valid, idx=idx, key="rate")
-        name_s = tr_valid.get("name") if isinstance(tr_valid.get("name"), str) else None
-
-        placeholders: set[str] = set()
-        placeholders |= set(_parse_template_key(frm_s)[1])
-        placeholders |= set(_parse_template_key(to_s)[1])
-        placeholders |= _extract_placeholders_from_expr(rate_s)
-        if name_s:
-            placeholders |= _extract_placeholders_from_expr(name_s)
-
-        if not placeholders:
-            rate_expanded = _expand_helpers(rate_s, axes=axes)
-            tr_out = dict(tr_valid)
-            tr_out["from"] = frm_s
-            tr_out["to"] = to_s
-            tr_out["rate"] = rate_expanded
-            expanded.append(tr_out)
-            continue
-
-        coords_lists: list[list[str]] = []
-        for ph in placeholders:
-            if ph not in axis_lookup:
-                _raise_invalid_rhs_spec(
-                    detail=f"transition placeholder {ph!r} references unknown axis"
-                )
-            coords_lists.append(axis_lookup[ph])
-
-        combos = list(product(*coords_lists))
-        for combo in combos:
-            assignment = {ph: combo[i] for i, ph in enumerate(placeholders)}
-
-            frm_render = _render_template_or_literal(frm_s, assignment)
-            to_render = _render_template_or_literal(to_s, assignment)
-
-            rate_sub = _apply_template_substitutions(
-                rate_s,
-                assignment=assignment,
+    for tr_map in transitions_raw:
+        expanded.extend(
+            _expand_single_transition(
+                tr_map,
+                axes=axes,
                 template_map=template_map,
+                axis_lookup=axis_lookup,
             )
-            rate_expanded = _expand_helpers(rate_sub, axes=axes)
-
-            tr_expanded: dict[str, Any] = dict(tr_valid)
-            tr_expanded["from"] = frm_render
-            tr_expanded["to"] = to_render
-            tr_expanded["rate"] = rate_expanded
-            if name_s:
-                tr_expanded["name"] = _apply_template_substitutions(
-                    name_s, assignment=assignment, template_map=template_map
-                )
-            expanded.append(tr_expanded)
+        )
 
     return expanded
 
@@ -940,7 +971,7 @@ def _parse_template_key(template_key: str) -> tuple[str, list[str]]:
         Tuple of (base, placeholder list). Returns (template_key, []) if it
         does not match the expected format.
     """
-    m = re.fullmatch(r"\s*([A-Za-z_][A-Za-z0-9_]*)\[(.+)\]\s*", template_key)
+    m = _STATE_TEMPLATE_RE.fullmatch(template_key)
     if not m:
         return template_key, []
     base = m.group(1)
@@ -986,8 +1017,6 @@ def _apply_template_substitutions(
         expr_out = re.sub(re.escape(template_key), rendered, expr_out)
 
     # Inline placeholder syntax without explicit template map entry
-    pattern = re.compile(r"([A-Za-z_][A-Za-z0-9_]*)\[(.*?)\]")
-
     def _inline_replacer(match: Match[str]) -> str:
         base = match.group(1)
         inner = match.group(2)
@@ -996,7 +1025,7 @@ def _apply_template_substitutions(
             return match.group(0)
         return _render_template_name(base, placeholders, assignment)
 
-    return pattern.sub(_inline_replacer, expr_out)
+    return _INLINE_TEMPLATE_RE.sub(_inline_replacer, expr_out)
 
 
 def _resolve_template_equation(
@@ -1056,14 +1085,9 @@ def _expand_integrate_over(expr: str, *, axes: list[dict[str, Any]]) -> str:
                 return coords, [float(d) for d in deltas]
         _raise_invalid_rhs_spec(detail=f"integrate_over axis {ax_name!r} not found")
 
-    pattern = re.compile(
-        r"integrate_over\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*([A-Za-z_][A-Za-z0-9_]*)\s*,\s*(.*?)\)",
-        re.DOTALL,
-    )
-
     out = expr
     while True:
-        m = pattern.search(out)
+        m = _INTEGRATE_OVER_RE.search(out)
         if not m:
             break
         axis_name = m.group(1)
@@ -1120,15 +1144,10 @@ def _expand_sum_over(expr: str, *, axes: list[dict[str, Any]]) -> str:
                 return [str(c) for c in coords]
         _raise_invalid_rhs_spec(detail=f"sum_over axis {ax_name!r} not found")
 
-    pattern = re.compile(
-        r"sum_over\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*([A-Za-z_][A-Za-z0-9_]*)\s*,\s*(.*?)\)",
-        re.DOTALL,
-    )
-
     out = expr
     # Iterate until no more matches to handle multiple sum_over occurrences.
     while True:
-        m = pattern.search(out)
+        m = _SUM_OVER_RE.search(out)
         if not m:
             break
         axis_name = m.group(1)
@@ -1479,7 +1498,7 @@ def normalize_rhs(spec: Mapping[str, Any] | None) -> NormalizedRhs:
 # -----------------------------------------------------------------------------
 
 
-def normalize_expr_rhs(spec: Mapping[str, Any]) -> NormalizedRhs:  # noqa: PLR0914
+def normalize_expr_rhs(spec: Mapping[str, Any]) -> NormalizedRhs:
     """
     Normalize an expression-based RHS specification.
 
@@ -1498,7 +1517,7 @@ def normalize_expr_rhs(spec: Mapping[str, Any]) -> NormalizedRhs:  # noqa: PLR09
         _raise_invalid_rhs_spec(detail="equations must be a mapping of state->expr")
 
     axes_meta = _normalize_axes(spec.get("axes"))
-    aliases_raw, state_axes, kernels_meta, operators_meta = _normalize_common_meta(
+    meta_parts = _normalize_common_meta(
         spec,
         axis_names={"subgroup"} | {ax["name"] for ax in axes_meta},
         state_set=set(state_raw),
@@ -1506,9 +1525,9 @@ def normalize_expr_rhs(spec: Mapping[str, Any]) -> NormalizedRhs:  # noqa: PLR09
 
     meta: dict[str, Any] = {
         "axes": axes_meta,
-        "state_axes": state_axes,
-        "kernels": kernels_meta,
-        "operators": operators_meta,
+        "state_axes": meta_parts[1],
+        "kernels": meta_parts[2],
+        "operators": meta_parts[3],
     }
     for reserved_key in ("sources", "couplings", "constraints"):
         if reserved_key in spec:
@@ -1521,16 +1540,16 @@ def normalize_expr_rhs(spec: Mapping[str, Any]) -> NormalizedRhs:  # noqa: PLR09
         _raise_invalid_rhs_spec(detail="expanded state contains duplicates")
 
     aliases, alias_template_map = _expand_alias_templates(
-        aliases_raw, axes=axes_meta, template_map_seed=state_template_map
+        meta_parts[0], axes=axes_meta, template_map_seed=state_template_map
     )
     template_map_all = {**state_template_map, **alias_template_map}
 
-    chains = spec.get("chain") or []
-    if chains:
-        if not isinstance(chains, list):
+    chain_block = spec.get("chain")
+    if chain_block:
+        if not isinstance(chain_block, list):
             _raise_invalid_rhs_spec(detail="chain must be a list if provided")
         _apply_expr_chains(
-            chains=chains,
+            chains=chain_block,
             state_expanded=state_expanded,
             equations_map=equations_map,
         )
@@ -1659,7 +1678,7 @@ def _build_transition_equations(
     return equations
 
 
-def normalize_transitions_rhs(  # noqa: C901, PLR0914
+def normalize_transitions_rhs(
     spec: Mapping[str, Any],
 ) -> NormalizedRhs:
     """Normalize a transition-based RHS specification (diagram/hazard semantics).
@@ -1671,31 +1690,29 @@ def normalize_transitions_rhs(  # noqa: C901, PLR0914
     if len(state_raw) != len(set(state_raw)):
         _raise_invalid_rhs_spec(detail="state contains duplicate names")
 
-    transitions_raw_obj = spec.get("transitions")
-    if transitions_raw_obj is None:
+    transitions_raw = spec.get("transitions")
+    if transitions_raw is None:
         transitions_raw = []
-    elif isinstance(transitions_raw_obj, list):
-        transitions_raw = list(transitions_raw_obj)
+    elif isinstance(transitions_raw, list):
+        transitions_raw = list(transitions_raw)
     else:
         _raise_invalid_rhs_spec(detail="transitions must be a list")
 
     axes_meta = _normalize_axes(spec.get("axes"))
 
-    aliases_raw, _, kernels_meta, operators_meta = _normalize_common_meta(
-        spec,
-        axis_names={"subgroup"} | {ax["name"] for ax in axes_meta},
-        state_set=None,
+    meta_parts = _normalize_common_meta(
+        spec, axis_names={"subgroup"} | {ax["name"] for ax in axes_meta}, state_set=None
     )
 
     meta: dict[str, Any] = {
         "transitions": transitions_raw,
         "axes": axes_meta,
-        "kernels": kernels_meta,
-        "operators": operators_meta,
+        "kernels": meta_parts[2],
+        "operators": meta_parts[3],
     }
-    for reserved_key in ("sources", "couplings", "constraints"):
-        if reserved_key in spec:
-            meta[reserved_key] = spec.get(reserved_key)
+    meta.update({
+        k: spec[k] for k in ("sources", "couplings", "constraints") if k in spec
+    })
 
     state_expanded, state_template_map = _expand_state_templates(
         state_raw, axes=axes_meta
@@ -1704,7 +1721,7 @@ def normalize_transitions_rhs(  # noqa: C901, PLR0914
         _raise_invalid_rhs_spec(detail="expanded state contains duplicates")
 
     aliases, alias_template_map = _expand_alias_templates(
-        aliases_raw, axes=axes_meta, template_map_seed=state_template_map
+        meta_parts[0], axes=axes_meta, template_map_seed=state_template_map
     )
     template_map_all = {**state_template_map, **alias_template_map}
 
@@ -1712,12 +1729,12 @@ def normalize_transitions_rhs(  # noqa: C901, PLR0914
     d_terms: dict[str, list[str]] = {s: [] for s in state_expanded}
     all_syms = _collect_alias_symbols(aliases, axes=axes_meta)
 
-    chains = spec.get("chain") or []
-    if chains:
-        if not isinstance(chains, list):
+    chain_block = spec.get("chain")
+    if chain_block:
+        if not isinstance(chain_block, list):
             _raise_invalid_rhs_spec(detail="chain must be a list if provided")
         _apply_transition_chains(
-            chains=chains,
+            chains=chain_block,
             state_expanded=state_expanded,
             transitions_raw=transitions_raw,
             state_set=state_set,
@@ -1738,10 +1755,9 @@ def normalize_transitions_rhs(  # noqa: C901, PLR0914
     )
 
     for idx, tr_map in enumerate(transitions_expanded):
-        tr_valid = _validate_transition_mapping(tr_map, idx=idx)
         _apply_transition(
             idx=idx,
-            tr=tr_valid,
+            tr=tr_map,
             state_set=state_set,
             all_syms=all_syms,
             d_terms=d_terms,

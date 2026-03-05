@@ -230,8 +230,7 @@ def _parse_expr(expr: str) -> ast.Expression:
         _raise_invalid_expression(detail=f"invalid expression syntax: {exc.msg}")
 
 
-def _validate_call(node: ast.Call, *, expr: str) -> None:
-    func = node.func
+def _validate_call(func: ast.AST, *, expr: str) -> None:
     if isinstance(func, ast.Attribute):
         if not isinstance(func.value, ast.Name):
             _raise_invalid_expression(detail=f"invalid call root in {expr!r}")
@@ -276,9 +275,8 @@ def _validate_ast(tree: ast.AST, *, expr: str) -> None:
             _raise_invalid_expression(
                 detail=f"{DISALLOWED_ATTRIBUTE_ACCESS} in {expr!r}"
             )
-
         if isinstance(node, ast.Call):
-            _validate_call(node, expr=expr)
+            _validate_call(node.func, expr=expr)
 
 
 def _compile_expr(expr: str) -> CodeType:
@@ -378,9 +376,8 @@ def _validate_state_vector(y_arr: np.ndarray, *, n_state: int) -> np.ndarray:
     Returns:
         State vector coerced to shape (n_state,).
     """
-    if y_arr.ndim != 1:
-        _raise_state_shape_error(expected="1D array", got=y_arr.shape)
-    if y_arr.size != n_state:
+    expected_shape = (n_state,)
+    if tuple(y_arr.shape) != expected_shape:
         _raise_state_shape_error(expected=f"(n_state={n_state},)", got=y_arr.shape)
     return y_arr
 
