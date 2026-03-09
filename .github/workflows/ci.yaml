@@ -1,0 +1,82 @@
+---
+name: 'ci'
+
+'on':
+  pull_request:
+    branches:
+      - 'main'
+  workflow_dispatch:
+
+permissions:
+  contents: 'read'
+
+jobs:
+  docs:
+    name: 'docs'
+    runs-on: 'ubuntu-latest'
+    steps:
+      - name: 'checkout repository'
+        uses: 'actions/checkout@v6'
+        with:
+          persist-credentials: false
+      - name: 'install just'
+        uses: 'extractions/setup-just@v3'
+      - name: 'setup uv'
+        uses: 'astral-sh/setup-uv@v7'
+        with:
+          enable-cache: true
+          cache-dependency-glob: '**/pyproject.toml'
+          python-version: '3.12'
+      - name: 'build documentation'
+        run: 'just docs'
+        env:
+          UV_PYTHON_VERSION: '3.12'
+  quality:
+    name: 'quality'
+    runs-on: 'ubuntu-latest'
+    steps:
+      - name: 'checkout repository'
+        uses: 'actions/checkout@v6'
+        with:
+          persist-credentials: false
+      - name: 'install just'
+        uses: 'extractions/setup-just@v3'
+      - name: 'setup uv'
+        uses: 'astral-sh/setup-uv@v7'
+        with:
+          enable-cache: true
+          cache-dependency-glob: '**/pyproject.toml'
+          python-version: '3.12'
+      - name: 'run quality checks'
+        run: 'just quality'
+        env:
+          UV_PYTHON_VERSION: '3.12'
+  tests:
+    name: 'tests (${{ matrix.python-version }})'
+    needs:
+      - 'quality'
+      - 'docs'
+    runs-on: 'ubuntu-latest'
+    strategy:
+      matrix:
+        python-version:
+          - '3.11'
+          - '3.12'
+          - '3.13'
+    steps:
+      - name: 'checkout repository'
+        uses: 'actions/checkout@v6'
+        with:
+          persist-credentials: false
+      - name: 'install just'
+        uses: 'extractions/setup-just@v3'
+      - name: 'setup uv with python ${{ matrix.python-version }}'
+        uses: 'astral-sh/setup-uv@v7'
+        with:
+          enable-cache: true
+          cache-dependency-glob: '**/pyproject.toml'
+          python-version: '${{ matrix.python-version }}'
+      - name: 'run test suite'
+        run: 'just test'
+        env:
+          UV_PYTHON_VERSION: '${{ matrix.python-version }}'

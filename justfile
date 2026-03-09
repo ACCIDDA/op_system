@@ -1,96 +1,125 @@
+run := "uv run"
+provider_dir := "flepimop2-op_system"
+provider_run := run + " --project " + provider_dir + " --directory " + provider_dir
+
 # Run all default tasks for local development
-default: format check pytest mypy docs
+default: dev docs
 
-# -------------------------------------------------
-# Local venv + deps (explicit step)
-# -------------------------------------------------
+# Run all default dev tasks
+dev: ruff mypy test
 
-# Create/refresh the main venv and install dev deps.
-venv:
-	uv venv --clear
-	uv sync --dev
+# Run all default CI tasks
+ci: quality test docs
 
-# -------------------------------------------------
-# Formatting / linting
-# -------------------------------------------------
+# Format code in both packages
+[group('dev')]
+fmt: fmt-root fmt-provider
 
-# Tool-only execution (does not require resolving project deps).
-format:
-	uvx ruff format --preview
+# Run local Ruff formatting and lint fixes in both packages
+[group('dev')]
+ruff: fmt lint
 
-check:
-	uvx ruff check --preview --fix
+# Run local lint fixes in both packages
+[group('dev')]
+lint: lint-root lint-provider
 
-# -------------------------------------------------
-# Provider venv + deps (explicit step)
-# -------------------------------------------------
+# Run CI Ruff checks in both packages
+[group('ci')]
+ci-ruff: ci-ruff-root ci-ruff-provider
 
-# Create/refresh the provider venv and install all deps (including dev group).
-provider-sync:
-	cd flepimop2-op_system && uv venv --clear
-	cd flepimop2-op_system && uv sync --dev
+# Format the root package
+[group('dev')]
+fmt-root:
+	{{run}} ruff format
 
-# -------------------------------------------------
-# Tests
-# -------------------------------------------------
+# Run Ruff lint fixes for the root package
+[group('dev')]
+lint-root:
+	{{run}} ruff check --fix
 
-pytest-core:
-	uv run pytest --doctest-modules
+# Run CI Ruff checks for the root package
+[group('ci')]
+ci-ruff-root:
+	{{run}} ruff format --check
+	{{run}} ruff check --no-fix
 
-# Ensure provider venv exists before running provider tests.
-pytest-provider: provider-sync
-	cd flepimop2-op_system && .venv/bin/python -m pytest --doctest-modules
+# Format the provider package
+[group('dev')]
+fmt-provider:
+	{{provider_run}} ruff format
 
-pytest:
-	just pytest-core
-	just pytest-provider
+# Run Ruff lint fixes for the provider package
+[group('dev')]
+lint-provider:
+	{{provider_run}} ruff check --fix
 
-# -------------------------------------------------
-# Type checking
-# -------------------------------------------------
+# Run CI Ruff checks for the provider package
+[group('ci')]
+ci-ruff-provider:
+	{{provider_run}} ruff format --check
+	{{provider_run}} ruff check --no-fix
 
-mypy-core:
-	uv run mypy --strict src/op_system
+# Run all tests in both packages
+[group('dev')]
+[group('ci')]
+test: test-root test-provider
 
-# Ensure provider venv exists before running provider mypy.
-mypy-provider: provider-sync
-	cd flepimop2-op_system && .venv/bin/python -m mypy --strict src/flepimop2
+# Run the root package test suite
+[group('dev')]
+[group('ci')]
+test-root:
+	{{run}} pytest
 
-mypy:
-	just mypy-core
-	just mypy-provider
+# Run the provider package test suite
+[group('dev')]
+[group('ci')]
+test-provider:
+	{{provider_run}} pytest
 
-# -------------------------------------------------
-# CI aggregate
-# -------------------------------------------------
+# Run type checks in both packages
+[group('dev')]
+[group('ci')]
+mypy: mypy-root mypy-provider
 
-ci:
-	uvx ruff format --preview --check
-	uvx ruff check --preview --no-fix
-	just provider-sync
-	just pytest
-	just mypy
+# Run mypy for the root package
+[group('dev')]
+[group('ci')]
+mypy-root:
+	{{run}} mypy
 
-# -------------------------------------------------
-# Utilities
-# -------------------------------------------------
+# Run mypy for the provider package
+[group('dev')]
+[group('ci')]
+mypy-provider:
+	{{provider_run}} mypy
 
+# Run all CI quality checks
+[group('ci')]
+quality: ci-ruff mypy
+
+# Build API reference for the documentation using `mkdocstrings`
+[group('docs')]
+api-reference:
+	{{run}} scripts/api-reference.py
+
+# Build the documentation using `mkdocs`
+[group('docs')]
+docs: api-reference
+	{{run}} mkdocs build --verbose --strict
+
+# Serve the documentation locally using `mkdocs`
+[group('docs')]
+serve: api-reference
+	{{run}} mkdocs serve
+
+# Clean generated venvs, lockfiles, caches, and built docs
+[group('dev')]
+[unix]
 clean:
 	rm -rf site
 	rm -f uv.lock
-	rm -rf .*_cache
 	rm -rf .venv
-	rm -rf flepimop2-op_system/.venv
+	rm -rf .*_cache
 	rm -f flepimop2-op_system/uv.lock
-
-# Build API reference for the documentation using `mkdocstrings`
-api-reference:
-    uv run scripts/api-reference.py
-
-# Build the documentation using `mkdocs`
-docs: api-reference
-	uv run mkdocs build --verbose --strict
-
-# Serve the documentation locally using `mkdocs`
-serve: api-reference
-	uv run mkdocs serve
+	rm -rf flepimop2-op_system/.venv
+	rm -rf flepimop2-op_system/.*_cache
