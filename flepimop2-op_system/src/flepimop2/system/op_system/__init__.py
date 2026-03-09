@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Any, Literal, NamedTuple, Self
 import numpy as np
 from flepimop2.configuration import ModuleModel
 from flepimop2.system.abc import SystemABC
+from flepimop2.typing import StateChangeEnum
 from pydantic import ConfigDict, Field, model_validator
 
 from op_system import CompiledRhs, compile_spec  # type: ignore[attr-defined]
@@ -35,6 +36,8 @@ class _AxesMeta(NamedTuple):
 
 class OpSystemSystem(ModuleModel, SystemABC):  # noqa: D101
     module: Literal["flepimop2.system.op_system"] = "flepimop2.system.op_system"
+    state_change: StateChangeEnum = StateChangeEnum.FLOW
+
     spec: dict[str, object] | None = Field(
         default=None, description="Inline op_system RHS specification (already loaded)"
     )
