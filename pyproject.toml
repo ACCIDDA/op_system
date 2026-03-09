@@ -56,12 +56,15 @@ testpaths = [
     "src/op_system/",
     "tests/",
 ]
+addopts = "--doctest-modules"
 
 [tool.ruff.format]
+preview = true
 docstring-code-format = true
 docstring-code-line-length = 72
 
 [tool.ruff.lint]
+preview = true
 select = ["ALL"]
 ignore = [
     "COM812",
@@ -82,7 +85,12 @@ ignore = [
 convention = "google"
 
 [tool.mypy]
-exclude = ["examples/"]
+strict = true
+files = "."
+exclude = [
+    "examples/",
+    "flepimop2-op_system/",
+]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/op_system"]

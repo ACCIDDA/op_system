@@ -44,6 +44,7 @@ allow-direct-references = true
 # Ensure hatchling can build from src/ layout and include the namespace package
 [tool.hatch.build.targets.wheel]
 packages = ["src/flepimop2"]
+include = ["src/flepimop2/system/op_system/py.typed"]
 
 # --- uv monorepo wiring: satisfy op-system from the sibling directory ---
 [tool.uv.sources]
@@ -51,14 +52,16 @@ op-system = { path = ".." }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-q"
+addopts = "-q --doctest-modules"
 
 
 [tool.ruff.format]
+preview = true
 docstring-code-format = true
 docstring-code-line-length = 72
 
 [tool.ruff.lint]
+preview = true
 select = ["ALL"]
 ignore = [
   "COM812",
@@ -74,6 +77,13 @@ ignore = [
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
+
+[tool.mypy]
+strict = true
+files = "."
+namespace_packages = true
+explicit_package_bases = true
+mypy_path = "$MYPY_CONFIG_FILE_DIR/src"
 
 [dependency-groups]
 dev = [

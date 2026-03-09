@@ -7,11 +7,11 @@ from flepimop2.system.op_system import OpSystemSystem
 
 
 @pytest.fixture
-def sir_spec() -> dict:
+def sir_spec() -> dict[str, object]:
     """Minimal SIR RHS spec for testing.
 
     Returns:
-        dict: Spec dictionary for a simple SIR model.
+        dict[str, object]: Spec dictionary for a simple SIR model.
     """
     return {
         "kind": "expr",
@@ -25,7 +25,7 @@ def sir_spec() -> dict:
     }
 
 
-def test_builds_and_steps(sir_spec: dict) -> None:
+def test_builds_and_steps(sir_spec: dict[str, object]) -> None:
     """System compiles spec and produces expected derivatives."""
     sys = OpSystemSystem(spec=sir_spec)
     y0 = np.array([0.999, 0.001, 0.0], dtype=np.float64)
@@ -40,7 +40,7 @@ def test_builds_and_steps(sir_spec: dict) -> None:
     )
 
 
-def test_invalid_state_shape_raises(sir_spec: dict) -> None:
+def test_invalid_state_shape_raises(sir_spec: dict[str, object]) -> None:
     """Reject non-1D or wrong-length state arrays."""
     sys = OpSystemSystem(spec=sir_spec)
     with pytest.raises(ValueError, match=r"state must be a 1D array"):
@@ -49,6 +49,6 @@ def test_invalid_state_shape_raises(sir_spec: dict) -> None:
 
 def test_invalid_spec_raises() -> None:
     """Invalid spec fails during model validation/compile."""
-    bad_spec = {"kind": "expr", "state": ["x"], "equations": {}}
+    bad_spec: dict[str, object] = {"kind": "expr", "state": ["x"], "equations": {}}
     with pytest.raises(ValueError, match=r"Missing equation"):
         OpSystemSystem(spec=bad_spec)

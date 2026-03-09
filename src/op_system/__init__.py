@@ -21,7 +21,7 @@ Design guarantees:
 
 from __future__ import annotations
 
-from .compile import CompiledRhs, compile_rhs
+from .compile import CompiledRhs, EvalFn, compile_rhs
 from .specs import (
     NormalizedRhs,
     normalize_expr_rhs,
@@ -69,6 +69,7 @@ __all__ = [
     "EXPERIMENTAL_FEATURES",
     "SUPPORTED_RHS_KINDS",
     "CompiledRhs",
+    "EvalFn",
     "NormalizedRhs",
     "__version__",
     "compile_rhs",

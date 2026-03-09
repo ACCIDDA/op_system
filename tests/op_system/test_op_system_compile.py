@@ -95,11 +95,12 @@ def test_bind_is_strict_two_arg_callable(compiled_xy: CompiledRhs) -> None:
     """bind() returns a strict (t, y) callable and rejects runtime kwargs."""
     bound = compiled_xy.bind({"a": 2.0, "b": 1.0})
     with pytest.raises(TypeError, match=r"unexpected keyword argument"):
+        # This call is intentionally invalid at the type level
         bound(
             np.float64(0.0),
             np.array([2.0, 3.0], dtype=np.float64),
             a=3.0,
-        )
+        )  # type: ignore[call-arg]
 
 
 def test_eval_rejects_non_1d_state_shape() -> None:

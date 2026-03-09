@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import ast
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, NoReturn, cast
+from typing import TYPE_CHECKING, Any, NoReturn, Protocol, cast
 
 import numpy as np
 from numpy.typing import NDArray
@@ -34,6 +34,7 @@ if TYPE_CHECKING:
 
 Float64Array = NDArray[np.float64]
 _SAFE_BUILTINS = {"__import__": __import__}
+
 
 # -----------------------------------------------------------------------------
 # Error message constants
@@ -122,6 +123,12 @@ def _raise_unsupported_feature(*, feature: str, detail: str | None = None) -> No
 # -----------------------------------------------------------------------------
 # Public compiled RHS container
 # -----------------------------------------------------------------------------
+class EvalFn(Protocol):
+    """Callable RHS evaluator supporting runtime parameter kwargs."""
+
+    def __call__(  # noqa: D102
+        self, t: np.float64, y: Float64Array, **params: object
+    ) -> Float64Array: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -130,7 +137,7 @@ class CompiledRhs:
 
     state_names: tuple[str, ...]
     param_names: tuple[str, ...]
-    eval_fn: Callable[[np.float64, Float64Array], Float64Array]
+    eval_fn: EvalFn
 
     def bind(
         self, params: Mapping[str, object]
@@ -410,7 +417,7 @@ def _make_eval_fn(
     state_names: tuple[str, ...],
     aliases: Mapping[str, str],
     equations: tuple[str, ...],
-) -> Callable[[np.float64, Float64Array], Float64Array]:
+) -> EvalFn:
     n_state = len(state_names)
     name_to_idx = {s: i for i, s in enumerate(state_names)}
     alias_code = _collect_alias_code(aliases)

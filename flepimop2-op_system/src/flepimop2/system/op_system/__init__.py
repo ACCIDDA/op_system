@@ -18,7 +18,7 @@ from flepimop2.system.abc import SystemABC
 from flepimop2.typing import StateChangeEnum
 from pydantic import ConfigDict, Field, model_validator
 
-from op_system import CompiledRhs, compile_spec  # type: ignore[attr-defined]
+from op_system import CompiledRhs, compile_spec
 
 __version__ = "0.1.0"
 
