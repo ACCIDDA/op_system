@@ -10,13 +10,13 @@ pydantic BaseModel subclass is defined here, flepimop2 auto-generates a
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Literal, NamedTuple, Self
+from typing import TYPE_CHECKING, Any, Literal, NamedTuple
 
 import numpy as np
 from flepimop2.configuration import ModuleModel
 from flepimop2.system.abc import SystemABC
 from flepimop2.typing import StateChangeEnum
-from pydantic import ConfigDict, Field, model_validator
+from pydantic import ConfigDict, Field
 
 from op_system import CompiledRhs, compile_spec
 
@@ -38,20 +38,15 @@ class OpSystemSystem(ModuleModel, SystemABC):  # noqa: D101
     module: Literal["flepimop2.system.op_system"] = "flepimop2.system.op_system"
     state_change: StateChangeEnum = StateChangeEnum.FLOW
 
-    spec: dict[str, object] | None = Field(
-        default=None, description="Inline op_system RHS specification (already loaded)"
+    spec: dict[str, object] = Field(
+        default=..., description="Inline op_system RHS specification (already loaded)"
     )
 
     model_config = ConfigDict(extra="allow")
 
-    @model_validator(mode="after")
-    def _compile_and_bind(self) -> Self:
-        if self.spec is None:
-            message = "spec must be provided as an already loaded mapping"
-            raise ValueError(message)
-        if not isinstance(self.spec, dict):
-            message = "spec must be a mapping (dict)"
-            raise TypeError(message)
+    def model_post_init(self, context: Any) -> None:  # noqa: ANN401
+        """Compile `op_system` specification and prepare stepper and shape helpers."""
+        del context
 
         spec_obj = self.spec
         compiled = compile_spec(spec_obj)
@@ -92,7 +87,6 @@ class OpSystemSystem(ModuleModel, SystemABC):  # noqa: D101
 
         self._stepper = _stepper
         self._compiled_rhs = compiled  # handy for debugging/adapters
-        return self
 
     @staticmethod
     def _extract_axes_meta(compiled: CompiledRhs) -> _AxesMeta:
