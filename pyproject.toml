@@ -12,6 +12,7 @@ authors = [
 ]
 dependencies = [
     "numpy>=1.26",
+    "pydantic>=2.12.5,<3.0.0",
 ]
 
 classifiers = [
