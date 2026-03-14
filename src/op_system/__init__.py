@@ -21,6 +21,9 @@ Design guarantees:
 
 from __future__ import annotations
 
+from op_system._identifer_string import IdentifierString
+from op_system._state_string import StateString
+
 from .compile import CompiledRhs, EvalFn, compile_rhs
 from .specs import (
     NormalizedRhs,
@@ -70,7 +73,9 @@ __all__ = [
     "SUPPORTED_RHS_KINDS",
     "CompiledRhs",
     "EvalFn",
+    "IdentifierString",
     "NormalizedRhs",
+    "StateString",
     "__version__",
     "compile_rhs",
     "compile_spec",
