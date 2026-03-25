@@ -16,6 +16,7 @@ import pytest
 
 from op_system.specs import (
     NormalizedRhs,
+    _normalize_constraints,
     normalize_expr_rhs,
     normalize_rhs,
     normalize_transitions_rhs,
@@ -624,3 +625,151 @@ def test_normalize_rhs_unsupported_kind() -> None:
     spec = {"kind": "pde", "state": ["u"], "equations": {"u": "0.0"}}
     with pytest.raises(NotImplementedError, match=r"Only 'expr' and 'transitions'"):
         normalize_rhs(spec)
+
+
+# ---------------------------------------------------------------------------
+# _normalize_constraints tests
+# ---------------------------------------------------------------------------
+
+_AXES_AGE_VAX: list[dict[str, object]] = [
+    {"name": "age", "type": "categorical", "coords": ["u65", "o65"], "size": 2},
+    {
+        "name": "vax",
+        "type": "categorical",
+        "coords": ["none", "dose1", "dose2"],
+        "size": 3,
+    },
+]
+
+
+def test_normalize_constraints_none_returns_empty() -> None:
+    """None constraints returns an empty list."""
+    assert _normalize_constraints(None, axes=_AXES_AGE_VAX) == []
+
+
+def test_normalize_constraints_empty_list_returns_empty() -> None:
+    """An empty list returns an empty list."""
+    assert _normalize_constraints([], axes=_AXES_AGE_VAX) == []
+
+
+def test_normalize_constraints_allow_happy_path() -> None:
+    """Allow-mode constraint parses correctly."""
+    raw = [
+        {
+            "axes": ["age", "vax"],
+            "allow": [
+                {"age": "u65", "vax": ["none"]},
+                {"age": "o65"},
+            ],
+        },
+    ]
+    result = _normalize_constraints(raw, axes=_AXES_AGE_VAX)
+    assert len(result) == 1
+    rule = result[0]
+    assert rule["axes"] == ("age", "vax")
+    assert rule["mode"] == "allow"
+    assert len(rule["rules"]) == 2
+    assert rule["rules"][0] == {"age": ["u65"], "vax": ["none"]}
+    assert rule["rules"][1] == {"age": ["o65"]}
+
+
+def test_normalize_constraints_exclude_happy_path() -> None:
+    """Exclude-mode constraint parses correctly."""
+    raw = [
+        {
+            "axes": ["age", "vax"],
+            "exclude": [
+                {"age": "u65", "vax": ["dose1", "dose2"]},
+            ],
+        },
+    ]
+    result = _normalize_constraints(raw, axes=_AXES_AGE_VAX)
+    assert len(result) == 1
+    rule = result[0]
+    assert rule["axes"] == ("age", "vax")
+    assert rule["mode"] == "exclude"
+    assert rule["rules"][0] == {"age": ["u65"], "vax": ["dose1", "dose2"]}
+
+
+def test_normalize_constraints_rejects_not_a_list() -> None:
+    """Constraints must be a list."""
+    with pytest.raises(ValueError, match=r"constraints must be a list"):
+        _normalize_constraints("bad", axes=_AXES_AGE_VAX)
+
+
+def test_normalize_constraints_rejects_unknown_axis() -> None:
+    """Reference to an undefined axis raises."""
+    raw = [{"axes": ["age", "region"], "allow": [{"age": "u65"}]}]
+    with pytest.raises(ValueError, match=r"unknown axis 'region'"):
+        _normalize_constraints(raw, axes=_AXES_AGE_VAX)
+
+
+def test_normalize_constraints_rejects_unknown_coord() -> None:
+    """Reference to an undefined coordinate raises."""
+    raw = [{"axes": ["age", "vax"], "allow": [{"age": "child"}]}]
+    with pytest.raises(ValueError, match=r"unknown coord 'child'"):
+        _normalize_constraints(raw, axes=_AXES_AGE_VAX)
+
+
+def test_normalize_constraints_rejects_mixed_allow_exclude() -> None:
+    """Providing both allow and exclude in one rule raises."""
+    raw = [
+        {
+            "axes": ["age", "vax"],
+            "allow": [{"age": "u65"}],
+            "exclude": [{"age": "o65"}],
+        },
+    ]
+    with pytest.raises(ValueError, match=r"either 'allow' or 'exclude', not both"):
+        _normalize_constraints(raw, axes=_AXES_AGE_VAX)
+
+
+def test_normalize_constraints_rejects_missing_mode() -> None:
+    """A rule with neither allow nor exclude raises."""
+    raw = [{"axes": ["age", "vax"]}]
+    with pytest.raises(ValueError, match=r"must specify 'allow' or 'exclude'"):
+        _normalize_constraints(raw, axes=_AXES_AGE_VAX)
+
+
+def test_normalize_constraints_rejects_too_few_axes() -> None:
+    """A rule with fewer than two axes raises."""
+    raw = [{"axes": ["age"], "allow": [{"age": "u65"}]}]
+    with pytest.raises(ValueError, match=r"at least two axis names"):
+        _normalize_constraints(raw, axes=_AXES_AGE_VAX)
+
+
+def test_normalize_constraints_rejects_duplicate_axes() -> None:
+    """Duplicate axes in one rule raises."""
+    raw = [{"axes": ["age", "age"], "allow": [{"age": "u65"}]}]
+    with pytest.raises(ValueError, match=r"duplicate axis 'age'"):
+        _normalize_constraints(raw, axes=_AXES_AGE_VAX)
+
+
+def test_normalize_constraints_rejects_empty_allow_list() -> None:
+    """An empty allow list raises."""
+    raw = [{"axes": ["age", "vax"], "allow": []}]
+    with pytest.raises(ValueError, match=r"must be a non-empty list"):
+        _normalize_constraints(raw, axes=_AXES_AGE_VAX)
+
+
+def test_normalize_constraints_rejects_empty_rule_mapping() -> None:
+    """A rule entry with no axis keys raises."""
+    raw = [{"axes": ["age", "vax"], "allow": [{}]}]
+    with pytest.raises(ValueError, match=r"must specify at least one axis"):
+        _normalize_constraints(raw, axes=_AXES_AGE_VAX)
+
+
+def test_normalize_constraints_rejects_rule_axis_not_in_constraint_axes() -> None:
+    """A rule referencing an axis not declared in the constraint axes raises."""
+    axes = [
+        *_AXES_AGE_VAX,
+        {
+            "name": "region",
+            "type": "categorical",
+            "coords": ["east", "west"],
+            "size": 2,
+        },
+    ]
+    raw = [{"axes": ["age", "vax"], "allow": [{"region": "east"}]}]
+    with pytest.raises(ValueError, match=r"references axis 'region' not in"):
+        _normalize_constraints(raw, axes=axes)
