@@ -39,10 +39,10 @@ import ast
 import re
 from dataclasses import dataclass
 from itertools import product
-from typing import TYPE_CHECKING, Any, NoReturn
+from typing import TYPE_CHECKING, Any, NamedTuple, NoReturn
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Mapping
+    from collections.abc import Iterable, Mapping, Sequence
     from re import Match
 
 
@@ -467,15 +467,31 @@ def _normalize_axes(raw_axes: object) -> list[dict[str, Any]]:
 
 
 def _validate_constraint_axes(
-    rule_axes_raw: object,
+    rule_axes_raw: Sequence[str] | object,
     *,
     idx: int,
     axis_names: set[str],
 ) -> tuple[list[str], set[str]]:
     """Validate and return the axes list for a single constraint rule.
 
+    Args:
+        rule_axes_raw: Raw axes value from the constraint entry, expected to
+            be a sequence of at least two axis name strings.
+        idx: Zero-based index of the parent constraint entry (for error
+            messages).
+        axis_names: Set of valid axis names declared in the spec.
+
     Returns:
         Tuple of (ordered axis name list, axis name set).
+
+    Examples:
+        >>> axes, seen = _validate_constraint_axes(
+        ...     ["age", "vax"], idx=0, axis_names={"age", "vax"}
+        ... )
+        >>> axes
+        ['age', 'vax']
+        >>> sorted(seen)
+        ['age', 'vax']
     """
     if not isinstance(rule_axes_raw, (list, tuple)) or len(rule_axes_raw) < 2:
         _raise_invalid_rhs_spec(
@@ -486,11 +502,10 @@ def _validate_constraint_axes(
     rule_axes: list[str] = []
     seen: set[str] = set()
     for j, ax_name in enumerate(rule_axes_raw):
-        if not isinstance(ax_name, str) or not ax_name.strip():
+        if not isinstance(ax_name, str) or not (ax_s := ax_name.strip()):
             _raise_invalid_rhs_spec(
                 detail=f"constraints[{idx}].axes[{j}] must be a non-empty string"
             )
-        ax_s = ax_name.strip()
         if ax_s not in axis_names:
             _raise_invalid_rhs_spec(
                 detail=f"constraints[{idx}].axes references unknown axis {ax_s!r}"
@@ -508,6 +523,10 @@ def _resolve_constraint_mode(
     entry_map: Mapping[str, Any], *, idx: int
 ) -> tuple[str, list[Any]]:
     """Determine allow/exclude mode and return raw rules list.
+
+    Args:
+        entry_map: Parsed constraint entry mapping.
+        idx: Zero-based index of the constraint entry (for error messages).
 
     Returns:
         Tuple of (mode string, raw rule list).
@@ -545,7 +564,7 @@ def _validate_constraint_rule(
     Args:
         rule: Raw rule object (expected to be a mapping).
         label: Human-readable label for error messages (e.g.
-            ``constraints[0].allow[1]``).
+            `constraints[0].allow[1]`).
         rule_axis_set: Set of axis names declared by the parent constraint.
         axis_lookup: Mapping of axis name to set of valid coordinates.
 
@@ -582,27 +601,35 @@ def _validate_constraint_rule(
     return validated
 
 
+class ConstraintRule(NamedTuple):
+    """Validated constraint rule produced by `_normalize_constraints`."""
+
+    axes: tuple[str, ...]
+    mode: str
+    rules: tuple[dict[str, list[str]], ...]
+
+
 def _normalize_constraints(
     raw_constraints: object,
     *,
     axes: list[dict[str, Any]],
-) -> list[dict[str, Any]]:
+) -> list[ConstraintRule]:
     """Normalize cross-axis constraint rules.
 
-    Each rule references two or more axes and declares either an ``allow``
-    list (allowlist of valid coordinate combinations) or an ``exclude``
-    list (blocklist of invalid combinations).  Mixing ``allow`` and
-    ``exclude`` in the same rule is rejected.
+    Each rule references two or more axes and declares either an `allow`
+    list (allowlist of valid coordinate combinations) or an `exclude`
+    list (blocklist of invalid combinations).  Mixing `allow` and
+    `exclude` in the same rule is rejected.
 
     Args:
-        raw_constraints: Raw ``constraints`` value from the spec.
-        axes: Already-normalized axis definitions (from ``_normalize_axes``).
+        raw_constraints: Raw `constraints` value from the spec.
+        axes: Already-normalized axis definitions (from `_normalize_axes`).
 
     Returns:
         List of validated constraint rule dicts, each containing:
-        - ``axes``:  tuple of axis names referenced by the rule
-        - ``mode``:  ``"allow"`` or ``"exclude"``
-        - ``rules``: tuple of validated assignment dicts
+        - `axes`:  tuple of axis names referenced by the rule
+        - `mode`:  `"allow"` or `"exclude"`
+        - `rules`: tuple of validated assignment dicts
     """
     if raw_constraints is None:
         return []
@@ -615,7 +642,7 @@ def _normalize_constraints(
         ax["name"]: {str(c) for c in ax.get("coords", [])} for ax in axes
     }
     axis_names = set(axis_lookup)
-    out: list[dict[str, Any]] = []
+    out: list[ConstraintRule] = []
 
     for idx, entry in enumerate(raw_constraints):
         entry_map = _ensure_mapping(entry, name=f"constraints[{idx}]")
@@ -634,11 +661,13 @@ def _normalize_constraints(
             for r_idx, rule in enumerate(raw_rules)
         ]
 
-        out.append({
-            "axes": tuple(rule_axes),
-            "mode": mode,
-            "rules": tuple(validated_rules),
-        })
+        out.append(
+            ConstraintRule(
+                axes=tuple(rule_axes),
+                mode=mode,
+                rules=tuple(validated_rules),
+            )
+        )
 
     return out
 

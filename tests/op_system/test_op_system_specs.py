@@ -15,6 +15,7 @@ import re
 import pytest
 
 from op_system.specs import (
+    ConstraintRule,
     NormalizedRhs,
     _normalize_constraints,
     normalize_expr_rhs,
@@ -664,13 +665,16 @@ def test_normalize_constraints_allow_happy_path() -> None:
         },
     ]
     result = _normalize_constraints(raw, axes=_AXES_AGE_VAX)
-    assert len(result) == 1
-    rule = result[0]
-    assert rule["axes"] == ("age", "vax")
-    assert rule["mode"] == "allow"
-    assert len(rule["rules"]) == 2
-    assert rule["rules"][0] == {"age": ["u65"], "vax": ["none"]}
-    assert rule["rules"][1] == {"age": ["o65"]}
+    assert result == [
+        ConstraintRule(
+            axes=("age", "vax"),
+            mode="allow",
+            rules=(
+                {"age": ["u65"], "vax": ["none"]},
+                {"age": ["o65"]},
+            ),
+        ),
+    ]
 
 
 def test_normalize_constraints_exclude_happy_path() -> None:
@@ -684,11 +688,13 @@ def test_normalize_constraints_exclude_happy_path() -> None:
         },
     ]
     result = _normalize_constraints(raw, axes=_AXES_AGE_VAX)
-    assert len(result) == 1
-    rule = result[0]
-    assert rule["axes"] == ("age", "vax")
-    assert rule["mode"] == "exclude"
-    assert rule["rules"][0] == {"age": ["u65"], "vax": ["dose1", "dose2"]}
+    assert result == [
+        ConstraintRule(
+            axes=("age", "vax"),
+            mode="exclude",
+            rules=({"age": ["u65"], "vax": ["dose1", "dose2"]},),
+        ),
+    ]
 
 
 def test_normalize_constraints_rejects_not_a_list() -> None:
