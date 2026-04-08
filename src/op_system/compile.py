@@ -495,4 +495,5 @@ def compile_rhs(rhs: NormalizedRhs) -> CompiledRhs:
         state_names=rhs.state_names,
         param_names=rhs.param_names,
         eval_fn=eval_fn,
+        meta=rhs.meta,
     )
