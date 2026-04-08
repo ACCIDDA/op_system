@@ -20,7 +20,8 @@ whitelist, and evaluation runs with empty builtins.
 from __future__ import annotations
 
 import ast
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, NoReturn, Protocol, cast
 
 import numpy as np
@@ -138,6 +139,7 @@ class CompiledRhs:
     state_names: tuple[str, ...]
     param_names: tuple[str, ...]
     eval_fn: EvalFn
+    meta: Mapping[str, Any] = field(default_factory=lambda: MappingProxyType({}))
 
     def bind(
         self, params: Mapping[str, object]
