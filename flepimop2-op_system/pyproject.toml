@@ -78,13 +78,6 @@ ignore = [
 [tool.ruff.lint.pydocstyle]
 convention = "google"
 
-[tool.mypy]
-strict = true
-files = "."
-namespace_packages = true
-explicit_package_bases = true
-mypy_path = "$MYPY_CONFIG_FILE_DIR/src"
-
 [dependency-groups]
 dev = [
   "pytest>=8.4.2",
