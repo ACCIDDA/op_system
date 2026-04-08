@@ -73,8 +73,15 @@ test-root:
 # Run the provider package test suite
 [group('dev')]
 [group('ci')]
-test-provider:
-	{{provider_run}} pytest
+test-provider: provider-sync
+	cd {{provider_dir}} && .venv/bin/python -m pytest
+
+# Create/refresh the provider venv and install all deps (including dev group).
+# Run this once before running provider pytest/mypy if you aren't using `ci`.
+[group('dev')]
+provider-sync:
+	cd {{provider_dir}} && uv venv --clear
+	cd {{provider_dir}} && uv sync --dev
 
 # Run type checks in both packages
 [group('dev')]
@@ -90,8 +97,8 @@ mypy-root:
 # Run mypy for the provider package
 [group('dev')]
 [group('ci')]
-mypy-provider:
-	{{provider_run}} mypy
+mypy-provider: provider-sync
+	cd {{provider_dir}} && .venv/bin/python -m mypy --strict --namespace-packages --explicit-package-bases src/flepimop2
 
 # Run all CI quality checks
 [group('ci')]
