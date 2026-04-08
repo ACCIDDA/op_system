@@ -65,6 +65,7 @@ class OpSystemSystem(ModuleModel, SystemABC):  # noqa: D101
         self.flatten = flatten_fn
         self.unflatten = unflatten_fn
         self.mixing_kernels = mixing_kernels
+        self.options = {"mixing_kernels": mixing_kernels}
 
         def _stepper(
             time: np.float64,
@@ -90,9 +91,7 @@ class OpSystemSystem(ModuleModel, SystemABC):  # noqa: D101
 
     @staticmethod
     def _extract_axes_meta(compiled: CompiledRhs) -> _AxesMeta:
-        meta = compiled.meta if hasattr(compiled, "meta") else None
-        meta_dict = meta if isinstance(meta, dict) else {}
-        axes_meta = meta_dict.get("axes", [])
+        axes_meta = compiled.meta.get("axes", [])
         axis_sizes: dict[str, int] = {"subgroup": 1}
         axis_coords: dict[str, np.ndarray] = {
             "subgroup": np.asarray([0], dtype=np.float64)
@@ -101,7 +100,15 @@ class OpSystemSystem(ModuleModel, SystemABC):  # noqa: D101
         for ax in axes_meta:
             name = str(ax.get("name"))
             size = int(ax.get("size", 0) or len(ax.get("coords", []) or []))
-            coords = np.asarray(ax.get("coords", np.arange(size)), dtype=np.float64)
+            raw_coords = ax.get("coords", None)
+            try:
+                coords = (
+                    np.asarray(raw_coords, dtype=np.float64)
+                    if raw_coords is not None
+                    else np.arange(size, dtype=np.float64)
+                )
+            except (ValueError, TypeError):
+                coords = np.arange(size, dtype=np.float64)
             axis_sizes[name] = size
             axis_coords[name] = coords
             axis_order.append(name)
@@ -112,9 +119,7 @@ class OpSystemSystem(ModuleModel, SystemABC):  # noqa: D101
     def _build_mixing_kernels(
         self, compiled: CompiledRhs, axis_coords: dict[str, np.ndarray]
     ) -> dict[str, np.ndarray]:
-        meta = compiled.meta if hasattr(compiled, "meta") else None
-        meta_dict = meta if isinstance(meta, dict) else {}
-        mixing_meta = meta_dict.get("mixing", [])
+        mixing_meta = compiled.meta.get("kernels", []) or []
         kernels: dict[str, np.ndarray] = {}
         for mk in mixing_meta:
             name = str(mk.get("name"))
