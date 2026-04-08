@@ -65,6 +65,7 @@ class OpSystemSystem(ModuleModel, SystemABC):  # noqa: D101
         self.flatten = flatten_fn
         self.unflatten = unflatten_fn
         self.mixing_kernels = mixing_kernels
+        self.options = {"mixing_kernels": mixing_kernels}
 
         def _stepper(
             time: np.float64,
