@@ -52,3 +52,33 @@ def test_invalid_spec_raises() -> None:
     bad_spec: dict[str, object] = {"kind": "expr", "state": ["x"], "equations": {}}
     with pytest.raises(ValueError, match=r"Missing equation"):
         OpSystemSystem(spec=bad_spec)
+
+
+def test_option_mixing_kernels_bare_spec(sir_spec: dict[str, object]) -> None:
+    """A spec without kernels exposes an empty mixing_kernels option."""
+    sys = OpSystemSystem(spec=sir_spec)
+    mk = sys.option("mixing_kernels", None)
+    assert isinstance(mk, dict)
+    assert mk == {}
+
+
+def test_option_mixing_kernels_with_kernel() -> None:
+    """A spec with a kernel exposes it via the mixing_kernels option."""
+    spec: dict[str, object] = {
+        "kind": "expr",
+        "axes": [{"name": "loc", "coords": ["0", "1"]}],
+        "kernels": [
+            {
+                "name": "contact",
+                "form": "gaussian",
+                "params": {"scale": 1.0, "sigma": 0.5},
+            },
+        ],
+        "state": ["S[loc]"],
+        "equations": {"S[loc]": "-S[loc]"},
+    }
+    sys = OpSystemSystem(spec=spec)
+    mk = sys.option("mixing_kernels", None)
+    assert isinstance(mk, dict)
+    assert "contact" in mk
+    assert isinstance(mk["contact"], np.ndarray)
