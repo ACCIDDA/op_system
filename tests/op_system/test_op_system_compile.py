@@ -11,6 +11,7 @@ These tests cover:
 - AST whitelist rejects disallowed calls/attribute access
 - alias dependency resolution and cycles
 - transitions RHS compiles and evaluates with expected flow semantics
+- compile_rhs threads NormalizedRhs.meta through to CompiledRhs.meta
 
 Note:
 - errors.py was removed, so we only assert built-in exception types and messages.
@@ -23,6 +24,7 @@ import re
 import numpy as np
 import pytest
 
+from op_system import compile_spec
 from op_system.compile import CompiledRhs, compile_rhs
 from op_system.specs import NormalizedRhs, normalize_rhs
 
@@ -317,3 +319,54 @@ def test_transitions_rhs_compiles_and_evaluates() -> None:
     rec = 0.1 * float(y[1])
     expected = np.array([-inf, inf - rec, rec], dtype=np.float64)
     assert np.allclose(out, expected)
+
+
+# ---------------------------------------------------------------------------
+# Meta threading (#11)
+# ---------------------------------------------------------------------------
+
+
+def test_compiled_rhs_meta_from_spec_with_axes_and_kernels() -> None:
+    """compile_rhs preserves axes and kernels metadata from NormalizedRhs."""
+    spec: dict[str, object] = {
+        "kind": "expr",
+        "axes": [{"name": "age", "coords": ["a0", "a1", "a2"]}],
+        "state": ["S", "I"],
+        "kernels": [
+            {
+                "name": "contact",
+                "form": "gaussian",
+                "params": {"scale": 1.0, "sigma": 0.5},
+            },
+        ],
+        "equations": {"S": "-beta * S", "I": "beta * S"},
+    }
+    rhs = normalize_rhs(spec)
+    compiled = compile_rhs(rhs)
+
+    assert "axes" in compiled.meta
+    assert len(compiled.meta["axes"]) == 1
+    assert compiled.meta["axes"][0]["name"] == "age"
+    assert "kernels" in compiled.meta
+    assert len(compiled.meta["kernels"]) == 1
+    assert compiled.meta["kernels"][0]["name"] == "contact"
+
+
+def test_compiled_rhs_meta_empty_for_bare_spec(compiled_xy: CompiledRhs) -> None:
+    """A spec with no axes/kernels/operators produces meta with empty values."""
+    assert compiled_xy.meta.get("axes") == []
+    assert compiled_xy.meta.get("kernels") == []
+
+
+def test_compile_spec_preserves_meta() -> None:
+    """compile_spec (public facade) round-trips meta through normalize+compile."""
+    spec: dict[str, object] = {
+        "kind": "expr",
+        "axes": [{"name": "space", "coords": ["s0", "s1"]}],
+        "state": ["x"],
+        "equations": {"x": "a * x"},
+    }
+    compiled = compile_spec(spec)
+
+    assert "axes" in compiled.meta
+    assert compiled.meta["axes"][0]["name"] == "space"
