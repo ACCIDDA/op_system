@@ -10,12 +10,23 @@ pydantic BaseModel subclass is defined here, flepimop2 auto-generates a
 
 from __future__ import annotations
 
+import functools
+import sys
 from typing import TYPE_CHECKING, Any, Literal, NamedTuple
 
 import numpy as np
 from flepimop2.configuration import ModuleModel
 from flepimop2.system.abc import SystemABC
-from flepimop2.typing import StateChangeEnum
+from flepimop2.typing import (
+    IdentifierString,
+    StateChangeEnum,
+    SystemProtocol,
+)
+
+if sys.version_info >= (3, 12):
+    from typing import override
+else:
+    from typing_extensions import override
 from pydantic import ConfigDict, Field
 
 from op_system import CompiledRhs, compile_spec
@@ -88,6 +99,13 @@ class OpSystemSystem(ModuleModel, SystemABC):  # noqa: D101
 
         self._stepper = _stepper
         self._compiled_rhs = compiled  # handy for debugging/adapters
+
+    @override
+    def _bind_impl(
+        self, params: dict[IdentifierString, Any] | None = None
+    ) -> SystemProtocol:
+        """Return a stepper with any static parameters partially applied."""
+        return functools.partial(self._stepper, **(params or {}))
 
     @staticmethod
     def _extract_axes_meta(compiled: CompiledRhs) -> _AxesMeta:
