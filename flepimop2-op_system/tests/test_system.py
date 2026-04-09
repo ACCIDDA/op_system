@@ -113,3 +113,27 @@ def test_bind_delegates_to_step(sir_spec: dict[str, object]) -> None:
     via_bind = sys.bind()(time=np.float64(0.0), state=y0, beta=0.3, gamma=0.1)
 
     np.testing.assert_allclose(via_bind, via_step, rtol=0.0, atol=0.0)
+
+
+# -- Integration: full SystemABC.bind() contract -----------------------------------
+
+
+def test_bind_rejects_forbidden_param(sir_spec: dict[str, object]) -> None:
+    """SystemABC.bind() rejects 'time' and 'state' in params."""
+    sys = OpSystemSystem(spec=sir_spec)
+    with pytest.raises(TypeError, match="time"):
+        sys.bind(params={"time": 0.0})
+
+
+def test_bind_roundtrip_multi_step(sir_spec: dict[str, object]) -> None:
+    """Bound stepper can be called repeatedly (simulating an engine loop)."""
+    sys = OpSystemSystem(spec=sir_spec)
+    stepper = sys.bind(params={"beta": 0.3, "gamma": 0.1})
+    state = np.array([0.999, 0.001, 0.0], dtype=np.float64)
+
+    for _ in range(5):
+        deriv = stepper(time=np.float64(0.0), state=state)
+        state += 0.1 * deriv  # simple Euler step
+
+    # Population is conserved: S + I + R == 1.0
+    np.testing.assert_allclose(state.sum(), 1.0, atol=1e-14)
