@@ -779,3 +779,51 @@ def test_normalize_constraints_rejects_rule_axis_not_in_constraint_axes() -> Non
     raw = [{"axes": ["age", "vax"], "allow": [{"region": "east"}]}]
     with pytest.raises(ValueError, match=r"references axis 'region' not in"):
         _normalize_constraints(raw, axes=axes)
+
+
+# -- Equation key whitespace normalisation --
+
+
+def test_expr_equation_keys_with_spaces_accepted() -> None:
+    """Equation keys with spaces inside brackets match their template."""
+    spec = {
+        "kind": "expr",
+        "axes": [
+            {"name": "x", "coords": ["a", "b"]},
+            {"name": "y", "coords": ["c", "d"]},
+        ],
+        "state": ["u[x,y]"],
+        "equations": {"u[x, y]": "-u[x, y]"},
+    }
+    out = normalize_expr_rhs(spec)
+    assert len(out.state_names) == 4
+    assert len(out.equations) == 4
+
+
+def test_expr_equation_keys_spaces_three_axes() -> None:
+    """Equation keys with spaces work for 3+ axes."""
+    spec = {
+        "kind": "expr",
+        "axes": [
+            {"name": "a", "coords": ["a1", "a2"]},
+            {"name": "b", "coords": ["b1"]},
+            {"name": "c", "coords": ["c1"]},
+        ],
+        "state": ["u[a,b,c]"],
+        "equations": {"u[a, b, c]": "-u[a, b, c]"},
+    }
+    out = normalize_expr_rhs(spec)
+    assert len(out.state_names) == 2
+    assert len(out.equations) == 2
+
+
+def test_expr_equation_keys_extra_spaces_normalised() -> None:
+    """Extra whitespace around axis names in equation keys is tolerated."""
+    spec = {
+        "kind": "expr",
+        "axes": [{"name": "loc", "coords": ["a", "b"]}],
+        "state": ["S[loc]"],
+        "equations": {"S[ loc ]": "-S[ loc ]"},
+    }
+    out = normalize_expr_rhs(spec)
+    assert len(out.state_names) == 2
