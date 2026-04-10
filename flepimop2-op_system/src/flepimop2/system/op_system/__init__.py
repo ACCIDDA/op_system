@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import functools
 import sys
+from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Literal, NamedTuple
 
 import numpy as np
@@ -76,7 +77,13 @@ class OpSystemSystem(ModuleModel, SystemABC):  # noqa: D101
         self.flatten = flatten_fn
         self.unflatten = unflatten_fn
         self.mixing_kernels = mixing_kernels
-        self.options = {"mixing_kernels": mixing_kernels}
+        operators = self._extract_operators(compiled)
+        operator_axis = self._extract_operator_axis(compiled)
+        self.options = {
+            "mixing_kernels": mixing_kernels,
+            "operators": operators,
+            "operator_axis": operator_axis,
+        }
 
         def _stepper(
             time: np.float64,
@@ -133,6 +140,35 @@ class OpSystemSystem(ModuleModel, SystemABC):  # noqa: D101
         return _AxesMeta(
             axis_order=tuple(axis_order), axis_sizes=axis_sizes, axis_coords=axis_coords
         )
+
+    @staticmethod
+    def _extract_operators(
+        compiled: CompiledRhs,
+    ) -> tuple[MappingProxyType[str, Any], ...] | None:
+        """Extract operator metadata from compiled spec as immutable mappings.
+
+        Returns:
+            Tuple of read-only operator dicts, or ``None`` if no operators.
+        """
+        ops = compiled.meta.get("operators")
+        if not ops:
+            return None
+        return tuple(MappingProxyType(op) for op in ops)
+
+    @staticmethod
+    def _extract_operator_axis(compiled: CompiledRhs) -> str | None:
+        """Return the single shared axis name if all operators act on the same axis.
+
+        Returns:
+            Shared axis name, or ``None`` if there are zero or multiple axes.
+        """
+        ops = compiled.meta.get("operators")
+        if not ops:
+            return None
+        axes = {op.get("axis") for op in ops}
+        if len(axes) == 1:
+            return str(next(iter(axes)))
+        return None
 
     def _build_mixing_kernels(
         self, compiled: CompiledRhs, axis_coords: dict[str, np.ndarray]

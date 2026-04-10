@@ -254,6 +254,25 @@ def _ensure_mapping(x: object, *, name: str) -> Mapping[str, Any]:
     return x
 
 
+def _normalize_bracket_key(key: str) -> str:
+    """Normalize whitespace inside bracket notation.
+
+    Strips spaces around commas and bracket edges so that user-provided keys
+    like ``"u[x, y]"`` match the canonical template form ``"u[x,y]"``.
+
+    Returns:
+        Canonical bracket key string.
+    """
+    if "[" not in key:
+        return key.strip()
+    m = _STATE_TEMPLATE_RE.fullmatch(key)
+    if not m:
+        return key.strip()
+    base = m.group(1)
+    parts = [p.strip() for p in m.group(2).split(",")]
+    return f"{base}[{','.join(parts)}]"
+
+
 def _normalize_axis_name(ax_map: Mapping[str, Any], *, idx: int, seen: set[str]) -> str:
     name_val = ax_map.get("name")
     if not isinstance(name_val, str) or not name_val.strip():
@@ -1726,6 +1745,9 @@ def normalize_expr_rhs(spec: Mapping[str, Any]) -> NormalizedRhs:
     equations_map = spec.get("equations")
     if not isinstance(equations_map, dict):
         _raise_invalid_rhs_spec(detail="equations must be a mapping of state->expr")
+
+    # Normalize equation keys so that e.g. "u[x, y]" matches template "u[x,y]"
+    equations_map = {_normalize_bracket_key(k): v for k, v in equations_map.items()}
 
     axes_meta = _normalize_axes(spec.get("axes"))
     meta_parts = _normalize_common_meta(
