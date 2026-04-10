@@ -1,5 +1,7 @@
 """Tests for the flepimop2 op_system adapter System."""
 
+from types import MappingProxyType
+
 import numpy as np
 import pytest
 from flepimop2.typing import SystemProtocol
@@ -137,3 +139,130 @@ def test_bind_roundtrip_multi_step(sir_spec: dict[str, object]) -> None:
 
     # Population is conserved: S + I + R == 1.0
     np.testing.assert_allclose(state.sum(), 1.0, atol=1e-14)
+
+
+# -- Operator wiring (#8, #54) -------------------------------------------------
+
+
+@pytest.fixture
+def sir_with_operators_spec() -> dict[str, object]:
+    """SIR spec with a single diffusion operator on the loc axis.
+
+    Returns:
+        dict[str, object]: Spec with one operator.
+    """
+    return {
+        "kind": "expr",
+        "axes": [{"name": "loc", "coords": ["a", "b"]}],
+        "state": ["S[loc]", "I[loc]", "R[loc]"],
+        "equations": {
+            "S[loc]": "-beta * S[loc] * I[loc]",
+            "I[loc]": "beta * S[loc] * I[loc] - gamma * I[loc]",
+            "R[loc]": "gamma * I[loc]",
+        },
+        "operators": [
+            {"kind": "diffusion", "axis": "loc", "bc": "neumann"},
+        ],
+    }
+
+
+@pytest.fixture
+def multi_operator_spec() -> dict[str, object]:
+    """Spec with two operators on different axes.
+
+    Returns:
+        dict[str, object]: Spec with operators on loc and age axes.
+    """
+    return {
+        "kind": "expr",
+        "axes": [
+            {"name": "loc", "coords": ["a", "b"]},
+            {"name": "age", "coords": ["young", "old"]},
+        ],
+        "state": ["u[loc,age]"],
+        "equations": {"u[loc,age]": "-u[loc,age]"},
+        "operators": [
+            {"kind": "diffusion", "axis": "loc"},
+            {"kind": "advection", "axis": "age"},
+        ],
+    }
+
+
+def test_option_operators_none_when_absent(sir_spec: dict[str, object]) -> None:
+    """A spec without operators returns None for the operators option."""
+    sys = OpSystemSystem(spec=sir_spec)
+    assert sys.option("operators", "missing") is None
+
+
+def test_option_operators_present(
+    sir_with_operators_spec: dict[str, object],
+) -> None:
+    """A spec with operators exposes them via the operators option."""
+    sys = OpSystemSystem(spec=sir_with_operators_spec)
+    ops = sys.option("operators", None)
+    assert ops is not None
+    assert len(ops) == 1
+    assert ops[0]["kind"] == "diffusion"
+    assert ops[0]["axis"] == "loc"
+    assert ops[0]["bc"] == "neumann"
+
+
+def test_option_operators_returns_immutable(
+    sir_with_operators_spec: dict[str, object],
+) -> None:
+    """Operator dicts returned by option() are immutable MappingProxy objects."""
+    sys = OpSystemSystem(spec=sir_with_operators_spec)
+    ops = sys.option("operators", None)
+    assert ops is not None
+    assert isinstance(ops, tuple)
+    assert isinstance(ops[0], MappingProxyType)
+    with pytest.raises(TypeError):
+        ops[0]["kind"] = "advection"  # type: ignore[index]
+
+
+def test_option_operator_axis_single(
+    sir_with_operators_spec: dict[str, object],
+) -> None:
+    """When all operators share one axis, operator_axis returns that name."""
+    sys = OpSystemSystem(spec=sir_with_operators_spec)
+    assert sys.option("operator_axis", None) == "loc"
+
+
+def test_option_operator_axis_none_when_absent(
+    sir_spec: dict[str, object],
+) -> None:
+    """No operators means operator_axis is None."""
+    sys = OpSystemSystem(spec=sir_spec)
+    assert sys.option("operator_axis", None) is None
+
+
+def test_option_operator_axis_none_when_mixed(
+    multi_operator_spec: dict[str, object],
+) -> None:
+    """Multiple axes across operators means operator_axis is None."""
+    sys = OpSystemSystem(spec=multi_operator_spec)
+    assert sys.option("operator_axis", None) is None
+
+
+def test_option_operators_multi_axis(
+    multi_operator_spec: dict[str, object],
+) -> None:
+    """Multi-operator spec surfaces both operators."""
+    sys = OpSystemSystem(spec=multi_operator_spec)
+    ops = sys.option("operators", None)
+    assert ops is not None
+    assert len(ops) == 2
+    kinds = {op["kind"] for op in ops}
+    assert kinds == {"diffusion", "advection"}
+
+
+def test_option_operators_independent_of_mixing_kernels(
+    sir_with_operators_spec: dict[str, object],
+) -> None:
+    """Operators and mixing_kernels are independent options."""
+    sys = OpSystemSystem(spec=sir_with_operators_spec)
+    mk = sys.option("mixing_kernels", None)
+    ops = sys.option("operators", None)
+    assert isinstance(mk, dict)
+    assert ops is not None
+    assert len(ops) == 1
