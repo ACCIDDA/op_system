@@ -266,3 +266,104 @@ def test_option_operators_independent_of_mixing_kernels(
     assert isinstance(mk, dict)
     assert ops is not None
     assert len(ops) == 1
+
+
+# -- Axis / shape / flatten options (#12) ---------------------------------------
+
+
+def test_option_axis_order_bare_spec(sir_spec: dict[str, object]) -> None:
+    """A bare SIR spec has axis_order ('state', 'subgroup')."""
+    sys = OpSystemSystem(spec=sir_spec)
+    assert sys.option("axis_order", None) == ("state", "subgroup")
+
+
+def test_option_axis_order_with_axes() -> None:
+    """A spec with an explicit axis appends it to axis_order."""
+    spec: dict[str, object] = {
+        "kind": "expr",
+        "axes": [{"name": "loc", "coords": ["a", "b"]}],
+        "state": ["S[loc]"],
+        "equations": {"S[loc]": "-S[loc]"},
+    }
+    sys = OpSystemSystem(spec=spec)
+    order = sys.option("axis_order", None)
+    assert order == ("state", "subgroup", "loc")
+
+
+def test_option_axis_sizes_bare_spec(sir_spec: dict[str, object]) -> None:
+    """A bare SIR spec has axis_sizes {'subgroup': 1}."""
+    sys = OpSystemSystem(spec=sir_spec)
+    assert sys.option("axis_sizes", None) == {"subgroup": 1}
+
+
+def test_option_axis_sizes_with_axes() -> None:
+    """A spec with an explicit axis includes its size."""
+    spec: dict[str, object] = {
+        "kind": "expr",
+        "axes": [{"name": "loc", "coords": ["a", "b"]}],
+        "state": ["S[loc]"],
+        "equations": {"S[loc]": "-S[loc]"},
+    }
+    sys = OpSystemSystem(spec=spec)
+    sizes = sys.option("axis_sizes", None)
+    assert sizes == {"subgroup": 1, "loc": 2}
+
+
+def test_option_axis_coords_bare_spec(sir_spec: dict[str, object]) -> None:
+    """A bare SIR spec has subgroup coords as [0]."""
+    sys = OpSystemSystem(spec=sir_spec)
+    coords = sys.option("axis_coords", None)
+    assert "subgroup" in coords
+    np.testing.assert_array_equal(coords["subgroup"], np.array([0], dtype=np.float64))
+
+
+def test_option_axis_coords_with_axes() -> None:
+    """A spec with an explicit axis includes its coords as a float array."""
+    spec: dict[str, object] = {
+        "kind": "expr",
+        "axes": [{"name": "loc", "coords": ["0", "1"]}],
+        "state": ["S[loc]"],
+        "equations": {"S[loc]": "-S[loc]"},
+    }
+    sys = OpSystemSystem(spec=spec)
+    coords = sys.option("axis_coords", None)
+    assert "loc" in coords
+    np.testing.assert_array_equal(coords["loc"], np.array([0, 1], dtype=np.float64))
+
+
+def test_option_state_shape_bare_spec(sir_spec: dict[str, object]) -> None:
+    """A bare SIR spec has state_shape (3, 1)."""
+    sys = OpSystemSystem(spec=sir_spec)
+    assert sys.option("state_shape", None) == (3, 1)
+
+
+def test_option_state_shape_with_axes() -> None:
+    """A spec with an axis includes the axis dimension in state_shape."""
+    spec: dict[str, object] = {
+        "kind": "expr",
+        "axes": [{"name": "loc", "coords": ["a", "b"]}],
+        "state": ["S[loc]"],
+        "equations": {"S[loc]": "-S[loc]"},
+    }
+    sys = OpSystemSystem(spec=spec)
+    assert sys.option("state_shape", None) == (2, 1, 2)
+
+
+def test_option_flatten_unflatten_roundtrip() -> None:
+    """Flatten then unflatten recovers the original shaped array."""
+    spec: dict[str, object] = {
+        "kind": "expr",
+        "axes": [{"name": "loc", "coords": ["a", "b", "c"]}],
+        "state": ["S[loc]", "I[loc]"],
+        "equations": {"S[loc]": "-S[loc]", "I[loc]": "S[loc]"},
+    }
+    sys = OpSystemSystem(spec=spec)
+    shape = sys.option("state_shape", None)
+    flatten = sys.option("flatten", None)
+    unflatten = sys.option("unflatten", None)
+    tensor = np.arange(np.prod(shape), dtype=np.float64).reshape(shape)
+    flat = flatten(tensor)
+    assert flat.ndim == 1
+    assert flat.size == np.prod(shape)
+    recovered = unflatten(flat)
+    np.testing.assert_array_equal(recovered, tensor)
