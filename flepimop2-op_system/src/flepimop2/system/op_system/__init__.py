@@ -70,16 +70,15 @@ class OpSystemSystem(ModuleModel, SystemABC):  # noqa: D101
             n_state, axes_meta
         )
 
-        self.axis_order = axes_meta.axis_order
-        self.axis_sizes = axes_meta.axis_sizes
-        self.axis_coords = axes_meta.axis_coords
-        self.state_shape = shape_dims
-        self.flatten = flatten_fn
-        self.unflatten = unflatten_fn
-        self.mixing_kernels = mixing_kernels
         operators = self._extract_operators(compiled)
         operator_axis = self._extract_operator_axis(compiled)
         self.options = {
+            "axis_order": axes_meta.axis_order,
+            "axis_sizes": axes_meta.axis_sizes,
+            "axis_coords": axes_meta.axis_coords,
+            "state_shape": shape_dims,
+            "flatten": flatten_fn,
+            "unflatten": unflatten_fn,
             "mixing_kernels": mixing_kernels,
             "operators": operators,
             "operator_axis": operator_axis,
@@ -97,7 +96,7 @@ class OpSystemSystem(ModuleModel, SystemABC):  # noqa: D101
                     f"expected ({n_state},), got {state_arr.shape}."
                 )
                 raise ValueError(msg)
-            params = dict(self.mixing_kernels)
+            params = dict(mixing_kernels)
             params.update(kwargs)
             return np.asarray(
                 compiled.eval_fn(np.float64(time), state_arr, **params),
