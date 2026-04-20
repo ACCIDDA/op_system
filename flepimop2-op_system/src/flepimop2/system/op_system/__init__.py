@@ -76,6 +76,8 @@ class OpSystemSystem(ModuleModel, SystemABC):  # noqa: D101
             "axis_order": axes_meta.axis_order,
             "axis_sizes": axes_meta.axis_sizes,
             "axis_coords": axes_meta.axis_coords,
+            "state_names": compiled.state_names,
+            "initial_state": compiled.meta.get("initial_state"),
             "state_shape": shape_dims,
             "flatten": flatten_fn,
             "unflatten": unflatten_fn,

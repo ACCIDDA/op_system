@@ -1076,6 +1076,71 @@ def _expand_alias_templates(
     return aliases_out, alias_template_map
 
 
+def _expand_initial_state_templates(
+    initial_state_raw: Mapping[str, str] | None,
+    *,
+    axes: list[dict[str, Any]],
+    template_map: Mapping[str, list[tuple[str, dict[str, str]]]],
+) -> dict[str, str] | None:
+    """Expand a templated initial_state mapping into concrete state→param pairs.
+
+    Args:
+        initial_state_raw: Mapping of (possibly templated) state name to
+            (possibly templated) parameter name, or ``None``.
+        axes: Normalized axis definitions.
+        template_map: Combined template map from states and aliases.
+
+    Returns:
+        Expanded ``dict[str, str]`` mapping each concrete state name to its
+        concrete parameter name, or ``None`` if *initial_state_raw* is ``None``.
+    """
+    if initial_state_raw is None:
+        return None
+
+    ic_keys = list(initial_state_raw.keys())
+    ic_expanded_keys, ic_template_map = _expand_state_templates(ic_keys, axes=axes)
+    if len(ic_expanded_keys) != len(set(ic_expanded_keys)):
+        _raise_invalid_rhs_spec(detail="expanded initial_state keys contain duplicates")
+
+    combined = {**template_map, **ic_template_map}
+    result: dict[str, str] = {}
+
+    for raw_key, raw_val in initial_state_raw.items():
+        val_s = str(raw_val).strip()
+        if not val_s:
+            _raise_invalid_rhs_spec(
+                detail=f"initial_state[{raw_key!r}] must be a non-empty string",
+            )
+        if raw_key in ic_template_map:
+            for expanded_key, assignment in ic_template_map[raw_key]:
+                result[expanded_key] = _apply_template_substitutions(
+                    val_s,
+                    assignment=assignment,
+                    template_map=combined,
+                )
+        else:
+            result[raw_key] = val_s
+
+    return result
+
+
+def _maybe_attach_initial_state(
+    meta: dict[str, Any],
+    initial_state_raw: Mapping[str, str] | None,
+    *,
+    axes: list[dict[str, Any]],
+    template_map: Mapping[str, list[tuple[str, dict[str, str]]]],
+) -> None:
+    """Expand *initial_state_raw* and attach it to *meta* when present."""
+    expanded = _expand_initial_state_templates(
+        initial_state_raw,
+        axes=axes,
+        template_map=template_map,
+    )
+    if expanded is not None:
+        meta["initial_state"] = expanded
+
+
 def _extract_placeholders_from_expr(expr: str) -> set[str]:
     """Extract placeholder symbols found inside [...] tokens in an expression.
 
@@ -1807,6 +1872,13 @@ def normalize_expr_rhs(spec: Mapping[str, Any]) -> NormalizedRhs:
         template_map=template_map_all,
     )
 
+    _maybe_attach_initial_state(
+        meta,
+        spec.get("initial_state"),
+        axes=axes_meta,
+        template_map=template_map_all,
+    )
+
     return NormalizedRhs(
         kind="expr",
         state_names=tuple(state_expanded),
@@ -1995,6 +2067,13 @@ def normalize_transitions_rhs(
             all_syms=all_syms,
             d_terms=d_terms,
         )
+
+    _maybe_attach_initial_state(
+        meta,
+        spec.get("initial_state"),
+        axes=axes_meta,
+        template_map=template_map_all,
+    )
 
     return NormalizedRhs(
         kind="transitions",

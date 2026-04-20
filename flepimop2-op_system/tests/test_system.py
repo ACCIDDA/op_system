@@ -367,3 +367,50 @@ def test_option_flatten_unflatten_roundtrip() -> None:
     assert flat.size == np.prod(shape)
     recovered = unflatten(flat)
     np.testing.assert_array_equal(recovered, tensor)
+
+
+# -- initial_state and state_names options --------------------------------------
+
+
+def test_option_state_names(sir_spec: dict[str, object]) -> None:
+    """state_names option exposes compiled state names."""
+    sys = OpSystemSystem(spec=sir_spec)
+    assert sys.option("state_names") == ("S", "I", "R")
+
+
+def test_option_initial_state_absent(sir_spec: dict[str, object]) -> None:
+    """initial_state option is None when spec has no initial_state block."""
+    sys = OpSystemSystem(spec=sir_spec)
+    assert sys.option("initial_state") is None
+
+
+def test_option_initial_state_scalar() -> None:
+    """Scalar initial_state mapping is exposed via option."""
+    spec: dict[str, object] = {
+        "kind": "expr",
+        "state": ["S", "I"],
+        "equations": {"S": "-S", "I": "S"},
+        "initial_state": {"S": "S0", "I": "I0"},
+    }
+    sys = OpSystemSystem(spec=spec)
+    assert sys.option("initial_state") == {"S": "S0", "I": "I0"}
+
+
+def test_option_initial_state_templated() -> None:
+    """Templated initial_state expands and is exposed via option."""
+    spec: dict[str, object] = {
+        "kind": "transitions",
+        "axes": [{"name": "vax", "coords": ["u", "v"]}],
+        "state": ["S[vax]", "D"],
+        "transitions": [
+            {"from": "S[vax]", "to": "D", "rate": "mu"},
+        ],
+        "initial_state": {"S[vax]": "S0[vax]", "D": "D0"},
+    }
+    sys = OpSystemSystem(spec=spec)
+    ic = sys.option("initial_state")
+    assert ic == {
+        "S__vax_u": "S0__vax_u",
+        "S__vax_v": "S0__vax_v",
+        "D": "D0",
+    }
