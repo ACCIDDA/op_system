@@ -370,3 +370,31 @@ def test_compile_spec_preserves_meta() -> None:
 
     assert "axes" in compiled.meta
     assert compiled.meta["axes"][0]["name"] == "space"
+
+
+def test_sum_over_in_filter_evaluates_correctly() -> None:
+    """sum_over IN filter compiles and evaluates correctly end-to-end."""
+    spec = {
+        "kind": "expr",
+        "axes": [{"name": "vax", "coords": ["u", "v", "w"]}],
+        "state": ["S[vax]"],
+        "equations": {
+            # Constant-rate decay so eval_fn output is predictable
+            "S[vax]": "-S[vax]",
+        },
+        "aliases": {
+            "covered": "sum_over(vax=j IN [v, w], S[vax=j])",
+        },
+    }
+    rhs = normalize_rhs(spec)
+
+    # NormalizedRhs.aliases holds the expanded string
+    assert "S__vax_v" in rhs.aliases["covered"]
+    assert "S__vax_w" in rhs.aliases["covered"]
+    assert "S__vax_u" not in rhs.aliases["covered"]
+
+    # Compile and run eval_fn: state = [u=10, v=3, w=7], dS/dt = -S
+    compiled = compile_rhs(rhs)
+    state = np.array([10.0, 3.0, 7.0], dtype=np.float64)
+    derivs = compiled.eval_fn(np.float64(0.0), state)
+    assert np.allclose(derivs, -state)

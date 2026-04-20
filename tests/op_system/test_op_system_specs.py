@@ -1109,3 +1109,99 @@ def test_coord_shift_rejects_bad_arrow_syntax() -> None:
     }
     with pytest.raises(ValueError, match="from_coord -> to_coord"):
         normalize_transitions_rhs(spec)
+
+
+# sum_over IN filter tests
+# ---------------------------------------------------------------------------
+
+
+def test_sum_over_in_filter_subsets_coords() -> None:
+    """sum_over with IN filter sums only the listed coords."""
+    spec = {
+        "kind": "expr",
+        "axes": [{"name": "vax", "coords": ["u", "v", "w"]}],
+        "state": ["S[vax]"],
+        "equations": {
+            "S[vax]": "-S[vax]",
+        },
+        "aliases": {
+            "covered": "sum_over(vax=j IN [v, w], S[vax=j])",
+        },
+    }
+    out = normalize_expr_rhs(spec)
+    covered_eq = out.aliases["covered"]
+    # Only v and w should appear, not u
+    assert "S__vax_v" in covered_eq
+    assert "S__vax_w" in covered_eq
+    assert "S__vax_u" not in covered_eq
+
+
+def test_sum_over_no_filter_unchanged() -> None:
+    """sum_over without IN filter still expands over all coords."""
+    spec = {
+        "kind": "expr",
+        "axes": [{"name": "vax", "coords": ["u", "v", "w"]}],
+        "state": ["S[vax]"],
+        "equations": {"S[vax]": "-S[vax]"},
+        "aliases": {"N": "sum_over(vax=j, S[vax=j])"},
+    }
+    out = normalize_expr_rhs(spec)
+    n_eq = out.aliases["N"]
+    assert "S__vax_u" in n_eq
+    assert "S__vax_v" in n_eq
+    assert "S__vax_w" in n_eq
+
+
+def test_sum_over_in_filter_single_coord() -> None:
+    """sum_over IN filter with a single coord produces a single term."""
+    spec = {
+        "kind": "expr",
+        "axes": [{"name": "vax", "coords": ["u", "v", "w"]}],
+        "state": ["S[vax]"],
+        "equations": {"S[vax]": "-S[vax]"},
+        "aliases": {"just_u": "sum_over(vax=j IN [u], S[vax=j])"},
+    }
+    out = normalize_expr_rhs(spec)
+    eq = out.aliases["just_u"]
+    assert "S__vax_u" in eq
+    assert "S__vax_v" not in eq
+    assert "S__vax_w" not in eq
+
+
+def test_sum_over_in_filter_rejects_unknown_coord() -> None:
+    """sum_over IN filter with an unknown coord raises."""
+    spec = {
+        "kind": "expr",
+        "axes": [{"name": "vax", "coords": ["u", "v", "w"]}],
+        "state": ["S[vax]"],
+        "equations": {"S[vax]": "-S[vax]"},
+        "aliases": {"bad": "sum_over(vax=j IN [v, z], S[vax=j])"},
+    }
+    with pytest.raises(ValueError, match=r"unknown coord.*z.*vax"):
+        normalize_expr_rhs(spec)
+
+
+def test_sum_over_in_filter_rejects_empty_filter() -> None:
+    """sum_over IN [] with no coords raises."""
+    spec = {
+        "kind": "expr",
+        "axes": [{"name": "vax", "coords": ["u", "v", "w"]}],
+        "state": ["S[vax]"],
+        "equations": {"S[vax]": "-S[vax]"},
+        "aliases": {"bad": "sum_over(vax=j IN [], S[vax=j])"},
+    }
+    with pytest.raises(ValueError, match=r"IN filter.*empty"):
+        normalize_expr_rhs(spec)
+
+
+def test_sum_over_in_filter_rejects_duplicate_coord() -> None:
+    """sum_over IN filter with a repeated coord raises."""
+    spec = {
+        "kind": "expr",
+        "axes": [{"name": "vax", "coords": ["u", "v", "w"]}],
+        "state": ["S[vax]"],
+        "equations": {"S[vax]": "-S[vax]"},
+        "aliases": {"bad": "sum_over(vax=j IN [v, v], S[vax=j])"},
+    }
+    with pytest.raises(ValueError, match=r"duplicate coord"):
+        normalize_expr_rhs(spec)
