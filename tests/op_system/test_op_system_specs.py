@@ -827,3 +827,113 @@ def test_expr_equation_keys_extra_spaces_normalised() -> None:
     }
     out = normalize_expr_rhs(spec)
     assert len(out.state_names) == 2
+
+
+# -- initial_state template expansion ------------------------------------------
+
+
+def test_transitions_no_initial_state_omits_meta_key() -> None:
+    """When initial_state is absent, meta has no initial_state key."""
+    spec = {
+        "kind": "transitions",
+        "state": ["S", "I", "R"],
+        "transitions": [
+            {"from": "S", "to": "I", "rate": "beta"},
+            {"from": "I", "to": "R", "rate": "gamma"},
+        ],
+    }
+    out = normalize_transitions_rhs(spec)
+    assert "initial_state" not in out.meta
+
+
+def test_transitions_scalar_initial_state() -> None:
+    """Scalar (non-templated) initial_state passes through unchanged."""
+    spec = {
+        "kind": "transitions",
+        "state": ["S", "I", "R"],
+        "transitions": [
+            {"from": "S", "to": "I", "rate": "beta"},
+            {"from": "I", "to": "R", "rate": "gamma"},
+        ],
+        "initial_state": {"S": "S0", "I": "I0", "R": "R0"},
+    }
+    out = normalize_transitions_rhs(spec)
+    assert out.meta["initial_state"] == {"S": "S0", "I": "I0", "R": "R0"}
+
+
+def test_transitions_templated_initial_state_expands() -> None:
+    """Templated keys and values expand across axis coordinates."""
+    spec = {
+        "kind": "transitions",
+        "axes": [{"name": "vax", "coords": ["u", "v"]}],
+        "state": ["S[vax]", "D"],
+        "transitions": [
+            {"from": "S[vax]", "to": "D", "rate": "mu"},
+        ],
+        "initial_state": {"S[vax]": "S0[vax]", "D": "D0"},
+    }
+    out = normalize_transitions_rhs(spec)
+    expected = {
+        "S__vax_u": "S0__vax_u",
+        "S__vax_v": "S0__vax_v",
+        "D": "D0",
+    }
+    assert out.meta["initial_state"] == expected
+
+
+def test_transitions_multi_axis_initial_state() -> None:
+    """Initial state expands over multiple axes."""
+    spec = {
+        "kind": "transitions",
+        "axes": [
+            {"name": "age", "coords": ["y", "o"]},
+            {"name": "vax", "coords": ["u", "v"]},
+        ],
+        "state": ["S[age,vax]"],
+        "transitions": [
+            {"from": "S[age,vax]", "to": "S[age,vax]", "rate": "alpha"},
+        ],
+        "initial_state": {"S[age,vax]": "S0[age,vax]"},
+    }
+    out = normalize_transitions_rhs(spec)
+    ic = out.meta["initial_state"]
+    assert len(ic) == 4
+    assert ic["S__age_y__vax_u"] == "S0__age_y__vax_u"
+    assert ic["S__age_o__vax_v"] == "S0__age_o__vax_v"
+
+
+def test_expr_no_initial_state_omits_meta_key() -> None:
+    """When initial_state is absent, meta has no initial_state key (expr)."""
+    spec = {
+        "kind": "expr",
+        "state": ["S", "I", "R"],
+        "equations": {"S": "-beta*S", "I": "beta*S - gamma*I", "R": "gamma*I"},
+    }
+    out = normalize_expr_rhs(spec)
+    assert "initial_state" not in out.meta
+
+
+def test_expr_scalar_initial_state() -> None:
+    """Scalar initial_state passes through in expr specs."""
+    spec = {
+        "kind": "expr",
+        "state": ["S", "I"],
+        "equations": {"S": "-S", "I": "S"},
+        "initial_state": {"S": "S0", "I": "I0"},
+    }
+    out = normalize_expr_rhs(spec)
+    assert out.meta["initial_state"] == {"S": "S0", "I": "I0"}
+
+
+def test_expr_templated_initial_state_expands() -> None:
+    """Templated initial_state expands in expr specs."""
+    spec = {
+        "kind": "expr",
+        "axes": [{"name": "loc", "coords": ["a", "b"]}],
+        "state": ["u[loc]"],
+        "equations": {"u[loc]": "-u[loc]"},
+        "initial_state": {"u[loc]": "u0[loc]"},
+    }
+    out = normalize_expr_rhs(spec)
+    expected = {"u__loc_a": "u0__loc_a", "u__loc_b": "u0__loc_b"}
+    assert out.meta["initial_state"] == expected
