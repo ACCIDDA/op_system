@@ -937,3 +937,175 @@ def test_expr_templated_initial_state_expands() -> None:
     out = normalize_expr_rhs(spec)
     expected = {"u__loc_a": "u0__loc_a", "u__loc_b": "u0__loc_b"}
     assert out.meta["initial_state"] == expected
+
+
+# ---------------------------------------------------------------------------
+# coord_shift tests
+# ---------------------------------------------------------------------------
+
+
+def test_coord_shift_single_axis() -> None:
+    """A single-axis coord_shift expands to concrete transitions."""
+    spec = {
+        "kind": "transitions",
+        "axes": [{"name": "vax", "coords": ["u", "v"]}],
+        "state": ["S[vax]", "R[vax]"],
+        "transitions": [
+            {"from": "S[vax]", "to": "R[vax]", "rate": "gamma"},
+            {
+                "coord_shift": {"vax": "u -> v"},
+                "apply_to": ["S", "R"],
+                "rate": "nu",
+            },
+        ],
+    }
+    out = normalize_transitions_rhs(spec)
+
+    tr = out.meta["transitions"]
+    # Original template expands: 2 states x 1 transition = 2.
+    # coord_shift: 2 apply_to bases x 1 from_coord = 2.
+    # Total: 4 expanded transitions.
+    assert len(tr) == 4
+
+    shift_pairs = [(t["from"], t["to"]) for t in tr if t["rate"] == "nu"]
+    assert ("S__vax_u", "S__vax_v") in shift_pairs
+    assert ("R__vax_u", "R__vax_v") in shift_pairs
+    assert len(shift_pairs) == 2
+
+
+def test_coord_shift_multi_axis_expands_over_non_shifted() -> None:
+    """coord_shift expands over non-shifted axis coords."""
+    spec = {
+        "kind": "transitions",
+        "axes": [
+            {"name": "age", "coords": ["y", "o"]},
+            {"name": "vax", "coords": ["u", "v"]},
+        ],
+        "state": ["S[age,vax]"],
+        "transitions": [
+            {
+                "coord_shift": {"vax": "u -> v"},
+                "apply_to": ["S"],
+                "rate": "nu",
+            },
+        ],
+    }
+    out = normalize_transitions_rhs(spec)
+
+    tr = out.meta["transitions"]
+    shift_pairs = [(t["from"], t["to"]) for t in tr]
+    assert ("S__age_y__vax_u", "S__age_y__vax_v") in shift_pairs
+    assert ("S__age_o__vax_u", "S__age_o__vax_v") in shift_pairs
+    assert len(shift_pairs) == 2
+
+
+def test_coord_shift_preserves_regular_transitions() -> None:
+    """Regular transitions coexist with coord_shift entries."""
+    spec = {
+        "kind": "transitions",
+        "axes": [{"name": "vax", "coords": ["u", "v"]}],
+        "state": ["S[vax]", "I[vax]", "R[vax]"],
+        "aliases": {"N": "S__vax_u + S__vax_v + I__vax_u + I__vax_v"},
+        "transitions": [
+            {"from": "S[vax]", "to": "I[vax]", "rate": "beta"},
+            {"from": "I[vax]", "to": "R[vax]", "rate": "gamma"},
+            {
+                "coord_shift": {"vax": "u -> v"},
+                "apply_to": ["S", "R"],
+                "rate": "nu",
+            },
+        ],
+    }
+    out = normalize_transitions_rhs(spec)
+
+    tr = out.meta["transitions"]
+    # 2 template transitions * 2 coords + 2 coord_shift = 6
+    assert len(tr) == 6
+
+
+def test_coord_shift_rejects_missing_axis() -> None:
+    """coord_shift with an unknown axis raises."""
+    spec = {
+        "kind": "transitions",
+        "axes": [{"name": "vax", "coords": ["u", "v"]}],
+        "state": ["S[vax]"],
+        "transitions": [
+            {
+                "coord_shift": {"age": "y -> o"},
+                "apply_to": ["S"],
+                "rate": "nu",
+            },
+        ],
+    }
+    with pytest.raises(ValueError, match=r"axis.*age.*not defined"):
+        normalize_transitions_rhs(spec)
+
+
+def test_coord_shift_rejects_bad_coord() -> None:
+    """coord_shift with a coordinate not in the axis raises."""
+    spec = {
+        "kind": "transitions",
+        "axes": [{"name": "vax", "coords": ["u", "v"]}],
+        "state": ["S[vax]"],
+        "transitions": [
+            {
+                "coord_shift": {"vax": "u -> z"},
+                "apply_to": ["S"],
+                "rate": "nu",
+            },
+        ],
+    }
+    with pytest.raises(ValueError, match=r"coordinate.*z.*not in"):
+        normalize_transitions_rhs(spec)
+
+
+def test_coord_shift_rejects_missing_apply_to() -> None:
+    """coord_shift without apply_to raises."""
+    spec = {
+        "kind": "transitions",
+        "axes": [{"name": "vax", "coords": ["u", "v"]}],
+        "state": ["S[vax]"],
+        "transitions": [
+            {
+                "coord_shift": {"vax": "u -> v"},
+                "rate": "nu",
+            },
+        ],
+    }
+    with pytest.raises(ValueError, match="apply_to"):
+        normalize_transitions_rhs(spec)
+
+
+def test_coord_shift_rejects_missing_rate() -> None:
+    """coord_shift without rate raises."""
+    spec = {
+        "kind": "transitions",
+        "axes": [{"name": "vax", "coords": ["u", "v"]}],
+        "state": ["S[vax]"],
+        "transitions": [
+            {
+                "coord_shift": {"vax": "u -> v"},
+                "apply_to": ["S"],
+            },
+        ],
+    }
+    with pytest.raises(ValueError, match="rate"):
+        normalize_transitions_rhs(spec)
+
+
+def test_coord_shift_rejects_bad_arrow_syntax() -> None:
+    """coord_shift with malformed arrow raises."""
+    spec = {
+        "kind": "transitions",
+        "axes": [{"name": "vax", "coords": ["u", "v"]}],
+        "state": ["S[vax]"],
+        "transitions": [
+            {
+                "coord_shift": {"vax": "u to v"},
+                "apply_to": ["S"],
+                "rate": "nu",
+            },
+        ],
+    }
+    with pytest.raises(ValueError, match="from_coord -> to_coord"):
+        normalize_transitions_rhs(spec)

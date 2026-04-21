@@ -1756,6 +1756,173 @@ def _apply_transition_chains(
             })
 
 
+def _validate_coord_shift_entry(
+    tr: dict[str, Any],
+    axis_lookup: Mapping[str, list[str]],
+) -> tuple[str, str, str, list[Any], str]:
+    """Parse and validate a single ``coord_shift`` transition entry.
+
+    Returns:
+        ``(axis_name, from_coord, to_coord, apply_to, rate)``
+    """
+    shift_spec = tr["coord_shift"]
+    if not isinstance(shift_spec, dict) or len(shift_spec) != 1:
+        _raise_invalid_rhs_spec(
+            detail="coord_shift must be a mapping with exactly one axis entry",
+        )
+
+    axis_name, arrow = next(iter(shift_spec.items()))
+    if axis_name not in axis_lookup:
+        _raise_invalid_rhs_spec(
+            detail=f"coord_shift axis {axis_name!r} is not defined",
+        )
+
+    if not isinstance(arrow, str) or "->" not in arrow:
+        _raise_invalid_rhs_spec(
+            detail=f"coord_shift[{axis_name}] must be 'from_coord -> to_coord'",
+        )
+    parts = [p.strip() for p in arrow.split("->")]
+    if len(parts) != 2 or not parts[0] or not parts[1]:
+        _raise_invalid_rhs_spec(
+            detail=f"coord_shift[{axis_name}] must be 'from_coord -> to_coord'",
+        )
+    from_coord, to_coord = parts
+    valid_coords = axis_lookup[axis_name]
+    for coord in (from_coord, to_coord):
+        if coord not in valid_coords:
+            _raise_invalid_rhs_spec(
+                detail=(
+                    f"coord_shift coordinate {coord!r} not in "
+                    f"axis {axis_name!r} coords {valid_coords}"
+                ),
+            )
+
+    apply_to = tr.get("apply_to")
+    if not isinstance(apply_to, list) or not apply_to:
+        _raise_invalid_rhs_spec(
+            detail="coord_shift requires a non-empty 'apply_to' list",
+        )
+
+    rate_s = tr.get("rate")
+    if not isinstance(rate_s, str) or not rate_s.strip():
+        _raise_invalid_rhs_spec(detail="coord_shift requires a 'rate' string")
+
+    return axis_name, from_coord, to_coord, apply_to, rate_s.strip()
+
+
+def _apply_coord_shifts(
+    *,
+    transitions_raw: list[dict[str, Any]],
+    state_expanded: list[str],
+    axes: list[dict[str, Any]],
+) -> None:
+    """Expand ``coord_shift`` entries into concrete transitions.
+
+    Each ``coord_shift`` entry describes movement along one axis coordinate for
+    a set of states.  The entry is replaced *in-place* by one concrete
+    transition per state listed in ``apply_to``, per combination of the
+    remaining (non-shifted) axes those states carry.
+
+    Args:
+        transitions_raw: Mutable transition list — ``coord_shift`` entries are
+            replaced by concrete transition dicts.
+        state_expanded: Expanded state names (used to discover which axes each
+            ``apply_to`` state carries).
+        axes: Normalized axis definitions.
+    """
+    axis_lookup: dict[str, list[str]] = {
+        ax["name"]: [str(c) for c in ax.get("coords", [])] for ax in axes
+    }
+
+    i = 0
+    while i < len(transitions_raw):
+        tr = transitions_raw[i]
+        if "coord_shift" not in tr:
+            i += 1
+            continue
+
+        axis_name, from_coord, to_coord, apply_to, rate_s = _validate_coord_shift_entry(
+            tr, axis_lookup
+        )
+
+        concrete: list[dict[str, Any]] = []
+        from_frag = f"{axis_name}_{_sanitize_fragment(from_coord)}"
+        to_frag = f"{axis_name}_{_sanitize_fragment(to_coord)}"
+        for base in apply_to:
+            base = str(base).strip()  # noqa: PLW2901
+            concrete.extend(
+                _expand_coord_shift_for_base(
+                    base=base,
+                    from_frag=from_frag,
+                    to_frag=to_frag,
+                    rate_s=rate_s,
+                    state_expanded=state_expanded,
+                )
+            )
+
+        transitions_raw[i : i + 1] = concrete
+        i += len(concrete)
+
+
+def _expand_coord_shift_for_base(
+    *,
+    base: str,
+    from_frag: str,
+    to_frag: str,
+    rate_s: str,
+    state_expanded: list[str],
+) -> list[dict[str, Any]]:
+    """Emit concrete transitions for one ``apply_to`` base state.
+
+    Discovers which axes the base carries by inspecting ``state_expanded``
+    for names starting with ``base__``.  If the base has extra axes beyond
+    the shifted one, a transition is emitted for each coordinate combination
+    of those extra axes.  If only the shifted axis is present, a single
+    transition is emitted.
+
+    Returns:
+        Concrete ``{"from", "to", "rate"}`` transition dicts.
+    """
+    prefix = f"{base}__"
+    matching = [s for s in state_expanded if s.startswith(prefix)]
+
+    if not matching:
+        _raise_invalid_rhs_spec(
+            detail=(
+                f"coord_shift apply_to state {base!r} has no expanded states "
+                f"starting with '{prefix}'"
+            ),
+        )
+
+    concrete: list[dict[str, Any]] = []
+    expanded_set = set(state_expanded)
+
+    for state_name in matching:
+        if from_frag not in state_name:
+            continue
+
+        target = state_name.replace(from_frag, to_frag, 1)
+        if target not in expanded_set:
+            _raise_invalid_rhs_spec(
+                detail=(
+                    f"coord_shift would create transition to {target!r} "
+                    f"which is not an expanded state"
+                ),
+            )
+
+        concrete.append({"from": state_name, "to": target, "rate": rate_s})
+
+    if not concrete:
+        _raise_invalid_rhs_spec(
+            detail=(
+                f"coord_shift apply_to state {base!r} has no expanded states "
+                f"with fragment {from_frag!r}"
+            ),
+        )
+
+    return concrete
+
+
 # -----------------------------------------------------------------------------
 # Public normalization entrypoint
 # -----------------------------------------------------------------------------
@@ -2044,6 +2211,12 @@ def normalize_transitions_rhs(
             transitions_raw=transitions_raw,
             state_set=state_set,
         )
+
+    _apply_coord_shifts(
+        transitions_raw=transitions_raw,
+        state_expanded=state_expanded,
+        axes=axes_meta,
+    )
 
     for state_name in state_expanded:
         d_terms.setdefault(state_name, [])
