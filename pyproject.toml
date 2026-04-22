@@ -79,6 +79,7 @@ ignore = [
 "tests/**/*" = ["INP001", "PLC2701", "S101"]
 "flepimop2-op_system/src/flepimop2/system/op_system/__init__.py" = ["ANN401", "RUF067"]
 "scripts/**/*" = [
+    "N999",
     "T201",  # `print` found
 ]
 

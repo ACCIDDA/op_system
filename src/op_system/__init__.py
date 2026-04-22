@@ -36,7 +36,7 @@ from .specs import (
 # Versioning & capability metadata
 # -----------------------------------------------------------------------------
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 
 SUPPORTED_RHS_KINDS: tuple[str, ...] = ("expr", "transitions")  # noqa: RUF067
 

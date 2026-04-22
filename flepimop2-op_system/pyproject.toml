@@ -1,7 +1,8 @@
 [project]
 name = "flepimop2-op_system"
-version = "0.1.0"
+version = "0.1.1"
 description = "flepimop2 system provider package for op_system"
+readme = "README.md"
 requires-python = ">=3.11,<3.15"
 authors = [
     { name = "Joshua Macdonald", email = "jmacdo16@jh.edu" },
@@ -10,12 +11,8 @@ authors = [
 ]
 license = { file = "LICENSE" }
 dependencies = [
-  # Declare the dependency normally...
   "op-system>=0.1.0",
-
-  # flepimop2 is not in a registry, so keep it as a direct reference.
-  "flepimop2 @ git+https://github.com/ACCIDDA/flepimop2.git@main",
-
+  "flepimop2>=0.1.0",
   "pydantic>=2.0,<3",
   "numpy>=1.26",
   "PyYAML>=6.0",
@@ -40,10 +37,6 @@ Repository = "https://github.com/ACCIDDA/op_system"
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
-
-# REQUIRED for hatchling to accept git/direct URL dependencies
-[tool.hatch.metadata]
-allow-direct-references = true
 
 # Ensure hatchling can build from src/ layout and include the namespace package
 [tool.hatch.build.targets.wheel]
