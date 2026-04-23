@@ -53,7 +53,8 @@ _INTEGRATE_OVER_RE = re.compile(
     re.DOTALL,
 )
 _SUM_OVER_RE = re.compile(
-    r"sum_over\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*([A-Za-z_][A-Za-z0-9_]*)\s*,\s*(.*?)\)",
+    r"sum_over\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*([A-Za-z_][A-Za-z0-9_]*)"
+    r"(?:\s+IN\s+\[([^\[\]]*)\])?\s*,\s*(.*?)\)",
     re.DOTALL,
 )
 _PLACEHOLDER_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\[(.*?)\]")
@@ -1413,6 +1414,49 @@ def _expand_integrate_over(expr: str, *, axes: list[dict[str, Any]]) -> str:
     return out
 
 
+def _apply_coord_filter(
+    filter_str: str | None,
+    *,
+    axis_name: str,
+    all_coords: list[str],
+) -> list[str]:
+    """Return the coord subset to iterate over, or all coords if no filter.
+
+    Args:
+        filter_str: Raw ``IN [...]`` content (e.g. ``"v, w"``), or ``None``.
+        axis_name: Axis name — used in error messages only.
+        all_coords: All valid coords for the axis.
+
+    Returns:
+        Filtered coord list (preserves order of the filter, not the axis).
+    """
+    if filter_str is None:
+        return all_coords
+    requested = [c.strip() for c in filter_str.split(",") if c.strip()]
+    if not requested:
+        _raise_invalid_rhs_spec(
+            detail=f"sum_over IN filter for axis {axis_name!r} is empty",
+        )
+    seen: set[str] = set()
+    for coord in requested:
+        if coord in seen:
+            _raise_invalid_rhs_spec(
+                detail=(
+                    f"sum_over IN filter for axis {axis_name!r} "
+                    f"contains duplicate coord {coord!r}"
+                ),
+            )
+        seen.add(coord)
+        if coord not in all_coords:
+            _raise_invalid_rhs_spec(
+                detail=(
+                    f"sum_over IN filter references unknown coord {coord!r} "
+                    f"for axis {axis_name!r} (valid: {all_coords})"
+                ),
+            )
+    return requested
+
+
 def _expand_sum_over(expr: str, *, axes: list[dict[str, Any]]) -> str:
     """Expand sum_over(axis=var, inner_expr) for categorical axes.
 
@@ -1447,8 +1491,12 @@ def _expand_sum_over(expr: str, *, axes: list[dict[str, Any]]) -> str:
             break
         axis_name = m.group(1)
         var_name = m.group(2)
-        inner = m.group(3)
-        coords = _axis_coords(axis_name)
+        inner = m.group(4)
+        coords = _apply_coord_filter(
+            m.group(3),
+            axis_name=axis_name,
+            all_coords=_axis_coords(axis_name),
+        )
         terms: list[str] = []
         for coord in coords:
             # Replace var_name occurrences with coord (as identifier-safe string)
