@@ -37,7 +37,7 @@ jobs:
       prerelease: '${{ steps.validate-version.outputs.prerelease }}'
     steps:
       - name: 'Install just'
-        run: 'sudo apt install just'
+        uses: 'extractions/setup-just@v3'
       - name: 'Checkout repository'
         uses: 'actions/checkout@v6'
         with:
