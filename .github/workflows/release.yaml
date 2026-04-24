@@ -165,6 +165,7 @@ jobs:
         run: |
           ARGS=(
             release create "v${VERSION}"
+            --repo "${GITHUB_REPOSITORY}"
             --target "${GITHUB_SHA}"
             --title "v${VERSION}"
             --generate-notes
@@ -175,6 +176,7 @@ jobs:
           gh "${ARGS[@]}"
         env:
           GH_TOKEN: '${{ secrets.GITHUB_TOKEN }}'
+          GITHUB_REPOSITORY: '${{ github.repository }}'
           GITHUB_SHA: '${{ github.sha }}'
           PRERELEASE: '${{ needs.validate.outputs.prerelease }}'
           VERSION: '${{ needs.validate.outputs.version }}'
