@@ -11,9 +11,6 @@ from typing import Final
 
 REPO_ROOT: Final[pathlib.Path] = pathlib.Path(__file__).resolve().parents[1]
 SEMVER_PATTERN: Final[re.Pattern[str]] = re.compile(r"^\d+\.\d+\.\d+$")
-INIT_PATTERN: Final[re.Pattern[str]] = re.compile(
-    r'^__version__\s*=\s*"([^"]+)"', re.MULTILINE
-)
 
 
 def get_declared_versions() -> dict[str, str]:
@@ -21,10 +18,6 @@ def get_declared_versions() -> dict[str, str]:
 
     Returns:
         A mapping from file path to declared release version.
-
-    Raises:
-        SystemExit: If `src/op_system/__init__.py` does not define
-            `op_system.__version__`.
     """
     core_version = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text("utf-8"))[
         "project"
@@ -33,16 +26,9 @@ def get_declared_versions() -> dict[str, str]:
         (REPO_ROOT / "flepimop2-op_system" / "pyproject.toml").read_text("utf-8")
     )["project"]["version"]
 
-    init_text = (REPO_ROOT / "src" / "op_system" / "__init__.py").read_text("utf-8")
-    init_match = INIT_PATTERN.search(init_text)
-    if init_match is None:
-        msg = "Unable to find op_system.__version__ in src/op_system/__init__.py."
-        raise SystemExit(msg)
-
     return {
         "pyproject.toml": str(core_version),
         "flepimop2-op_system/pyproject.toml": str(provider_version),
-        "src/op_system/__init__.py": init_match.group(1),
     }
 
 
