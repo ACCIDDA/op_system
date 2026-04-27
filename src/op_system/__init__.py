@@ -21,6 +21,8 @@ Design guarantees:
 
 from __future__ import annotations
 
+from importlib.metadata import version
+
 from op_system._identifer_string import IdentifierString
 from op_system._state_string import StateString
 
@@ -36,7 +38,7 @@ from .specs import (
 # Versioning & capability metadata
 # -----------------------------------------------------------------------------
 
-__version__ = "0.1.1"
+__version__ = version("op_system")
 
 SUPPORTED_RHS_KINDS: tuple[str, ...] = ("expr", "transitions")  # noqa: RUF067
 
