@@ -133,6 +133,21 @@ def test_bind_delegates_to_step(sir_spec: dict[str, object]) -> None:
     np.testing.assert_allclose(via_bind, via_step, rtol=0.0, atol=0.0)
 
 
+def test_jax_backend_stepper_jittable(sir_spec: dict[str, object]) -> None:
+    """JAX backend returns tracer-compatible outputs under jit."""
+    jax = pytest.importorskip("jax")
+    jnp = pytest.importorskip("jax.numpy")
+
+    sys = OpSystemSystem(spec=sir_spec, backend="jax")
+    stepper = sys.bind(params={"beta": 0.3, "gamma": 0.1})
+    y0 = jnp.asarray([0.999, 0.001, 0.0])
+
+    out = jax.jit(lambda y: stepper(time=0.0, state=y))(y0)
+
+    expected = np.array([-0.0002997, 0.0001997, 0.0001], dtype=np.float64)
+    np.testing.assert_allclose(np.asarray(out), expected, rtol=1e-6, atol=1e-12)
+
+
 # -- Integration: full SystemABC.bind() contract -----------------------------------
 
 
