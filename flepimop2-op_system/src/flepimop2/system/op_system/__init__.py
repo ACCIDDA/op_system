@@ -30,7 +30,7 @@ import functools
 import importlib
 import sys
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Any, Literal, NamedTuple
+from typing import TYPE_CHECKING, Any, Literal, NamedTuple, cast
 
 import numpy as np
 from flepimop2.configuration import ModuleModel
@@ -127,7 +127,7 @@ class OpSystemSystem(ModuleModel, SystemABC):  # noqa: D101
                     compiled.eval_fn(np.float64(time), state_arr, **params),
                     dtype=np.float64,
                 )
-            return compiled.eval_fn(time, state_arr, **params)
+            return cast("Float64NDArray", compiled.eval_fn(time, state_arr, **params))
 
         self._stepper = _stepper
         self._compiled_rhs = compiled  # handy for debugging/adapters

@@ -22,7 +22,15 @@ from __future__ import annotations
 import ast
 from dataclasses import dataclass, field
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Any, NoReturn, Protocol, cast
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    NoReturn,
+    Protocol,
+    SupportsFloat,
+    SupportsIndex,
+    cast,
+)
 
 import numpy as np
 from numpy.typing import NDArray
@@ -34,7 +42,20 @@ if TYPE_CHECKING:
     from .specs import NormalizedRhs
 
 Float64Array = NDArray[np.float64]
+ScalarLike = SupportsFloat | SupportsIndex | str | bytes | None
 _SAFE_BUILTINS = {"__import__": __import__}
+
+
+class _BackendNamespace(Protocol):
+    def asarray(self, obj: object, dtype: object | None = None) -> object: ...
+
+    def stack(self, arrays: list[object]) -> object: ...
+
+    def sum(self, arr: object) -> object: ...
+
+
+class _Indexable(Protocol):
+    def __getitem__(self, idx: int) -> object: ...
 
 
 def _is_numpy_backend(xp: object) -> bool:
@@ -133,7 +154,7 @@ class EvalFn(Protocol):
 
     def __call__(  # noqa: D102
         self, t: object, y: object, **params: object
-    ) -> object: ...
+    ) -> Float64Array: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -145,7 +166,9 @@ class CompiledRhs:
     eval_fn: EvalFn
     meta: Mapping[str, Any] = field(default_factory=lambda: MappingProxyType({}))
 
-    def bind(self, params: Mapping[str, object]) -> Callable[[object, object], object]:
+    def bind(
+        self, params: Mapping[str, object]
+    ) -> Callable[[object, object], Float64Array]:
         """Bind parameter values and return a 2-arg RHS: rhs(t, y) -> dydt.
 
         Args:
@@ -156,7 +179,7 @@ class CompiledRhs:
         """
         params_dict = dict(params)
 
-        def rhs(t: object, y: object) -> object:
+        def rhs(t: object, y: object) -> Float64Array:
             return self.eval_fn(t, y, **params_dict)
 
         return rhs
@@ -400,7 +423,7 @@ def _evaluate_equations(
     eq_code: list[CodeType],
     env: Mapping[str, object],
     xp: object,
-) -> object:
+) -> Float64Array:
     """Evaluate equation code objects against an environment.
 
     Returns:
@@ -418,7 +441,7 @@ def _evaluate_equations(
 
     if _is_numpy_backend(xp):
         return np.asarray(out_vals, dtype=np.float64)
-    return cast("Any", xp).asarray(out_vals)
+    return cast("Float64Array", cast("_BackendNamespace", xp).asarray(out_vals))
 
 
 def _make_eval_fn(  # noqa: C901
@@ -436,38 +459,45 @@ def _make_eval_fn(  # noqa: C901
     def _sum_state(env: Mapping[str, object]) -> object:
         values = [v for k, v in env.items() if k in name_to_idx]
         if not values:
-            return cast("Any", xp).asarray(0.0)
+            return cast("_BackendNamespace", xp).asarray(0.0)
         if _is_numpy_backend(xp):
             return np.float64(np.sum(np.asarray(values, dtype=np.float64)))
-        return cast("Any", xp).sum(cast("Any", xp).stack(values))
+        xp_ns = cast("_BackendNamespace", xp)
+        return xp_ns.sum(xp_ns.stack(values))
 
     def _sum_prefix(prefix: str, env: Mapping[str, object]) -> object:
         values = [
             v for k, v in env.items() if k.startswith(prefix) and k in name_to_idx
         ]
         if not values:
-            return cast("Any", xp).asarray(0.0)
+            return cast("_BackendNamespace", xp).asarray(0.0)
         if _is_numpy_backend(xp):
             return np.float64(np.sum(np.asarray(values, dtype=np.float64)))
-        return cast("Any", xp).sum(cast("Any", xp).stack(values))
+        xp_ns = cast("_BackendNamespace", xp)
+        return xp_ns.sum(xp_ns.stack(values))
 
     def _build_env(
         t: object, y_arr: object, params: Mapping[str, object]
     ) -> dict[str, object]:
-        t_val = np.float64(t) if _is_numpy_backend(xp) else cast("Any", xp).asarray(t)
+        t_val = (
+            np.float64(cast("ScalarLike", t))
+            if _is_numpy_backend(xp)
+            else cast("_BackendNamespace", xp).asarray(t)
+        )
         env: dict[str, object] = {"np": xp, "t": t_val}
         for s, i in name_to_idx.items():
-            env[s] = cast("Any", y_arr)[i]
+            env[s] = cast("_Indexable", y_arr)[i]
         env.update(params)
         env["sum_state"] = lambda: _sum_state(env)
         env["sum_prefix"] = lambda prefix: _sum_prefix(str(prefix), env)
         return env
 
-    def eval_fn(t: object, y: object, **params: object) -> object:
+    def eval_fn(t: object, y: object, **params: object) -> Float64Array:
+        y_in: object
         if _is_numpy_backend(xp):
             y_in = np.asarray(y, dtype=np.float64)
         else:
-            y_in = cast("Any", xp).asarray(y)
+            y_in = cast("_BackendNamespace", xp).asarray(y)
         y_arr = _validate_state_vector(y_in, n_state=n_state)
 
         env = _build_env(t, y_arr, params)

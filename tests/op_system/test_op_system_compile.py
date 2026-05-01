@@ -476,7 +476,7 @@ def test_compile_rhs_traces_through_blackjax_nuts() -> None:
     y0 = jnp.asarray([1.0])
     observed_dydt = -0.7
 
-    def logdensity(theta: object) -> object:
+    def logdensity(theta: np.ndarray) -> object:
         beta = jnp.exp(theta[0])
         pred = compiled.eval_fn(0.0, y0, beta=beta)[0]
         residual = pred - observed_dydt
