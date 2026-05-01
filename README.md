@@ -50,6 +50,14 @@ dydt = compiled.eval_fn(0.0, jnp.asarray([999.0, 1.0, 0.0]), beta=0.3, gamma=0.1
 
 If you do not pass `xp`, `op_system` defaults to NumPy behavior.
 
+For diffrax-native solves and NUTS/HMC workflows, install the inference extra:
+
+```shell
+pip install "op_system[jax-inference]"
+```
+
+This includes `diffrax` and `blackjax` for end-to-end tracing workflows.
+
 ## YAML examples (organized and API-current)
 
 The example set below is intentionally small but complete: each core modeling pattern is shown for both `expr` and `transitions` pathways where applicable.

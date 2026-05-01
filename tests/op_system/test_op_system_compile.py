@@ -422,3 +422,75 @@ def test_compile_rhs_with_jax_backend_is_jittable() -> None:
         lambda beta: compiled.eval_fn(0.0, y0, beta=beta)[0],
     )
     assert np.isclose(float(grad_fn(1.5)), 2.0)
+
+
+def test_compile_rhs_with_jax_backend_diffrax_smoke() -> None:
+    """Compiled JAX RHS can be consumed directly by diffrax."""
+    jax = pytest.importorskip("jax")
+    jnp = pytest.importorskip("jax.numpy")
+    diffrax = pytest.importorskip("diffrax")
+
+    spec = {
+        "kind": "expr",
+        "state": ["x"],
+        "equations": {"x": "-beta * x"},
+    }
+    rhs = normalize_rhs(spec)
+    compiled = compile_rhs(rhs, xp=jnp)
+
+    term = diffrax.ODETerm(lambda t, y, args: compiled.eval_fn(t, y, **args))
+    solver = diffrax.Tsit5()
+
+    def solve(beta: float) -> object:
+        return diffrax.diffeqsolve(
+            term,
+            solver,
+            t0=0.0,
+            t1=1.0,
+            dt0=0.1,
+            y0=jnp.asarray([1.0]),
+            args={"beta": beta},
+            saveat=diffrax.SaveAt(t1=True),
+        ).ys[0]
+
+    out = jax.jit(solve)(0.5)
+    expected = np.exp(-0.5)
+    assert np.isclose(float(out), expected, rtol=1e-3)
+
+
+def test_compile_rhs_traces_through_blackjax_nuts() -> None:
+    """A representative NUTS step can trace gradients through RHS eval."""
+    jax = pytest.importorskip("jax")
+    jnp = pytest.importorskip("jax.numpy")
+    jr = pytest.importorskip("jax.random")
+    blackjax = pytest.importorskip("blackjax")
+
+    spec = {
+        "kind": "expr",
+        "state": ["x"],
+        "equations": {"x": "-beta * x"},
+    }
+    rhs = normalize_rhs(spec)
+    compiled = compile_rhs(rhs, xp=jnp)
+
+    y0 = jnp.asarray([1.0])
+    observed_dydt = -0.7
+
+    def logdensity(theta: object) -> object:
+        beta = jnp.exp(theta[0])
+        pred = compiled.eval_fn(0.0, y0, beta=beta)[0]
+        residual = pred - observed_dydt
+        prior = -0.5 * theta[0] ** 2
+        likelihood = -40.0 * residual**2
+        return prior + likelihood
+
+    nuts = blackjax.nuts(
+        logdensity,
+        step_size=0.1,
+        inverse_mass_matrix=jnp.ones((1,)),
+    )
+    state = nuts.init(jnp.asarray([0.0]))
+    key = jr.PRNGKey(0)
+
+    next_state, _info = jax.jit(nuts.step)(key, state)
+    assert np.isfinite(float(next_state.logdensity))

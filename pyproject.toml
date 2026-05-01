@@ -36,6 +36,11 @@ data = [
 jax = [
     "jax>=0.4",
 ]
+jax-inference = [
+    "jax>=0.4",
+    "diffrax",
+    "blackjax",
+]
 
 [build-system]
 requires = ["hatchling"]
