@@ -398,3 +398,27 @@ def test_sum_over_in_filter_evaluates_correctly() -> None:
     state = np.array([10.0, 3.0, 7.0], dtype=np.float64)
     derivs = compiled.eval_fn(np.float64(0.0), state)
     assert np.allclose(derivs, -state)
+
+
+def test_compile_rhs_with_jax_backend_is_jittable() -> None:
+    """JAX backend preserves tracers and can be jitted/differentiated."""
+    jax = pytest.importorskip("jax")
+    jnp = pytest.importorskip("jax.numpy")
+
+    spec = {
+        "kind": "expr",
+        "state": ["x"],
+        "equations": {"x": "beta * x"},
+    }
+    rhs = normalize_rhs(spec)
+    compiled = compile_rhs(rhs, xp=jnp)
+
+    y0 = jnp.asarray([2.0])
+    eval_jit = jax.jit(lambda beta: compiled.eval_fn(0.0, y0, beta=beta))
+    out = eval_jit(1.5)
+    assert np.allclose(np.asarray(out), np.asarray([3.0]))
+
+    grad_fn = jax.grad(
+        lambda beta: compiled.eval_fn(0.0, y0, beta=beta)[0],
+    )
+    assert np.isclose(float(grad_fn(1.5)), 2.0)

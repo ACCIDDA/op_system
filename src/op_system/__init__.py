@@ -50,7 +50,7 @@ EXPERIMENTAL_FEATURES: frozenset[str] = frozenset()  # noqa: RUF067
 # -----------------------------------------------------------------------------
 
 
-def compile_spec(spec: dict[str, object]) -> CompiledRhs:  # noqa: RUF067
+def compile_spec(spec: dict[str, object], *, xp: object | None = None) -> CompiledRhs:  # noqa: RUF067
     """
     Validate, normalize, and compile a RHS specification in one call.
 
@@ -58,12 +58,15 @@ def compile_spec(spec: dict[str, object]) -> CompiledRhs:  # noqa: RUF067
 
     Args:
         spec: Raw RHS specification mapping (YAML/JSON friendly).
+        xp: Optional array backend namespace; defaults to NumPy behavior.
 
     Returns:
         CompiledRhs: Runnable RHS callable container.
     """
     rhs = normalize_rhs(spec)
-    return compile_rhs(rhs)
+    if xp is None:
+        return compile_rhs(rhs)
+    return compile_rhs(rhs, xp=xp)
 
 
 # -----------------------------------------------------------------------------

@@ -37,6 +37,10 @@ Float64Array = NDArray[np.float64]
 _SAFE_BUILTINS = {"__import__": __import__}
 
 
+def _is_numpy_backend(xp: object) -> bool:
+    return xp is np or getattr(xp, "__name__", "") == "numpy"
+
+
 # -----------------------------------------------------------------------------
 # Error message constants
 # -----------------------------------------------------------------------------
@@ -128,8 +132,8 @@ class EvalFn(Protocol):
     """Callable RHS evaluator supporting runtime parameter kwargs."""
 
     def __call__(  # noqa: D102
-        self, t: np.float64, y: Float64Array, **params: object
-    ) -> Float64Array: ...
+        self, t: object, y: object, **params: object
+    ) -> object: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -141,9 +145,7 @@ class CompiledRhs:
     eval_fn: EvalFn
     meta: Mapping[str, Any] = field(default_factory=lambda: MappingProxyType({}))
 
-    def bind(
-        self, params: Mapping[str, object]
-    ) -> Callable[[np.float64, Float64Array], Float64Array]:
+    def bind(self, params: Mapping[str, object]) -> Callable[[object, object], object]:
         """Bind parameter values and return a 2-arg RHS: rhs(t, y) -> dydt.
 
         Args:
@@ -154,7 +156,7 @@ class CompiledRhs:
         """
         params_dict = dict(params)
 
-        def rhs(t: np.float64, y: Float64Array) -> Float64Array:
+        def rhs(t: object, y: object) -> object:
             return self.eval_fn(t, y, **params_dict)
 
         return rhs
@@ -379,15 +381,17 @@ def _resolve_aliases(
     )
 
 
-def _validate_state_vector(y_arr: np.ndarray, *, n_state: int) -> np.ndarray:
+def _validate_state_vector(y_arr: object, *, n_state: int) -> object:
     """Validate shape of the state vector.
 
     Returns:
         State vector coerced to shape (n_state,).
     """
     expected_shape = (n_state,)
-    if tuple(y_arr.shape) != expected_shape:
-        _raise_state_shape_error(expected=f"(n_state={n_state},)", got=y_arr.shape)
+    shape = getattr(y_arr, "shape", None)
+    shape_tuple = tuple(shape) if shape is not None else None
+    if shape_tuple != expected_shape:
+        _raise_state_shape_error(expected=f"(n_state={n_state},)", got=shape)
     return y_arr
 
 
@@ -395,72 +399,83 @@ def _evaluate_equations(
     *,
     eq_code: list[CodeType],
     env: Mapping[str, object],
-    n_state: int,
-) -> Float64Array:
+    xp: object,
+) -> object:
     """Evaluate equation code objects against an environment.
 
     Returns:
         Derivative vector aligned to the provided state ordering.
     """
-    out = np.empty((n_state,), dtype=np.float64)
-    for i, codeobj in enumerate(eq_code):
+    out_vals: list[object] = []
+    for codeobj in eq_code:
         try:
             val = eval(codeobj, {"__builtins__": _SAFE_BUILTINS}, env)  # noqa: S307
         except NameError as exc:
             _raise_parameter_error(detail=f"unknown symbol in equation: {exc!s}")
         except (ValueError, TypeError, ArithmeticError) as exc:
             _raise_invalid_expression(detail=f"equation evaluation failed: {exc!r}")
-        out[i] = np.float64(val)
-    return out
+        out_vals.append(val)
+
+    if _is_numpy_backend(xp):
+        return np.asarray(out_vals, dtype=np.float64)
+    return cast("Any", xp).asarray(out_vals)
 
 
-def _make_eval_fn(
+def _make_eval_fn(  # noqa: C901
     *,
     state_names: tuple[str, ...],
     aliases: Mapping[str, str],
     equations: tuple[str, ...],
+    xp: object,
 ) -> EvalFn:
     n_state = len(state_names)
     name_to_idx = {s: i for i, s in enumerate(state_names)}
     alias_code = _collect_alias_code(aliases)
     eq_code = _collect_eq_code(equations)
 
-    def _sum_state(env: Mapping[str, object]) -> np.float64:
-        values = [
-            np.float64(float(cast("Any", v)))
-            for k, v in env.items()
-            if k in name_to_idx
-        ]
-        return np.float64(sum(values))
+    def _sum_state(env: Mapping[str, object]) -> object:
+        values = [v for k, v in env.items() if k in name_to_idx]
+        if not values:
+            return cast("Any", xp).asarray(0.0)
+        if _is_numpy_backend(xp):
+            return np.float64(np.sum(np.asarray(values, dtype=np.float64)))
+        return cast("Any", xp).sum(cast("Any", xp).stack(values))
 
-    def _sum_prefix(prefix: str, env: Mapping[str, object]) -> np.float64:
+    def _sum_prefix(prefix: str, env: Mapping[str, object]) -> object:
         values = [
-            np.float64(float(cast("Any", v)))
-            for k, v in env.items()
-            if k.startswith(prefix) and k in name_to_idx
+            v for k, v in env.items() if k.startswith(prefix) and k in name_to_idx
         ]
-        return np.float64(sum(values))
+        if not values:
+            return cast("Any", xp).asarray(0.0)
+        if _is_numpy_backend(xp):
+            return np.float64(np.sum(np.asarray(values, dtype=np.float64)))
+        return cast("Any", xp).sum(cast("Any", xp).stack(values))
 
     def _build_env(
-        t: np.float64, y_arr: Float64Array, params: Mapping[str, object]
+        t: object, y_arr: object, params: Mapping[str, object]
     ) -> dict[str, object]:
-        env: dict[str, object] = {"np": np, "t": np.float64(t)}
+        t_val = np.float64(t) if _is_numpy_backend(xp) else cast("Any", xp).asarray(t)
+        env: dict[str, object] = {"np": xp, "t": t_val}
         for s, i in name_to_idx.items():
-            env[s] = np.float64(y_arr[i])
+            env[s] = cast("Any", y_arr)[i]
         env.update(params)
         env["sum_state"] = lambda: _sum_state(env)
         env["sum_prefix"] = lambda prefix: _sum_prefix(str(prefix), env)
         return env
 
-    def eval_fn(t: np.float64, y: Float64Array, **params: object) -> Float64Array:
-        y_arr = _validate_state_vector(np.asarray(y, dtype=np.float64), n_state=n_state)
+    def eval_fn(t: object, y: object, **params: object) -> object:
+        if _is_numpy_backend(xp):
+            y_in = np.asarray(y, dtype=np.float64)
+        else:
+            y_in = cast("Any", xp).asarray(y)
+        y_arr = _validate_state_vector(y_in, n_state=n_state)
 
-        env = _build_env(np.float64(t), y_arr, params)
+        env = _build_env(t, y_arr, params)
 
         if alias_code:
             env.update(_resolve_aliases(alias_code, base_env=env))
 
-        return _evaluate_equations(eq_code=eq_code, env=env, n_state=n_state)
+        return _evaluate_equations(eq_code=eq_code, env=env, xp=xp)
 
     return eval_fn
 
@@ -470,11 +485,12 @@ def _make_eval_fn(
 # -----------------------------------------------------------------------------
 
 
-def compile_rhs(rhs: NormalizedRhs) -> CompiledRhs:
+def compile_rhs(rhs: NormalizedRhs, *, xp: object = np) -> CompiledRhs:
     """Compile a normalized RHS into a runnable evaluation function.
 
     Args:
         rhs: Normalized RHS produced by `op_system.specs.normalize_rhs`.
+        xp: Array backend namespace (default: NumPy).
 
     Returns:
         A `CompiledRhs` containing an `eval_fn(t, y, **params) -> dydt`.
@@ -489,6 +505,7 @@ def compile_rhs(rhs: NormalizedRhs) -> CompiledRhs:
         state_names=rhs.state_names,
         aliases=rhs.aliases,
         equations=rhs.equations,
+        xp=xp,
     )
 
     return CompiledRhs(
