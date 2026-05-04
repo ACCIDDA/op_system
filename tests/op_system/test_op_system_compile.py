@@ -66,7 +66,7 @@ def compiled_xy(rhs_xy: NormalizedRhs) -> CompiledRhs:
     Returns:
         CompiledRhs instance.
     """
-    return compile_rhs(rhs_xy)
+    return compile_rhs(rhs_xy, xp=np)
 
 
 def test_compile_rhs_expr_happy_path_and_eval(compiled_xy: CompiledRhs) -> None:
@@ -109,7 +109,7 @@ def test_eval_rejects_non_1d_state_shape() -> None:
     """eval_fn rejects non-1D state arrays with standardized message."""
     spec = {"kind": "expr", "state": ["x"], "equations": {"x": "0.0"}}
     rhs = normalize_rhs(spec)
-    compiled = compile_rhs(rhs)
+    compiled = compile_rhs(rhs, xp=np)
 
     y_bad = np.zeros((1, 1), dtype=np.float64)
     msg = "state has an invalid shape/value. Expected (n_state=1,)."
@@ -125,7 +125,7 @@ def test_eval_rejects_wrong_state_length() -> None:
         "equations": {"x": "0.0", "y": "0.0"},
     }
     rhs = normalize_rhs(spec)
-    compiled = compile_rhs(rhs)
+    compiled = compile_rhs(rhs, xp=np)
 
     msg = "state has an invalid shape/value. Expected (n_state=2,)."
     with pytest.raises(ValueError, match=re.escape(msg)):
@@ -136,7 +136,7 @@ def test_eval_unknown_symbol_raises_parameter_error() -> None:
     """eval_fn raises parameter error for unknown symbols in expressions."""
     spec = {"kind": "expr", "state": ["x"], "equations": {"x": "beta * x"}}
     rhs = normalize_rhs(spec)
-    compiled = compile_rhs(rhs)
+    compiled = compile_rhs(rhs, xp=np)
 
     with pytest.raises(TypeError, match=r"Invalid parameters for op_system"):
         compiled.eval_fn(np.float64(0.0), np.array([1.0], dtype=np.float64))
@@ -154,7 +154,7 @@ def test_compile_rejects_disallowed_function_calls() -> None:
     spec = {"kind": "expr", "state": ["x"], "equations": {"x": "np.floor(x)"}}
     rhs = normalize_rhs(spec)
     with pytest.raises(ValueError, match=r"disallowed function call"):
-        compile_rhs(rhs)
+        compile_rhs(rhs, xp=np)
 
 
 def test_compile_rejects_nonwhitelisted_helper() -> None:
@@ -162,7 +162,7 @@ def test_compile_rejects_nonwhitelisted_helper() -> None:
     spec = {"kind": "expr", "state": ["x"], "equations": {"x": "foo(x)"}}
     rhs = normalize_rhs(spec)
     with pytest.raises(ValueError, match=r"disallowed function call"):
-        compile_rhs(rhs)
+        compile_rhs(rhs, xp=np)
 
 
 def test_compile_rejects_disallowed_attribute_access() -> None:
@@ -170,7 +170,7 @@ def test_compile_rejects_disallowed_attribute_access() -> None:
     spec = {"kind": "expr", "state": ["x"], "equations": {"x": "x.real"}}
     rhs = normalize_rhs(spec)
     with pytest.raises(ValueError, match=r"disallowed attribute access"):
-        compile_rhs(rhs)
+        compile_rhs(rhs, xp=np)
 
 
 def test_eval_allows_whitelisted_np_calls() -> None:
@@ -181,7 +181,7 @@ def test_eval_allows_whitelisted_np_calls() -> None:
         "equations": {"x": "np.maximum(x, 0.0)"},
     }
     rhs = normalize_rhs(spec)
-    compiled = compile_rhs(rhs)
+    compiled = compile_rhs(rhs, xp=np)
     out = compiled.eval_fn(np.float64(0.0), np.array([-2.0], dtype=np.float64))
     assert np.allclose(out, np.array([0.0], dtype=np.float64))
 
@@ -195,7 +195,7 @@ def test_eval_allows_expanded_np_whitelist() -> None:
     )
     spec = {"kind": "expr", "state": ["x"], "equations": {"x": expr}}
     rhs = normalize_rhs(spec)
-    compiled = compile_rhs(rhs)
+    compiled = compile_rhs(rhs, xp=np)
     x_val = np.array([1.0], dtype=np.float64)
     out = compiled.eval_fn(np.float64(0.0), x_val)
     expected = np.array(
@@ -231,7 +231,7 @@ def test_templates_and_sum_over_compile_and_eval() -> None:
         },
     }
     rhs = normalize_rhs(spec)
-    compiled = compile_rhs(rhs)
+    compiled = compile_rhs(rhs, xp=np)
 
     # State ordering after expansion: S__pop_p1, S__pop_p2, I__pop_p1, I__pop_p2
     y = np.array([10.0, 20.0, 1.0, 2.0], dtype=np.float64)
@@ -264,7 +264,7 @@ def test_reducer_helpers_sum_state_and_prefix() -> None:
         },
     }
     rhs = normalize_rhs(spec)
-    compiled = compile_rhs(rhs)
+    compiled = compile_rhs(rhs, xp=np)
     out = compiled.eval_fn(np.float64(0.0), np.array([2.0, 3.0], dtype=np.float64))
     assert np.allclose(out, np.array([5.0, 2.0], dtype=np.float64))
 
@@ -278,7 +278,7 @@ def test_alias_dependency_resolution() -> None:
         "equations": {"x": "b"},
     }
     rhs = normalize_rhs(spec)
-    compiled = compile_rhs(rhs)
+    compiled = compile_rhs(rhs, xp=np)
     out = compiled.eval_fn(np.float64(0.0), np.array([3.0], dtype=np.float64))
     assert np.allclose(out, np.array([6.0], dtype=np.float64))
 
@@ -292,7 +292,7 @@ def test_alias_cycle_is_rejected() -> None:
         "equations": {"x": "a"},
     }
     rhs = normalize_rhs(spec)
-    compiled = compile_rhs(rhs)
+    compiled = compile_rhs(rhs, xp=np)
     with pytest.raises(ValueError, match=r"could not resolve alias dependencies"):
         compiled.eval_fn(np.float64(0.0), np.array([1.0], dtype=np.float64))
 
@@ -309,7 +309,7 @@ def test_transitions_rhs_compiles_and_evaluates() -> None:
         ],
     }
     rhs = normalize_rhs(spec)
-    compiled = compile_rhs(rhs)
+    compiled = compile_rhs(rhs, xp=np)
 
     y = np.array([999.0, 1.0, 0.0], dtype=np.float64)
     out = compiled.eval_fn(np.float64(0.0), y, beta=0.3, gamma=0.1)
@@ -342,7 +342,7 @@ def test_compiled_rhs_meta_from_spec_with_axes_and_kernels() -> None:
         "equations": {"S": "-beta * S", "I": "beta * S"},
     }
     rhs = normalize_rhs(spec)
-    compiled = compile_rhs(rhs)
+    compiled = compile_rhs(rhs, xp=np)
 
     assert "axes" in compiled.meta
     assert len(compiled.meta["axes"]) == 1
@@ -372,6 +372,30 @@ def test_compile_spec_preserves_meta() -> None:
     assert compiled.meta["axes"][0]["name"] == "space"
 
 
+def test_compile_spec_owns_default_backend_policy() -> None:
+    """compile_spec defaults to NumPy without requiring callers to pass xp."""
+    spec: dict[str, object] = {
+        "kind": "expr",
+        "state": ["x"],
+        "equations": {"x": "2.0 * x"},
+    }
+    compiled = compile_spec(spec)
+    out = compiled.eval_fn(np.float64(0.0), np.array([3.0], dtype=np.float64))
+    assert np.allclose(out, np.array([6.0], dtype=np.float64))
+
+
+def test_compile_rhs_requires_explicit_backend_namespace() -> None:
+    """compile_rhs requires explicit xp so default policy is centralized."""
+    spec: dict[str, object] = {
+        "kind": "expr",
+        "state": ["x"],
+        "equations": {"x": "x"},
+    }
+    rhs = normalize_rhs(spec)
+    with pytest.raises(TypeError, match=r"required keyword-only argument: 'xp'"):
+        compile_rhs(rhs)  # type: ignore[call-arg]
+
+
 def test_sum_over_in_filter_evaluates_correctly() -> None:
     """sum_over IN filter compiles and evaluates correctly end-to-end."""
     spec = {
@@ -394,7 +418,103 @@ def test_sum_over_in_filter_evaluates_correctly() -> None:
     assert "S__vax_u" not in rhs.aliases["covered"]
 
     # Compile and run eval_fn: state = [u=10, v=3, w=7], dS/dt = -S
-    compiled = compile_rhs(rhs)
+    compiled = compile_rhs(rhs, xp=np)
     state = np.array([10.0, 3.0, 7.0], dtype=np.float64)
     derivs = compiled.eval_fn(np.float64(0.0), state)
     assert np.allclose(derivs, -state)
+
+
+def test_compile_rhs_with_jax_backend_is_jittable() -> None:
+    """JAX backend preserves tracers and can be jitted/differentiated."""
+    jax = pytest.importorskip("jax")
+    jnp = pytest.importorskip("jax.numpy")
+
+    spec = {
+        "kind": "expr",
+        "state": ["x"],
+        "equations": {"x": "beta * x"},
+    }
+    rhs = normalize_rhs(spec)
+    compiled = compile_rhs(rhs, xp=jnp)
+
+    y0 = jnp.asarray([2.0])
+    eval_jit = jax.jit(lambda beta: compiled.eval_fn(0.0, y0, beta=beta))
+    out = eval_jit(1.5)
+    assert np.allclose(np.asarray(out), np.asarray([3.0]))
+
+    grad_fn = jax.grad(
+        lambda beta: compiled.eval_fn(0.0, y0, beta=beta)[0],
+    )
+    assert np.isclose(float(grad_fn(1.5)), 2.0)
+
+
+def test_compile_rhs_with_jax_backend_diffrax_smoke() -> None:
+    """Compiled JAX RHS can be consumed directly by diffrax."""
+    jax = pytest.importorskip("jax")
+    jnp = pytest.importorskip("jax.numpy")
+    diffrax = pytest.importorskip("diffrax")
+
+    spec = {
+        "kind": "expr",
+        "state": ["x"],
+        "equations": {"x": "-beta * x"},
+    }
+    rhs = normalize_rhs(spec)
+    compiled = compile_rhs(rhs, xp=jnp)
+
+    term = diffrax.ODETerm(lambda t, y, args: compiled.eval_fn(t, y, **args))
+    solver = diffrax.Tsit5()
+
+    def solve(beta: float) -> object:
+        return diffrax.diffeqsolve(
+            term,
+            solver,
+            t0=0.0,
+            t1=1.0,
+            dt0=0.1,
+            y0=jnp.asarray([1.0]),
+            args={"beta": beta},
+            saveat=diffrax.SaveAt(t1=True),
+        ).ys[0]
+
+    out = jax.jit(solve)(0.5)
+    expected = np.exp(-0.5)
+    assert np.isclose(float(out), expected, rtol=1e-3)
+
+
+def test_compile_rhs_traces_through_blackjax_nuts() -> None:
+    """A representative NUTS step can trace gradients through RHS eval."""
+    jax = pytest.importorskip("jax")
+    jnp = pytest.importorskip("jax.numpy")
+    jr = pytest.importorskip("jax.random")
+    blackjax = pytest.importorskip("blackjax")
+
+    spec = {
+        "kind": "expr",
+        "state": ["x"],
+        "equations": {"x": "-beta * x"},
+    }
+    rhs = normalize_rhs(spec)
+    compiled = compile_rhs(rhs, xp=jnp)
+
+    y0 = jnp.asarray([1.0])
+    observed_dydt = -0.7
+
+    def logdensity(theta: np.ndarray) -> object:
+        beta = jnp.exp(theta[0])
+        pred = compiled.eval_fn(0.0, y0, beta=beta)[0]
+        residual = pred - observed_dydt
+        prior = -0.5 * theta[0] ** 2
+        likelihood = -40.0 * residual**2
+        return prior + likelihood
+
+    nuts = blackjax.nuts(
+        logdensity,
+        step_size=0.1,
+        inverse_mass_matrix=jnp.ones((1,)),
+    )
+    state = nuts.init(jnp.asarray([0.0]))
+    key = jr.PRNGKey(0)
+
+    next_state, _info = jax.jit(nuts.step)(key, state)
+    assert np.isfinite(float(next_state.logdensity))

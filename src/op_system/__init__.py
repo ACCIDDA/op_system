@@ -23,6 +23,8 @@ from __future__ import annotations
 
 from importlib.metadata import version
 
+import numpy as np
+
 from op_system._identifer_string import IdentifierString
 from op_system._state_string import StateString
 
@@ -50,7 +52,7 @@ EXPERIMENTAL_FEATURES: frozenset[str] = frozenset()  # noqa: RUF067
 # -----------------------------------------------------------------------------
 
 
-def compile_spec(spec: dict[str, object]) -> CompiledRhs:  # noqa: RUF067
+def compile_spec(spec: dict[str, object], *, xp: object = np) -> CompiledRhs:  # noqa: RUF067
     """
     Validate, normalize, and compile a RHS specification in one call.
 
@@ -58,12 +60,13 @@ def compile_spec(spec: dict[str, object]) -> CompiledRhs:  # noqa: RUF067
 
     Args:
         spec: Raw RHS specification mapping (YAML/JSON friendly).
+        xp: Array backend namespace; defaults to NumPy.
 
     Returns:
         CompiledRhs: Runnable RHS callable container.
     """
     rhs = normalize_rhs(spec)
-    return compile_rhs(rhs)
+    return compile_rhs(rhs, xp=xp)
 
 
 # -----------------------------------------------------------------------------
