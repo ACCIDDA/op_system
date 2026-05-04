@@ -397,7 +397,13 @@ def test_operator_requires_kind_and_preserves_bc() -> None:
             },
         ],
         "operators": [
-            {"name": "op0", "axis": "x", "kind": "advection", "bc": "periodic"},
+            {
+                "name": "op0",
+                "axis": "x",
+                "kind": "advection",
+                "bc": "periodic",
+                "velocity": "v",
+            },
         ],
         "state": ["u"],
         "equations": {"u": "0.0"},
@@ -408,6 +414,94 @@ def test_operator_requires_kind_and_preserves_bc() -> None:
     assert isinstance(operators_meta, list)
     assert operators_meta[0]["kind"] == "advection"
     assert operators_meta[0]["bc"] == "periodic"
+
+
+def test_operator_apply_to_validation() -> None:
+    """Operator apply_to should be validated against known top-level states."""
+    spec_bad_apply_to = {
+        "kind": "expr",
+        "axes": [{"name": "x", "coords": ["a"]}],
+        "state": ["S", "I"],
+        "operators": [
+            {
+                "name": "adv",
+                "axis": "x",
+                "kind": "advection",
+                "velocity": "v",
+                "apply_to": ["X"],
+            }
+        ],
+        "equations": {
+            "S": "0.0",
+            "I": "0.0",
+        },
+    }
+    with pytest.raises(ValueError, match=r"apply_to\[0\]='X' not in state"):
+        normalize_expr_rhs(spec_bad_apply_to)
+
+
+def test_operator_advection_requires_velocity() -> None:
+    """Advection/transport operators must include a velocity field."""
+    spec_missing_velocity = {
+        "kind": "expr",
+        "axes": [{"name": "x", "coords": ["a"]}],
+        "state": ["S"],
+        "operators": [
+            {
+                "name": "adv",
+                "axis": "x",
+                "kind": "advection",
+                "apply_to": ["S"],
+            }
+        ],
+        "equations": {"S": "0.0"},
+    }
+    with pytest.raises(ValueError, match=r"velocity is required"):
+        normalize_expr_rhs(spec_missing_velocity)
+
+
+def test_operator_jump_integral_requires_kernel_and_normalizes_direction() -> None:
+    """jump_integral operators require kernel/rate and normalize direction."""
+    spec_bad_jump = {
+        "kind": "expr",
+        "axes": [{"name": "x", "coords": ["a"]}],
+        "state": ["S"],
+        "operators": [
+            {
+                "name": "jump",
+                "axis": "x",
+                "kind": "jump_integral",
+                "rate": "nu",
+                "apply_to": ["S"],
+            }
+        ],
+        "equations": {"S": "0.0"},
+    }
+    with pytest.raises(ValueError, match=r"kernel must be a mapping"):
+        normalize_expr_rhs(spec_bad_jump)
+
+    spec_ok_jump = {
+        "kind": "expr",
+        "axes": [{"name": "x", "coords": ["a"]}],
+        "state": ["S"],
+        "operators": [
+            {
+                "name": "jump",
+                "axis": "x",
+                "kind": "jump_integral",
+                "rate": "nu",
+                "kernel": {"form": "gaussian", "params": {"sigma": 0.1}},
+                "direction": "UP",
+                "apply_to": ["S"],
+            }
+        ],
+        "equations": {"S": "0.0"},
+    }
+    out = normalize_expr_rhs(spec_ok_jump)
+    ops = out.meta.get("operators")
+    assert isinstance(ops, list)
+    assert ops[0]["kind"] == "jump_integral"
+    assert ops[0]["direction"] == "up"
 
 
 def test_state_axes_validation_errors() -> None:

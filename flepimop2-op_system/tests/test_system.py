@@ -199,7 +199,7 @@ def multi_operator_spec() -> dict[str, object]:
         "equations": {"u[loc,age]": "-u[loc,age]"},
         "operators": [
             {"kind": "diffusion", "axis": "loc"},
-            {"kind": "advection", "axis": "age"},
+            {"kind": "advection", "axis": "age", "velocity": "v_age"},
         ],
     }
 

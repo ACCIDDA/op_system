@@ -867,10 +867,210 @@ def _normalize_kernels(
     return out
 
 
+def _validate_op_apply_to(
+    apply_to_raw: object,
+    idx: int,
+    state_set: set[str] | None,
+) -> list[str]:
+    if not isinstance(apply_to_raw, (list, tuple)) or not apply_to_raw:
+        _raise_invalid_rhs_spec(
+            detail=(
+                f"operators[{idx}].apply_to must be a non-empty list "
+                "of state names if provided"
+            )
+        )
+    result: list[str] = []
+    for j, state_name in enumerate(apply_to_raw):
+        if not isinstance(state_name, str) or not state_name.strip():
+            _raise_invalid_rhs_spec(
+                detail=f"operators[{idx}].apply_to[{j}] must be a non-empty string"
+            )
+        state_name_s = state_name.strip()
+        if state_set is not None and state_name_s not in state_set:
+            _raise_invalid_rhs_spec(
+                detail=(f"operators[{idx}].apply_to[{j}]={state_name_s!r} not in state")
+            )
+        result.append(state_name_s)
+    return result
+
+
+def _validate_scalar_or_expr(value: object, field: str) -> None:
+    """Raise if *value* is not a non-empty string or a finite number."""
+    if isinstance(value, str):
+        if not value.strip():
+            _raise_invalid_rhs_spec(
+                detail=f"{field} must be a non-empty string or number"
+            )
+    elif isinstance(value, bool) or not isinstance(value, (int, float)):
+        _raise_invalid_rhs_spec(detail=f"{field} must be a non-empty string or number")
+
+
+def _validate_op_advection(op_map: Mapping[str, Any], idx: int, kind_s: str) -> None:
+    velocity_val = op_map.get("velocity")
+    if velocity_val is None:
+        _raise_invalid_rhs_spec(
+            detail=f"operators[{idx}].velocity is required for {kind_s!r}"
+        )
+    _validate_scalar_or_expr(velocity_val, f"operators[{idx}].velocity")
+
+
+def _validate_op_jump_integral(op_map: Mapping[str, Any], idx: int) -> None:
+    rate_val = op_map.get("rate")
+    if rate_val is None:
+        _raise_invalid_rhs_spec(
+            detail=f"operators[{idx}].rate is required for 'jump_integral'"
+        )
+    _validate_scalar_or_expr(rate_val, f"operators[{idx}].rate")
+
+    kernel_val = op_map.get("kernel")
+    if not isinstance(kernel_val, dict):
+        _raise_invalid_rhs_spec(
+            detail=f"operators[{idx}].kernel must be a mapping for 'jump_integral'"
+        )
+    kernel_form = kernel_val.get("form")
+    if not isinstance(kernel_form, str) or not kernel_form.strip():
+        _raise_invalid_rhs_spec(
+            detail=(
+                f"operators[{idx}].kernel.form must be a non-empty "
+                "string for 'jump_integral'"
+            )
+        )
+    kernel_params = kernel_val.get("params")
+    if kernel_params is not None and not isinstance(kernel_params, dict):
+        _raise_invalid_rhs_spec(
+            detail=(
+                f"operators[{idx}].kernel.params must be a mapping if "
+                "provided for 'jump_integral'"
+            )
+        )
+
+    direction_val = op_map.get("direction")
+    if direction_val is not None:
+        if not isinstance(direction_val, str) or not direction_val.strip():
+            _raise_invalid_rhs_spec(
+                detail=(
+                    f"operators[{idx}].direction must be one of 'up', 'down', or 'both'"
+                )
+            )
+        if direction_val.strip().lower() not in {"up", "down", "both"}:
+            _raise_invalid_rhs_spec(
+                detail=(
+                    f"operators[{idx}].direction must be one of 'up', 'down', or 'both'"
+                )
+            )
+
+
+def _validate_op_header(
+    op_map: Mapping[str, Any],
+    idx: int,
+    axis_names: set[str],
+) -> tuple[str | None, str, str, str | None]:
+    """Validate and strip the simple header fields of one operator entry.
+
+    Returns:
+        Tuple of (op_name_s, axis_name_s, kind_s, bc_val_s).
+    """
+    op_name = op_map.get("name")
+    if op_name is not None and (not isinstance(op_name, str) or not op_name.strip()):
+        _raise_invalid_rhs_spec(
+            detail=f"operators[{idx}].name must be a non-empty string if provided"
+        )
+
+    axis_name = op_map.get("axis")
+    if not isinstance(axis_name, str) or not axis_name.strip():
+        _raise_invalid_rhs_spec(
+            detail=f"operators[{idx}].axis must be a non-empty string"
+        )
+    axis_name_s = axis_name.strip()
+    if axis_name_s not in axis_names:
+        _raise_invalid_rhs_spec(
+            detail=f"operators[{idx}] references unknown axis {axis_name_s!r}"
+        )
+
+    kind_val = op_map.get("kind")
+    if not isinstance(kind_val, str) or not kind_val.strip():
+        _raise_invalid_rhs_spec(
+            detail=(
+                f"operators[{idx}].kind must be a non-empty string "
+                "(e.g., advection/jump_integral)"
+            )
+        )
+    kind_s = kind_val.strip().lower()
+
+    bc_val = op_map.get("bc")
+    if bc_val is not None and (not isinstance(bc_val, str) or not bc_val.strip()):
+        _raise_invalid_rhs_spec(
+            detail=f"operators[{idx}].bc must be a non-empty string if provided"
+        )
+
+    op_name_s: str | None = op_name.strip() if isinstance(op_name, str) else None
+    bc_val_s: str | None = bc_val.strip() if isinstance(bc_val, str) else None
+    return op_name_s, axis_name_s, kind_s, bc_val_s
+
+
+def _enrich_op_kind_fields(op_out: dict[str, Any], kind_s: str) -> None:
+    """Normalize kind-specific fields in *op_out* in-place."""
+    if kind_s in {"advection", "transport"}:
+        velocity_val = op_out["velocity"]
+        op_out["velocity"] = (
+            velocity_val.strip()
+            if isinstance(velocity_val, str)
+            else float(velocity_val)
+        )
+    elif kind_s == "jump_integral":
+        rate_val = op_out["rate"]
+        op_out["rate"] = (
+            rate_val.strip() if isinstance(rate_val, str) else float(rate_val)
+        )
+        kernel_val = dict(op_out["kernel"])
+        kernel_val["form"] = str(kernel_val["form"]).strip()
+        op_out["kernel"] = kernel_val
+        if "direction" in op_out and isinstance(op_out["direction"], str):
+            op_out["direction"] = op_out["direction"].strip().lower()
+
+
+def _normalize_single_operator(
+    op: object,
+    idx: int,
+    *,
+    axis_names: set[str],
+    state_set: set[str] | None,
+) -> dict[str, Any]:
+    op_map = _ensure_mapping(op, name=f"operators[{idx}]")
+    op_name_s, axis_name_s, kind_s, bc_val_s = _validate_op_header(
+        op_map, idx, axis_names
+    )
+
+    apply_to_raw = op_map.get("apply_to")
+    apply_to_clean: list[str] | None = (
+        _validate_op_apply_to(apply_to_raw, idx, state_set)
+        if apply_to_raw is not None
+        else None
+    )
+
+    if kind_s in {"advection", "transport"}:
+        _validate_op_advection(op_map, idx, kind_s)
+    elif kind_s == "jump_integral":
+        _validate_op_jump_integral(op_map, idx)
+
+    op_out = dict(op_map)
+    if op_name_s is not None:
+        op_out["name"] = op_name_s
+    op_out["axis"] = axis_name_s
+    op_out["kind"] = kind_s
+    if bc_val_s is not None:
+        op_out["bc"] = bc_val_s
+    if apply_to_clean is not None:
+        op_out["apply_to"] = apply_to_clean
+    _enrich_op_kind_fields(op_out, kind_s)
+    return op_out
+
+
 def _normalize_operators(
     raw_ops: object,
     *,
     axis_names: set[str],
+    state_set: set[str] | None = None,
 ) -> list[dict[str, Any]]:
     """Normalize operator metadata and validate axis references.
 
@@ -881,39 +1081,11 @@ def _normalize_operators(
         return []
     if not isinstance(raw_ops, list):
         _raise_invalid_rhs_spec(detail="operators must be a list")
-    out: list[dict[str, Any]] = []
-    for idx, op in enumerate(raw_ops):
-        op_map = _ensure_mapping(op, name=f"operators[{idx}]")
-        axis_name = op_map.get("axis")
-        if not isinstance(axis_name, str) or not axis_name.strip():
-            _raise_invalid_rhs_spec(
-                detail=f"operators[{idx}].axis must be a non-empty string"
-            )
-        axis_name_s = axis_name.strip()
-        if axis_name_s not in axis_names:
-            _raise_invalid_rhs_spec(
-                detail=f"operators[{idx}] references unknown axis {axis_name_s!r}"
-            )
-        kind_val = op_map.get("kind")
-        if not isinstance(kind_val, str) or not kind_val.strip():
-            _raise_invalid_rhs_spec(
-                detail=(
-                    f"operators[{idx}].kind must be a non-empty string "
-                    "(e.g., diffusion/advection)"
-                )
-            )
-        bc_val = op_map.get("bc")
-        if bc_val is not None and (not isinstance(bc_val, str) or not bc_val.strip()):
-            _raise_invalid_rhs_spec(
-                detail=f"operators[{idx}].bc must be a non-empty string if provided"
-            )
-        op_out = dict(op_map)
-        op_out["axis"] = axis_name_s
-        op_out["kind"] = kind_val.strip()
-        if bc_val is not None:
-            op_out["bc"] = bc_val.strip()
-        out.append(op_out)
-    return out
+
+    return [
+        _normalize_single_operator(op, idx, axis_names=axis_names, state_set=state_set)
+        for idx, op in enumerate(raw_ops)
+    ]
 
 
 def _get_meta_field(spec: Mapping[str, Any], key: str) -> object:
@@ -928,6 +1100,7 @@ def _normalize_common_meta(
     *,
     axis_names: set[str],
     state_set: set[str] | None,
+    operator_state_set: set[str] | None = None,
 ) -> tuple[
     dict[str, str],
     dict[str, tuple[str, ...]],
@@ -948,7 +1121,11 @@ def _normalize_common_meta(
     )
     operators_raw = spec.get("operators") or _get_meta_field(spec, "operators")
     operators_meta = (
-        _normalize_operators(operators_raw, axis_names=axis_names)
+        _normalize_operators(
+            operators_raw,
+            axis_names=axis_names,
+            state_set=operator_state_set,
+        )
         if isinstance(operators_raw, list)
         else operators_raw
     )
@@ -2034,6 +2211,7 @@ def normalize_expr_rhs(spec: Mapping[str, Any]) -> NormalizedRhs:
         spec,
         axis_names={"subgroup"} | {ax["name"] for ax in axes_meta},
         state_set=set(state_raw),
+        operator_state_set=set(state_raw),
     )
 
     meta: dict[str, Any] = {
@@ -2221,7 +2399,10 @@ def normalize_transitions_rhs(
     axes_meta = _normalize_axes(spec.get("axes"))
 
     meta_parts = _normalize_common_meta(
-        spec, axis_names={"subgroup"} | {ax["name"] for ax in axes_meta}, state_set=None
+        spec,
+        axis_names={"subgroup"} | {ax["name"] for ax in axes_meta},
+        state_set=None,
+        operator_state_set=set(state_raw),
     )
 
     meta: dict[str, Any] = {
