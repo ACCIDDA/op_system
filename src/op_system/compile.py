@@ -515,12 +515,12 @@ def _make_eval_fn(  # noqa: C901
 # -----------------------------------------------------------------------------
 
 
-def compile_rhs(rhs: NormalizedRhs, *, xp: object = np) -> CompiledRhs:
+def compile_rhs(rhs: NormalizedRhs, *, xp: object) -> CompiledRhs:
     """Compile a normalized RHS into a runnable evaluation function.
 
     Args:
         rhs: Normalized RHS produced by `op_system.specs.normalize_rhs`.
-        xp: Array backend namespace (default: NumPy).
+        xp: Array backend namespace.
 
     Returns:
         A `CompiledRhs` containing an `eval_fn(t, y, **params) -> dydt`.

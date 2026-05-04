@@ -30,7 +30,7 @@ import functools
 import importlib
 import sys
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Any, Literal, NamedTuple
+from typing import TYPE_CHECKING, Any, Literal, NamedTuple, cast
 
 import numpy as np
 from flepimop2.configuration import ModuleModel
@@ -66,7 +66,6 @@ class _AxesMeta(NamedTuple):
 class OpSystemSystem(ModuleModel, SystemABC):  # noqa: D101
     module: Literal["flepimop2.system.op_system"] = "flepimop2.system.op_system"
     state_change: StateChangeEnum = StateChangeEnum.FLOW
-    backend: Literal["numpy", "jax"] = "numpy"
 
     spec: dict[str, object] = Field(
         default=..., description="Inline op_system RHS specification (already loaded)"
@@ -79,7 +78,9 @@ class OpSystemSystem(ModuleModel, SystemABC):  # noqa: D101
         del context
 
         spec_obj = self.spec
-        xp = self._get_backend_namespace(self.backend)
+        existing_options = dict(getattr(self, "options", {}) or {})
+        array_backend = self._resolve_array_backend(existing_options)
+        xp = self._get_array_namespace(array_backend)
         compiled = compile_spec(spec_obj, xp=xp)
         n_state = len(compiled.state_names)
 
@@ -92,6 +93,7 @@ class OpSystemSystem(ModuleModel, SystemABC):  # noqa: D101
         operators = self._extract_operators(compiled)
         operator_axis = self._extract_operator_axis(compiled)
         self.options = {
+            **existing_options,
             "axis_order": axes_meta.axis_order,
             "axis_sizes": axes_meta.axis_sizes,
             "axis_coords": axes_meta.axis_coords,
@@ -103,6 +105,7 @@ class OpSystemSystem(ModuleModel, SystemABC):  # noqa: D101
             "mixing_kernels": mixing_kernels,
             "operators": operators,
             "operator_axis": operator_axis,
+            "array_backend": array_backend,
         }
 
         def _stepper(
@@ -110,7 +113,7 @@ class OpSystemSystem(ModuleModel, SystemABC):  # noqa: D101
             state: Float64NDArray,
             **kwargs: Any,  # noqa: ANN401
         ) -> Float64NDArray:
-            if self.backend == "numpy":
+            if array_backend == "numpy":
                 state_arr = np.asarray(state, dtype=np.float64)
             else:
                 state_arr = xp.asarray(state)
@@ -122,7 +125,7 @@ class OpSystemSystem(ModuleModel, SystemABC):  # noqa: D101
                 raise ValueError(msg)
             params = dict(mixing_kernels)
             params.update(kwargs)
-            if self.backend == "numpy":
+            if array_backend == "numpy":
                 return np.asarray(
                     compiled.eval_fn(np.float64(time), state_arr, **params),
                     dtype=np.float64,
@@ -170,13 +173,23 @@ class OpSystemSystem(ModuleModel, SystemABC):  # noqa: D101
         )
 
     @staticmethod
-    def _get_backend_namespace(backend: Literal["numpy", "jax"]) -> Any:  # noqa: ANN401
+    def _resolve_array_backend(
+        options: dict[str, object],
+    ) -> Literal["numpy", "jax"]:
+        backend = str(options.get("array_backend", "numpy"))
+        if backend not in {"numpy", "jax"}:
+            msg = "options.array_backend must be one of {'numpy', 'jax'}"
+            raise ValueError(msg)
+        return cast("Literal['numpy', 'jax']", backend)
+
+    @staticmethod
+    def _get_array_namespace(backend: Literal["numpy", "jax"]) -> Any:  # noqa: ANN401
         if backend == "numpy":
             return np
         try:
             jnp = importlib.import_module("jax.numpy")
         except ImportError as exc:
-            msg = "backend='jax' requires jax to be installed"
+            msg = "options.array_backend='jax' requires jax to be installed"
             raise ImportError(msg) from exc
         return jnp
 
