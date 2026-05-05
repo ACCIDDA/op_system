@@ -38,7 +38,15 @@ for JAX-native tracing and integration workflows:
 pip install "op_system[jax]"
 ```
 
-Then pass the backend namespace when compiling:
+Then choose JAX using the backend selector:
+
+```python
+from op_system import compile_spec
+
+compiled = compile_spec(spec, backend="jax")
+```
+
+You can also pass an explicit array namespace when needed:
 
 ```python
 import jax.numpy as jnp

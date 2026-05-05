@@ -30,7 +30,15 @@ import functools
 import importlib
 import sys
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Any, Literal, NamedTuple, cast
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Literal,
+    NamedTuple,
+    SupportsFloat,
+    SupportsIndex,
+    cast,
+)
 
 import numpy as np
 from flepimop2.configuration import ModuleModel
@@ -78,9 +86,14 @@ class OpSystemSystem(ModuleModel, SystemABC):  # noqa: D101
         del context
 
         spec_obj = self.spec
-        existing_options = dict(getattr(self, "options", {}) or {})
-        array_backend = self._resolve_array_backend(existing_options)
-        xp = self._get_array_namespace(array_backend)
+        array_backend = self._resolve_array_backend(
+            self.option("array_backend", "numpy")
+        )
+        xp, state_coerce, time_coerce, output_coerce = self._build_backend_runtime(
+            array_backend
+        )
+        self._array_namespace = xp
+
         compiled = compile_spec(spec_obj, xp=xp)
         n_state = len(compiled.state_names)
 
@@ -93,7 +106,7 @@ class OpSystemSystem(ModuleModel, SystemABC):  # noqa: D101
         operators = self._extract_operators(compiled)
         operator_axis = self._extract_operator_axis(compiled)
         self.options = {
-            **existing_options,
+            **dict(self.options or {}),
             "axis_order": axes_meta.axis_order,
             "axis_sizes": axes_meta.axis_sizes,
             "axis_coords": axes_meta.axis_coords,
@@ -113,10 +126,7 @@ class OpSystemSystem(ModuleModel, SystemABC):  # noqa: D101
             state: Float64NDArray,
             **kwargs: Any,  # noqa: ANN401
         ) -> Float64NDArray:
-            if array_backend == "numpy":
-                state_arr = np.asarray(state, dtype=np.float64)
-            else:
-                state_arr = xp.asarray(state)
+            state_arr = state_coerce(state)
             if state_arr.ndim != 1 or state_arr.size != n_state:
                 msg = (
                     "state must be a 1D array matching the spec state length; "
@@ -125,15 +135,11 @@ class OpSystemSystem(ModuleModel, SystemABC):  # noqa: D101
                 raise ValueError(msg)
             params = dict(mixing_kernels)
             params.update(kwargs)
-            if array_backend == "numpy":
-                return np.asarray(
-                    compiled.eval_fn(np.float64(time), state_arr, **params),
-                    dtype=np.float64,
-                )
-            result = compiled.eval_fn(time, state_arr, **params)
+            result = compiled.eval_fn(time_coerce(time), state_arr, **params)
+            output = output_coerce(result)
             if TYPE_CHECKING:
-                return np.asarray(result, dtype=np.float64)
-            return result
+                return np.asarray(output, dtype=np.float64)
+            return output
 
         self._stepper = _stepper
         self._compiled_rhs = compiled  # handy for debugging/adapters
@@ -174,9 +180,9 @@ class OpSystemSystem(ModuleModel, SystemABC):  # noqa: D101
 
     @staticmethod
     def _resolve_array_backend(
-        options: dict[str, object],
+        backend_value: object,
     ) -> Literal["numpy", "jax"]:
-        backend = str(options.get("array_backend", "numpy"))
+        backend = str(backend_value)
         if backend not in {"numpy", "jax"}:
             msg = "options.array_backend must be one of {'numpy', 'jax'}"
             raise ValueError(msg)
@@ -192,6 +198,46 @@ class OpSystemSystem(ModuleModel, SystemABC):  # noqa: D101
             msg = "options.array_backend='jax' requires jax to be installed"
             raise ImportError(msg) from exc
         return jnp
+
+    @classmethod
+    def _build_backend_runtime(
+        cls, backend: Literal["numpy", "jax"]
+    ) -> tuple[
+        Any,
+        Callable[[object], Any],
+        Callable[[SupportsFloat | SupportsIndex | str | bytes | None], Any],
+        Callable[[object], Any],
+    ]:
+        xp = cls._get_array_namespace(backend)
+        if backend == "numpy":
+
+            def state_coerce(state: object) -> np.ndarray:
+                return np.asarray(state, dtype=np.float64)
+
+            def time_coerce(
+                time: SupportsFloat | SupportsIndex | str | bytes | None,
+            ) -> np.float64:
+                return np.float64(time)
+
+            def output_coerce(result: object) -> np.ndarray:
+                return np.asarray(result, dtype=np.float64)
+
+            return xp, state_coerce, time_coerce, output_coerce
+
+        def state_coerce_jax(state: object) -> Any:  # noqa: ANN401
+            return xp.asarray(state)
+
+        def passthrough(
+            value: SupportsFloat | SupportsIndex | str | bytes | None,
+        ) -> SupportsFloat | SupportsIndex | str | bytes | None:
+            return value
+
+        return (
+            xp,
+            state_coerce_jax,
+            passthrough,
+            cast("Callable[[object], Any]", passthrough),
+        )
 
     @staticmethod
     def _extract_operators(

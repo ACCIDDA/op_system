@@ -34,6 +34,14 @@ classifiers = [
 [project.urls]
 Repository = "https://github.com/ACCIDDA/op_system"
 
+[project.optional-dependencies]
+jax = [
+  "op-system[jax]>=0.1.0",
+]
+jax-inference = [
+  "op-system[jax-inference]>=0.1.0",
+]
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

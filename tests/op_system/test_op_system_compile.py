@@ -384,6 +384,33 @@ def test_compile_spec_owns_default_backend_policy() -> None:
     assert np.allclose(out, np.array([6.0], dtype=np.float64))
 
 
+def test_compile_spec_rejects_conflicting_backend_and_xp() -> None:
+    """compile_spec rejects passing backend='jax' with explicit xp."""
+    spec: dict[str, object] = {
+        "kind": "expr",
+        "state": ["x"],
+        "equations": {"x": "x"},
+    }
+    with pytest.raises(ValueError, match=r"Pass either xp or backend='jax'"):
+        compile_spec(spec, xp=np, backend="jax")
+
+
+def test_compile_spec_with_backend_jax_is_jittable() -> None:
+    """compile_spec supports backend='jax' as a public UX path."""
+    jax = pytest.importorskip("jax")
+
+    spec: dict[str, object] = {
+        "kind": "expr",
+        "state": ["x"],
+        "equations": {"x": "beta * x"},
+    }
+    compiled = compile_spec(spec, backend="jax")
+
+    y0 = np.array([2.0], dtype=np.float64)
+    out = jax.jit(lambda beta: compiled.eval_fn(0.0, y0, beta=beta))(1.5)
+    assert np.allclose(np.asarray(out), np.asarray([3.0]))
+
+
 def test_compile_rhs_requires_explicit_backend_namespace() -> None:
     """compile_rhs requires explicit xp so default policy is centralized."""
     spec: dict[str, object] = {
