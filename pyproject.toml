@@ -33,6 +33,14 @@ data = [
     "pandas>=2.2",
     "pyarrow>=16.0",
 ]
+jax = [
+    "jax>=0.4",
+]
+jax-inference = [
+    "jax>=0.4",
+    "diffrax",
+    "blackjax",
+]
 
 [build-system]
 requires = ["hatchling"]

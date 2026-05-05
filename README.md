@@ -28,6 +28,44 @@ spec = {
 compiled = compile_spec(spec)
 dydt = compiled.eval_fn(0.0, [999.0, 1.0, 0.0], beta=0.3, gamma=0.1)
 ```
+
+## Optional JAX Backend
+
+Install the optional dependency group if you want to compile RHS callables
+for JAX-native tracing and integration workflows:
+
+```shell
+pip install "op_system[jax]"
+```
+
+Then choose JAX using the backend selector:
+
+```python
+from op_system import compile_spec
+
+compiled = compile_spec(spec, backend="jax")
+```
+
+You can also pass an explicit array namespace when needed:
+
+```python
+import jax.numpy as jnp
+from op_system import compile_spec
+
+compiled = compile_spec(spec, xp=jnp)
+dydt = compiled.eval_fn(0.0, jnp.asarray([999.0, 1.0, 0.0]), beta=0.3, gamma=0.1)
+```
+
+If you do not pass `xp`, `op_system` defaults to NumPy behavior.
+
+For diffrax-native solves and NUTS/HMC workflows, install the inference extra:
+
+```shell
+pip install "op_system[jax-inference]"
+```
+
+This includes `diffrax` and `blackjax` for end-to-end tracing workflows.
+
 ## YAML examples (organized and API-current)
 
 The example set below is intentionally small but complete: each core modeling pattern is shown for both `expr` and `transitions` pathways where applicable.

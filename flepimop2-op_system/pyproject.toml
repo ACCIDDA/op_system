@@ -12,7 +12,7 @@ authors = [
 license = { file = "LICENSE" }
 dependencies = [
   "op-system>=0.1.0",
-  "flepimop2>=0.1.0",
+  "flepimop2>=0.2.0",
   "pydantic>=2.0,<3",
   "numpy>=1.26",
   "PyYAML>=6.0",
@@ -33,6 +33,14 @@ classifiers = [
 
 [project.urls]
 Repository = "https://github.com/ACCIDDA/op_system"
+
+[project.optional-dependencies]
+jax = [
+  "op-system[jax]>=0.1.0",
+]
+jax-inference = [
+  "op-system[jax-inference]>=0.1.0",
+]
 
 [build-system]
 requires = ["hatchling"]
@@ -78,7 +86,7 @@ convention = "google"
 dev = [
   "pytest>=8.4.2",
   "ruff>=0.13.3",
-  "mypy>=1.18.2",
+  "mypy>=1.20.2",
 ]
 
 [[tool.mypy.overrides]]
