@@ -1335,6 +1335,86 @@ def _extract_placeholders_from_expr(expr: str) -> set[str]:
     return placeholders
 
 
+def _parse_transition_endpoint_tokens(
+    name_s: str,
+) -> tuple[str, list[str], dict[str, str]]:
+    """Parse endpoint templates that may include pinned axis tokens.
+
+    Supported token forms inside ``[...]`` are:
+    - ``axis`` (placeholder expanded over coords)
+    - ``axis=coord`` (pinned endpoint coordinate)
+
+    Returns:
+        Tuple ``(base, placeholders, pinned_values)``.
+    """
+    m = _STATE_TEMPLATE_RE.fullmatch(name_s)
+    if not m:
+        return name_s, [], {}
+
+    base = m.group(1)
+    tokens = [p.strip() for p in m.group(2).split(",") if p.strip()]
+    placeholders: list[str] = []
+    pinned: dict[str, str] = {}
+    for token in tokens:
+        if "=" in token:
+            axis, coord = [part.strip() for part in token.split("=", 1)]
+            if not axis or not coord:
+                _raise_invalid_rhs_spec(
+                    detail=f"invalid pinned endpoint token {token!r} in {name_s!r}"
+                )
+            pinned[axis] = coord
+        else:
+            placeholders.append(token)
+
+    return base, placeholders, pinned
+
+
+def _render_transition_endpoint(
+    name_s: str,
+    assignment: Mapping[str, str],
+    *,
+    axis_lookup: Mapping[str, list[str]],
+) -> str:
+    """Render an endpoint template using placeholders and optional pinned axes.
+
+    Returns:
+        Concrete expanded state name, or ``name_s`` when not templated.
+    """
+    base, placeholders, pinned = _parse_transition_endpoint_tokens(name_s)
+    if not placeholders and not pinned:
+        return name_s
+
+    all_axes = placeholders + list(pinned.keys())
+    if len(all_axes) != len(set(all_axes)):
+        _raise_invalid_rhs_spec(detail=f"duplicate axis token in endpoint {name_s!r}")
+
+    parts: list[str] = []
+    for ph in placeholders:
+        if ph not in axis_lookup:
+            _raise_invalid_rhs_spec(
+                detail=f"transition placeholder {ph!r} references unknown axis"
+            )
+        if ph not in assignment:
+            return name_s
+        parts.append(f"{ph}_{_sanitize_fragment(assignment[ph])}")
+
+    for axis_name, coord in pinned.items():
+        if axis_name not in axis_lookup:
+            _raise_invalid_rhs_spec(
+                detail=f"transition pinned axis {axis_name!r} references unknown axis"
+            )
+        if coord not in axis_lookup[axis_name]:
+            _raise_invalid_rhs_spec(
+                detail=(
+                    f"transition pinned coord {coord!r} not in axis "
+                    f"{axis_name!r} coords"
+                )
+            )
+        parts.append(f"{axis_name}_{_sanitize_fragment(coord)}")
+
+    return base + "__" + "__".join(parts)
+
+
 def _render_template_or_literal(name_s: str, assignment: Mapping[str, str]) -> str:
     base, placeholders = _parse_template_key(name_s)
     if not placeholders or any(ph not in assignment for ph in placeholders):
@@ -1356,8 +1436,8 @@ def _expand_single_transition(
     name_s = tr_valid.get("name") if isinstance(tr_valid.get("name"), str) else None
 
     placeholders: set[str] = set()
-    placeholders |= set(_parse_template_key(frm_s)[1])
-    placeholders |= set(_parse_template_key(to_s)[1])
+    placeholders |= set(_parse_transition_endpoint_tokens(frm_s)[1])
+    placeholders |= set(_parse_transition_endpoint_tokens(to_s)[1])
     placeholders |= _extract_placeholders_from_expr(rate_s)
     if name_s:
         placeholders |= _extract_placeholders_from_expr(name_s)
@@ -1382,8 +1462,16 @@ def _expand_single_transition(
     for combo in product(*coords_lists):
         assignment = {ph: combo[i] for i, ph in enumerate(placeholders)}
 
-        frm_render = _render_template_or_literal(frm_s, assignment)
-        to_render = _render_template_or_literal(to_s, assignment)
+        frm_render = _render_transition_endpoint(
+            frm_s,
+            assignment,
+            axis_lookup=axis_lookup,
+        )
+        to_render = _render_transition_endpoint(
+            to_s,
+            assignment,
+            axis_lookup=axis_lookup,
+        )
 
         rate_sub = _apply_template_substitutions(
             rate_s,
@@ -1795,6 +1883,19 @@ def _normalize_chain_forward_rates(
     return rates
 
 
+def _build_chain_stage_names(cname: str, *, length: int) -> list[str]:
+    """Build chain stage names, preserving template placeholders when present.
+
+    Returns:
+        Ordered list of stage names for the chain.
+    """
+    base, placeholders = _parse_template_key(cname)
+    if placeholders:
+        suffix = f"[{','.join(placeholders)}]"
+        return [f"{base}{i}{suffix}" for i in range(1, length + 1)]
+    return [f"{cname}{i}" for i in range(1, length + 1)]
+
+
 def _normalize_chain_entry(
     chain: Mapping[str, Any], *, idx: int
 ) -> tuple[str, str] | None:
@@ -1879,16 +1980,24 @@ def _validate_chain_entry(
         length=clen,
     )
 
-    stage_names = [f"{cname}{i}" for i in range(1, clen + 1)]
+    stage_names = _build_chain_stage_names(cname, length=clen)
 
     entry_cfg = _normalize_chain_entry(chain, idx=idx)
-    if entry_cfg is not None and entry_cfg[0] not in state_set:
+    if (
+        entry_cfg is not None
+        and not _parse_template_key(entry_cfg[0])[1]
+        and entry_cfg[0] not in state_set
+    ):
         _raise_invalid_rhs_spec(
             detail=f"chain[{idx}].entry.from={entry_cfg[0]!r} not in state"
         )
 
     exit_cfg = _normalize_chain_exit(chain, idx=idx)
-    if exit_cfg is not None and exit_cfg[0] not in state_set:
+    if (
+        exit_cfg is not None
+        and not _parse_template_key(exit_cfg[0])[1]
+        and exit_cfg[0] not in state_set
+    ):
         _raise_invalid_rhs_spec(
             detail=f"chain[{idx}] exit.to={exit_cfg[0]!r} not in state"
         )
@@ -1938,7 +2047,7 @@ def _apply_expr_chains(
 def _apply_transition_chains(
     *,
     chains: list[Any],
-    state_expanded: list[str],
+    state_raw: list[str],
     transitions_raw: list[dict[str, Any]],
     state_set: set[str],
 ) -> None:
@@ -1952,7 +2061,7 @@ def _apply_transition_chains(
 
         for stage_name in stage_names:
             if stage_name not in state_set:
-                state_expanded.append(stage_name)
+                state_raw.append(stage_name)
                 state_set.add(stage_name)
 
         if entry_cfg is not None:
@@ -2415,6 +2524,17 @@ def normalize_transitions_rhs(
         k: spec[k] for k in ("sources", "couplings", "constraints") if k in spec
     })
 
+    chain_block = spec.get("chain")
+    if chain_block:
+        if not isinstance(chain_block, list):
+            _raise_invalid_rhs_spec(detail="chain must be a list if provided")
+        _apply_transition_chains(
+            chains=chain_block,
+            state_raw=state_raw,
+            transitions_raw=transitions_raw,
+            state_set=set(state_raw),
+        )
+
     state_expanded, state_template_map = _expand_state_templates(
         state_raw, axes=axes_meta
     )
@@ -2429,17 +2549,6 @@ def normalize_transitions_rhs(
     state_set = set(state_expanded)
     d_terms: dict[str, list[str]] = {s: [] for s in state_expanded}
     all_syms = _collect_alias_symbols(aliases, axes=axes_meta)
-
-    chain_block = spec.get("chain")
-    if chain_block:
-        if not isinstance(chain_block, list):
-            _raise_invalid_rhs_spec(detail="chain must be a list if provided")
-        _apply_transition_chains(
-            chains=chain_block,
-            state_expanded=state_expanded,
-            transitions_raw=transitions_raw,
-            state_set=state_set,
-        )
 
     _apply_coord_shifts(
         transitions_raw=transitions_raw,

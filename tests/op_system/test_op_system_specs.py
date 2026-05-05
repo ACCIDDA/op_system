@@ -589,6 +589,66 @@ def test_transitions_template_expansion_over_axes() -> None:
     assert set(out.param_names) == expected_params
 
 
+def test_transitions_template_endpoint_pinning_expands_correctly() -> None:
+    """Endpoint pinning keeps pinned axis fixed while expanding other axes."""
+    spec = {
+        "kind": "transitions",
+        "axes": [
+            {"name": "age", "coords": ["u65", "o65"]},
+            {"name": "imm", "coords": ["X0", "X1"]},
+        ],
+        "state": ["I[age,imm]", "X[age,imm]"],
+        "transitions": [
+            {
+                "from": "I[age,imm]",
+                "to": "X[age,imm=X1]",
+                "rate": "waning[imm]",
+            }
+        ],
+    }
+
+    out = normalize_transitions_rhs(spec)
+
+    assert "X__age_u65__imm_X1" in out.state_names
+    assert "X__age_o65__imm_X1" in out.state_names
+    assert any("-" in eq and "I__age_u65__imm_X0" in eq for eq in out.equations)
+    assert any(
+        "I__age_u65__imm_X0" in eq and "I__age_u65__imm_X1" in eq
+        for eq in out.equations
+    )
+
+
+def test_transitions_chain_helper_supports_templated_chain_names() -> None:
+    """Transitions chains accept template names and expand stages over axes."""
+    spec = {
+        "kind": "transitions",
+        "axes": [
+            {"name": "age", "coords": ["a", "b"]},
+            {"name": "vax", "coords": ["u", "v"]},
+        ],
+        "state": ["E[age,vax]", "R[age,vax]"],
+        "transitions": [],
+        "chain": [
+            {
+                "name": "I[age,vax]",
+                "length": 3,
+                "entry": {"from": "E[age,vax]", "rate": "sigma"},
+                "forward": ["g12", "g23"],
+                "exit": {"to": "R[age,vax]", "rate": "g3r"},
+            }
+        ],
+    }
+
+    out = normalize_transitions_rhs(spec)
+
+    assert "I1__age_a__vax_u" in out.state_names
+    assert "I3__age_b__vax_v" in out.state_names
+    # 4 axis combinations * (entry + 2 internal + exit) transitions per combo.
+    assert len(out.meta["transitions"]) == 16
+    rates = {tr["rate"] for tr in out.meta["transitions"]}
+    assert rates == {"sigma", "g12", "g23", "g3r"}
+
+
 def test_expr_chain_helper_autofills_missing_equations() -> None:
     """Chain helper under expr fills missing stage equations when provided."""
     spec = {
