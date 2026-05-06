@@ -8,26 +8,28 @@
       
       
       
-        <link rel="canonical" href="https://accidda.github.io/op_system/0.1/">
+        <link rel="canonical" href="https://accidda.github.io/op_system/0.1/development/code-style/">
       
       
+        <link rel="prev" href="../..">
       
-        <link rel="next" href="development/code-style/">
+      
+        <link rel="next" href="../creating-a-release/">
       
       
         
       
       
-      <link rel="icon" href="assets/images/favicon.png">
+      <link rel="icon" href="../../assets/images/favicon.png">
       <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
     
     
       
-        <title>op_system Documentation</title>
+        <title>Code Style - op_system Documentation</title>
       
     
     
-      <link rel="stylesheet" href="assets/stylesheets/main.484c7ddc.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
       
       
 
@@ -46,9 +48,9 @@
       
     
     
-      <link rel="stylesheet" href="assets/_mkdocstrings.css">
+      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
     
-    <script>__md_scope=new URL(".",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
     
       
 
@@ -66,7 +68,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#welcome-to-op-system" class="md-skip">
+        <a href="#code-style" class="md-skip">
           Skip to content
         </a>
       
@@ -81,12 +83,12 @@
             <div class="md-banner__inner md-grid md-typeset">
               
   You're not viewing the latest version.
-  <a href="../.">
+  <a href="../../..">
     <strong>Click here to go to latest.</strong>
   </a>
 
             </div>
-            <script>var el=document.querySelector("[data-md-component=outdated]"),base=new URL("."),outdated=__md_get("__outdated",sessionStorage,base);!0===outdated&&el&&(el.hidden=!1)</script>
+            <script>var el=document.querySelector("[data-md-component=outdated]"),base=new URL("../.."),outdated=__md_get("__outdated",sessionStorage,base);!0===outdated&&el&&(el.hidden=!1)</script>
           </aside>
         
       </div>
@@ -98,7 +100,7 @@
 
 <header class="md-header md-header--shadow" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href="." title="op_system Documentation" class="md-header__button md-logo" aria-label="op_system Documentation" data-md-component="logo">
+    <a href="../.." title="op_system Documentation" class="md-header__button md-logo" aria-label="op_system Documentation" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -118,7 +120,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Home
+              Code Style
             
           </span>
         </div>
@@ -208,7 +210,7 @@
 
 <nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
-    <a href="." title="op_system Documentation" class="md-nav__button md-logo" aria-label="op_system Documentation" data-md-component="logo">
+    <a href="../.." title="op_system Documentation" class="md-nav__button md-logo" aria-label="op_system Documentation" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -235,19 +237,10 @@
       
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-      <a href="." class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
         
   
   
@@ -263,7 +256,6 @@
   
 
       </a>
-      
     </li>
   
 
@@ -272,18 +264,20 @@
       
   
   
+    
   
   
+  
     
     
     
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" checked>
         
           
           <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
@@ -304,7 +298,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_2">
             <span class="md-nav__icon md-icon"></span>
             
@@ -319,10 +313,37 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="development/code-style/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Code Style
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -338,6 +359,70 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#records-namedtuple-vs-dataclass" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Records: NamedTuple vs @dataclass
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#colocate-parsers-with-the-type-they-produce" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Colocate parsers with the type they produce
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#internal-vs-public-names" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Internal vs public names
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#error-handling" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Error handling
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -350,7 +435,7 @@
   
   
     <li class="md-nav__item">
-      <a href="development/creating-a-release/" class="md-nav__link">
+      <a href="../creating-a-release/" class="md-nav__link">
         
   
   
@@ -432,7 +517,7 @@
   
   
     <li class="md-nav__item">
-      <a href="guides/getting-started/" class="md-nav__link">
+      <a href="../../guides/getting-started/" class="md-nav__link">
         
   
   
@@ -514,7 +599,7 @@
   
   
     <li class="md-nav__item">
-      <a href="api-reference/op-system/" class="md-nav__link">
+      <a href="../../api-reference/op-system/" class="md-nav__link">
         
   
   
@@ -542,7 +627,7 @@
   
   
     <li class="md-nav__item">
-      <a href="api-reference/compile/" class="md-nav__link">
+      <a href="../../api-reference/compile/" class="md-nav__link">
         
   
   
@@ -570,7 +655,7 @@
   
   
     <li class="md-nav__item">
-      <a href="api-reference/specs/" class="md-nav__link">
+      <a href="../../api-reference/specs/" class="md-nav__link">
         
   
   
@@ -618,6 +703,58 @@
     
   
   
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#records-namedtuple-vs-dataclass" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Records: NamedTuple vs @dataclass
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#colocate-parsers-with-the-type-they-produce" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Colocate parsers with the type they produce
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#internal-vs-public-names" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Internal vs public names
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#error-handling" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Error handling
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
 </nav>
                   </div>
                 </div>
@@ -633,8 +770,68 @@
 
 
 
-<h1 id="welcome-to-op-system">Welcome to <code>OP System</code><a class="headerlink" href="#welcome-to-op-system" title="Permanent link">&para;</a></h1>
-<p>The next generation vectorized compartmental model system builder for <a href="https://github.com/ACCIDDA/flepimop2"><code>flepimop2</code></a>.</p>
+<h1 id="code-style">Code style<a class="headerlink" href="#code-style" title="Permanent link">&para;</a></h1>
+<p>This page captures conventions adopted across <code>op_system</code>. They are not strict
+rules — exceptions exist where the trade-offs differ — but new code should
+follow them by default and call out any deviation in the PR description.</p>
+<h2 id="records-namedtuple-vs-dataclass">Records: <code>NamedTuple</code> vs <code>@dataclass</code><a class="headerlink" href="#records-namedtuple-vs-dataclass" title="Permanent link">&para;</a></h2>
+<p><code>op_system</code> parsers and normalizers produce many small "value records": parsed
+selectors, normalized axes, validated constraint rules, compiled kernel
+descriptors, etc. For these we have a default and a fallback.</p>
+<p><strong>Default to <code>typing.NamedTuple</code></strong> for small, value-like records that are
+produced once by a parser and read many times.</p>
+<p>Reasons:</p>
+<ul>
+<li>Immutable — downstream code cannot silently mutate the record.</li>
+<li>Hashable — usable as <code>dict</code> keys and in <code>set</code>s without extra work.</li>
+<li>Tuple-compatible — legacy unpacking (<code>base, tokens = parse_selector(s)</code>)
+  keeps working and <code>NamedTuple</code> records compare equal to plain tuples of the
+  same values.</li>
+<li>Zero boilerplate — fields and types in one declaration, no <code>__init__</code>
+  required.</li>
+</ul>
+<p>Use <code>@dataclass</code> (preferably <code>@dataclass(frozen=True, slots=True)</code>) when you
+need any of:</p>
+<ul>
+<li>Mutability.</li>
+<li><code>field(default_factory=...)</code> for mutable defaults.</li>
+<li><code>__post_init__</code> validation that cannot live in a parser/classmethod.</li>
+<li>Inheritance.</li>
+<li>Keyword-only construction (<code>@dataclass(kw_only=True)</code>).</li>
+<li>Computed fields beyond what a <code>from_*</code> classmethod would express.</li>
+</ul>
+<h2 id="colocate-parsers-with-the-type-they-produce">Colocate parsers with the type they produce<a class="headerlink" href="#colocate-parsers-with-the-type-they-produce" title="Permanent link">&para;</a></h2>
+<p>Whenever a record has a non-trivial parsing/validation path, expose it as a
+classmethod on the record type — typically <code>from_string</code>, <code>from_mapping</code>, or
+<code>from_yaml_node</code>. The pattern is modeled on <code>ParsedShorthand.from_string</code> in
+<code>flepimop2._utils._module</code>. This keeps the constructor of record next to the
+spec for what a valid record looks like.</p>
+<h2 id="internal-vs-public-names">Internal vs public names<a class="headerlink" href="#internal-vs-public-names" title="Permanent link">&para;</a></h2>
+<p>Modules whose name starts with an underscore (<code>_axes</code>, <code>_constraints</code>,
+<code>_helpers</code>, <code>_normalize</code>, <code>_symbols</code>, <code>_templates</code>) are internal to
+<code>op_system</code>. Types and helpers defined in those modules should also be
+underscore-prefixed unless they are deliberately re-exported from a public
+module (e.g. <code>op_system.specs</code>, <code>op_system.compile</code>, the package <code>__init__</code>).</p>
+<p>This applies to record classes too: an internal record produced by a private
+parser is <code>_ConstraintRule</code>, not <code>ConstraintRule</code>. Promoting an internal type
+to public should be a deliberate decision tied to a stability commitment.</p>
+<h2 id="error-handling">Error handling<a class="headerlink" href="#error-handling" title="Permanent link">&para;</a></h2>
+<p>Raise the specific exception type at the point of failure rather than
+delegating to a <code>_raise_*</code> helper. The shared exception types live in
+<code>op_system._errors</code>:</p>
+<ul>
+<li><code>InvalidRhsSpecError(ValueError)</code> — structural problems with a normalized
+  RHS spec (missing fields, wrong types, unknown references).</li>
+<li><code>InvalidExpressionError(ValueError)</code> — expression strings that fail
+  parsing/AST validation.</li>
+<li><code>UnsupportedFeatureError(NotImplementedError)</code> — features declared in a
+  spec that are not yet implemented.</li>
+</ul>
+<p>All three subclass a built-in (<code>ValueError</code> / <code>NotImplementedError</code>), so
+existing <code>except ValueError</code> / <code>except NotImplementedError</code> sites in
+downstream code keep working while new code can catch the more specific
+subclasses when needed.</p>
+<p>Document the specific exception type in the function's <code>Raises:</code> block.</p>
 
 
 
@@ -684,10 +881,10 @@
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": ".", "features": [], "search": "assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"provider": "mike"}}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": [], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"provider": "mike"}}</script>
     
     
-      <script src="assets/javascripts/bundle.79ae519e.min.js"></script>
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
       
     
   </body>
