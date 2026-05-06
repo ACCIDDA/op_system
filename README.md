@@ -120,7 +120,7 @@ system:
           coords: [u, v]
       state: [S[age,vax], I[age,vax], R[age,vax]]
       aliases:
-        lambda[age]: beta * sum_over(vax=j, I[age,j]) / sum_state()
+        lambda[age]: beta * apply_along(vax=j, I[age,vax=j]) / sum_state()
       equations:
         S[age,vax]: -lambda[age] * S[age,vax]
         I[age,vax]: lambda[age] * S[age,vax] - gamma * I[age,vax]
@@ -140,7 +140,7 @@ system:
           coords: [u, v]
       state: [S[age,vax], I[age,vax], R[age,vax]]
       aliases:
-        lambda[age,vax]: beta * (1 - ve[vax]) * sum_over(vax=j, I[age,j]) / sum_state()
+        lambda[age,vax]: beta * (1 - ve[vax]) * apply_along(vax=j, I[age,vax=j]) / sum_state()
       equations:
         S[age,vax]: -lambda[age,vax] * S[age,vax]
         I[age,vax]: lambda[age,vax] * S[age,vax] - gamma[vax] * I[age,vax]
@@ -164,7 +164,7 @@ spec:
       coords: [u, v]
   state: [S[age,vax], I[age,vax], R[age,vax]]
   aliases:
-    lambda[age]: beta * sum_over(vax=j, I[age,j]) / sum_state()
+    lambda[age]: beta * apply_along(vax=j, I[age,vax=j]) / sum_state()
   transitions:
     - from: S[age,vax]
       to: I[age,vax]
@@ -185,7 +185,7 @@ spec:
   transitions:
     - from: S[age,vax]
       to: I[age,vax]
-      rate: beta * (1 - ve[vax]) * sum_over(vax=j, I[age,j]) / sum_state()
+      rate: beta * (1 - ve[vax]) * apply_along(vax=j, I[age,vax=j]) / sum_state()
     - from: I[age,vax]
       to: R[age,vax]
       rate: gamma[vax]
@@ -217,9 +217,9 @@ system:
       aliases:
         foi[age,vax,strain]: beta[strain] * I[age,vax,strain] / sum_state()
       equations:
-        S[age,vax]: -sum_over(strain=s, foi[age,vax,s] * S[age,vax])
+        S[age,vax]: -apply_along(strain=s, foi[age,vax,strain=s] * S[age,vax])
         I[age,vax,strain]: foi[age,vax,strain] * S[age,vax] - gamma[strain] * I[age,vax,strain]
-        R[age,vax]: sum_over(strain=s, gamma[strain] * I[age,vax,s])
+        R[age,vax]: apply_along(strain=s, gamma[strain=s] * I[age,vax,strain=s])
 ```
 
 **`transitions` (same axis pattern)**
@@ -338,7 +338,7 @@ system:
       transitions: []
 ```
 
-### 5) Continuous axis + `integrate_over` (expr pathway)
+### 5) Continuous axis + `apply_along` (expr pathway)
 
 ```yaml
 system:
@@ -364,10 +364,10 @@ system:
             scale: 1.0
             sigma: 0.5
       equations:
-        u[x]: integrate_over(x=xi, K[xi] * u[xi]) - decay * u[x]
+        u[x]: apply_along(x=xi, K[x=xi] * u[x=xi]) - decay * u[x]
 ```
 
-`integrate_over` uses trapezoidal weights derived from axis coordinates; non-uniform spacing is respected.
+`apply_along` uses trapezoidal weights derived from axis coordinates when the bound axes are continuous; non-uniform spacing is respected.
 
 
 ---
@@ -399,8 +399,7 @@ just mypy
 - Templates: `State[axis,...]` expand over categorical axes; equations may be written once per template.
 - Aliases and inline placeholders like `theta[age]` expand over categorical axes using the same assignments, removing per-axis parameter duplication.
 - Transitions now accept templated states and rates over categorical axes; templated `from`/`to`/`rate` are expanded before hazard assembly.
-- `sum_over(axis=var, expr)`: unrolls over categorical coords; continuous axes are rejected.
-- `integrate_over(axis=var, expr)`: trapezoidal integrate along continuous axes using axis-derived deltas (non-uniform spacing supported).
+- `apply_along(axis1=var1, ..., expr, [kernel=sum|integrate])`: contracts an expression along one or more axes in a single call. Categorical axes use uniform weights of 1; continuous axes use trapezoidal weights derived from axis-`deltas` (non-uniform spacing supported). The kernel is inferred from axis types; pass `kernel=sum` or `kernel=integrate` to override.
 - Chain helper: `chain` block auto-fills equations/transitions for staged compartments (expr or transitions kinds). Keep your base model structure explicit (for example `I` or `I[age,vax]` must appear in `state`), while staged chain internals (`I1..Ik`) are synthesized automatically and do not need explicit `state` entries.
 - Reducers in expressions: `sum_state()`, `sum_prefix(prefix)`.
 - Axes: categorical or continuous; continuous can be generated via `domain` + `size` + `spacing` (linear/log/geom).

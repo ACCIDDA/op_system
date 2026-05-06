@@ -219,15 +219,15 @@ def test_eval_allows_expanded_np_whitelist() -> None:
     assert np.allclose(out, expected)
 
 
-def test_templates_and_sum_over_compile_and_eval() -> None:
-    """Templated states with sum_over compile and evaluate end-to-end."""
+def test_templates_and_apply_along_compile_and_eval() -> None:
+    """Templated states with apply_along compile and evaluate end-to-end."""
     spec = {
         "kind": "expr",
         "axes": [{"name": "pop", "coords": ["p1", "p2"]}],
         "state": ["S[pop]", "I[pop]"],
         "equations": {
-            "S[pop]": "-beta * S[pop] * sum_over(pop=j, I[pop=j])",
-            "I[pop]": "beta * S[pop] * sum_over(pop=j, I[pop=j]) - gamma * I[pop]",
+            "S[pop]": "-beta * S[pop] * apply_along(pop=j, I[pop=j])",
+            "I[pop]": "beta * S[pop] * apply_along(pop=j, I[pop=j]) - gamma * I[pop]",
         },
     }
     rhs = normalize_rhs(spec)
@@ -421,34 +421,6 @@ def test_compile_rhs_requires_explicit_backend_namespace() -> None:
     rhs = normalize_rhs(spec)
     with pytest.raises(TypeError, match=r"required keyword-only argument: 'xp'"):
         compile_rhs(rhs)  # type: ignore[call-arg]
-
-
-def test_sum_over_in_filter_evaluates_correctly() -> None:
-    """sum_over IN filter compiles and evaluates correctly end-to-end."""
-    spec = {
-        "kind": "expr",
-        "axes": [{"name": "vax", "coords": ["u", "v", "w"]}],
-        "state": ["S[vax]"],
-        "equations": {
-            # Constant-rate decay so eval_fn output is predictable
-            "S[vax]": "-S[vax]",
-        },
-        "aliases": {
-            "covered": "sum_over(vax=j IN [v, w], S[vax=j])",
-        },
-    }
-    rhs = normalize_rhs(spec)
-
-    # NormalizedRhs.aliases holds the expanded string
-    assert "S__vax_v" in rhs.aliases["covered"]
-    assert "S__vax_w" in rhs.aliases["covered"]
-    assert "S__vax_u" not in rhs.aliases["covered"]
-
-    # Compile and run eval_fn: state = [u=10, v=3, w=7], dS/dt = -S
-    compiled = compile_rhs(rhs, xp=np)
-    state = np.array([10.0, 3.0, 7.0], dtype=np.float64)
-    derivs = compiled.eval_fn(np.float64(0.0), state)
-    assert np.allclose(derivs, -state)
 
 
 def test_compile_rhs_with_jax_backend_is_jittable() -> None:

@@ -21,7 +21,6 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
-    from re import Match
 
 from op_system._axes import _normalize_axes, _normalize_bracket_key
 from op_system._errors import InvalidRhsSpecError, UnsupportedFeatureError
@@ -49,16 +48,6 @@ from op_system._templates import (
 # ---------------------------------------------------------------------------
 # Regex patterns for helper expression expansion
 # ---------------------------------------------------------------------------
-
-_INTEGRATE_OVER_RE = re.compile(
-    r"integrate_over\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*([A-Za-z_][A-Za-z0-9_]*)\s*,\s*(.*?)\)",
-    re.DOTALL,
-)
-_SUM_OVER_RE = re.compile(
-    r"sum_over\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*([A-Za-z_][A-Za-z0-9_]*)"
-    r"(?:\s+IN\s+\[([^\[\]]*)\])?\s*,\s*(.*?)\)",
-    re.DOTALL,
-)
 
 _ALLOWED_KERNEL_FORMS: dict[str, tuple[str, ...]] = {
     "erfc": ("scale", "sigma"),
@@ -1029,187 +1018,325 @@ def _expand_transition_templates(
 
 
 # ---------------------------------------------------------------------------
-# Equation expansion (sum_over, integrate_over, gather)
+# Equation expansion (apply_along, gather)
 # ---------------------------------------------------------------------------
 
 
-def _expand_integrate_over(expr: str, *, axes: list[dict[str, Any]]) -> str:
-    """Expand ``integrate_over(axis=var, inner_expr)`` for continuous axes.
-
-    Uses trapezoidal weights derived from axis coords; rejects categorical axes.
+def _find_call_span(expr: str, name: str) -> tuple[int, int] | None:
+    """Locate the first balanced ``name(...)`` call in *expr*.
 
     Returns:
-        Expression string with integrate_over calls expanded to weighted sums.
-    """
-
-    def _axis_coords_and_deltas(ax_name: str) -> tuple[list[str], list[float]]:
-        for ax in axes:
-            if ax.get("name") == ax_name:
-                if ax.get("type") != "continuous":
-                    raise InvalidRhsSpecError(
-                        detail=f"integrate_over axis {ax_name!r} must be continuous"
-                    )
-                coords = [str(c) for c in ax.get("coords", [])]
-                deltas = ax.get("deltas") or []
-                if not coords or not deltas or len(coords) != len(deltas):
-                    raise InvalidRhsSpecError(
-                        detail=f"integrate_over axis {ax_name!r} missing coords/deltas"
-                    )
-                return coords, [float(d) for d in deltas]
-        raise InvalidRhsSpecError(detail=f"integrate_over axis {ax_name!r} not found")
-
-    out = expr
-    while True:
-        m = _INTEGRATE_OVER_RE.search(out)
-        if not m:
-            break
-        axis_name = m.group(1)
-        var_name = m.group(2)
-        inner = m.group(3)
-        coords, deltas = _axis_coords_and_deltas(axis_name)
-        terms: list[str] = []
-        for coord, delta in zip(coords, deltas, strict=True):
-            replaced = re.sub(
-                rf"\b{re.escape(var_name)}\b",
-                str(coord),
-                inner,
-            )
-
-            def _template_replacer(
-                match: Match[str],
-                *,
-                axis: str = axis_name,
-                coord_val: str = str(coord),
-            ) -> str:
-                return f"{match.group(1)}__{axis}_{_sanitize_fragment(coord_val)}"
-
-            replaced = re.sub(
-                rf"([A-Za-z_][A-Za-z0-9_]*)\[\s*{re.escape(axis_name)}\s*=\s*{re.escape(str(coord))}\s*\]",
-                _template_replacer,
-                replaced,
-            )
-            terms.append(f"({delta})*({replaced})")
-        replacement = " + ".join(terms)
-        out = out[: m.start()] + f"({replacement})" + out[m.end() :]
-    return out
-
-
-def _apply_coord_filter(
-    filter_str: str | None,
-    *,
-    axis_name: str,
-    all_coords: list[str],
-) -> list[str]:
-    """Return the coord subset to iterate over, or all coords if no filter.
-
-    Args:
-        filter_str: Raw ``IN [...]`` content (e.g. ``"v, w"``), or ``None``.
-        axis_name: Axis name — used in error messages only.
-        all_coords: All valid coords for the axis.
-
-    Returns:
-        Filtered coord list (preserves order of the filter, not the axis).
+        ``(start, end)`` half-open span covering ``name(...)`` (end is the
+        index just past the closing paren), or ``None`` if no such call
+        exists.  Matches whole-word identifiers only.
 
     Raises:
-        InvalidRhsSpecError: If validation fails.
+        InvalidRhsSpecError: If parentheses inside the call are unbalanced.
     """
-    if filter_str is None:
-        return all_coords
-    requested = [c.strip() for c in filter_str.split(",") if c.strip()]
-    if not requested:
-        raise InvalidRhsSpecError(
-            detail=f"sum_over IN filter for axis {axis_name!r} is empty",
-        )
-    seen: set[str] = set()
-    for coord in requested:
-        if coord in seen:
-            raise InvalidRhsSpecError(
-                detail=(
-                    f"sum_over IN filter for axis {axis_name!r} "
-                    f"contains duplicate coord {coord!r}"
-                ),
-            )
-        seen.add(coord)
-        if coord not in all_coords:
-            raise InvalidRhsSpecError(
-                detail=(
-                    f"sum_over IN filter references unknown coord {coord!r} "
-                    f"for axis {axis_name!r} (valid: {all_coords})"
-                ),
-            )
-    return requested
+    pat = re.compile(rf"\b{re.escape(name)}\s*\(")
+    m = pat.search(expr)
+    if m is None:
+        return None
+    start = m.start()
+    i = m.end()
+    depth = 1
+    n = len(expr)
+    while i < n:
+        c = expr[i]
+        if c == "(":
+            depth += 1
+        elif c == ")":
+            depth -= 1
+            if depth == 0:
+                return (start, i + 1)
+        i += 1
+    raise InvalidRhsSpecError(detail=f"unbalanced parentheses in {name}(...) call")
 
 
-def _expand_sum_over(expr: str, *, axes: list[dict[str, Any]]) -> str:
-    """Expand ``sum_over(axis=var, inner_expr)`` for categorical axes.
-
-    Continuous axes are rejected.  Supports an optional ``IN [coords]``
-    filter to restrict the summation.
+def _split_top_level_commas(s: str) -> list[str]:
+    """Split *s* on commas at the top paren/bracket nesting level.
 
     Returns:
-        Expression string with sum_over calls expanded to explicit sums.
+        List of comma-separated argument strings (each stripped of
+        surrounding whitespace).  Empty input yields ``[]``.
     """
+    out: list[str] = []
+    depth = 0
+    last = 0
+    for i, c in enumerate(s):
+        if c in "([{":
+            depth += 1
+        elif c in ")]}":
+            depth -= 1
+        elif c == "," and depth == 0:
+            out.append(s[last:i].strip())
+            last = i + 1
+    tail = s[last:].strip()
+    if tail or out:
+        out.append(tail)
+    return out
 
-    def _axis_coords(ax_name: str) -> list[str]:
-        for ax in axes:
-            if ax.get("name") == ax_name:
-                if ax.get("type") != "categorical":
-                    raise InvalidRhsSpecError(
-                        detail=f"sum_over axis {ax_name!r} must be categorical"
-                    )
-                coords = ax.get("coords", [])
-                if not coords:
-                    raise InvalidRhsSpecError(
-                        detail=f"sum_over axis {ax_name!r} has no coords"
-                    )
-                return [str(c) for c in coords]
-        raise InvalidRhsSpecError(detail=f"sum_over axis {ax_name!r} not found")
 
+_KERNEL_KW_RE = re.compile(r"^kernel\s*=\s*(.+)$", re.DOTALL)
+_AXIS_BIND_RE = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.+)$", re.DOTALL)
+_APPLY_ALONG_KERNELS = frozenset({"sum", "integrate"})
+
+
+def _parse_apply_along_args(  # noqa: C901
+    args_str: str,
+    *,
+    axis_names: set[str],
+) -> tuple[list[tuple[str, str]], str | None, str]:
+    """Parse the argument list of an ``apply_along(...)`` call.
+
+    Args:
+        args_str: The raw text between the call's parentheses.
+        axis_names: Known axis names (used to distinguish axis bindings
+            from the inner expression).
+
+    Returns:
+        Tuple ``(axis_bindings, kernel_form, inner_expr)`` where
+        ``axis_bindings`` is a list of ``(axis_name, var_name)`` pairs in
+        declaration order, ``kernel_form`` is ``"sum"``, ``"integrate"``
+        or ``None`` (meaning auto-select from axis types), and
+        ``inner_expr`` is the bound inner expression.
+
+    Raises:
+        InvalidRhsSpecError: If the argument list is malformed (no args,
+            empty arg, duplicate ``kernel=``, unknown kernel name, missing
+            axis bindings, non-identifier var name, or wrong number of
+            inner expressions).
+    """
+    parts = _split_top_level_commas(args_str)
+    if not parts or all(not p for p in parts):
+        raise InvalidRhsSpecError(detail="apply_along(...) requires arguments")
+
+    bindings: list[tuple[str, str]] = []
+    kernel_form: str | None = None
+    inner_parts: list[str] = []
+
+    for part in parts:
+        if not part:
+            raise InvalidRhsSpecError(detail="apply_along(...) has empty argument")
+        km = _KERNEL_KW_RE.match(part)
+        if km is not None:
+            if kernel_form is not None:
+                raise InvalidRhsSpecError(
+                    detail="apply_along(...) accepts at most one 'kernel=' kwarg"
+                )
+            kf = km.group(1).strip().lower()
+            if kf not in _APPLY_ALONG_KERNELS:
+                raise InvalidRhsSpecError(
+                    detail=(
+                        f"apply_along(...) kernel must be one of "
+                        f"{sorted(_APPLY_ALONG_KERNELS)}, got {kf!r}"
+                    )
+                )
+            kernel_form = kf
+            continue
+        bm = _AXIS_BIND_RE.match(part)
+        if bm is not None and bm.group(1) in axis_names:
+            ax_name = bm.group(1)
+            var_name = bm.group(2).strip()
+            if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", var_name):
+                raise InvalidRhsSpecError(
+                    detail=(
+                        f"apply_along(...) axis binding {ax_name}={var_name!r} "
+                        "must bind to an identifier"
+                    )
+                )
+            bindings.append((ax_name, var_name))
+            continue
+        inner_parts.append(part)
+
+    if not bindings:
+        raise InvalidRhsSpecError(
+            detail="apply_along(...) requires at least one axis=var binding"
+        )
+    if len(inner_parts) != 1:
+        raise InvalidRhsSpecError(
+            detail=(
+                "apply_along(...) requires exactly one inner expression argument "
+                f"(got {len(inner_parts)})"
+            )
+        )
+    return bindings, kernel_form, inner_parts[0]
+
+
+def _select_apply_along_kernel(
+    bindings: list[tuple[str, str]],
+    kernel_form: str | None,
+    *,
+    axes: list[dict[str, Any]],
+) -> str:
+    """Select the per-axis helper form for an ``apply_along`` call.
+
+    Returns:
+        Either ``"sum"`` or ``"integrate"``.
+
+    Raises:
+        InvalidRhsSpecError: If an explicit kernel is incompatible with
+            the bound axis types, or if the kernel cannot be inferred from
+            mixed/unknown axis types.
+    """
+    axis_types: dict[str, str] = {
+        str(ax.get("name")): str(ax.get("type", "")) for ax in axes
+    }
+    types = {axis_types.get(ax) for ax, _ in bindings}
+    if kernel_form == "sum":
+        bad = [ax for ax, _ in bindings if axis_types.get(ax) != "categorical"]
+        if bad:
+            raise InvalidRhsSpecError(
+                detail=(
+                    f"apply_along(kernel=sum) requires categorical axes; "
+                    f"got non-categorical: {bad}"
+                )
+            )
+        return "sum"
+    if kernel_form == "integrate":
+        bad = [ax for ax, _ in bindings if axis_types.get(ax) != "continuous"]
+        if bad:
+            raise InvalidRhsSpecError(
+                detail=(
+                    f"apply_along(kernel=integrate) requires continuous axes; "
+                    f"got non-continuous: {bad}"
+                )
+            )
+        return "integrate"
+    if types == {"categorical"}:
+        return "sum"
+    if types == {"continuous"}:
+        return "integrate"
+    raise InvalidRhsSpecError(
+        detail=(
+            "apply_along(...) cannot infer kernel for mixed/unknown axis types "
+            f"({sorted(t for t in types if t)}); pass kernel=sum or kernel=integrate"
+        )
+    )
+
+
+def _substitute_apply_along_brackets(expr: str, bound: Mapping[str, str]) -> str:
+    """Rewrite ``name[ax=c, ...]`` to ``name__ax_<c>__...`` for bound axes.
+
+    For each ``name[...]`` subexpression, axis assignments whose axis is in
+    ``bound`` and whose coord matches ``bound[axis]`` are consumed into a
+    ``__axis_<sanitized-coord>`` suffix on ``name``.  Remaining assignments
+    stay inside the brackets.  The bracket itself is dropped if every
+    assignment is consumed.
+
+    Returns:
+        Expression string with bound bracket assignments folded into
+        ``__axis_coord`` suffixes.
+    """
+    pat = re.compile(r"([A-Za-z_][A-Za-z0-9_]*)\[([^\[\]]*)\]")
+
+    def _sub(match: re.Match[str]) -> str:
+        name = match.group(1)
+        body = match.group(2)
+        entries = [e.strip() for e in body.split(",") if e.strip()]
+        consumed: list[tuple[str, str]] = []
+        remaining: list[str] = []
+        for entry in entries:
+            if "=" in entry:
+                ax, _, coord = entry.partition("=")
+                ax = ax.strip()
+                coord = coord.strip()
+                if ax in bound and bound[ax] == coord:
+                    consumed.append((ax, coord))
+                    continue
+            remaining.append(entry)
+        if not consumed:
+            return match.group(0)
+        suffix = "".join(
+            f"__{ax}_{_sanitize_fragment(coord)}" for ax, coord in consumed
+        )
+        if remaining:
+            return f"{name}{suffix}[{', '.join(remaining)}]"
+        return f"{name}{suffix}"
+
+    return pat.sub(_sub, expr)
+
+
+def _expand_apply_along(expr: str, *, axes: list[dict[str, Any]]) -> str:  # noqa: PLR0914
+    """Expand ``apply_along(...)`` calls directly to weighted sums.
+
+    The ``apply_along`` primitive contracts an expression along one or more
+    axes using a single shared kernel form.  Categorical axes use uniform
+    weights of 1; continuous axes use trapezoidal weights derived from the
+    axis ``deltas``.  All bound axes are substituted in a single Cartesian
+    expansion, so ``name[ax1=c1, ax2=c2, ...]`` brackets that fully bind
+    apply_along axes collapse to ``name__ax1_<c1>__ax2_<c2>``.
+
+    Returns:
+        Expression string with ``apply_along`` calls fully expanded.
+
+    Raises:
+        InvalidRhsSpecError: If a bound axis has no coords, or if a
+            continuous axis is missing trapezoidal ``deltas``.
+    """
+    axis_lookup = {str(ax.get("name")): ax for ax in axes if ax.get("name")}
     out = expr
     while True:
-        m = _SUM_OVER_RE.search(out)
-        if not m:
-            break
-        axis_name = m.group(1)
-        var_name = m.group(2)
-        inner = m.group(4)
-        coords = _apply_coord_filter(
-            m.group(3),
-            axis_name=axis_name,
-            all_coords=_axis_coords(axis_name),
+        span = _find_call_span(out, "apply_along")
+        if span is None:
+            return out
+        start, end = span
+        args_str = out[start + len("apply_along(") : end - 1]
+        bindings, kernel_form, inner = _parse_apply_along_args(
+            args_str, axis_names=set(axis_lookup)
         )
+        kernel = _select_apply_along_kernel(bindings, kernel_form, axes=axes)
+        # Recursively expand any inner apply_along first so we work on a flat
+        # inner expression for substitution.
+        inner = _expand_apply_along(inner, axes=axes)
+
+        # Build per-axis (coord, weight) lists.
+        axis_options: list[list[tuple[str, float]]] = []
+        for ax_name, _var in bindings:
+            ax = axis_lookup[ax_name]
+            coords = [str(c) for c in ax.get("coords", [])]
+            if not coords:
+                raise InvalidRhsSpecError(
+                    detail=f"apply_along axis {ax_name!r} has no coords"
+                )
+            if kernel == "integrate":
+                deltas = ax.get("deltas") or []
+                if len(deltas) != len(coords):
+                    raise InvalidRhsSpecError(
+                        detail=(
+                            f"apply_along axis {ax_name!r} missing or mismatched deltas"
+                        )
+                    )
+                axis_options.append([
+                    (c, float(d)) for c, d in zip(coords, deltas, strict=True)
+                ])
+            else:
+                axis_options.append([(c, 1.0) for c in coords])
+
         terms: list[str] = []
-        for coord in coords:
-            replaced = re.sub(
-                rf"\b{re.escape(var_name)}\b",
-                str(coord),
-                inner,
-            )
-            coord_s = str(coord)
-
-            def _template_replacer(
-                match: Match[str], *, axis: str = axis_name, coord: str = coord_s
-            ) -> str:
-                return f"{match.group(1)}__{axis}_{_sanitize_fragment(coord)}"
-
-            replaced = re.sub(
-                rf"([A-Za-z_][A-Za-z0-9_]*)\[\s*{re.escape(axis_name)}\s*=\s*{re.escape(coord_s)}\s*\]",
-                _template_replacer,
-                replaced,
-            )
-            terms.append(f"({replaced})")
+        for combo in product(*axis_options):
+            replaced = inner
+            bound: dict[str, str] = {}
+            for (ax_name, var_name), (coord, _w) in zip(bindings, combo, strict=True):
+                replaced = re.sub(rf"\b{re.escape(var_name)}\b", coord, replaced)
+                bound[ax_name] = coord
+            replaced = _substitute_apply_along_brackets(replaced, bound)
+            if kernel == "integrate":
+                weight = "*".join(str(w) for _, w in combo)
+                terms.append(f"({weight})*({replaced})")
+            else:
+                terms.append(f"({replaced})")
         replacement = " + ".join(terms)
-        out = out[: m.start()] + f"({replacement})" + out[m.end() :]
-    return out
+        out = out[:start] + f"({replacement})" + out[end:]
 
 
 def _expand_helpers(expr: str, *, axes: list[dict[str, Any]]) -> str:
-    """Expand helper calls (integrate_over, sum_over) before AST parsing.
+    """Expand helper calls (currently only ``apply_along``) before AST parsing.
 
     Returns:
         Expression string with helper calls expanded.
     """
-    return _expand_sum_over(_expand_integrate_over(expr, axes=axes), axes=axes)
+    return _expand_apply_along(expr, axes=axes)
 
 
 def _resolve_template_equation(
