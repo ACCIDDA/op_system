@@ -15,7 +15,7 @@ from op_system._errors import InvalidRhsSpecError
 from op_system._helpers import _ensure_mapping
 
 
-class ConstraintRule(NamedTuple):
+class _ConstraintRule(NamedTuple):
     """Validated constraint rule produced by ``_normalize_constraints``."""
 
     axes: tuple[str, ...]
@@ -153,7 +153,7 @@ def _normalize_constraints(
     raw_constraints: object,
     *,
     axes: list[dict[str, Any]],
-) -> list[ConstraintRule]:
+) -> list[_ConstraintRule]:
     """Normalize cross-axis constraint rules.
 
     Each rule references two or more axes and declares either an ``allow``
@@ -161,7 +161,7 @@ def _normalize_constraints(
     list (blocklist of invalid combinations).
 
     Returns:
-        List of validated ``ConstraintRule`` named tuples.
+        List of validated ``_ConstraintRule`` named tuples.
 
     Raises:
         InvalidRhsSpecError: If validation fails.
@@ -177,7 +177,7 @@ def _normalize_constraints(
         ax["name"]: {str(c) for c in ax.get("coords", [])} for ax in axes
     }
     axis_names = set(axis_lookup)
-    out: list[ConstraintRule] = []
+    out: list[_ConstraintRule] = []
 
     for idx, entry in enumerate(raw_constraints):
         entry_map = _ensure_mapping(entry, name=f"constraints[{idx}]")
@@ -197,7 +197,7 @@ def _normalize_constraints(
         ]
 
         out.append(
-            ConstraintRule(
+            _ConstraintRule(
                 axes=tuple(rule_axes),
                 mode=mode,
                 rules=tuple(validated_rules),
