@@ -14,10 +14,9 @@ import re
 
 import pytest
 
+from op_system._constraints import _ConstraintRule, _normalize_constraints
 from op_system.specs import (
-    ConstraintRule,
     NormalizedRhs,
-    _normalize_constraints,
     normalize_expr_rhs,
     normalize_rhs,
     normalize_transitions_rhs,
@@ -436,7 +435,7 @@ def test_operator_apply_to_validation() -> None:
             "I": "0.0",
         },
     }
-    with pytest.raises(ValueError, match=r"apply_to\[0\]='X' not in state"):
+    with pytest.raises(ValueError, match=r"apply_to entry 'X' not in state"):
         normalize_expr_rhs(spec_bad_apply_to)
 
 
@@ -587,6 +586,66 @@ def test_transitions_template_expansion_over_axes() -> None:
 
     expected_params = {"b0", "gamma", "k_base"}
     assert set(out.param_names) == expected_params
+
+
+def test_transitions_template_endpoint_pinning_expands_correctly() -> None:
+    """Endpoint pinning keeps pinned axis fixed while expanding other axes."""
+    spec = {
+        "kind": "transitions",
+        "axes": [
+            {"name": "age", "coords": ["u65", "o65"]},
+            {"name": "imm", "coords": ["X0", "X1"]},
+        ],
+        "state": ["I[age,imm]", "X[age,imm]"],
+        "transitions": [
+            {
+                "from": "I[age,imm]",
+                "to": "X[age,imm=X1]",
+                "rate": "waning[imm]",
+            }
+        ],
+    }
+
+    out = normalize_transitions_rhs(spec)
+
+    assert "X__age_u65__imm_X1" in out.state_names
+    assert "X__age_o65__imm_X1" in out.state_names
+    assert any("-" in eq and "I__age_u65__imm_X0" in eq for eq in out.equations)
+    assert any(
+        "I__age_u65__imm_X0" in eq and "I__age_u65__imm_X1" in eq
+        for eq in out.equations
+    )
+
+
+def test_transitions_chain_helper_supports_templated_chain_names() -> None:
+    """Transitions chains accept template names and expand stages over axes."""
+    spec = {
+        "kind": "transitions",
+        "axes": [
+            {"name": "age", "coords": ["a", "b"]},
+            {"name": "vax", "coords": ["u", "v"]},
+        ],
+        "state": ["E[age,vax]", "R[age,vax]"],
+        "transitions": [],
+        "chain": [
+            {
+                "name": "I[age,vax]",
+                "length": 3,
+                "entry": {"from": "E[age,vax]", "rate": "sigma"},
+                "forward": ["g12", "g23"],
+                "exit": {"to": "R[age,vax]", "rate": "g3r"},
+            }
+        ],
+    }
+
+    out = normalize_transitions_rhs(spec)
+
+    assert "I1__age_a__vax_u" in out.state_names
+    assert "I3__age_b__vax_v" in out.state_names
+    # 4 axis combinations * (entry + 2 internal + exit) transitions per combo.
+    assert len(out.meta["transitions"]) == 16
+    rates = {tr["rate"] for tr in out.meta["transitions"]}
+    assert rates == {"sigma", "g12", "g23", "g3r"}
 
 
 def test_expr_chain_helper_autofills_missing_equations() -> None:
@@ -760,7 +819,7 @@ def test_normalize_constraints_allow_happy_path() -> None:
     ]
     result = _normalize_constraints(raw, axes=_AXES_AGE_VAX)
     assert result == [
-        ConstraintRule(
+        _ConstraintRule(
             axes=("age", "vax"),
             mode="allow",
             rules=(
@@ -783,7 +842,7 @@ def test_normalize_constraints_exclude_happy_path() -> None:
     ]
     result = _normalize_constraints(raw, axes=_AXES_AGE_VAX)
     assert result == [
-        ConstraintRule(
+        _ConstraintRule(
             axes=("age", "vax"),
             mode="exclude",
             rules=({"age": ["u65"], "vax": ["dose1", "dose2"]},),
@@ -1299,3 +1358,80 @@ def test_sum_over_in_filter_rejects_duplicate_coord() -> None:
     }
     with pytest.raises(ValueError, match=r"duplicate coord"):
         normalize_expr_rhs(spec)
+
+
+# ---------------------------------------------------------------------------
+# Pinned selector integration tests (#82 acceptance criteria)
+# ---------------------------------------------------------------------------
+
+
+def test_initial_state_pinned_key_expands_correctly() -> None:
+    """initial_state key with pinned axis generates only fixed-coord entries."""
+    spec = {
+        "kind": "transitions",
+        "axes": [
+            {"name": "age", "coords": ["y", "o"]},
+            {"name": "vax", "coords": ["u", "v"]},
+            {"name": "imm", "coords": ["X0", "X1"]},
+        ],
+        "state": ["S[age,vax,imm]"],
+        "transitions": [
+            {"from": "S[age,vax,imm]", "to": "S[age,vax,imm]", "rate": "alpha"},
+        ],
+        # Pin imm=X0; should expand age x vax but not imm.
+        "initial_state": {"S[age,vax,imm=X0]": "S0[age,vax,imm=X0]"},
+    }
+    out = normalize_transitions_rhs(spec)
+    ic = out.meta["initial_state"]
+    # 2 age x 2 vax x 1 pinned imm = 4 entries.
+    assert len(ic) == 4
+    for key in ic:
+        assert "imm_X0" in key
+        assert "imm_X1" not in key
+    assert "S__age_y__vax_u__imm_X0" in ic
+    assert "S__age_o__vax_v__imm_X0" in ic
+
+
+def test_initial_state_pinned_key_invalid_coord_rejected() -> None:
+    """initial_state key with an unknown pinned coord raises."""
+    spec = {
+        "kind": "transitions",
+        "axes": [
+            {"name": "imm", "coords": ["X0", "X1"]},
+        ],
+        "state": ["S[imm]"],
+        "transitions": [{"from": "S[imm]", "to": "S[imm]", "rate": "alpha"}],
+        "initial_state": {"S[imm=X99]": "S0"},
+    }
+    with pytest.raises(ValueError, match=r"pinned coord"):
+        normalize_transitions_rhs(spec)
+
+
+def test_transitions_pinned_from_endpoint_expands_correctly() -> None:
+    """Pinned FROM endpoint keeps that axis fixed while expanding others."""
+    spec = {
+        "kind": "transitions",
+        "axes": [
+            {"name": "age", "coords": ["y", "o"]},
+            {"name": "vax", "coords": ["u", "v"]},
+        ],
+        "state": ["S[age,vax]", "R[age,vax]"],
+        "transitions": [
+            # Pin age=y; only young age group transitions.
+            {
+                "from": "S[age=y, vax]",
+                "to": "R[age=y, vax]",
+                "rate": "gamma",
+            }
+        ],
+    }
+    out = normalize_transitions_rhs(spec)
+    trs = out.meta["transitions"]
+    # 2 vax combinations, age pinned to y.
+    assert len(trs) == 2
+    frm_states = {tr["from"] for tr in trs}
+    assert frm_states == {"S__age_y__vax_u", "S__age_y__vax_v"}
+    to_states = {tr["to"] for tr in trs}
+    assert to_states == {"R__age_y__vax_u", "R__age_y__vax_v"}
+    # Old-age states exist in state_names but are untouched by this transition.
+    assert "S__age_o__vax_u" in out.state_names
