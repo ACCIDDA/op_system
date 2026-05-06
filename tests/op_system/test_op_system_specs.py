@@ -14,10 +14,9 @@ import re
 
 import pytest
 
+from op_system._constraints import ConstraintRule, _normalize_constraints
 from op_system.specs import (
-    ConstraintRule,
     NormalizedRhs,
-    _normalize_constraints,
     normalize_expr_rhs,
     normalize_rhs,
     normalize_transitions_rhs,
@@ -436,7 +435,7 @@ def test_operator_apply_to_validation() -> None:
             "I": "0.0",
         },
     }
-    with pytest.raises(ValueError, match=r"apply_to\[0\]='X' not in state"):
+    with pytest.raises(ValueError, match=r"apply_to entry 'X' not in state"):
         normalize_expr_rhs(spec_bad_apply_to)
 
 

@@ -35,19 +35,44 @@ Future-facing (not implemented, but reserved)
 
 from __future__ import annotations
 
-import ast
 import re
 from dataclasses import dataclass
 from itertools import product
-from typing import TYPE_CHECKING, Any, NamedTuple, NoReturn
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Mapping, Sequence
+    from collections.abc import Mapping
     from re import Match
 
+from op_system._axes import _normalize_axes, _normalize_bracket_key
+from op_system._errors import (
+    _raise_invalid_rhs_spec,
+    _raise_unsupported_feature,
+)
+from op_system._helpers import (
+    _ensure_mapping,
+    _ensure_str_dict,
+    _ensure_str_list,
+    _sorted_unique,
+)
+from op_system._symbols import _collect_names, _parse_expr
+from op_system._templates import (
+    PinnedToken,
+    SelectorToken,
+    WildcardToken,
+    _apply_template_substitutions,
+    _extract_placeholders_from_expr,
+    _sanitize_fragment,
+    build_axis_lookup,
+    expand_apply_to,
+    expand_selector,
+    parse_selector,
+    render_selector,
+)
 
-_STATE_TEMPLATE_RE = re.compile(r"\s*([A-Za-z_][A-Za-z0-9_]*)\[(.+)\]\s*")
-_INLINE_TEMPLATE_RE = re.compile(r"([A-Za-z_][A-Za-z0-9_]*)\[(.*?)\]")
+# These types are part of the public API of this module (re-exported for callers).
+__all__ = ["PinnedToken", "SelectorToken", "WildcardToken"]
+
 _INTEGRATE_OVER_RE = re.compile(
     r"integrate_over\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*([A-Za-z_][A-Za-z0-9_]*)\s*,\s*(.*?)\)",
     re.DOTALL,
@@ -57,15 +82,6 @@ _SUM_OVER_RE = re.compile(
     r"(?:\s+IN\s+\[([^\[\]]*)\])?\s*,\s*(.*?)\)",
     re.DOTALL,
 )
-_PLACEHOLDER_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\[(.*?)\]")
-
-# -----------------------------------------------------------------------------
-# Error message constants
-# -----------------------------------------------------------------------------
-
-_INVALID_RHS_SPEC_PREFIX = "Invalid op_system RHS specification."
-_INVALID_EXPRESSION_PREFIX = "Invalid op_system expression."
-_UNSUPPORTED_FEATURE_PREFIX = "Unsupported op_system feature."
 
 _ALLOWED_KERNEL_FORMS: dict[str, tuple[str, ...]] = {
     "erfc": ("scale", "sigma"),
@@ -75,55 +91,6 @@ _ALLOWED_KERNEL_FORMS: dict[str, tuple[str, ...]] = {
     "power_law": ("scale", "sigma", "p"),
     "custom_value": (),
 }
-
-
-def _raise_invalid_rhs_spec(
-    *, missing: list[str] | None = None, detail: str | None = None
-) -> NoReturn:
-    """Raise a standardized RHS specification error.
-
-    Args:
-        missing: Optional list of missing field names.
-        detail: Optional additional detail string.
-
-    Raises:
-        ValueError: Always.
-    """
-    parts: list[str] = [_INVALID_RHS_SPEC_PREFIX]
-    if missing:
-        parts.append(f"Missing required field(s): {sorted(set(missing))}.")
-    if detail:
-        parts.append(f"Detail: {detail}")
-    raise ValueError(" ".join(parts))
-
-
-def _raise_invalid_expression(*, detail: str) -> NoReturn:
-    """Raise a standardized expression error.
-
-    Args:
-        detail: Error detail.
-
-    Raises:
-        ValueError: Always.
-    """
-    msg = f"{_INVALID_EXPRESSION_PREFIX} Detail: {detail}"
-    raise ValueError(msg)
-
-
-def _raise_unsupported_feature(*, feature: str, detail: str | None = None) -> NoReturn:
-    """Raise a standardized unsupported feature error.
-
-    Args:
-        feature: Feature identifier.
-        detail: Optional additional detail.
-
-    Raises:
-        NotImplementedError: Always.
-    """
-    msg = f"{_UNSUPPORTED_FEATURE_PREFIX} Feature '{feature}' is not supported."
-    if detail:
-        msg = f"{msg} Detail: {detail}"
-    raise NotImplementedError(msg)
 
 
 # -----------------------------------------------------------------------------
@@ -144,552 +111,7 @@ class NormalizedRhs:
     meta: Mapping[str, Any]
 
 
-# -----------------------------------------------------------------------------
-# AST helpers (minimal v1)
-# -----------------------------------------------------------------------------
-
-
-def _parse_expr(expr: str) -> ast.AST:
-    """
-    Parse a Python expression and return the AST node.
-
-    Args:
-        expr: Expression string to parse.
-
-    Returns:
-        The parsed AST node.
-    """
-    try:
-        return ast.parse(expr, mode="eval")
-    except SyntaxError as exc:
-        _raise_invalid_expression(detail=f"invalid expression syntax: {exc.msg}")
-
-
-def _collect_names(tree: ast.AST) -> set[str]:
-    """
-    Collect all Name identifiers used in an expression AST.
-
-    Args:
-        tree: Parsed AST.
-
-    Returns:
-        Set of identifier names referenced in the expression.
-    """
-    names: set[str] = set()
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Name):
-            names.add(str(node.id))
-    return names
-
-
-def _ensure_str_list(x: object, *, name: str) -> list[str]:
-    """
-    Ensure x is a list of non-empty strings.
-
-    Args:
-        x: Input value.
-        name: Field name for error messages.
-
-    Returns:
-        List of stripped, non-empty strings.
-    """
-    if not isinstance(x, (list, tuple)):
-        _raise_invalid_rhs_spec(detail=f"{name} must be a list of strings")
-    out: list[str] = []
-    for i, v in enumerate(x):
-        if not isinstance(v, str) or not v.strip():
-            _raise_invalid_rhs_spec(detail=f"{name}[{i}] must be a non-empty string")
-        out.append(v.strip())
-    return out
-
-
-def _ensure_str_dict(x: object, *, name: str) -> dict[str, str]:
-    """
-    Ensure x is a dict of non-empty strings.
-
-    Args:
-        x: Input value (mapping) or None.
-        name: Field name for error messages.
-
-    Returns:
-        Dict of stripped string keys to stripped non-empty string values.
-    """
-    if x is None:
-        return {}
-    if not isinstance(x, dict):
-        _raise_invalid_rhs_spec(detail=f"{name} must be a mapping of string->string")
-    out: dict[str, str] = {}
-    for k, v in x.items():
-        if not isinstance(k, str) or not k.strip():
-            _raise_invalid_rhs_spec(detail=f"{name} keys must be non-empty strings")
-        if not isinstance(v, str) or not v.strip():
-            _raise_invalid_rhs_spec(detail=f"{name}[{k!r}] must be a non-empty string")
-        out[k.strip()] = v.strip()
-    return out
-
-
-def _sorted_unique(xs: Iterable[str]) -> tuple[str, ...]:
-    """Return a sorted tuple of unique strings from the iterable."""
-    return tuple(sorted(set(xs)))
-
-
-def _as_number(x: object, *, name: str) -> float:
-    """Ensure x is a real number (int/float) and return float.
-
-    Returns:
-        Input coerced to float.
-    """
-    if isinstance(x, bool) or not isinstance(x, (int, float)):
-        _raise_invalid_rhs_spec(detail=f"{name} must be a number")
-    return float(x)
-
-
-def _ensure_mapping(x: object, *, name: str) -> Mapping[str, Any]:
-    """Ensure x is a mapping.
-
-    Returns:
-        Mapping view of the input.
-    """
-    if not isinstance(x, dict):
-        _raise_invalid_rhs_spec(detail=f"{name} must be a mapping")
-    return x
-
-
-def _normalize_bracket_key(key: str) -> str:
-    """Normalize whitespace inside bracket notation.
-
-    Strips spaces around commas and bracket edges so that user-provided keys
-    like ``"u[x, y]"`` match the canonical template form ``"u[x,y]"``.
-
-    Returns:
-        Canonical bracket key string.
-    """
-    if "[" not in key:
-        return key.strip()
-    m = _STATE_TEMPLATE_RE.fullmatch(key)
-    if not m:
-        return key.strip()
-    base = m.group(1)
-    parts = [p.strip() for p in m.group(2).split(",")]
-    return f"{base}[{','.join(parts)}]"
-
-
-def _normalize_axis_name(ax_map: Mapping[str, Any], *, idx: int, seen: set[str]) -> str:
-    name_val = ax_map.get("name")
-    if not isinstance(name_val, str) or not name_val.strip():
-        _raise_invalid_rhs_spec(detail=f"axes[{idx}].name must be a non-empty string")
-    name = name_val.strip()
-    if name in seen:
-        _raise_invalid_rhs_spec(detail=f"duplicate axis name: {name!r}")
-    seen.add(name)
-    return name
-
-
-def _normalize_axis_type(ax_map: Mapping[str, Any], *, idx: int) -> str:
-    ax_type = str(ax_map.get("type", "categorical")).strip().lower()
-    if ax_type not in {"categorical", "continuous"}:
-        _raise_invalid_rhs_spec(
-            detail=f"axes[{idx}].type must be 'categorical' or 'continuous'"
-        )
-    return ax_type
-
-
-def _normalize_axis_units(ax_map: Mapping[str, Any], *, idx: int) -> str | None:
-    units_obj = ax_map.get("units")
-    if units_obj is None:
-        return None
-    if not isinstance(units_obj, str) or not units_obj.strip():
-        _raise_invalid_rhs_spec(
-            detail=f"axes[{idx}].units must be a non-empty string if provided"
-        )
-    return units_obj.strip()
-
-
-def _normalize_axis_coords(
-    coords_obj: object,
-    *,
-    idx: int,
-    ax_type: str,
-) -> tuple[list[Any], int]:
-    if not isinstance(coords_obj, (list, tuple)) or not coords_obj:
-        _raise_invalid_rhs_spec(detail=f"axes[{idx}].coords must be a non-empty list")
-    coords = list(coords_obj)
-    if ax_type == "categorical":
-        for j, v in enumerate(coords):
-            if not isinstance(v, str) or not str(v).strip():
-                _raise_invalid_rhs_spec(
-                    detail=f"axes[{idx}].coords[{j}] must be a non-empty string"
-                )
-            coords[j] = str(v).strip()
-        return coords, len(coords)
-
-    for j, v in enumerate(coords):
-        coords[j] = _as_number(v, name=f"axes[{idx}].coords[{j}]")
-    if len(coords) >= 2:
-        for j in range(1, len(coords)):
-            if coords[j] < coords[j - 1]:
-                _raise_invalid_rhs_spec(
-                    detail=(
-                        f"axes[{idx}].coords must be non-decreasing for continuous axes"
-                    )
-                )
-    return coords, len(coords)
-
-
-def _compute_axis_deltas(coords: list[float], *, idx: int) -> list[float]:
-    """Compute integration weights (trapezoidal) for a continuous axis.
-
-    Weights are half-interval widths at boundaries and centered widths inside.
-    Raises if any interval width is non-positive.
-
-    Returns:
-        List of trapezoidal weights matching coords length.
-    """
-    if len(coords) < 2:
-        _raise_invalid_rhs_spec(detail=f"axes[{idx}] continuous requires >=2 coords")
-
-    deltas: list[float] = []
-    for i in range(len(coords)):
-        if i == 0:
-            width = (coords[1] - coords[0]) / 2.0
-        elif i == len(coords) - 1:
-            width = (coords[-1] - coords[-2]) / 2.0
-        else:
-            width = (coords[i + 1] - coords[i - 1]) / 2.0
-        if width <= 0.0:
-            _raise_invalid_rhs_spec(
-                detail=f"axes[{idx}] coords must be strictly increasing for integration"
-            )
-        deltas.append(width)
-    return deltas
-
-
-def _generate_continuous_coords(
-    *, domain: object, size_obj: object, spacing: str, idx: int
-) -> tuple[list[float], int]:
-    domain_map = (
-        _ensure_mapping(domain, name=f"axes[{idx}].domain")
-        if domain is not None
-        else None
-    )
-    lb = (
-        _as_number(domain_map.get("lb"), name=f"axes[{idx}].domain.lb")
-        if domain_map
-        else None
-    )
-    ub = (
-        _as_number(domain_map.get("ub"), name=f"axes[{idx}].domain.ub")
-        if domain_map
-        else None
-    )
-    if lb is None or ub is None:
-        _raise_invalid_rhs_spec(
-            detail=(
-                f"axes[{idx}] continuous requires domain.lb and domain.ub "
-                "when coords are absent"
-            )
-        )
-    if ub <= lb:
-        _raise_invalid_rhs_spec(detail=f"axes[{idx}].domain.ub must be greater than lb")
-
-    if not isinstance(size_obj, (int, float)) or isinstance(size_obj, bool):
-        _raise_invalid_rhs_spec(detail=f"axes[{idx}].size must be an integer >= 2")
-    resolved_size = int(size_obj)
-    if resolved_size < 2:
-        _raise_invalid_rhs_spec(detail=f"axes[{idx}].size must be >= 2")
-
-    spacing_allowed = {"linear", "log", "geom"}
-    if spacing not in spacing_allowed:
-        _raise_invalid_rhs_spec(
-            detail=f"axes[{idx}].spacing must be one of {sorted(spacing_allowed)}"
-        )
-
-    coords: list[float] = []
-    if spacing == "linear":
-        step = (ub - lb) / (resolved_size - 1)
-        coords = [lb + step * i for i in range(resolved_size)]
-    elif spacing in {"log", "geom"}:
-        if lb <= 0 or ub <= 0:
-            _raise_invalid_rhs_spec(
-                detail=f"axes[{idx}] log/geom spacing requires positive lb/ub"
-            )
-        ratio = (ub / lb) ** (1.0 / (resolved_size - 1))
-        coords = [lb * (ratio**i) for i in range(resolved_size)]
-
-    return coords, resolved_size
-
-
-def _normalize_single_axis(
-    ax_map: Mapping[str, Any], *, idx: int, seen: set[str]
-) -> dict[str, Any]:
-    name = _normalize_axis_name(ax_map, idx=idx, seen=seen)
-    ax_type = _normalize_axis_type(ax_map, idx=idx)
-    spacing = str(ax_map.get("spacing", "linear")).strip().lower()
-    coords_obj = ax_map.get("coords")
-    domain = ax_map.get("domain")
-    size_obj = ax_map.get("size")
-
-    if coords_obj is not None:
-        coords, resolved_size = _normalize_axis_coords(
-            coords_obj, idx=idx, ax_type=ax_type
-        )
-    elif ax_type == "categorical":
-        _raise_invalid_rhs_spec(detail=f"axes[{idx}] categorical requires coords")
-    else:
-        coords, resolved_size = _generate_continuous_coords(
-            domain=domain, size_obj=size_obj, spacing=spacing, idx=idx
-        )
-
-    axis_out: dict[str, Any] = {
-        "name": name,
-        "type": ax_type,
-        "coords": coords,
-        "size": resolved_size,
-    }
-    if ax_type == "continuous":
-        axis_out["deltas"] = _compute_axis_deltas(coords, idx=idx)
-    if domain is not None:
-        axis_out["domain"] = domain
-    if spacing:
-        axis_out["spacing"] = spacing
-    units = _normalize_axis_units(ax_map, idx=idx)
-    if units is not None:
-        axis_out["units"] = units
-    return axis_out
-
-
-def _normalize_axes(raw_axes: object) -> list[dict[str, Any]]:
-    """Normalize axis specifications (categorical or continuous).
-
-    Returns:
-        Normalized axis definitions with coords and sizes.
-    """
-    if raw_axes is None:
-        return []
-    if not isinstance(raw_axes, list):
-        _raise_invalid_rhs_spec(detail="axes must be a list of axis definitions")
-
-    seen: set[str] = set()
-    axes_out: list[dict[str, Any]] = []
-
-    for idx, ax in enumerate(raw_axes):
-        axis_out = _normalize_single_axis(
-            _ensure_mapping(ax, name=f"axes[{idx}]"), idx=idx, seen=seen
-        )
-        axes_out.append(axis_out)
-
-    return axes_out
-
-
-# -----------------------------------------------------------------------------
-# Constraint normalization (cross-axis masking)
-# -----------------------------------------------------------------------------
-
-
-def _validate_constraint_axes(
-    rule_axes_raw: Sequence[str] | object,
-    *,
-    idx: int,
-    axis_names: set[str],
-) -> tuple[list[str], set[str]]:
-    """Validate and return the axes list for a single constraint rule.
-
-    Args:
-        rule_axes_raw: Raw axes value from the constraint entry, expected to
-            be a sequence of at least two axis name strings.
-        idx: Zero-based index of the parent constraint entry (for error
-            messages).
-        axis_names: Set of valid axis names declared in the spec.
-
-    Returns:
-        Tuple of (ordered axis name list, axis name set).
-
-    Examples:
-        >>> axes, seen = _validate_constraint_axes(
-        ...     ["age", "vax"], idx=0, axis_names={"age", "vax"}
-        ... )
-        >>> axes
-        ['age', 'vax']
-        >>> sorted(seen)
-        ['age', 'vax']
-    """
-    if not isinstance(rule_axes_raw, (list, tuple)) or len(rule_axes_raw) < 2:
-        _raise_invalid_rhs_spec(
-            detail=(
-                f"constraints[{idx}].axes must be a list of at least two axis names"
-            )
-        )
-    rule_axes: list[str] = []
-    seen: set[str] = set()
-    for j, ax_name in enumerate(rule_axes_raw):
-        if not isinstance(ax_name, str) or not (ax_s := ax_name.strip()):
-            _raise_invalid_rhs_spec(
-                detail=f"constraints[{idx}].axes[{j}] must be a non-empty string"
-            )
-        if ax_s not in axis_names:
-            _raise_invalid_rhs_spec(
-                detail=f"constraints[{idx}].axes references unknown axis {ax_s!r}"
-            )
-        if ax_s in seen:
-            _raise_invalid_rhs_spec(
-                detail=f"constraints[{idx}].axes contains duplicate axis {ax_s!r}"
-            )
-        seen.add(ax_s)
-        rule_axes.append(ax_s)
-    return rule_axes, seen
-
-
-def _resolve_constraint_mode(
-    entry_map: Mapping[str, Any], *, idx: int
-) -> tuple[str, list[Any]]:
-    """Determine allow/exclude mode and return raw rules list.
-
-    Args:
-        entry_map: Parsed constraint entry mapping.
-        idx: Zero-based index of the constraint entry (for error messages).
-
-    Returns:
-        Tuple of (mode string, raw rule list).
-    """
-    has_allow = "allow" in entry_map
-    has_exclude = "exclude" in entry_map
-    if has_allow and has_exclude:
-        _raise_invalid_rhs_spec(
-            detail=(
-                f"constraints[{idx}] must specify either 'allow' or 'exclude', not both"
-            )
-        )
-    if not has_allow and not has_exclude:
-        _raise_invalid_rhs_spec(
-            detail=f"constraints[{idx}] must specify 'allow' or 'exclude'"
-        )
-    mode = "allow" if has_allow else "exclude"
-    raw_rules = entry_map[mode]
-    if not isinstance(raw_rules, list) or not raw_rules:
-        _raise_invalid_rhs_spec(
-            detail=f"constraints[{idx}].{mode} must be a non-empty list"
-        )
-    return mode, raw_rules
-
-
-def _validate_constraint_rule(
-    rule: object,
-    *,
-    label: str,
-    rule_axis_set: set[str],
-    axis_lookup: Mapping[str, set[str]],
-) -> dict[str, list[str]]:
-    """Validate a single rule mapping inside a constraint entry.
-
-    Args:
-        rule: Raw rule object (expected to be a mapping).
-        label: Human-readable label for error messages (e.g.
-            `constraints[0].allow[1]`).
-        rule_axis_set: Set of axis names declared by the parent constraint.
-        axis_lookup: Mapping of axis name to set of valid coordinates.
-
-    Returns:
-        Validated mapping of axis name to list of coordinate strings.
-    """
-    rule_map = _ensure_mapping(rule, name=label)
-    validated: dict[str, list[str]] = {}
-    for key, val in rule_map.items():
-        key_s = str(key).strip()
-        if key_s not in rule_axis_set:
-            _raise_invalid_rhs_spec(
-                detail=(
-                    f"{label} references axis {key_s!r} not in "
-                    f"constraint axes {sorted(rule_axis_set)}"
-                )
-            )
-        if isinstance(val, str):
-            coords = [val.strip()]
-        elif isinstance(val, (list, tuple)):
-            coords = [str(v).strip() for v in val]
-        else:
-            coords = [str(val).strip()]
-        for coord in coords:
-            if coord not in axis_lookup[key_s]:
-                _raise_invalid_rhs_spec(
-                    detail=(
-                        f"{label} references unknown coord {coord!r} for axis {key_s!r}"
-                    )
-                )
-        validated[key_s] = coords
-    if not validated:
-        _raise_invalid_rhs_spec(detail=f"{label} must specify at least one axis")
-    return validated
-
-
-class ConstraintRule(NamedTuple):
-    """Validated constraint rule produced by `_normalize_constraints`."""
-
-    axes: tuple[str, ...]
-    mode: str
-    rules: tuple[dict[str, list[str]], ...]
-
-
-def _normalize_constraints(
-    raw_constraints: object,
-    *,
-    axes: list[dict[str, Any]],
-) -> list[ConstraintRule]:
-    """Normalize cross-axis constraint rules.
-
-    Each rule references two or more axes and declares either an `allow`
-    list (allowlist of valid coordinate combinations) or an `exclude`
-    list (blocklist of invalid combinations).  Mixing `allow` and
-    `exclude` in the same rule is rejected.
-
-    Args:
-        raw_constraints: Raw `constraints` value from the spec.
-        axes: Already-normalized axis definitions (from `_normalize_axes`).
-
-    Returns:
-        List of validated constraint rule dicts, each containing:
-        - `axes`:  tuple of axis names referenced by the rule
-        - `mode`:  `"allow"` or `"exclude"`
-        - `rules`: tuple of validated assignment dicts
-    """
-    if raw_constraints is None:
-        return []
-    if not isinstance(raw_constraints, list):
-        _raise_invalid_rhs_spec(detail="constraints must be a list")
-    if not raw_constraints:
-        return []
-
-    axis_lookup: dict[str, set[str]] = {
-        ax["name"]: {str(c) for c in ax.get("coords", [])} for ax in axes
-    }
-    axis_names = set(axis_lookup)
-    out: list[ConstraintRule] = []
-
-    for idx, entry in enumerate(raw_constraints):
-        entry_map = _ensure_mapping(entry, name=f"constraints[{idx}]")
-        rule_axes, rule_axis_set = _validate_constraint_axes(
-            entry_map.get("axes"), idx=idx, axis_names=axis_names
-        )
-        mode, raw_rules = _resolve_constraint_mode(entry_map, idx=idx)
-
-        validated_rules = [
-            _validate_constraint_rule(
-                rule,
-                label=f"constraints[{idx}].{mode}[{r_idx}]",
-                rule_axis_set=rule_axis_set,
-                axis_lookup=axis_lookup,
-            )
-            for r_idx, rule in enumerate(raw_rules)
-        ]
-
-        out.append(
-            ConstraintRule(
-                axes=tuple(rule_axes),
-                mode=mode,
-                rules=tuple(validated_rules),
-            )
-        )
-
-    return out
+# (Constraint normalization is in _constraints.py and imported above.)
 
 
 def _normalize_state_axes(
@@ -871,6 +293,8 @@ def _validate_op_apply_to(
     apply_to_raw: object,
     idx: int,
     state_set: set[str] | None,
+    *,
+    axes: list[dict[str, Any]] | None = None,
 ) -> list[str]:
     if not isinstance(apply_to_raw, (list, tuple)) or not apply_to_raw:
         _raise_invalid_rhs_spec(
@@ -879,18 +303,29 @@ def _validate_op_apply_to(
                 "of state names if provided"
             )
         )
-    result: list[str] = []
-    for j, state_name in enumerate(apply_to_raw):
-        if not isinstance(state_name, str) or not state_name.strip():
-            _raise_invalid_rhs_spec(
-                detail=f"operators[{idx}].apply_to[{j}] must be a non-empty string"
-            )
-        state_name_s = state_name.strip()
-        if state_set is not None and state_name_s not in state_set:
-            _raise_invalid_rhs_spec(
-                detail=(f"operators[{idx}].apply_to[{j}]={state_name_s!r} not in state")
-            )
-        result.append(state_name_s)
+    if axes:
+        axis_lookup = build_axis_lookup(axes)
+        result = expand_apply_to(
+            list(apply_to_raw),
+            axis_lookup=axis_lookup,
+            state_set=state_set,
+            context=f"operators[{idx}].apply_to",
+        )
+    else:
+        result = []
+        for j, state_name in enumerate(apply_to_raw):
+            if not isinstance(state_name, str) or not state_name.strip():
+                _raise_invalid_rhs_spec(
+                    detail=f"operators[{idx}].apply_to[{j}] must be a non-empty string"
+                )
+            state_name_s = state_name.strip()
+            if state_set is not None and state_name_s not in state_set:
+                _raise_invalid_rhs_spec(
+                    detail=(
+                        f"operators[{idx}].apply_to[{j}]={state_name_s!r} not in state"
+                    )
+                )
+            result.append(state_name_s)
     return result
 
 
@@ -1035,6 +470,7 @@ def _normalize_single_operator(
     *,
     axis_names: set[str],
     state_set: set[str] | None,
+    axes: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     op_map = _ensure_mapping(op, name=f"operators[{idx}]")
     op_name_s, axis_name_s, kind_s, bc_val_s = _validate_op_header(
@@ -1043,7 +479,7 @@ def _normalize_single_operator(
 
     apply_to_raw = op_map.get("apply_to")
     apply_to_clean: list[str] | None = (
-        _validate_op_apply_to(apply_to_raw, idx, state_set)
+        _validate_op_apply_to(apply_to_raw, idx, state_set, axes=axes)
         if apply_to_raw is not None
         else None
     )
@@ -1071,6 +507,7 @@ def _normalize_operators(
     *,
     axis_names: set[str],
     state_set: set[str] | None = None,
+    axes: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     """Normalize operator metadata and validate axis references.
 
@@ -1083,7 +520,9 @@ def _normalize_operators(
         _raise_invalid_rhs_spec(detail="operators must be a list")
 
     return [
-        _normalize_single_operator(op, idx, axis_names=axis_names, state_set=state_set)
+        _normalize_single_operator(
+            op, idx, axis_names=axis_names, state_set=state_set, axes=axes
+        )
         for idx, op in enumerate(raw_ops)
     ]
 
@@ -1101,6 +540,7 @@ def _normalize_common_meta(
     axis_names: set[str],
     state_set: set[str] | None,
     operator_state_set: set[str] | None = None,
+    axes: list[dict[str, Any]] | None = None,
 ) -> tuple[
     dict[str, str],
     dict[str, tuple[str, ...]],
@@ -1125,6 +565,7 @@ def _normalize_common_meta(
             operators_raw,
             axis_names=axis_names,
             state_set=operator_state_set,
+            axes=axes,
         )
         if isinstance(operators_raw, list)
         else operators_raw
@@ -1143,16 +584,6 @@ def _collect_alias_symbols(
     return symbols
 
 
-def _sanitize_fragment(val: object) -> str:
-    """Sanitize coord fragments into identifier-friendly pieces.
-
-    Returns:
-        A safe identifier fragment with non-alphanumerics replaced by underscores.
-    """
-    s = str(val)
-    return re.sub(r"[^0-9A-Za-z]+", "_", s).strip("_") or "_"
-
-
 def _expand_state_templates(
     state_raw: list[str],
     *,
@@ -1160,49 +591,39 @@ def _expand_state_templates(
 ) -> tuple[list[str], dict[str, list[tuple[str, dict[str, str]]]]]:
     """Expand state templates with categorical axes into concrete names.
 
-    Returns:
-        A tuple of (expanded_state_names, template_map) where template_map maps
-        template keys to lists of (expanded_name, assignment dict).
-    """
-    axis_lookup: dict[str, list[str]] = {
-        ax["name"]: [str(c) for c in ax.get("coords", [])] for ax in axes
-    }
+    Supports wildcard tokens (``axis``), pinned tokens (``axis=coord``), and
+    mixed selectors.  Wildcard-only selectors also create a template_map entry
+    keyed by ``"base[ax1,ax2]"`` for use in subsequent expression substitution.
 
+    Returns:
+        A tuple of (expanded_state_names, template_map).
+    """
+    axis_lookup = build_axis_lookup(axes)
     expanded: list[str] = []
     template_map: dict[str, list[tuple[str, dict[str, str]]]] = {}
 
     for entry in state_raw:
-        if "[" not in entry or "]" not in entry:
-            expanded.append(entry)
-            continue
-        m = _STATE_TEMPLATE_RE.fullmatch(entry)
-        if not m:
-            _raise_invalid_rhs_spec(detail=f"invalid state template: {entry!r}")
-        base = m.group(1)
-        placeholders = [p.strip() for p in m.group(2).split(",")]
-        if not all(placeholders):
-            _raise_invalid_rhs_spec(detail=f"invalid state template axes in {entry!r}")
-        coords_lists: list[list[str]] = []
-        for ph in placeholders:
-            if ph not in axis_lookup:
-                _raise_invalid_rhs_spec(
-                    detail=f"state template axis {ph!r} not defined"
+        base, tokens = parse_selector(entry)
+        results = expand_selector(
+            entry, axis_lookup=axis_lookup, context=f"state entry {entry!r}"
+        )
+        if not tokens:
+            # Bare name — no expansion, no template_map entry.
+            expanded.append(base)
+        else:
+            wildcards = [t for t in tokens if isinstance(t, WildcardToken)]
+            if wildcards:
+                # Canonical template key: only wildcard axes (for expr substitution).
+                template_key = f"{base}[{','.join(wt.axis for wt in wildcards)}]"
+            else:
+                # All-pinned selector: full key (no expression substitution expected).
+                pinned = (t for t in tokens if isinstance(t, PinnedToken))
+                template_key = (
+                    f"{base}[{','.join(f'{t.axis}={t.coord}' for t in pinned)}]"
                 )
-            coords_lists.append(axis_lookup[ph])
-        combos = list(product(*coords_lists))
-        template_key = f"{base}[{','.join(placeholders)}]"
-        template_map[template_key] = []
-        for combo in combos:
-            parts = [
-                f"{placeholders[i]}_{_sanitize_fragment(combo[i])}"
-                for i in range(len(placeholders))
-            ]
-            name = base + "__" + "__".join(parts)
-            template_map[template_key].append((
-                name,
-                {placeholders[i]: combo[i] for i in range(len(placeholders))},
-            ))
-            expanded.append(name)
+            template_map[template_key] = results
+            for name, _ in results:
+                expanded.append(name)
 
     return expanded, template_map
 
@@ -1214,12 +635,6 @@ def _expand_alias_templates(
     template_map_seed: Mapping[str, list[tuple[str, dict[str, str]]]],
 ) -> tuple[dict[str, str], dict[str, list[tuple[str, dict[str, str]]]]]:
     """Expand templated alias names and substitute inline placeholders.
-
-    Args:
-        aliases_raw: Mapping of alias name (templated or concrete) to expr.
-        axes: Normalized axis definitions.
-        template_map_seed: Existing template map (e.g., state templates) to use
-            for substitutions inside alias expressions.
 
     Returns:
         A tuple of (expanded_aliases, alias_template_map).
@@ -1233,6 +648,8 @@ def _expand_alias_templates(
     aliases_out: dict[str, str] = {}
 
     for raw_name, expr in aliases_raw.items():
+        # Normalize the key so spaces inside brackets don't prevent lookup.
+        canonical_name = _normalize_bracket_key(raw_name)
         expr_s = expr.strip()
         if not expr_s:
             _raise_invalid_rhs_spec(
@@ -1240,8 +657,8 @@ def _expand_alias_templates(
             )
         expr_s = _expand_helpers(expr_s, axes=axes)
 
-        if raw_name in alias_template_map:
-            for expanded_name, assignment in alias_template_map[raw_name]:
+        if canonical_name in alias_template_map:
+            for expanded_name, assignment in alias_template_map[canonical_name]:
                 substituted = _apply_template_substitutions(
                     expr_s,
                     assignment=assignment,
@@ -1262,11 +679,8 @@ def _expand_initial_state_templates(
 ) -> dict[str, str] | None:
     """Expand a templated initial_state mapping into concrete state→param pairs.
 
-    Args:
-        initial_state_raw: Mapping of (possibly templated) state name to
-            (possibly templated) parameter name, or ``None``.
-        axes: Normalized axis definitions.
-        template_map: Combined template map from states and aliases.
+    Supports wildcard selectors (``X[age, vax]``), pinned selectors
+    (``X[age, vax, imm=X0]``), and bare state names.
 
     Returns:
         Expanded ``dict[str, str]`` mapping each concrete state name to its
@@ -1275,13 +689,9 @@ def _expand_initial_state_templates(
     if initial_state_raw is None:
         return None
 
-    ic_keys = list(initial_state_raw.keys())
-    ic_expanded_keys, ic_template_map = _expand_state_templates(ic_keys, axes=axes)
-    if len(ic_expanded_keys) != len(set(ic_expanded_keys)):
-        _raise_invalid_rhs_spec(detail="expanded initial_state keys contain duplicates")
-
-    combined = {**template_map, **ic_template_map}
+    axis_lookup = build_axis_lookup(axes)
     result: dict[str, str] = {}
+    expanded_keys: list[str] = []
 
     for raw_key, raw_val in initial_state_raw.items():
         val_s = str(raw_val).strip()
@@ -1289,15 +699,21 @@ def _expand_initial_state_templates(
             _raise_invalid_rhs_spec(
                 detail=f"initial_state[{raw_key!r}] must be a non-empty string",
             )
-        if raw_key in ic_template_map:
-            for expanded_key, assignment in ic_template_map[raw_key]:
-                result[expanded_key] = _apply_template_substitutions(
-                    val_s,
-                    assignment=assignment,
-                    template_map=combined,
-                )
-        else:
-            result[raw_key] = val_s
+        results = expand_selector(
+            raw_key,
+            axis_lookup=axis_lookup,
+            context=f"initial_state key {raw_key!r}",
+        )
+        for expanded_key, assignment in results:
+            expanded_keys.append(expanded_key)
+            result[expanded_key] = _apply_template_substitutions(
+                val_s,
+                assignment=assignment,
+                template_map=template_map,
+            )
+
+    if len(expanded_keys) != len(set(expanded_keys)):
+        _raise_invalid_rhs_spec(detail="expanded initial_state keys contain duplicates")
 
     return result
 
@@ -1319,107 +735,84 @@ def _maybe_attach_initial_state(
         meta["initial_state"] = expanded
 
 
-def _extract_placeholders_from_expr(expr: str) -> set[str]:
-    """Extract placeholder symbols found inside [...] tokens in an expression.
-
-    Returns:
-        Set of placeholder names referenced inside bracket templates.
-    """
-    placeholders: set[str] = set()
-    for match in _PLACEHOLDER_RE.finditer(expr):
-        inner = match.group(1)
-        for part in inner.split(","):
-            part_s = part.strip()
-            if part_s:
-                placeholders.add(part_s)
-    return placeholders
+# (Template primitives _extract_placeholders_from_expr, _render_template_or_literal,
+#  _apply_template_substitutions, _render_template_name, _parse_template_key,
+#  _parse_transition_endpoint_tokens, _render_transition_endpoint, and
+#  _build_chain_stage_names are now in _templates.py and imported above.)
 
 
-def _parse_transition_endpoint_tokens(
-    name_s: str,
-) -> tuple[str, list[str], dict[str, str]]:
-    """Parse endpoint templates that may include pinned axis tokens.
+@dataclass(frozen=True)
+class _TransitionEndpoints:
+    """Parsed endpoint data and expansion context for a single transition template."""
 
-    Supported token forms inside ``[...]`` are:
-    - ``axis`` (placeholder expanded over coords)
-    - ``axis=coord`` (pinned endpoint coordinate)
+    frm_base: str
+    frm_tokens: list[SelectorToken]
+    to_base: str
+    to_tokens: list[SelectorToken]
+    rate_s: str
+    name_s: str | None
+    axes: list[dict[str, Any]]
+    template_map: Mapping[str, list[tuple[str, dict[str, str]]]]
+    axis_lookup: dict[str, list[str]]
 
-    Returns:
-        Tuple ``(base, placeholders, pinned_values)``.
-    """
-    m = _STATE_TEMPLATE_RE.fullmatch(name_s)
-    if not m:
-        return name_s, [], {}
 
-    base = m.group(1)
-    tokens = [p.strip() for p in m.group(2).split(",") if p.strip()]
-    placeholders: list[str] = []
-    pinned: dict[str, str] = {}
-    for token in tokens:
-        if "=" in token:
-            axis, coord = [part.strip() for part in token.split("=", 1)]
-            if not axis or not coord:
+def _collect_transition_wildcard_axes(
+    endpoints: _TransitionEndpoints,
+) -> list[str]:
+    """Return ordered list of unique wildcard axes from endpoints and expressions."""
+    wildcard_axes: list[str] = []
+    seen: set[str] = set()
+    for tok in endpoints.frm_tokens + endpoints.to_tokens:
+        if isinstance(tok, WildcardToken) and tok.axis not in seen:
+            wildcard_axes.append(tok.axis)
+            seen.add(tok.axis)
+    expr_placeholders = _extract_placeholders_from_expr(endpoints.rate_s)
+    if endpoints.name_s:
+        expr_placeholders |= _extract_placeholders_from_expr(endpoints.name_s)
+    for ph in sorted(expr_placeholders):
+        if ph not in seen:
+            if ph not in endpoints.axis_lookup:
                 _raise_invalid_rhs_spec(
-                    detail=f"invalid pinned endpoint token {token!r} in {name_s!r}"
+                    detail=f"transition placeholder {ph!r} references unknown axis"
                 )
-            pinned[axis] = coord
-        else:
-            placeholders.append(token)
-
-    return base, placeholders, pinned
+            wildcard_axes.append(ph)
+            seen.add(ph)
+    return wildcard_axes
 
 
-def _render_transition_endpoint(
-    name_s: str,
-    assignment: Mapping[str, str],
+def _render_transition_combo(
+    tr_base: dict[str, Any],
+    endpoints: _TransitionEndpoints,
     *,
-    axis_lookup: Mapping[str, list[str]],
-) -> str:
-    """Render an endpoint template using placeholders and optional pinned axes.
+    assignment: dict[str, str],
+) -> dict[str, Any]:
+    """Build one expanded transition dict for a given axis assignment.
 
     Returns:
-        Concrete expanded state name, or ``name_s`` when not templated.
+        Expanded transition mapping with concrete from/to/rate fields.
     """
-    base, placeholders, pinned = _parse_transition_endpoint_tokens(name_s)
-    if not placeholders and not pinned:
-        return name_s
-
-    all_axes = placeholders + list(pinned.keys())
-    if len(all_axes) != len(set(all_axes)):
-        _raise_invalid_rhs_spec(detail=f"duplicate axis token in endpoint {name_s!r}")
-
-    parts: list[str] = []
-    for ph in placeholders:
-        if ph not in axis_lookup:
-            _raise_invalid_rhs_spec(
-                detail=f"transition placeholder {ph!r} references unknown axis"
-            )
-        if ph not in assignment:
-            return name_s
-        parts.append(f"{ph}_{_sanitize_fragment(assignment[ph])}")
-
-    for axis_name, coord in pinned.items():
-        if axis_name not in axis_lookup:
-            _raise_invalid_rhs_spec(
-                detail=f"transition pinned axis {axis_name!r} references unknown axis"
-            )
-        if coord not in axis_lookup[axis_name]:
-            _raise_invalid_rhs_spec(
-                detail=(
-                    f"transition pinned coord {coord!r} not in axis "
-                    f"{axis_name!r} coords"
-                )
-            )
-        parts.append(f"{axis_name}_{_sanitize_fragment(coord)}")
-
-    return base + "__" + "__".join(parts)
-
-
-def _render_template_or_literal(name_s: str, assignment: Mapping[str, str]) -> str:
-    base, placeholders = _parse_template_key(name_s)
-    if not placeholders or any(ph not in assignment for ph in placeholders):
-        return name_s
-    return _render_template_name(base, placeholders, assignment)
+    rate_sub = _apply_template_substitutions(
+        endpoints.rate_s, assignment=assignment, template_map=endpoints.template_map
+    )
+    tr_out: dict[str, Any] = dict(tr_base)
+    tr_out["from"] = render_selector(
+        endpoints.frm_base,
+        endpoints.frm_tokens,
+        assignment,
+        axis_lookup=endpoints.axis_lookup,
+    )
+    tr_out["to"] = render_selector(
+        endpoints.to_base,
+        endpoints.to_tokens,
+        assignment,
+        axis_lookup=endpoints.axis_lookup,
+    )
+    tr_out["rate"] = _expand_helpers(rate_sub, axes=endpoints.axes)
+    if endpoints.name_s:
+        tr_out["name"] = _apply_template_substitutions(
+            endpoints.name_s, assignment=assignment, template_map=endpoints.template_map
+        )
+    return tr_out
 
 
 def _expand_single_transition(
@@ -1427,7 +820,7 @@ def _expand_single_transition(
     *,
     axes: list[dict[str, Any]],
     template_map: Mapping[str, list[tuple[str, dict[str, str]]]],
-    axis_lookup: Mapping[str, list[str]],
+    axis_lookup: dict[str, list[str]],
 ) -> list[dict[str, Any]]:
     tr_valid = _validate_transition_mapping(tr_map, idx=0)
     frm_s = _get_required_str(tr_valid, idx=0, key="from")
@@ -1435,62 +828,40 @@ def _expand_single_transition(
     rate_s = _get_required_str(tr_valid, idx=0, key="rate")
     name_s = tr_valid.get("name") if isinstance(tr_valid.get("name"), str) else None
 
-    placeholders: set[str] = set()
-    placeholders |= set(_parse_transition_endpoint_tokens(frm_s)[1])
-    placeholders |= set(_parse_transition_endpoint_tokens(to_s)[1])
-    placeholders |= _extract_placeholders_from_expr(rate_s)
-    if name_s:
-        placeholders |= _extract_placeholders_from_expr(name_s)
+    frm_base, frm_tokens = parse_selector(frm_s)
+    to_base, to_tokens = parse_selector(to_s)
+    endpoints = _TransitionEndpoints(
+        frm_base=frm_base,
+        frm_tokens=frm_tokens,
+        to_base=to_base,
+        to_tokens=to_tokens,
+        rate_s=rate_s,
+        name_s=name_s,
+        axes=axes,
+        template_map=template_map,
+        axis_lookup=axis_lookup,
+    )
+    wildcard_axes = _collect_transition_wildcard_axes(endpoints)
 
-    if not placeholders:
-        rate_expanded = _expand_helpers(rate_s, axes=axes)
-        tr_out = dict(tr_valid)
-        tr_out["from"] = frm_s
-        tr_out["to"] = to_s
-        tr_out["rate"] = rate_expanded
-        return [tr_out]
+    if not wildcard_axes:
+        return [_render_transition_combo(dict(tr_valid), endpoints, assignment={})]
 
     coords_lists: list[list[str]] = []
-    for ph in placeholders:
+    for ph in wildcard_axes:
         if ph not in axis_lookup:
             _raise_invalid_rhs_spec(
                 detail=f"transition placeholder {ph!r} references unknown axis"
             )
         coords_lists.append(axis_lookup[ph])
 
-    expanded: list[dict[str, Any]] = []
-    for combo in product(*coords_lists):
-        assignment = {ph: combo[i] for i, ph in enumerate(placeholders)}
-
-        frm_render = _render_transition_endpoint(
-            frm_s,
-            assignment,
-            axis_lookup=axis_lookup,
+    return [
+        _render_transition_combo(
+            dict(tr_valid),
+            endpoints,
+            assignment=dict(zip(wildcard_axes, combo, strict=True)),
         )
-        to_render = _render_transition_endpoint(
-            to_s,
-            assignment,
-            axis_lookup=axis_lookup,
-        )
-
-        rate_sub = _apply_template_substitutions(
-            rate_s,
-            assignment=assignment,
-            template_map=template_map,
-        )
-        rate_expanded = _expand_helpers(rate_sub, axes=axes)
-
-        tr_expanded: dict[str, Any] = dict(tr_valid)
-        tr_expanded["from"] = frm_render
-        tr_expanded["to"] = to_render
-        tr_expanded["rate"] = rate_expanded
-        if name_s:
-            tr_expanded["name"] = _apply_template_substitutions(
-                name_s, assignment=assignment, template_map=template_map
-            )
-        expanded.append(tr_expanded)
-
-    return expanded
+        for combo in product(*coords_lists)
+    ]
 
 
 def _expand_transition_templates(
@@ -1523,70 +894,6 @@ def _expand_transition_templates(
         )
 
     return expanded
-
-
-def _parse_template_key(template_key: str) -> tuple[str, list[str]]:
-    """Parse a template key like "S[pop,age]" into (base, placeholders).
-
-    Returns:
-        Tuple of (base, placeholder list). Returns (template_key, []) if it
-        does not match the expected format.
-    """
-    m = _STATE_TEMPLATE_RE.fullmatch(template_key)
-    if not m:
-        return template_key, []
-    base = m.group(1)
-    placeholders = [p.strip() for p in m.group(2).split(",") if p.strip()]
-    return base, placeholders
-
-
-def _render_template_name(
-    base: str, placeholders: list[str], assignment: Mapping[str, str]
-) -> str:
-    """Render an expanded name from base + placeholders using assignment.
-
-    Returns:
-        Concrete state name (e.g., S__pop_p1__age_0_5).
-    """
-    parts = [f"{ph}_{_sanitize_fragment(assignment[ph])}" for ph in placeholders]
-    return base + "__" + "__".join(parts)
-
-
-def _apply_template_substitutions(
-    expr_s: str,
-    *,
-    assignment: Mapping[str, str],
-    template_map: Mapping[str, list[tuple[str, dict[str, str]]]],
-) -> str:
-    """Replace template references in ``expr_s`` using a concrete assignment.
-
-    Handles both explicit template keys (e.g., ``S[age]`` present in a template
-    map) and inline placeholder syntax like ``theta[age,pop]`` when the
-    placeholders are covered by ``assignment``.
-
-    Returns:
-        Expression with template tokens replaced using the provided assignment.
-    """
-    expr_out = expr_s
-
-    # Explicit template keys (e.g., from state or alias template maps)
-    for template_key in template_map:
-        base, placeholders = _parse_template_key(template_key)
-        if not placeholders or any(ph not in assignment for ph in placeholders):
-            continue
-        rendered = _render_template_name(base, placeholders, assignment)
-        expr_out = re.sub(re.escape(template_key), rendered, expr_out)
-
-    # Inline placeholder syntax without explicit template map entry
-    def _inline_replacer(match: Match[str]) -> str:
-        base = match.group(1)
-        inner = match.group(2)
-        placeholders = [p.strip() for p in inner.split(",") if p.strip()]
-        if not placeholders or any(ph not in assignment for ph in placeholders):
-            return match.group(0)
-        return _render_template_name(base, placeholders, assignment)
-
-    return _INLINE_TEMPLATE_RE.sub(_inline_replacer, expr_out)
 
 
 def _resolve_template_equation(
@@ -1644,7 +951,9 @@ def _expand_integrate_over(expr: str, *, axes: list[dict[str, Any]]) -> str:
                         detail=f"integrate_over axis {ax_name!r} missing coords/deltas"
                     )
                 return coords, [float(d) for d in deltas]
-        _raise_invalid_rhs_spec(detail=f"integrate_over axis {ax_name!r} not found")
+        return _raise_invalid_rhs_spec(
+            detail=f"integrate_over axis {ax_name!r} not found"
+        )
 
     out = expr
     while True:
@@ -1746,7 +1055,7 @@ def _expand_sum_over(expr: str, *, axes: list[dict[str, Any]]) -> str:
                         detail=f"sum_over axis {ax_name!r} has no coords"
                     )
                 return [str(c) for c in coords]
-        _raise_invalid_rhs_spec(detail=f"sum_over axis {ax_name!r} not found")
+        return _raise_invalid_rhs_spec(detail=f"sum_over axis {ax_name!r} not found")
 
     out = expr
     # Iterate until no more matches to handle multiple sum_over occurrences.
@@ -1843,7 +1152,9 @@ def _chain_rate_expr(value: object, *, field: str) -> str:
         return value.strip()
     if isinstance(value, (int, float)) and not isinstance(value, bool):
         return str(float(value))
-    _raise_invalid_rhs_spec(detail=f"{field} must be a non-empty string or number")
+    return _raise_invalid_rhs_spec(
+        detail=f"{field} must be a non-empty string or number"
+    )
 
 
 def _normalize_chain_forward_rates(
@@ -1889,9 +1200,16 @@ def _build_chain_stage_names(cname: str, *, length: int) -> list[str]:
     Returns:
         Ordered list of stage names for the chain.
     """
-    base, placeholders = _parse_template_key(cname)
-    if placeholders:
-        suffix = f"[{','.join(placeholders)}]"
+    base, tokens = parse_selector(cname)
+    if tokens:
+        suffix = (
+            "["
+            + ",".join(
+                (f"{t.axis}={t.coord}" if isinstance(t, PinnedToken) else t.axis)
+                for t in tokens
+            )
+            + "]"
+        )
         return [f"{base}{i}{suffix}" for i in range(1, length + 1)]
     return [f"{cname}{i}" for i in range(1, length + 1)]
 
@@ -1985,7 +1303,7 @@ def _validate_chain_entry(
     entry_cfg = _normalize_chain_entry(chain, idx=idx)
     if (
         entry_cfg is not None
-        and not _parse_template_key(entry_cfg[0])[1]
+        and not parse_selector(entry_cfg[0])[1]
         and entry_cfg[0] not in state_set
     ):
         _raise_invalid_rhs_spec(
@@ -1995,7 +1313,7 @@ def _validate_chain_entry(
     exit_cfg = _normalize_chain_exit(chain, idx=idx)
     if (
         exit_cfg is not None
-        and not _parse_template_key(exit_cfg[0])[1]
+        and not parse_selector(exit_cfg[0])[1]
         and exit_cfg[0] not in state_set
     ):
         _raise_invalid_rhs_spec(
@@ -2182,8 +1500,12 @@ def _apply_coord_shifts(
         concrete: list[dict[str, Any]] = []
         from_frag = f"{axis_name}_{_sanitize_fragment(from_coord)}"
         to_frag = f"{axis_name}_{_sanitize_fragment(to_coord)}"
-        for base in apply_to:
-            base = str(base).strip()  # noqa: PLW2901
+        expanded_apply_to = expand_apply_to(
+            apply_to,
+            axis_lookup=axis_lookup,
+            context=f"coord_shift[{axis_name}].apply_to",
+        )
+        for base in expanded_apply_to:
             concrete.extend(
                 _expand_coord_shift_for_base(
                     base=base,
@@ -2274,6 +1596,7 @@ def normalize_rhs(spec: Mapping[str, Any] | None) -> NormalizedRhs:
     """
     if spec is None:
         _raise_invalid_rhs_spec(detail="rhs specification is required")
+    # spec is not None past this point; the above call is NoReturn when spec is None.
 
     kind = str(spec.get("kind", "expr")).strip().lower()
 
@@ -2287,6 +1610,7 @@ def normalize_rhs(spec: Mapping[str, Any] | None) -> NormalizedRhs:
         feature=f"rhs.kind={kind}",
         detail="Only 'expr' and 'transitions' are supported in v1.",
     )
+    return normalize_expr_rhs(spec)  # unreachable; satisfies return type checker
 
 
 # -----------------------------------------------------------------------------
@@ -2321,6 +1645,7 @@ def normalize_expr_rhs(spec: Mapping[str, Any]) -> NormalizedRhs:
         axis_names={"subgroup"} | {ax["name"] for ax in axes_meta},
         state_set=set(state_raw),
         operator_state_set=set(state_raw),
+        axes=axes_meta,
     )
 
     meta: dict[str, Any] = {
@@ -2512,6 +1837,7 @@ def normalize_transitions_rhs(
         axis_names={"subgroup"} | {ax["name"] for ax in axes_meta},
         state_set=None,
         operator_state_set=set(state_raw),
+        axes=axes_meta,
     )
 
     meta: dict[str, Any] = {

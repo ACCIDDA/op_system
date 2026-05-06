@@ -1,0 +1,449 @@
+"""op_system._templates.
+
+Centralized template selector parsing, rendering, and expansion utilities.
+
+All spec sections that accept axis-templated names route through this module:
+
+  - state template expansion
+  - alias key expansion
+  - transition endpoint expansion (``from``/``to``)
+  - ``initial_state`` key expansion (supports pinned coords)
+  - chain stage name generation
+  - operator ``apply_to`` expansion
+  - ``coord_shift`` ``apply_to`` expansion
+
+Selector syntax
+---------------
+A selector is a string of the form::
+
+    Name[token1, token2, ...]
+
+where each token is either:
+
+  - ``axis``         wildcard — expands over all coords of that axis
+  - ``axis=coord``   pinned  — holds this axis fixed at ``coord``
+
+Mixed selectors expand only the wildcard axes while embedding pinned coords
+in the rendered concrete name.  A bare name without brackets is returned
+unchanged (single-element expansion with empty assignment).
+
+Examples::
+
+    X[age, vax, loc, imm=X0]  →  X__age_a0__vax_u__loc_usa__imm_X0, ...
+    S[age]                     →  S__age_a0, S__age_a1, ...
+    S                          →  S   (pass-through)
+"""
+
+from __future__ import annotations
+
+import re
+from dataclasses import dataclass
+from itertools import product
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
+
+from op_system._errors import _raise_invalid_rhs_spec
+
+# Matches "Name[...]" with optional surrounding whitespace.
+_STATE_TEMPLATE_RE = re.compile(r"\s*([A-Za-z_][A-Za-z0-9_]*)\[(.+)\]\s*")
+# Matches any "Name[...]" token inside an expression string.
+_INLINE_TEMPLATE_RE = re.compile(r"([A-Za-z_][A-Za-z0-9_]*)\[(.*?)\]")
+# Matches any "[...]" fragment to extract placeholder names from rate exprs.
+_PLACEHOLDER_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\[(.*?)\]")
+
+
+# ---------------------------------------------------------------------------
+# Token types
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True, slots=True)
+class WildcardToken:
+    """Axis token that expands over all coordinates of that axis."""
+
+    axis: str
+
+
+@dataclass(frozen=True, slots=True)
+class PinnedToken:
+    """Axis token pinned to a specific coordinate."""
+
+    axis: str
+    coord: str
+
+
+SelectorToken = WildcardToken | PinnedToken
+
+
+# ---------------------------------------------------------------------------
+# Core primitives
+# ---------------------------------------------------------------------------
+
+
+def _sanitize_fragment(val: object) -> str:
+    """Sanitize a coord value for safe embedding in a state name.
+
+    Replaces characters that are not alphanumeric or underscores with ``_``.
+
+    Returns:
+        Identifier-safe string fragment.
+    """
+    return re.sub(r"[^A-Za-z0-9_]", "_", str(val))
+
+
+def build_axis_lookup(axes: list[dict[str, Any]]) -> dict[str, list[str]]:
+    """Build a ``{axis_name: [coord, ...]}`` mapping from normalized axes.
+
+    Returns:
+        Dict mapping axis names to their coordinate lists.
+    """
+    return {ax["name"]: [str(c) for c in ax.get("coords", [])] for ax in axes}
+
+
+def parse_selector(s: str) -> tuple[str, list[SelectorToken]]:
+    """Parse a selector string into a base name and a list of tokens.
+
+    Supports:
+
+    - Bare name: ``"S"``           → ``("S", [])``
+    - Wildcard:  ``"S[age, vax]"`` → ``("S", [WildcardToken("age"),
+      WildcardToken("vax")])``
+    - Pinned:    ``"X[imm=X0]"``  → ``("X", [PinnedToken("imm", "X0")])``
+    - Mixed:     ``"X[age, imm=X0]"`` → ``("X", [WildcardToken("age"),
+      PinnedToken("imm", "X0")])``
+
+    Returns:
+        ``(base, tokens)`` where tokens is empty for bare names.
+    """
+    m = _STATE_TEMPLATE_RE.fullmatch(s)
+    if not m:
+        return s.strip(), []
+
+    base = m.group(1)
+    raw_tokens = [t.strip() for t in m.group(2).split(",") if t.strip()]
+    tokens: list[SelectorToken] = []
+
+    for tok in raw_tokens:
+        if "=" in tok:
+            axis, coord = [p.strip() for p in tok.split("=", 1)]
+            if not axis or not coord:
+                _raise_invalid_rhs_spec(
+                    detail=f"invalid pinned selector token {tok!r} in {s!r}"
+                )
+            tokens.append(PinnedToken(axis=axis, coord=coord))
+        else:
+            tokens.append(WildcardToken(axis=tok))
+
+    # Reject duplicate axis names across all tokens.
+    seen_axes: set[str] = set()
+    for tok in tokens:
+        ax = tok.axis
+        if ax in seen_axes:
+            _raise_invalid_rhs_spec(detail=f"duplicate axis {ax!r} in selector {s!r}")
+        seen_axes.add(ax)
+
+    return base, tokens
+
+
+def render_selector(
+    base: str,
+    tokens: list[SelectorToken],
+    assignment: Mapping[str, str],
+    *,
+    axis_lookup: Mapping[str, list[str]] | None = None,
+) -> str:
+    """Render a concrete state name from a base, tokens, and an assignment.
+
+    Wildcard tokens draw their value from ``assignment``; pinned tokens use
+    their embedded coordinate.  When ``axis_lookup`` is provided, validates
+    that referenced axes and pinned coords are declared.
+
+    If a wildcard token's axis is absent from ``assignment``, the original
+    bracketed form is returned unchanged (allows partial rendering).
+
+    Returns:
+        Concrete name string, e.g. ``"X__age_a0__vax_u__imm_X0"``.
+    """
+    if not tokens:
+        return base
+
+    parts: list[str] = []
+    for tok in tokens:
+        if isinstance(tok, WildcardToken):
+            if axis_lookup is not None and tok.axis not in axis_lookup:
+                _raise_invalid_rhs_spec(
+                    detail=f"selector references unknown axis {tok.axis!r}"
+                )
+            if tok.axis not in assignment:
+                # Partial assignment — caller did not cover this axis.
+                return (
+                    base
+                    + "["
+                    + ",".join(
+                        (
+                            f"{t.axis}={t.coord}"
+                            if isinstance(t, PinnedToken)
+                            else t.axis
+                        )
+                        for t in tokens
+                    )
+                    + "]"
+                )
+            parts.append(f"{tok.axis}_{_sanitize_fragment(assignment[tok.axis])}")
+        else:  # PinnedToken
+            if axis_lookup is not None:
+                if tok.axis not in axis_lookup:
+                    _raise_invalid_rhs_spec(
+                        detail=(
+                            f"selector pinned axis {tok.axis!r} references unknown axis"
+                        )
+                    )
+                if tok.coord not in axis_lookup[tok.axis]:
+                    _raise_invalid_rhs_spec(
+                        detail=(
+                            f"selector pinned coord {tok.coord!r} not in "
+                            f"axis {tok.axis!r} coords"
+                        )
+                    )
+            parts.append(f"{tok.axis}_{_sanitize_fragment(tok.coord)}")
+
+    return base + "__" + "__".join(parts)
+
+
+def expand_selector(
+    s: str,
+    *,
+    axis_lookup: dict[str, list[str]],
+    context: str = "",
+) -> list[tuple[str, dict[str, str]]]:
+    """Expand a selector string over all wildcard axis combinations.
+
+    Validates all axis and coord references against ``axis_lookup``.
+
+    Args:
+        s: Selector string, e.g. ``"X[age, vax, imm=X0]"``.
+        axis_lookup: Mapping of axis name → coordinate list.
+        context: Optional context string for error messages.
+
+    Returns:
+        List of ``(concrete_name, assignment)`` pairs, one per wildcard
+        combination.  For bare names with no tokens, returns a single
+        ``[(name, {})]``.
+    """
+    ctx = f" in {context}" if context else ""
+    base, tokens = parse_selector(s)
+
+    if not tokens:
+        return [(base, {})]
+
+    # Validate all tokens and collect wildcard axes.
+    wildcards: list[WildcardToken] = []
+    for tok in tokens:
+        if tok.axis not in axis_lookup:
+            _raise_invalid_rhs_spec(
+                detail=f"selector axis {tok.axis!r} not defined{ctx}"
+            )
+        if isinstance(tok, PinnedToken):
+            if tok.coord not in axis_lookup[tok.axis]:
+                _raise_invalid_rhs_spec(
+                    detail=(
+                        f"selector pinned coord {tok.coord!r} not in "
+                        f"axis {tok.axis!r} coords{ctx}"
+                    )
+                )
+        else:
+            wildcards.append(tok)
+
+    if not wildcards:
+        # All tokens are pinned — single concrete expansion.
+        assignment: dict[str, str] = {
+            tok.axis: tok.coord for tok in tokens if isinstance(tok, PinnedToken)
+        }
+        name = render_selector(base, tokens, assignment, axis_lookup=axis_lookup)
+        return [(name, assignment)]
+
+    coords_lists = [axis_lookup[wt.axis] for wt in wildcards]
+    results: list[tuple[str, dict[str, str]]] = []
+    for combo in product(*coords_lists):
+        assignment = {wildcards[i].axis: combo[i] for i in range(len(wildcards))}
+        # Add pinned coords to assignment for full record-keeping.
+        for tok in tokens:
+            if isinstance(tok, PinnedToken):
+                assignment[tok.axis] = tok.coord
+        name = render_selector(base, tokens, assignment, axis_lookup=axis_lookup)
+        results.append((name, assignment))
+
+    return results
+
+
+# ---------------------------------------------------------------------------
+# Chain stage name helper
+# ---------------------------------------------------------------------------
+
+
+def _build_chain_stage_names(cname: str, *, length: int) -> list[str]:
+    """Build chain stage names, preserving template tokens when present.
+
+    Returns:
+        Ordered list of stage name strings for the chain.
+    """
+    base, tokens = parse_selector(cname)
+    if tokens:
+        suffix = (
+            "["
+            + ",".join(
+                f"{t.axis}={t.coord}" if isinstance(t, PinnedToken) else t.axis
+                for t in tokens
+            )
+            + "]"
+        )
+        return [f"{base}{i}{suffix}" for i in range(1, length + 1)]
+    return [f"{cname}{i}" for i in range(1, length + 1)]
+
+
+# ---------------------------------------------------------------------------
+# Expression-level template substitution helpers
+# ---------------------------------------------------------------------------
+
+
+def _extract_placeholders_from_expr(expr: str) -> set[str]:
+    """
+    Extract wildcard placeholder axis names from ``[...]`` tokens in an expression.
+
+    Only bare axis names (not ``axis=coord`` pins) are treated as placeholders.
+
+    Returns:
+        Set of placeholder names referenced inside bracket templates.
+    """
+    placeholders: set[str] = set()
+    for match in _PLACEHOLDER_RE.finditer(expr):
+        inner = match.group(1)
+        for part in inner.split(","):
+            part_s = part.strip()
+            if part_s and "=" not in part_s:
+                placeholders.add(part_s)
+    return placeholders
+
+
+def _render_template_name(
+    base: str, placeholders: list[str], assignment: Mapping[str, str]
+) -> str:
+    """Render an expanded name from base + wildcard placeholders + assignment.
+
+    Returns:
+        Concrete state name, e.g. ``"S__pop_p1__age_0_5"``.
+    """
+    parts = [f"{ph}_{_sanitize_fragment(assignment[ph])}" for ph in placeholders]
+    return base + "__" + "__".join(parts)
+
+
+def _render_template_or_literal(name_s: str, assignment: Mapping[str, str]) -> str:
+    """
+    Render a template name if placeholders are covered by assignment.
+
+    Returns the literal string unchanged if no placeholders are present or
+    any wildcard axis is missing from the assignment.
+
+    Returns:
+        Rendered concrete name or the original literal string.
+    """
+    base, tokens = parse_selector(name_s)
+    wildcards = [t for t in tokens if isinstance(t, WildcardToken)]
+    if not wildcards or any(wt.axis not in assignment for wt in wildcards):
+        return name_s
+    return _render_template_name(base, [wt.axis for wt in wildcards], assignment)
+
+
+def _apply_template_substitutions(
+    expr_s: str,
+    *,
+    assignment: Mapping[str, str],
+    template_map: Mapping[str, list[tuple[str, dict[str, str]]]],
+) -> str:
+    """Replace template references in ``expr_s`` using a concrete assignment.
+
+    Handles both explicit template keys (e.g. ``S[age]`` in template_map)
+    and inline placeholder syntax like ``theta[age,pop]`` when the
+    placeholders are covered by ``assignment``.
+
+    Returns:
+        Expression string with template tokens replaced.
+    """
+    expr_out = expr_s
+
+    # Explicit template keys from the template map.
+    for template_key in template_map:
+        base, tokens = parse_selector(template_key)
+        wildcards = [t for t in tokens if isinstance(t, WildcardToken)]
+        if not wildcards or any(wt.axis not in assignment for wt in wildcards):
+            continue
+        rendered = _render_template_name(
+            base, [wt.axis for wt in wildcards], assignment
+        )
+        expr_out = re.sub(re.escape(template_key), rendered, expr_out)
+
+    # Inline placeholder syntax without an explicit template map entry.
+    def _inline_replacer(match: re.Match[str]) -> str:
+        inner_base = match.group(1)
+        inner = match.group(2)
+        phs = [p.strip() for p in inner.split(",") if p.strip() and "=" not in p]
+        if not phs or any(ph not in assignment for ph in phs):
+            return match.group(0)
+        return _render_template_name(inner_base, phs, assignment)
+
+    return _INLINE_TEMPLATE_RE.sub(_inline_replacer, expr_out)
+
+
+# ---------------------------------------------------------------------------
+# apply_to expansion (operators + coord_shift)
+# ---------------------------------------------------------------------------
+
+
+def expand_apply_to(
+    apply_to_raw: object,
+    *,
+    axis_lookup: dict[str, list[str]],
+    state_set: set[str] | None = None,
+    context: str = "",
+) -> list[str]:
+    """Expand and validate an ``apply_to`` list, supporting selector syntax.
+
+    Each entry may be:
+    - A bare state name: ``"X"``  (passed through, for coord_shift prefix logic)
+    - A full selector:  ``"X[age, vax, loc]"``  (expanded to concrete names)
+
+    Args:
+        apply_to_raw: Raw ``apply_to`` value from the spec.
+        axis_lookup: Axis name → coordinate list for expansion.
+        state_set: When provided, each expanded name is validated against it.
+        context: Context string for error messages.
+
+    Returns:
+        Flat list of concrete (or bare) state name strings.
+    """
+    ctx = f" in {context}" if context else ""
+    if not isinstance(apply_to_raw, (list, tuple)) or not apply_to_raw:
+        _raise_invalid_rhs_spec(
+            detail=f"apply_to must be a non-empty list of state names{ctx}"
+        )
+
+    result: list[str] = []
+    for j, entry in enumerate(apply_to_raw):
+        if not isinstance(entry, str) or not entry.strip():
+            _raise_invalid_rhs_spec(
+                detail=f"apply_to[{j}] must be a non-empty string{ctx}"
+            )
+        entry_s = entry.strip()
+        expanded = expand_selector(
+            entry_s, axis_lookup=axis_lookup, context=f"apply_to[{j}]{ctx}"
+        )
+        for name, _ in expanded:
+            if state_set is not None and name not in state_set:
+                _raise_invalid_rhs_spec(
+                    detail=f"apply_to entry {name!r} not in state{ctx}"
+                )
+            result.append(name)
+
+    return result
