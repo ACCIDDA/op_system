@@ -42,7 +42,7 @@ from itertools import product
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from collections.abc import Mapping, Sequence
 
 from op_system._errors import _raise_invalid_rhs_spec
 
@@ -149,7 +149,7 @@ def parse_selector(s: str) -> tuple[str, list[SelectorToken]]:
 
 def render_selector(
     base: str,
-    tokens: list[SelectorToken],
+    tokens: Sequence[SelectorToken],
     assignment: Mapping[str, str],
     *,
     axis_lookup: Mapping[str, list[str]] | None = None,
