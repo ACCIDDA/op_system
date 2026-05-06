@@ -24,9 +24,23 @@ def _normalize_bracket_key(key: str) -> str:
 
     Strips spaces around commas and bracket edges so that user-provided keys
     like ``"u[x, y]"`` match the canonical template form ``"u[x,y]"``.
+    Inputs without brackets are returned with leading/trailing whitespace
+    stripped; inputs whose bracket contents do not match the template grammar
+    are returned stripped but otherwise unchanged.
+
+    Args:
+        key: Input key string, possibly containing bracket notation.
 
     Returns:
         Canonical bracket key string.
+
+    Examples:
+        >>> _normalize_bracket_key("u[x, y]")
+        'u[x,y]'
+        >>> _normalize_bracket_key("  S  ")
+        'S'
+        >>> _normalize_bracket_key("X[ age , imm = X0 ]")
+        'X[age,imm = X0]'
     """
     if "[" not in key:
         return key.strip()
@@ -103,11 +117,26 @@ def _normalize_axis_coords(
 def _compute_axis_deltas(coords: list[float], *, idx: int) -> list[float]:
     """Compute trapezoidal integration weights for a continuous axis.
 
+    Each weight equals the half-sum of the gaps to the neighboring points
+    (one-sided at the boundaries), so summing ``f(c) * w(c)`` over coords
+    approximates the trapezoidal-rule integral of ``f``.
+
+    Args:
+        coords: Strictly increasing list of coordinate values.
+        idx: Axis index, used in raised error messages.
+
     Returns:
-        List of weights matching coords length.
+        List of weights with the same length as ``coords``.
 
     Raises:
-        InvalidRhsSpecError: If validation fails.
+        InvalidRhsSpecError: If ``coords`` has fewer than two entries, or
+            adjacent coordinates are not strictly increasing.
+
+    Examples:
+        >>> _compute_axis_deltas([0.0, 1.0, 3.0], idx=0)
+        [0.5, 1.5, 1.0]
+        >>> _compute_axis_deltas([0.0, 2.0], idx=0)
+        [1.0, 1.0]
     """
     if len(coords) < 2:
         raise InvalidRhsSpecError(detail=f"axes[{idx}] continuous requires >=2 coords")

@@ -96,8 +96,22 @@ def _sanitize_fragment(val: object) -> str:
 def build_axis_lookup(axes: list[dict[str, Any]]) -> dict[str, list[str]]:
     """Build a ``{axis_name: [coord, ...]}`` mapping from normalized axes.
 
+    Args:
+        axes: List of normalized axis dicts; each must contain a ``name``
+            entry and may contain a ``coords`` list (continuous axes
+            without explicit coords map to an empty list).
+
     Returns:
-        Dict mapping axis names to their coordinate lists.
+        Dict mapping each axis name to its coordinate list (as strings).
+
+    Examples:
+        >>> build_axis_lookup([
+        ...     {"name": "age", "coords": ["y", "o"]},
+        ...     {"name": "vax", "coords": ["u", "v"]},
+        ... ])
+        {'age': ['y', 'o'], 'vax': ['u', 'v']}
+        >>> build_axis_lookup([{"name": "x", "domain": {"lb": 0, "ub": 1}}])
+        {'x': []}
     """
     return {ax["name"]: [str(c) for c in ax.get("coords", [])] for ax in axes}
 
@@ -114,11 +128,28 @@ def parse_selector(s: str) -> tuple[str, list[SelectorToken]]:
     - Mixed:     ``"X[age, imm=X0]"`` → ``("X", [WildcardToken("age"),
       PinnedToken("imm", "X0")])``
 
+    Args:
+        s: Selector string. May include surrounding whitespace and
+            whitespace inside the brackets; both are stripped.
+
     Returns:
-        ``(base, tokens)`` where tokens is empty for bare names.
+        ``(base, tokens)`` where ``tokens`` is empty for bare names. Token
+        order matches the order of declaration inside the brackets.
 
     Raises:
-        InvalidRhsSpecError: If validation fails.
+        InvalidRhsSpecError: If a pinned token has an empty axis or coord,
+            or if any axis appears in more than one token.
+
+    Examples:
+        >>> parse_selector("S")
+        ('S', [])
+        >>> parse_selector("X[age, imm=X0]")
+        ('X', [WildcardToken(axis='age'), PinnedToken(axis='imm', coord='X0')])
+        >>> try:
+        ...     parse_selector("X[age, age=a0]")
+        ... except Exception as exc:
+        ...     print(type(exc).__name__)
+        InvalidRhsSpecError
     """
     m = _STATE_TEMPLATE_RE.fullmatch(s)
     if not m:
