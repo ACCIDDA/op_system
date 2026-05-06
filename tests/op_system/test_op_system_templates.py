@@ -36,20 +36,26 @@ _AXES = [
 # ---------------------------------------------------------------------------
 
 
-def test_build_axis_lookup_basic() -> None:
-    """build_axis_lookup returns correct axis→coords mapping."""
-    lookup = build_axis_lookup(_AXES)
-    assert lookup == {
-        "age": ["a0", "a1"],
-        "vax": ["u", "v"],
-        "imm": ["X0", "X1"],
-    }
-
-
-def test_build_axis_lookup_continuous_axis_returns_empty_coords() -> None:
-    """Continuous axes without explicit coords map to empty lists."""
-    axes = [{"name": "x", "domain": {"lb": 0, "ub": 1}}]
-    assert build_axis_lookup(axes) == {"x": []}
+@pytest.mark.parametrize(
+    ("axes", "expected"),
+    [
+        pytest.param(
+            _AXES,
+            {"age": ["a0", "a1"], "vax": ["u", "v"], "imm": ["X0", "X1"]},
+            id="categorical-multi-axis",
+        ),
+        pytest.param(
+            [{"name": "x", "domain": {"lb": 0, "ub": 1}}],
+            {"x": []},
+            id="continuous-no-coords",
+        ),
+    ],
+)
+def test_build_axis_lookup(
+    axes: list[dict[str, object]], expected: dict[str, list[str]]
+) -> None:
+    """build_axis_lookup returns the expected axis→coords mapping."""
+    assert build_axis_lookup(axes) == expected
 
 
 # ---------------------------------------------------------------------------
@@ -57,64 +63,52 @@ def test_build_axis_lookup_continuous_axis_returns_empty_coords() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_parse_selector_bare_name() -> None:
-    """Bare name (no brackets) returns (name, [])."""
-    base, tokens = parse_selector("S")
-    assert base == "S"
-    assert tokens == []
-
-
-def test_parse_selector_bare_name_strips_whitespace() -> None:
-    """Leading/trailing whitespace around a bare name is stripped."""
-    base, tokens = parse_selector("  S  ")
-    assert base == "S"
-    assert tokens == []
-
-
-def test_parse_selector_wildcard_single() -> None:
-    """Single wildcard token produces one WildcardToken."""
-    base, tokens = parse_selector("S[age]")
-    assert base == "S"
-    assert tokens == [WildcardToken("age")]
-
-
-def test_parse_selector_wildcard_multi() -> None:
-    """Multiple wildcard tokens are returned in declaration order."""
-    base, tokens = parse_selector("S[age, vax]")
-    assert base == "S"
-    assert tokens == [WildcardToken("age"), WildcardToken("vax")]
-
-
-def test_parse_selector_pinned_only() -> None:
-    """Single pinned token produces one PinnedToken."""
-    base, tokens = parse_selector("X[imm=X0]")
-    assert base == "X"
-    assert tokens == [PinnedToken("imm", "X0")]
-
-
-def test_parse_selector_pinned_multi() -> None:
-    """Multiple pinned tokens parse correctly."""
-    base, tokens = parse_selector("X[age=a0, imm=X1]")
-    assert base == "X"
-    assert tokens == [PinnedToken("age", "a0"), PinnedToken("imm", "X1")]
-
-
-def test_parse_selector_mixed() -> None:
-    """Mixed wildcard and pinned tokens parse in declaration order."""
-    base, tokens = parse_selector("X[age, vax, imm=X0]")
-    assert base == "X"
-    assert tokens == [
-        WildcardToken("age"),
-        WildcardToken("vax"),
-        PinnedToken("imm", "X0"),
-    ]
-
-
-def test_parse_selector_whitespace_inside_brackets() -> None:
-    """Whitespace around token names and around ``=`` is stripped."""
-    base, tokens = parse_selector("X[ age , imm = X0 ]")
-    assert base == "X"
-    assert tokens == [WildcardToken("age"), PinnedToken("imm", "X0")]
+@pytest.mark.parametrize(
+    ("selector", "expected_base", "expected_tokens"),
+    [
+        pytest.param("S", "S", [], id="bare-name"),
+        pytest.param("  S  ", "S", [], id="bare-name-stripped"),
+        pytest.param("S[age]", "S", [WildcardToken("age")], id="wildcard-single"),
+        pytest.param(
+            "S[age, vax]",
+            "S",
+            [WildcardToken("age"), WildcardToken("vax")],
+            id="wildcard-multi",
+        ),
+        pytest.param("X[imm=X0]", "X", [PinnedToken("imm", "X0")], id="pinned-single"),
+        pytest.param(
+            "X[age=a0, imm=X1]",
+            "X",
+            [PinnedToken("age", "a0"), PinnedToken("imm", "X1")],
+            id="pinned-multi",
+        ),
+        pytest.param(
+            "X[age, vax, imm=X0]",
+            "X",
+            [
+                WildcardToken("age"),
+                WildcardToken("vax"),
+                PinnedToken("imm", "X0"),
+            ],
+            id="mixed-wildcard-pinned",
+        ),
+        pytest.param(
+            "X[ age , imm = X0 ]",
+            "X",
+            [WildcardToken("age"), PinnedToken("imm", "X0")],
+            id="whitespace-inside-brackets",
+        ),
+    ],
+)
+def test_parse_selector_valid(
+    selector: str,
+    expected_base: str,
+    expected_tokens: list[WildcardToken | PinnedToken],
+) -> None:
+    """Valid selectors parse to the expected (base, tokens) pair."""
+    base, tokens = parse_selector(selector)
+    assert base == expected_base
+    assert tokens == expected_tokens
 
 
 # ---------------------------------------------------------------------------
@@ -122,34 +116,22 @@ def test_parse_selector_whitespace_inside_brackets() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_parse_selector_duplicate_wildcard_axis_raises() -> None:
-    """Duplicate wildcard axis names in the same selector raise ValueError."""
-    with pytest.raises(ValueError, match="duplicate axis"):
-        parse_selector("X[age, age]")
-
-
-def test_parse_selector_duplicate_pinned_axis_raises() -> None:
-    """Duplicate pinned axis names (different coords) raise ValueError."""
-    with pytest.raises(ValueError, match="duplicate axis"):
-        parse_selector("X[imm=X0, imm=X1]")
-
-
-def test_parse_selector_wildcard_and_pinned_same_axis_raises() -> None:
-    """Combining wildcard and pinned token for the same axis raises ValueError."""
-    with pytest.raises(ValueError, match="duplicate axis"):
-        parse_selector("X[age, age=a0]")
-
-
-def test_parse_selector_empty_pinned_coord_raises() -> None:
-    """Pinned token with empty coord string raises ValueError."""
-    with pytest.raises(ValueError, match="invalid pinned selector"):
-        parse_selector("X[age=]")
-
-
-def test_parse_selector_empty_pinned_axis_raises() -> None:
-    """Pinned token with empty axis string raises ValueError."""
-    with pytest.raises(ValueError, match="invalid pinned selector"):
-        parse_selector("X[=X0]")
+@pytest.mark.parametrize(
+    ("selector", "match"),
+    [
+        pytest.param("X[age, age]", "duplicate axis", id="duplicate-wildcard"),
+        pytest.param("X[imm=X0, imm=X1]", "duplicate axis", id="duplicate-pinned"),
+        pytest.param(
+            "X[age, age=a0]", "duplicate axis", id="wildcard-and-pinned-same-axis"
+        ),
+        pytest.param("X[age=]", "invalid pinned selector", id="empty-pinned-coord"),
+        pytest.param("X[=X0]", "invalid pinned selector", id="empty-pinned-axis"),
+    ],
+)
+def test_parse_selector_invalid(selector: str, match: str) -> None:
+    """Invalid selectors raise ValueError with the expected message fragment."""
+    with pytest.raises(ValueError, match=match):
+        parse_selector(selector)
 
 
 # ---------------------------------------------------------------------------
@@ -157,40 +139,48 @@ def test_parse_selector_empty_pinned_axis_raises() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_render_selector_bare_name() -> None:
-    """Bare base with no tokens renders to just the base."""
-    assert render_selector("S", [], {}) == "S"
-
-
-def test_render_selector_wildcard_single() -> None:
-    """Single wildcard token renders to ``base__axis_coord``."""
-    tokens = [WildcardToken("age")]
-    assert render_selector("S", tokens, {"age": "a0"}) == "S__age_a0"
-
-
-def test_render_selector_wildcard_multi() -> None:
-    """Multiple wildcard tokens each contribute an ``axis_coord`` segment."""
-    tokens = [WildcardToken("age"), WildcardToken("vax")]
-    assert render_selector("S", tokens, {"age": "a1", "vax": "v"}) == "S__age_a1__vax_v"
-
-
-def test_render_selector_pinned_only() -> None:
-    """Pinned token renders with its fixed coord value embedded."""
-    tokens = [PinnedToken("imm", "X0")]
-    assert render_selector("X", tokens, {}) == "X__imm_X0"
-
-
-def test_render_selector_mixed() -> None:
-    """Mixed tokens: wildcard draws from assignment; pinned embeds its coord."""
-    tokens: list[WildcardToken | PinnedToken] = [
-        WildcardToken("age"),
-        WildcardToken("vax"),
-        PinnedToken("imm", "X0"),
-    ]
-    assert (
-        render_selector("X", tokens, {"age": "a1", "vax": "v"})
-        == "X__age_a1__vax_v__imm_X0"
-    )
+@pytest.mark.parametrize(
+    ("base", "tokens", "assignment", "expected"),
+    [
+        pytest.param("S", [], {}, "S", id="bare-name"),
+        pytest.param(
+            "S",
+            [WildcardToken("age")],
+            {"age": "a0"},
+            "S__age_a0",
+            id="wildcard-single",
+        ),
+        pytest.param(
+            "S",
+            [WildcardToken("age"), WildcardToken("vax")],
+            {"age": "a1", "vax": "v"},
+            "S__age_a1__vax_v",
+            id="wildcard-multi",
+        ),
+        pytest.param(
+            "X", [PinnedToken("imm", "X0")], {}, "X__imm_X0", id="pinned-only"
+        ),
+        pytest.param(
+            "X",
+            [
+                WildcardToken("age"),
+                WildcardToken("vax"),
+                PinnedToken("imm", "X0"),
+            ],
+            {"age": "a1", "vax": "v"},
+            "X__age_a1__vax_v__imm_X0",
+            id="mixed",
+        ),
+    ],
+)
+def test_render_selector_valid(
+    base: str,
+    tokens: list[WildcardToken | PinnedToken],
+    assignment: dict[str, str],
+    expected: str,
+) -> None:
+    """render_selector emits the expected concrete name."""
+    assert render_selector(base, tokens, assignment) == expected
 
 
 # ---------------------------------------------------------------------------
@@ -198,20 +188,35 @@ def test_render_selector_mixed() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_render_selector_validates_unknown_wildcard_axis() -> None:
-    """Unknown wildcard axis with axis_lookup provided raises ValueError."""
+@pytest.mark.parametrize(
+    ("base", "tokens", "assignment", "match"),
+    [
+        pytest.param(
+            "S",
+            [WildcardToken("bad")],
+            {"bad": "x"},
+            "unknown axis",
+            id="unknown-wildcard-axis",
+        ),
+        pytest.param(
+            "X",
+            [PinnedToken("imm", "X99")],
+            {},
+            "pinned coord",
+            id="unknown-pinned-coord",
+        ),
+    ],
+)
+def test_render_selector_validation_errors(
+    base: str,
+    tokens: list[WildcardToken | PinnedToken],
+    assignment: dict[str, str],
+    match: str,
+) -> None:
+    """render_selector validates against axis_lookup when provided."""
     lookup = build_axis_lookup(_AXES)
-    tokens = [WildcardToken("bad")]
-    with pytest.raises(ValueError, match="unknown axis"):
-        render_selector("S", tokens, {"bad": "x"}, axis_lookup=lookup)
-
-
-def test_render_selector_validates_unknown_pinned_coord() -> None:
-    """Unknown pinned coord with axis_lookup provided raises ValueError."""
-    lookup = build_axis_lookup(_AXES)
-    tokens = [PinnedToken("imm", "X99")]
-    with pytest.raises(ValueError, match="pinned coord"):
-        render_selector("X", tokens, {}, axis_lookup=lookup)
+    with pytest.raises(ValueError, match=match):
+        render_selector(base, tokens, assignment, axis_lookup=lookup)
 
 
 def test_render_selector_partial_assignment_returns_bracketed_form() -> None:
@@ -233,35 +238,34 @@ def test_expand_selector_bare_name() -> None:
     assert expand_selector("S", axis_lookup=lookup) == [("S", {})]
 
 
-def test_expand_selector_wildcard_single() -> None:
-    """Single wildcard expands over all coords of that axis in order."""
+@pytest.mark.parametrize(
+    ("selector", "expected_names"),
+    [
+        pytest.param("S[age]", ["S__age_a0", "S__age_a1"], id="wildcard-single"),
+        pytest.param(
+            "S[age, vax]",
+            [
+                "S__age_a0__vax_u",
+                "S__age_a0__vax_v",
+                "S__age_a1__vax_u",
+                "S__age_a1__vax_v",
+            ],
+            id="wildcard-multi-cartesian",
+        ),
+        pytest.param("X[imm=X0]", ["X__imm_X0"], id="pinned-only-single"),
+        pytest.param(
+            "X[age=a0, imm=X1]",
+            ["X__age_a0__imm_X1"],
+            id="pinned-multi-single",
+        ),
+    ],
+)
+def test_expand_selector_names(selector: str, expected_names: list[str]) -> None:
+    """expand_selector yields the expected concrete names."""
     lookup = build_axis_lookup(_AXES)
-    results = expand_selector("S[age]", axis_lookup=lookup)
-    assert [r[0] for r in results] == ["S__age_a0", "S__age_a1"]
-
-
-def test_expand_selector_wildcard_multi_is_cartesian_product() -> None:
-    """Multiple wildcards expand as the cartesian product of all coord lists."""
-    lookup = build_axis_lookup(_AXES)
-    results = expand_selector("S[age, vax]", axis_lookup=lookup)
-    assert len(results) == 4  # 2 age x 2 vax
-    names = {r[0] for r in results}
-    assert names == {
-        "S__age_a0__vax_u",
-        "S__age_a0__vax_v",
-        "S__age_a1__vax_u",
-        "S__age_a1__vax_v",
-    }
-
-
-def test_expand_selector_pinned_only_single_expansion() -> None:
-    """All-pinned selector yields exactly one expansion with the pinned name."""
-    lookup = build_axis_lookup(_AXES)
-    results = expand_selector("X[imm=X0]", axis_lookup=lookup)
-    assert len(results) == 1
-    name, assignment = results[0]
-    assert name == "X__imm_X0"
-    assert assignment["imm"] == "X0"
+    results = expand_selector(selector, axis_lookup=lookup)
+    assert {r[0] for r in results} == set(expected_names)
+    assert len(results) == len(expected_names)
 
 
 def test_expand_selector_mixed_expands_wildcards_only() -> None:
@@ -273,14 +277,6 @@ def test_expand_selector_mixed_expands_wildcards_only() -> None:
     assert all("imm_X0" in n for n in names)
     assert "X__age_a0__vax_u__imm_X0" in names
     assert "X__age_a1__vax_v__imm_X0" in names
-
-
-def test_expand_selector_pinned_multi_all_axes_in_name() -> None:
-    """Multi-pinned selector produces a single name with all pinned segments."""
-    lookup = build_axis_lookup(_AXES)
-    results = expand_selector("X[age=a0, imm=X1]", axis_lookup=lookup)
-    assert len(results) == 1
-    assert results[0][0] == "X__age_a0__imm_X1"
 
 
 def test_expand_selector_mixed_assignment_includes_pinned_axes() -> None:
@@ -297,25 +293,19 @@ def test_expand_selector_mixed_assignment_includes_pinned_axes() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_expand_selector_unknown_wildcard_axis_raises() -> None:
-    """Unknown wildcard axis raises ValueError."""
+@pytest.mark.parametrize(
+    ("selector", "match"),
+    [
+        pytest.param("S[bad]", "not defined", id="unknown-wildcard-axis"),
+        pytest.param("X[bad=v]", "not defined", id="unknown-pinned-axis"),
+        pytest.param("X[imm=X99]", "pinned coord", id="unknown-pinned-coord"),
+    ],
+)
+def test_expand_selector_invalid(selector: str, match: str) -> None:
+    """Invalid selectors raise ValueError with the expected message fragment."""
     lookup = build_axis_lookup(_AXES)
-    with pytest.raises(ValueError, match="not defined"):
-        expand_selector("S[bad]", axis_lookup=lookup)
-
-
-def test_expand_selector_unknown_pinned_axis_raises() -> None:
-    """Unknown pinned axis raises ValueError."""
-    lookup = build_axis_lookup(_AXES)
-    with pytest.raises(ValueError, match="not defined"):
-        expand_selector("X[bad=v]", axis_lookup=lookup)
-
-
-def test_expand_selector_unknown_pinned_coord_raises() -> None:
-    """Unknown coord for a known pinned axis raises ValueError."""
-    lookup = build_axis_lookup(_AXES)
-    with pytest.raises(ValueError, match="pinned coord"):
-        expand_selector("X[imm=X99]", axis_lookup=lookup)
+    with pytest.raises(ValueError, match=match):
+        expand_selector(selector, axis_lookup=lookup)
 
 
 # ---------------------------------------------------------------------------
@@ -338,29 +328,27 @@ def test_expand_apply_to_selector_expands_to_concrete_names() -> None:
     assert set(result) == {"S__vax_u", "S__vax_v"}
 
 
-def test_expand_apply_to_expanded_name_not_in_state_set_raises() -> None:
-    """Expanded name absent from state_set raises ValueError."""
-    lookup = build_axis_lookup(_AXES)
-    with pytest.raises(ValueError, match="not in state"):
-        expand_apply_to(["X"], axis_lookup=lookup, state_set={"S", "R"})
-
-
-def test_expand_apply_to_empty_list_raises() -> None:
-    """Empty apply_to list raises ValueError."""
-    lookup = build_axis_lookup(_AXES)
-    with pytest.raises(ValueError, match="non-empty list"):
-        expand_apply_to([], axis_lookup=lookup)
-
-
-def test_expand_apply_to_non_string_entry_raises() -> None:
-    """Non-string apply_to entry raises ValueError."""
-    lookup = build_axis_lookup(_AXES)
-    with pytest.raises(ValueError, match="non-empty string"):
-        expand_apply_to([123], axis_lookup=lookup)
-
-
 def test_expand_apply_to_without_state_set_skips_membership_check() -> None:
     """When state_set is None, expansion proceeds without membership validation."""
     lookup = build_axis_lookup([{"name": "vax", "coords": ["u", "v"]}])
     result = expand_apply_to(["S[vax]"], axis_lookup=lookup)
     assert set(result) == {"S__vax_u", "S__vax_v"}
+
+
+@pytest.mark.parametrize(
+    ("apply_to", "state_set", "match"),
+    [
+        pytest.param(["X"], {"S", "R"}, "not in state", id="expanded-name-missing"),
+        pytest.param([], None, "non-empty list", id="empty-list"),
+        pytest.param([123], None, "non-empty string", id="non-string-entry"),
+    ],
+)
+def test_expand_apply_to_invalid(
+    apply_to: list[object],
+    state_set: set[str] | None,
+    match: str,
+) -> None:
+    """Invalid apply_to inputs raise ValueError with the expected message fragment."""
+    lookup = build_axis_lookup(_AXES)
+    with pytest.raises(ValueError, match=match):
+        expand_apply_to(apply_to, axis_lookup=lookup, state_set=state_set)

@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import ast
 
-from op_system._errors import _raise_invalid_expression
+from op_system._errors import InvalidExpressionError
 
 
 def _parse_expr(expr: str) -> ast.AST:
@@ -15,11 +15,16 @@ def _parse_expr(expr: str) -> ast.AST:
 
     Returns:
         The parsed AST node.
+
+    Raises:
+        InvalidExpressionError: If validation fails.
     """
     try:
         return ast.parse(expr, mode="eval")
     except SyntaxError as exc:
-        _raise_invalid_expression(detail=f"invalid expression syntax: {exc.msg}")
+        raise InvalidExpressionError(
+            detail=f"invalid expression syntax: {exc.msg}"
+        ) from exc
 
 
 def _collect_names(tree: ast.AST) -> set[str]:

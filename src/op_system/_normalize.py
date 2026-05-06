@@ -24,7 +24,7 @@ if TYPE_CHECKING:
     from re import Match
 
 from op_system._axes import _normalize_axes, _normalize_bracket_key
-from op_system._errors import _raise_invalid_rhs_spec, _raise_unsupported_feature
+from op_system._errors import InvalidRhsSpecError, UnsupportedFeatureError
 from op_system._helpers import (
     _ensure_mapping,
     _ensure_str_dict,
@@ -98,10 +98,13 @@ def _get_required_str(tr: Mapping[str, Any], *, idx: int, key: str) -> str:
 
     Returns:
         Stripped string value.
+
+    Raises:
+        InvalidRhsSpecError: If validation fails.
     """
     val = tr.get(key)
     if not isinstance(val, str) or not val.strip():
-        _raise_invalid_rhs_spec(detail=f"transitions[{idx}].{key} must be a string")
+        raise InvalidRhsSpecError(detail=f"transitions[{idx}].{key} must be a string")
     return val.strip()
 
 
@@ -110,27 +113,36 @@ def _validate_transition_mapping(tr: object, *, idx: int) -> Mapping[str, Any]:
 
     Returns:
         Validated transition mapping.
+
+    Raises:
+        InvalidRhsSpecError: If validation fails.
     """
     if not isinstance(tr, dict):
-        _raise_invalid_rhs_spec(detail=f"transitions[{idx}] must be a mapping")
+        raise InvalidRhsSpecError(detail=f"transitions[{idx}] must be a mapping")
     if "name" in tr:
         name_val = tr.get("name")
         if not isinstance(name_val, str) or not name_val.strip():
-            _raise_invalid_rhs_spec(
+            raise InvalidRhsSpecError(
                 detail=f"transitions[{idx}].name must be a non-empty string"
             )
     return tr
 
 
 def _validate_scalar_or_expr(value: object, field: str) -> None:
-    """Raise if *value* is not a non-empty string or a finite number."""
+    """Raise if *value* is not a non-empty string or a finite number.
+
+    Raises:
+        InvalidRhsSpecError: If validation fails.
+    """
     if isinstance(value, str):
         if not value.strip():
-            _raise_invalid_rhs_spec(
+            raise InvalidRhsSpecError(
                 detail=f"{field} must be a non-empty string or number"
             )
     elif isinstance(value, bool) or not isinstance(value, (int, float)):
-        _raise_invalid_rhs_spec(detail=f"{field} must be a non-empty string or number")
+        raise InvalidRhsSpecError(
+            detail=f"{field} must be a non-empty string or number"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -148,6 +160,9 @@ def _normalize_state_axes(
 
     Returns:
         Mapping of state names to tuples of axis names.
+
+    Raises:
+        InvalidRhsSpecError: If validation fails.
     """
     if raw_state_axes is None:
         return {}
@@ -155,25 +170,25 @@ def _normalize_state_axes(
     out: dict[str, tuple[str, ...]] = {}
     for state, axes in mapping.items():
         if state not in state_set:
-            _raise_invalid_rhs_spec(detail=f"state_axes key {state!r} not in state")
+            raise InvalidRhsSpecError(detail=f"state_axes key {state!r} not in state")
         if not isinstance(axes, (list, tuple)) or not axes:
-            _raise_invalid_rhs_spec(
+            raise InvalidRhsSpecError(
                 detail=f"state_axes[{state!r}] must be a non-empty list of axis names"
             )
         resolved: list[str] = []
         seen: set[str] = set()
         for i, ax in enumerate(axes):
             if not isinstance(ax, str) or not ax.strip():
-                _raise_invalid_rhs_spec(
+                raise InvalidRhsSpecError(
                     detail=f"state_axes[{state!r}][{i}] must be a non-empty string"
                 )
             ax_name = ax.strip()
             if ax_name not in axis_names:
-                _raise_invalid_rhs_spec(
+                raise InvalidRhsSpecError(
                     detail=f"state_axes[{state!r}] references unknown axis {ax_name!r}"
                 )
             if ax_name in seen:
-                _raise_invalid_rhs_spec(
+                raise InvalidRhsSpecError(
                     detail=f"state_axes[{state!r}] contains duplicate axis {ax_name!r}"
                 )
             seen.add(ax_name)
@@ -194,22 +209,25 @@ def _normalize_kernel_axes_field(
 
     Returns:
         Tuple of axis name strings, or ``None`` if not provided.
+
+    Raises:
+        InvalidRhsSpecError: If validation fails.
     """
     if axes_field is None:
         return None
     if not isinstance(axes_field, (list, tuple)) or not axes_field:
-        _raise_invalid_rhs_spec(
+        raise InvalidRhsSpecError(
             detail=f"kernels[{idx}].axes must be a non-empty list if provided"
         )
     resolved_axes: list[str] = []
     for ax_idx, ax in enumerate(axes_field):
         if not isinstance(ax, str) or not ax.strip():
-            _raise_invalid_rhs_spec(
+            raise InvalidRhsSpecError(
                 detail=f"kernels[{idx}].axes[{ax_idx}] must be a non-empty string"
             )
         ax_name = ax.strip()
         if ax_name not in axis_names:
-            _raise_invalid_rhs_spec(
+            raise InvalidRhsSpecError(
                 detail=f"kernels[{idx}] references unknown axis {ax_name!r}"
             )
         resolved_axes.append(ax_name)
@@ -223,15 +241,18 @@ def _normalize_kernel_form_and_params(
 
     Returns:
         Tuple of (form_name, params_mapping_or_none).
+
+    Raises:
+        InvalidRhsSpecError: If validation fails.
     """
     if value is None:
         if not isinstance(form, str) or not form.strip():
-            _raise_invalid_rhs_spec(
+            raise InvalidRhsSpecError(
                 detail=(f"kernels[{idx}].form is required when value is not provided")
             )
         form_name = form.strip().lower()
         if form_name not in _ALLOWED_KERNEL_FORMS:
-            _raise_invalid_rhs_spec(
+            raise InvalidRhsSpecError(
                 detail=f"kernels[{idx}] form {form_name!r} is not supported"
             )
         required_keys = _ALLOWED_KERNEL_FORMS[form_name]
@@ -240,7 +261,7 @@ def _normalize_kernel_form_and_params(
         )
         for req in required_keys:
             if req not in params_map_required:
-                _raise_invalid_rhs_spec(
+                raise InvalidRhsSpecError(
                     detail=f"kernels[{idx}].params missing required key {req!r}"
                 )
         return form_name, params_map_required
@@ -251,7 +272,7 @@ def _normalize_kernel_form_and_params(
         else "custom_value"
     )
     if form_name and form_name not in _ALLOWED_KERNEL_FORMS:
-        _raise_invalid_rhs_spec(
+        raise InvalidRhsSpecError(
             detail=f"kernels[{idx}] form {form_name!r} is not supported"
         )
     params_map_optional: Mapping[str, Any] | None
@@ -275,10 +296,13 @@ def _normalize_single_kernel(
 
     Returns:
         Normalized kernel dict.
+
+    Raises:
+        InvalidRhsSpecError: If validation fails.
     """
     name = _get_required_str(mk_map, idx=idx, key="name")
     if name in seen:
-        _raise_invalid_rhs_spec(detail=f"duplicate kernel name: {name!r}")
+        raise InvalidRhsSpecError(detail=f"duplicate kernel name: {name!r}")
     seen.add(name)
 
     axes_resolved = _normalize_kernel_axes_field(
@@ -314,11 +338,14 @@ def _normalize_kernels(
 
     Returns:
         List of normalized kernel definitions.
+
+    Raises:
+        InvalidRhsSpecError: If validation fails.
     """
     if raw_kernels is None:
         return []
     if not isinstance(raw_kernels, list):
-        _raise_invalid_rhs_spec(detail="kernels must be a list")
+        raise InvalidRhsSpecError(detail="kernels must be a list")
 
     seen: set[str] = set()
     out: list[dict[str, Any]] = []
@@ -349,9 +376,12 @@ def _validate_op_apply_to(
 
     Returns:
         List of concrete (or bare) state name strings.
+
+    Raises:
+        InvalidRhsSpecError: If validation fails.
     """
     if not isinstance(apply_to_raw, (list, tuple)) or not apply_to_raw:
-        _raise_invalid_rhs_spec(
+        raise InvalidRhsSpecError(
             detail=(
                 f"operators[{idx}].apply_to must be a non-empty list "
                 "of state names if provided"
@@ -369,12 +399,12 @@ def _validate_op_apply_to(
         result = []
         for j, state_name in enumerate(apply_to_raw):
             if not isinstance(state_name, str) or not state_name.strip():
-                _raise_invalid_rhs_spec(
+                raise InvalidRhsSpecError(
                     detail=f"operators[{idx}].apply_to[{j}] must be a non-empty string"
                 )
             state_name_s = state_name.strip()
             if state_set is not None and state_name_s not in state_set:
-                _raise_invalid_rhs_spec(
+                raise InvalidRhsSpecError(
                     detail=(
                         f"operators[{idx}].apply_to[{j}]={state_name_s!r} not in state"
                     )
@@ -384,32 +414,40 @@ def _validate_op_apply_to(
 
 
 def _validate_op_advection(op_map: Mapping[str, Any], idx: int, kind_s: str) -> None:
-    """Validate advection/transport operator fields."""
+    """Validate advection/transport operator fields.
+
+    Raises:
+        InvalidRhsSpecError: If validation fails.
+    """
     velocity_val = op_map.get("velocity")
     if velocity_val is None:
-        _raise_invalid_rhs_spec(
+        raise InvalidRhsSpecError(
             detail=f"operators[{idx}].velocity is required for {kind_s!r}"
         )
     _validate_scalar_or_expr(velocity_val, f"operators[{idx}].velocity")
 
 
 def _validate_op_jump_integral(op_map: Mapping[str, Any], idx: int) -> None:
-    """Validate jump_integral operator fields."""
+    """Validate jump_integral operator fields.
+
+    Raises:
+        InvalidRhsSpecError: If validation fails.
+    """
     rate_val = op_map.get("rate")
     if rate_val is None:
-        _raise_invalid_rhs_spec(
+        raise InvalidRhsSpecError(
             detail=f"operators[{idx}].rate is required for 'jump_integral'"
         )
     _validate_scalar_or_expr(rate_val, f"operators[{idx}].rate")
 
     kernel_val = op_map.get("kernel")
     if not isinstance(kernel_val, dict):
-        _raise_invalid_rhs_spec(
+        raise InvalidRhsSpecError(
             detail=f"operators[{idx}].kernel must be a mapping for 'jump_integral'"
         )
     kernel_form = kernel_val.get("form")
     if not isinstance(kernel_form, str) or not kernel_form.strip():
-        _raise_invalid_rhs_spec(
+        raise InvalidRhsSpecError(
             detail=(
                 f"operators[{idx}].kernel.form must be a non-empty "
                 "string for 'jump_integral'"
@@ -417,7 +455,7 @@ def _validate_op_jump_integral(op_map: Mapping[str, Any], idx: int) -> None:
         )
     kernel_params = kernel_val.get("params")
     if kernel_params is not None and not isinstance(kernel_params, dict):
-        _raise_invalid_rhs_spec(
+        raise InvalidRhsSpecError(
             detail=(
                 f"operators[{idx}].kernel.params must be a mapping if "
                 "provided for 'jump_integral'"
@@ -427,13 +465,13 @@ def _validate_op_jump_integral(op_map: Mapping[str, Any], idx: int) -> None:
     direction_val = op_map.get("direction")
     if direction_val is not None:
         if not isinstance(direction_val, str) or not direction_val.strip():
-            _raise_invalid_rhs_spec(
+            raise InvalidRhsSpecError(
                 detail=(
                     f"operators[{idx}].direction must be one of 'up', 'down', or 'both'"
                 )
             )
         if direction_val.strip().lower() not in {"up", "down", "both"}:
-            _raise_invalid_rhs_spec(
+            raise InvalidRhsSpecError(
                 detail=(
                     f"operators[{idx}].direction must be one of 'up', 'down', or 'both'"
                 )
@@ -449,27 +487,30 @@ def _validate_op_header(
 
     Returns:
         Tuple of ``(op_name_s, axis_name_s, kind_s, bc_val_s)``.
+
+    Raises:
+        InvalidRhsSpecError: If validation fails.
     """
     op_name = op_map.get("name")
     if op_name is not None and (not isinstance(op_name, str) or not op_name.strip()):
-        _raise_invalid_rhs_spec(
+        raise InvalidRhsSpecError(
             detail=f"operators[{idx}].name must be a non-empty string if provided"
         )
 
     axis_name = op_map.get("axis")
     if not isinstance(axis_name, str) or not axis_name.strip():
-        _raise_invalid_rhs_spec(
+        raise InvalidRhsSpecError(
             detail=f"operators[{idx}].axis must be a non-empty string"
         )
     axis_name_s = axis_name.strip()
     if axis_name_s not in axis_names:
-        _raise_invalid_rhs_spec(
+        raise InvalidRhsSpecError(
             detail=f"operators[{idx}] references unknown axis {axis_name_s!r}"
         )
 
     kind_val = op_map.get("kind")
     if not isinstance(kind_val, str) or not kind_val.strip():
-        _raise_invalid_rhs_spec(
+        raise InvalidRhsSpecError(
             detail=(
                 f"operators[{idx}].kind must be a non-empty string "
                 "(e.g., advection/jump_integral)"
@@ -479,7 +520,7 @@ def _validate_op_header(
 
     bc_val = op_map.get("bc")
     if bc_val is not None and (not isinstance(bc_val, str) or not bc_val.strip()):
-        _raise_invalid_rhs_spec(
+        raise InvalidRhsSpecError(
             detail=f"operators[{idx}].bc must be a non-empty string if provided"
         )
 
@@ -563,11 +604,14 @@ def _normalize_operators(
 
     Returns:
         List of normalized operator definitions.
+
+    Raises:
+        InvalidRhsSpecError: If validation fails.
     """
     if raw_ops is None:
         return []
     if not isinstance(raw_ops, list):
-        _raise_invalid_rhs_spec(detail="operators must be a list")
+        raise InvalidRhsSpecError(detail="operators must be a list")
 
     return [
         _normalize_single_operator(
@@ -710,11 +754,14 @@ def _expand_alias_templates(
 
     Returns:
         A tuple of ``(expanded_aliases, alias_template_map)``.
+
+    Raises:
+        InvalidRhsSpecError: If validation fails.
     """
     alias_names = list(aliases_raw.keys())
     alias_expanded, alias_template_map = _expand_state_templates(alias_names, axes=axes)
     if len(alias_expanded) != len(set(alias_expanded)):
-        _raise_invalid_rhs_spec(detail="expanded aliases contain duplicates")
+        raise InvalidRhsSpecError(detail="expanded aliases contain duplicates")
 
     combined_template_map = {**template_map_seed, **alias_template_map}
     aliases_out: dict[str, str] = {}
@@ -723,7 +770,7 @@ def _expand_alias_templates(
         canonical_name = _normalize_bracket_key(raw_name)
         expr_s = expr.strip()
         if not expr_s:
-            _raise_invalid_rhs_spec(
+            raise InvalidRhsSpecError(
                 detail=f"aliases[{raw_name!r}] must be a non-empty string"
             )
         expr_s = _expand_helpers(expr_s, axes=axes)
@@ -756,6 +803,9 @@ def _expand_initial_state_templates(
     Returns:
         Expanded ``dict[str, str]`` mapping, or ``None`` if *initial_state_raw*
         is ``None``.
+
+    Raises:
+        InvalidRhsSpecError: If validation fails.
     """
     if initial_state_raw is None:
         return None
@@ -767,7 +817,7 @@ def _expand_initial_state_templates(
     for raw_key, raw_val in initial_state_raw.items():
         val_s = str(raw_val).strip()
         if not val_s:
-            _raise_invalid_rhs_spec(
+            raise InvalidRhsSpecError(
                 detail=f"initial_state[{raw_key!r}] must be a non-empty string",
             )
         results = expand_selector(
@@ -784,7 +834,9 @@ def _expand_initial_state_templates(
             )
 
     if len(expanded_keys) != len(set(expanded_keys)):
-        _raise_invalid_rhs_spec(detail="expanded initial_state keys contain duplicates")
+        raise InvalidRhsSpecError(
+            detail="expanded initial_state keys contain duplicates"
+        )
 
     return result
 
@@ -829,7 +881,11 @@ class _TransitionEndpoints:
 def _collect_transition_wildcard_axes(
     endpoints: _TransitionEndpoints,
 ) -> list[str]:
-    """Return ordered list of unique wildcard axes from endpoints and expressions."""
+    """Return ordered list of unique wildcard axes from endpoints and expressions.
+
+    Raises:
+        InvalidRhsSpecError: If validation fails.
+    """
     wildcard_axes: list[str] = []
     seen: set[str] = set()
     for tok in endpoints.frm_tokens + endpoints.to_tokens:
@@ -842,7 +898,7 @@ def _collect_transition_wildcard_axes(
     for ph in sorted(expr_placeholders):
         if ph not in seen:
             if ph not in endpoints.axis_lookup:
-                _raise_invalid_rhs_spec(
+                raise InvalidRhsSpecError(
                     detail=f"transition placeholder {ph!r} references unknown axis"
                 )
             wildcard_axes.append(ph)
@@ -896,6 +952,9 @@ def _expand_single_transition(
 
     Returns:
         List of concrete transition dicts.
+
+    Raises:
+        InvalidRhsSpecError: If validation fails.
     """
     tr_valid = _validate_transition_mapping(tr_map, idx=0)
     frm_s = _get_required_str(tr_valid, idx=0, key="from")
@@ -924,7 +983,7 @@ def _expand_single_transition(
     coords_lists: list[list[str]] = []
     for ph in wildcard_axes:
         if ph not in axis_lookup:
-            _raise_invalid_rhs_spec(
+            raise InvalidRhsSpecError(
                 detail=f"transition placeholder {ph!r} references unknown axis"
             )
         coords_lists.append(axis_lookup[ph])
@@ -987,19 +1046,17 @@ def _expand_integrate_over(expr: str, *, axes: list[dict[str, Any]]) -> str:
         for ax in axes:
             if ax.get("name") == ax_name:
                 if ax.get("type") != "continuous":
-                    _raise_invalid_rhs_spec(
+                    raise InvalidRhsSpecError(
                         detail=f"integrate_over axis {ax_name!r} must be continuous"
                     )
                 coords = [str(c) for c in ax.get("coords", [])]
                 deltas = ax.get("deltas") or []
                 if not coords or not deltas or len(coords) != len(deltas):
-                    _raise_invalid_rhs_spec(
+                    raise InvalidRhsSpecError(
                         detail=f"integrate_over axis {ax_name!r} missing coords/deltas"
                     )
                 return coords, [float(d) for d in deltas]
-        return _raise_invalid_rhs_spec(
-            detail=f"integrate_over axis {ax_name!r} not found"
-        )
+        raise InvalidRhsSpecError(detail=f"integrate_over axis {ax_name!r} not found")
 
     out = expr
     while True:
@@ -1052,18 +1109,21 @@ def _apply_coord_filter(
 
     Returns:
         Filtered coord list (preserves order of the filter, not the axis).
+
+    Raises:
+        InvalidRhsSpecError: If validation fails.
     """
     if filter_str is None:
         return all_coords
     requested = [c.strip() for c in filter_str.split(",") if c.strip()]
     if not requested:
-        _raise_invalid_rhs_spec(
+        raise InvalidRhsSpecError(
             detail=f"sum_over IN filter for axis {axis_name!r} is empty",
         )
     seen: set[str] = set()
     for coord in requested:
         if coord in seen:
-            _raise_invalid_rhs_spec(
+            raise InvalidRhsSpecError(
                 detail=(
                     f"sum_over IN filter for axis {axis_name!r} "
                     f"contains duplicate coord {coord!r}"
@@ -1071,7 +1131,7 @@ def _apply_coord_filter(
             )
         seen.add(coord)
         if coord not in all_coords:
-            _raise_invalid_rhs_spec(
+            raise InvalidRhsSpecError(
                 detail=(
                     f"sum_over IN filter references unknown coord {coord!r} "
                     f"for axis {axis_name!r} (valid: {all_coords})"
@@ -1094,16 +1154,16 @@ def _expand_sum_over(expr: str, *, axes: list[dict[str, Any]]) -> str:
         for ax in axes:
             if ax.get("name") == ax_name:
                 if ax.get("type") != "categorical":
-                    _raise_invalid_rhs_spec(
+                    raise InvalidRhsSpecError(
                         detail=f"sum_over axis {ax_name!r} must be categorical"
                     )
                 coords = ax.get("coords", [])
                 if not coords:
-                    _raise_invalid_rhs_spec(
+                    raise InvalidRhsSpecError(
                         detail=f"sum_over axis {ax_name!r} has no coords"
                     )
                 return [str(c) for c in coords]
-        return _raise_invalid_rhs_spec(detail=f"sum_over axis {ax_name!r} not found")
+        raise InvalidRhsSpecError(detail=f"sum_over axis {ax_name!r} not found")
 
     out = expr
     while True:
@@ -1164,6 +1224,9 @@ def _resolve_template_equation(
 
     Returns:
         Expanded expression string if found, otherwise ``None``.
+
+    Raises:
+        InvalidRhsSpecError: If validation fails.
     """
     for template_key, variants in template_map.items():
         for expanded_name, assignment in variants:
@@ -1171,7 +1234,7 @@ def _resolve_template_equation(
                 continue
             expr = equations_map[template_key]
             if not isinstance(expr, str) or not expr.strip():
-                _raise_invalid_rhs_spec(
+                raise InvalidRhsSpecError(
                     detail=(f"equations[{template_key!r}] must be a non-empty string")
                 )
             expr_s = _expand_helpers(expr.strip(), axes=axes)
@@ -1196,6 +1259,9 @@ def _gather_equations(
 
     Returns:
         List of expanded equation strings in the same order as *state*.
+
+    Raises:
+        InvalidRhsSpecError: If validation fails.
     """
     eqs: list[str] = []
     template_map = template_map or {}
@@ -1203,7 +1269,7 @@ def _gather_equations(
         if name in equations_map:
             expr = equations_map[name]
             if not isinstance(expr, str) or not expr.strip():
-                _raise_invalid_rhs_spec(
+                raise InvalidRhsSpecError(
                     detail=f"equations[{name!r}] must be a non-empty string"
                 )
             expr_s = _expand_helpers(expr.strip(), axes=axes)
@@ -1220,7 +1286,7 @@ def _gather_equations(
             all_syms=all_syms,
         )
         if expr_res is None:
-            _raise_invalid_rhs_spec(detail=f"Missing equation for state {name!r}")
+            raise InvalidRhsSpecError(detail=f"Missing equation for state {name!r}")
         eqs.append(expr_res)
     return eqs
 
@@ -1235,14 +1301,15 @@ def _chain_rate_expr(value: object, *, field: str) -> str:
 
     Returns:
         A non-empty expression string.
+
+    Raises:
+        InvalidRhsSpecError: If validation fails.
     """
     if isinstance(value, str) and value.strip():
         return value.strip()
     if isinstance(value, (int, float)) and not isinstance(value, bool):
         return str(float(value))
-    return _raise_invalid_rhs_spec(
-        detail=f"{field} must be a non-empty string or number"
-    )
+    raise InvalidRhsSpecError(detail=f"{field} must be a non-empty string or number")
 
 
 def _normalize_chain_forward_rates(
@@ -1255,13 +1322,16 @@ def _normalize_chain_forward_rates(
 
     Returns:
         A list of ``length - 1`` rate expression strings.
+
+    Raises:
+        InvalidRhsSpecError: If validation fails.
     """
     if isinstance(forward_raw, (str, int, float)) and not isinstance(forward_raw, bool):
         expr = _chain_rate_expr(forward_raw, field=f"chain[{idx}].forward")
         return [expr] * (length - 1)
 
     if not isinstance(forward_raw, (list, tuple)):
-        _raise_invalid_rhs_spec(
+        raise InvalidRhsSpecError(
             detail=(
                 f"chain[{idx}].forward must be a string/number or a list of "
                 f"{length - 1} rates"
@@ -1273,7 +1343,7 @@ def _normalize_chain_forward_rates(
         for i, v in enumerate(forward_raw)
     ]
     if len(rates) != length - 1:
-        _raise_invalid_rhs_spec(
+        raise InvalidRhsSpecError(
             detail=(
                 f"chain[{idx}].forward list length must be {length - 1} "
                 f"for chain length {length}"
@@ -1309,6 +1379,9 @@ def _normalize_chain_entry(
 
     Returns:
         Tuple ``(from_state, rate_expr)`` or ``None`` if no entry provided.
+
+    Raises:
+        InvalidRhsSpecError: If validation fails.
     """
     entry_raw = chain.get("entry")
     if entry_raw is None:
@@ -1316,7 +1389,7 @@ def _normalize_chain_entry(
     entry_map = _ensure_mapping(entry_raw, name=f"chain[{idx}].entry")
     frm = entry_map.get("from")
     if not isinstance(frm, str) or not frm.strip():
-        _raise_invalid_rhs_spec(
+        raise InvalidRhsSpecError(
             detail=f"chain[{idx}].entry.from must be a non-empty string"
         )
     rate = _chain_rate_expr(entry_map.get("rate"), field=f"chain[{idx}].entry.rate")
@@ -1334,13 +1407,16 @@ def _normalize_chain_exit(
 
     Returns:
         Tuple ``(to_state, rate_expr_or_none)`` or ``None``.
+
+    Raises:
+        InvalidRhsSpecError: If validation fails.
     """
     exit_raw = chain.get("exit")
     if exit_raw is not None:
         exit_map = _ensure_mapping(exit_raw, name=f"chain[{idx}].exit")
         to_raw = exit_map.get("to")
         if not isinstance(to_raw, str) or not to_raw.strip():
-            _raise_invalid_rhs_spec(
+            raise InvalidRhsSpecError(
                 detail=f"chain[{idx}].exit.to must be a non-empty string"
             )
         rate_raw = exit_map.get("rate")
@@ -1355,7 +1431,7 @@ def _normalize_chain_exit(
     if to_legacy is None:
         return None
     if not isinstance(to_legacy, str) or not to_legacy.strip():
-        _raise_invalid_rhs_spec(detail=f"chain[{idx}].to must be a non-empty string")
+        raise InvalidRhsSpecError(detail=f"chain[{idx}].to must be a non-empty string")
     return to_legacy.strip(), None
 
 
@@ -1369,16 +1445,19 @@ def _validate_chain_entry(
 
     Returns:
         ``(stage_names, forward_rates, entry_cfg, exit_cfg)``.
+
+    Raises:
+        InvalidRhsSpecError: If validation fails.
     """
     if not isinstance(chain, dict):
-        _raise_invalid_rhs_spec(detail=f"chain[{idx}] must be a mapping")
+        raise InvalidRhsSpecError(detail=f"chain[{idx}] must be a mapping")
     cname = _get_required_str(chain, idx=idx, key="name")
     length_obj = chain.get("length")
     if not isinstance(length_obj, (int, float)) or isinstance(length_obj, bool):
-        _raise_invalid_rhs_spec(detail=f"chain[{idx}].length must be an integer >= 2")
+        raise InvalidRhsSpecError(detail=f"chain[{idx}].length must be an integer >= 2")
     clen = int(length_obj)
     if clen < 2:
-        _raise_invalid_rhs_spec(detail=f"chain[{idx}].length must be >= 2")
+        raise InvalidRhsSpecError(detail=f"chain[{idx}].length must be >= 2")
 
     forward_rates = _normalize_chain_forward_rates(
         chain.get("forward"),
@@ -1394,7 +1473,7 @@ def _validate_chain_entry(
         and not parse_selector(entry_cfg[0])[1]
         and entry_cfg[0] not in state_set
     ):
-        _raise_invalid_rhs_spec(
+        raise InvalidRhsSpecError(
             detail=f"chain[{idx}].entry.from={entry_cfg[0]!r} not in state"
         )
 
@@ -1404,7 +1483,7 @@ def _validate_chain_entry(
         and not parse_selector(exit_cfg[0])[1]
         and exit_cfg[0] not in state_set
     ):
-        _raise_invalid_rhs_spec(
+        raise InvalidRhsSpecError(
             detail=f"chain[{idx}] exit.to={exit_cfg[0]!r} not in state"
         )
 
@@ -1509,33 +1588,36 @@ def _validate_coord_shift_entry(
 
     Returns:
         ``(axis_name, from_coord, to_coord, apply_to, rate)``
+
+    Raises:
+        InvalidRhsSpecError: If validation fails.
     """
     shift_spec = tr["coord_shift"]
     if not isinstance(shift_spec, dict) or len(shift_spec) != 1:
-        _raise_invalid_rhs_spec(
+        raise InvalidRhsSpecError(
             detail="coord_shift must be a mapping with exactly one axis entry",
         )
 
     axis_name, arrow = next(iter(shift_spec.items()))
     if axis_name not in axis_lookup:
-        _raise_invalid_rhs_spec(
+        raise InvalidRhsSpecError(
             detail=f"coord_shift axis {axis_name!r} is not defined",
         )
 
     if not isinstance(arrow, str) or "->" not in arrow:
-        _raise_invalid_rhs_spec(
+        raise InvalidRhsSpecError(
             detail=f"coord_shift[{axis_name}] must be 'from_coord -> to_coord'",
         )
     parts = [p.strip() for p in arrow.split("->")]
     if len(parts) != 2 or not parts[0] or not parts[1]:
-        _raise_invalid_rhs_spec(
+        raise InvalidRhsSpecError(
             detail=f"coord_shift[{axis_name}] must be 'from_coord -> to_coord'",
         )
     from_coord, to_coord = parts
     valid_coords = axis_lookup[axis_name]
     for coord in (from_coord, to_coord):
         if coord not in valid_coords:
-            _raise_invalid_rhs_spec(
+            raise InvalidRhsSpecError(
                 detail=(
                     f"coord_shift coordinate {coord!r} not in "
                     f"axis {axis_name!r} coords {valid_coords}"
@@ -1544,13 +1626,13 @@ def _validate_coord_shift_entry(
 
     apply_to = tr.get("apply_to")
     if not isinstance(apply_to, list) or not apply_to:
-        _raise_invalid_rhs_spec(
+        raise InvalidRhsSpecError(
             detail="coord_shift requires a non-empty 'apply_to' list",
         )
 
     rate_s = tr.get("rate")
     if not isinstance(rate_s, str) or not rate_s.strip():
-        _raise_invalid_rhs_spec(detail="coord_shift requires a 'rate' string")
+        raise InvalidRhsSpecError(detail="coord_shift requires a 'rate' string")
 
     return axis_name, from_coord, to_coord, apply_to, rate_s.strip()
 
@@ -1627,12 +1709,15 @@ def _expand_coord_shift_for_base(
 
     Returns:
         Concrete ``{"from", "to", "rate"}`` transition dicts.
+
+    Raises:
+        InvalidRhsSpecError: If validation fails.
     """
     prefix = f"{base}__"
     matching = [s for s in state_expanded if s.startswith(prefix)]
 
     if not matching:
-        _raise_invalid_rhs_spec(
+        raise InvalidRhsSpecError(
             detail=(
                 f"coord_shift apply_to state {base!r} has no expanded states "
                 f"starting with '{prefix}'"
@@ -1648,7 +1733,7 @@ def _expand_coord_shift_for_base(
 
         target = state_name.replace(from_frag, to_frag, 1)
         if target not in expanded_set:
-            _raise_invalid_rhs_spec(
+            raise InvalidRhsSpecError(
                 detail=(
                     f"coord_shift would create transition to {target!r} "
                     f"which is not an expanded state"
@@ -1658,7 +1743,7 @@ def _expand_coord_shift_for_base(
         concrete.append({"from": state_name, "to": target, "rate": rate_s})
 
     if not concrete:
-        _raise_invalid_rhs_spec(
+        raise InvalidRhsSpecError(
             detail=(
                 f"coord_shift apply_to state {base!r} has no expanded states "
                 f"with fragment {from_frag!r}"
@@ -1681,9 +1766,13 @@ def normalize_rhs(spec: Mapping[str, Any] | None) -> NormalizedRhs:
 
     Returns:
         Backend-facing normalized RHS representation.
+
+    Raises:
+        InvalidRhsSpecError: If validation fails.
+        UnsupportedFeatureError: If validation fails.
     """
     if spec is None:
-        _raise_invalid_rhs_spec(detail="rhs specification is required")
+        raise InvalidRhsSpecError(detail="rhs specification is required")
 
     kind = str(spec.get("kind", "expr")).strip().lower()
 
@@ -1693,7 +1782,7 @@ def normalize_rhs(spec: Mapping[str, Any] | None) -> NormalizedRhs:
     if kind == "transitions":
         return normalize_transitions_rhs(spec)
 
-    _raise_unsupported_feature(
+    raise UnsupportedFeatureError(
         feature=f"rhs.kind={kind}",
         detail="Only 'expr' and 'transitions' are supported in v1.",
     )
@@ -1708,14 +1797,17 @@ def normalize_expr_rhs(spec: Mapping[str, Any]) -> NormalizedRhs:
 
     Returns:
         Backend-facing normalized RHS representation.
+
+    Raises:
+        InvalidRhsSpecError: If validation fails.
     """
     state_raw = _ensure_str_list(spec.get("state"), name="state")
     if len(state_raw) != len(set(state_raw)):
-        _raise_invalid_rhs_spec(detail="state contains duplicate names")
+        raise InvalidRhsSpecError(detail="state contains duplicate names")
 
     equations_map = spec.get("equations")
     if not isinstance(equations_map, dict):
-        _raise_invalid_rhs_spec(detail="equations must be a mapping of state->expr")
+        raise InvalidRhsSpecError(detail="equations must be a mapping of state->expr")
 
     equations_map = {_normalize_bracket_key(k): v for k, v in equations_map.items()}
 
@@ -1742,7 +1834,7 @@ def normalize_expr_rhs(spec: Mapping[str, Any]) -> NormalizedRhs:
         state_raw, axes=axes_meta
     )
     if len(state_expanded) != len(set(state_expanded)):
-        _raise_invalid_rhs_spec(detail="expanded state contains duplicates")
+        raise InvalidRhsSpecError(detail="expanded state contains duplicates")
 
     aliases, alias_template_map = _expand_alias_templates(
         meta_parts[0], axes=axes_meta, template_map_seed=state_template_map
@@ -1752,7 +1844,7 @@ def normalize_expr_rhs(spec: Mapping[str, Any]) -> NormalizedRhs:
     chain_block = spec.get("chain")
     if chain_block:
         if not isinstance(chain_block, list):
-            _raise_invalid_rhs_spec(detail="chain must be a list if provided")
+            raise InvalidRhsSpecError(detail="chain must be a list if provided")
         _apply_expr_chains(
             chains=chain_block,
             state_expanded=state_expanded,
@@ -1765,7 +1857,7 @@ def normalize_expr_rhs(spec: Mapping[str, Any]) -> NormalizedRhs:
         if k not in state_expanded and k not in template_map_all
     ]
     if unknown_keys:
-        _raise_invalid_rhs_spec(
+        raise InvalidRhsSpecError(
             detail=f"unknown equation key(s): {sorted(unknown_keys)}"
         )
 
@@ -1813,17 +1905,21 @@ def _apply_transition(
     all_syms: set[str],
     d_terms: dict[str, list[str]],
 ) -> None:
-    """Apply a transition to the derivative-term accumulator."""
+    """Apply a transition to the derivative-term accumulator.
+
+    Raises:
+        InvalidRhsSpecError: If validation fails.
+    """
     frm_s = _get_required_str(tr, idx=idx, key="from")
     to_s = _get_required_str(tr, idx=idx, key="to")
     rate_s = _get_required_str(tr, idx=idx, key="rate")
 
     if frm_s not in state_set:
-        _raise_invalid_rhs_spec(
+        raise InvalidRhsSpecError(
             detail=f"transitions[{idx}].from={frm_s!r} not in state"
         )
     if to_s not in state_set:
-        _raise_invalid_rhs_spec(detail=f"transitions[{idx}].to={to_s!r} not in state")
+        raise InvalidRhsSpecError(detail=f"transitions[{idx}].to={to_s!r} not in state")
 
     tree = _parse_expr(rate_s)
     all_syms |= _collect_names(tree)
@@ -1861,10 +1957,13 @@ def normalize_transitions_rhs(
 
     Returns:
         Backend-facing normalized RHS representation for the transitions kind.
+
+    Raises:
+        InvalidRhsSpecError: If validation fails.
     """
     state_raw = _ensure_str_list(spec.get("state"), name="state")
     if len(state_raw) != len(set(state_raw)):
-        _raise_invalid_rhs_spec(detail="state contains duplicate names")
+        raise InvalidRhsSpecError(detail="state contains duplicate names")
 
     transitions_raw = spec.get("transitions")
     if transitions_raw is None:
@@ -1872,7 +1971,7 @@ def normalize_transitions_rhs(
     elif isinstance(transitions_raw, list):
         transitions_raw = list(transitions_raw)
     else:
-        _raise_invalid_rhs_spec(detail="transitions must be a list")
+        raise InvalidRhsSpecError(detail="transitions must be a list")
 
     axes_meta = _normalize_axes(spec.get("axes"))
 
@@ -1897,7 +1996,7 @@ def normalize_transitions_rhs(
     chain_block = spec.get("chain")
     if chain_block:
         if not isinstance(chain_block, list):
-            _raise_invalid_rhs_spec(detail="chain must be a list if provided")
+            raise InvalidRhsSpecError(detail="chain must be a list if provided")
         _apply_transition_chains(
             chains=chain_block,
             state_raw=state_raw,
@@ -1909,7 +2008,7 @@ def normalize_transitions_rhs(
         state_raw, axes=axes_meta
     )
     if len(state_expanded) != len(set(state_expanded)):
-        _raise_invalid_rhs_spec(detail="expanded state contains duplicates")
+        raise InvalidRhsSpecError(detail="expanded state contains duplicates")
 
     aliases, alias_template_map = _expand_alias_templates(
         meta_parts[0], axes=axes_meta, template_map_seed=state_template_map
@@ -1930,7 +2029,7 @@ def normalize_transitions_rhs(
         d_terms.setdefault(state_name, [])
 
     if not transitions_raw:
-        _raise_invalid_rhs_spec(
+        raise InvalidRhsSpecError(
             detail="transitions must be non-empty after applying chain expansion"
         )
 

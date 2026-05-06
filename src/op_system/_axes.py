@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 
 import re
 
-from op_system._errors import _raise_invalid_rhs_spec
+from op_system._errors import InvalidRhsSpecError
 from op_system._helpers import _as_number, _ensure_mapping
 
 _STATE_TEMPLATE_RE = re.compile(r"\s*([A-Za-z_][A-Za-z0-9_]*)\[(.+)\]\s*")
@@ -41,10 +41,10 @@ def _normalize_bracket_key(key: str) -> str:
 def _normalize_axis_name(ax_map: Mapping[str, Any], *, idx: int, seen: set[str]) -> str:
     name_val = ax_map.get("name")
     if not isinstance(name_val, str) or not name_val.strip():
-        _raise_invalid_rhs_spec(detail=f"axes[{idx}].name must be a non-empty string")
+        raise InvalidRhsSpecError(detail=f"axes[{idx}].name must be a non-empty string")
     name = name_val.strip()
     if name in seen:
-        _raise_invalid_rhs_spec(detail=f"duplicate axis name: {name!r}")
+        raise InvalidRhsSpecError(detail=f"duplicate axis name: {name!r}")
     seen.add(name)
     return name
 
@@ -52,7 +52,7 @@ def _normalize_axis_name(ax_map: Mapping[str, Any], *, idx: int, seen: set[str])
 def _normalize_axis_type(ax_map: Mapping[str, Any], *, idx: int) -> str:
     ax_type = str(ax_map.get("type", "categorical")).strip().lower()
     if ax_type not in {"categorical", "continuous"}:
-        _raise_invalid_rhs_spec(
+        raise InvalidRhsSpecError(
             detail=f"axes[{idx}].type must be 'categorical' or 'continuous'"
         )
     return ax_type
@@ -63,7 +63,7 @@ def _normalize_axis_units(ax_map: Mapping[str, Any], *, idx: int) -> str | None:
     if units_obj is None:
         return None
     if not isinstance(units_obj, str) or not units_obj.strip():
-        _raise_invalid_rhs_spec(
+        raise InvalidRhsSpecError(
             detail=f"axes[{idx}].units must be a non-empty string if provided"
         )
     return units_obj.strip()
@@ -76,12 +76,12 @@ def _normalize_axis_coords(
     ax_type: str,
 ) -> tuple[list[Any], int]:
     if not isinstance(coords_obj, (list, tuple)) or not coords_obj:
-        _raise_invalid_rhs_spec(detail=f"axes[{idx}].coords must be a non-empty list")
+        raise InvalidRhsSpecError(detail=f"axes[{idx}].coords must be a non-empty list")
     coords = list(coords_obj)
     if ax_type == "categorical":
         for j, v in enumerate(coords):
             if not isinstance(v, str) or not str(v).strip():
-                _raise_invalid_rhs_spec(
+                raise InvalidRhsSpecError(
                     detail=f"axes[{idx}].coords[{j}] must be a non-empty string"
                 )
             coords[j] = str(v).strip()
@@ -92,7 +92,7 @@ def _normalize_axis_coords(
     if len(coords) >= 2:
         for j in range(1, len(coords)):
             if coords[j] < coords[j - 1]:
-                _raise_invalid_rhs_spec(
+                raise InvalidRhsSpecError(
                     detail=(
                         f"axes[{idx}].coords must be non-decreasing for continuous axes"
                     )
@@ -105,9 +105,12 @@ def _compute_axis_deltas(coords: list[float], *, idx: int) -> list[float]:
 
     Returns:
         List of weights matching coords length.
+
+    Raises:
+        InvalidRhsSpecError: If validation fails.
     """
     if len(coords) < 2:
-        _raise_invalid_rhs_spec(detail=f"axes[{idx}] continuous requires >=2 coords")
+        raise InvalidRhsSpecError(detail=f"axes[{idx}] continuous requires >=2 coords")
 
     deltas: list[float] = []
     for i in range(len(coords)):
@@ -118,7 +121,7 @@ def _compute_axis_deltas(coords: list[float], *, idx: int) -> list[float]:
         else:
             width = (coords[i + 1] - coords[i - 1]) / 2.0
         if width <= 0.0:
-            _raise_invalid_rhs_spec(
+            raise InvalidRhsSpecError(
                 detail=f"axes[{idx}] coords must be strictly increasing for integration"
             )
         deltas.append(width)
@@ -144,24 +147,26 @@ def _generate_continuous_coords(
         else None
     )
     if lb is None or ub is None:
-        _raise_invalid_rhs_spec(
+        raise InvalidRhsSpecError(
             detail=(
                 f"axes[{idx}] continuous requires domain.lb and domain.ub "
                 "when coords are absent"
             )
         )
     if ub <= lb:
-        _raise_invalid_rhs_spec(detail=f"axes[{idx}].domain.ub must be greater than lb")
+        raise InvalidRhsSpecError(
+            detail=f"axes[{idx}].domain.ub must be greater than lb"
+        )
 
     if not isinstance(size_obj, (int, float)) or isinstance(size_obj, bool):
-        _raise_invalid_rhs_spec(detail=f"axes[{idx}].size must be an integer >= 2")
+        raise InvalidRhsSpecError(detail=f"axes[{idx}].size must be an integer >= 2")
     resolved_size = int(size_obj)
     if resolved_size < 2:
-        _raise_invalid_rhs_spec(detail=f"axes[{idx}].size must be >= 2")
+        raise InvalidRhsSpecError(detail=f"axes[{idx}].size must be >= 2")
 
     spacing_allowed = {"linear", "log", "geom"}
     if spacing not in spacing_allowed:
-        _raise_invalid_rhs_spec(
+        raise InvalidRhsSpecError(
             detail=f"axes[{idx}].spacing must be one of {sorted(spacing_allowed)}"
         )
 
@@ -171,7 +176,7 @@ def _generate_continuous_coords(
         coords = [lb + step * i for i in range(resolved_size)]
     elif spacing in {"log", "geom"}:
         if lb <= 0 or ub <= 0:
-            _raise_invalid_rhs_spec(
+            raise InvalidRhsSpecError(
                 detail=f"axes[{idx}] log/geom spacing requires positive lb/ub"
             )
         ratio = (ub / lb) ** (1.0 / (resolved_size - 1))
@@ -195,7 +200,7 @@ def _normalize_single_axis(
             coords_obj, idx=idx, ax_type=ax_type
         )
     elif ax_type == "categorical":
-        _raise_invalid_rhs_spec(detail=f"axes[{idx}] categorical requires coords")
+        raise InvalidRhsSpecError(detail=f"axes[{idx}] categorical requires coords")
     else:
         coords, resolved_size = _generate_continuous_coords(
             domain=domain, size_obj=size_obj, spacing=spacing, idx=idx
@@ -224,11 +229,14 @@ def _normalize_axes(raw_axes: object) -> list[dict[str, Any]]:
 
     Returns:
         Normalized axis definitions with coords and sizes.
+
+    Raises:
+        InvalidRhsSpecError: If validation fails.
     """
     if raw_axes is None:
         return []
     if not isinstance(raw_axes, list):
-        _raise_invalid_rhs_spec(detail="axes must be a list of axis definitions")
+        raise InvalidRhsSpecError(detail="axes must be a list of axis definitions")
 
     seen: set[str] = set()
     axes_out: list[dict[str, Any]] = []

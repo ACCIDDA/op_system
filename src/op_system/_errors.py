@@ -1,61 +1,68 @@
 """op_system._errors.
 
-Shared error-raising helpers used across all op_system modules.
+Shared exception types raised by op_system normalization and parsing modules.
+
+Each exception subclasses a built-in (``ValueError`` / ``NotImplementedError``)
+so existing ``except ValueError`` / ``except NotImplementedError`` sites in
+downstream code continue to work, while new code can catch the more specific
+subclasses when finer-grained handling is desired.
 """
 
 from __future__ import annotations
-
-from typing import NoReturn
 
 _INVALID_RHS_SPEC_PREFIX = "Invalid op_system RHS specification."
 _INVALID_EXPRESSION_PREFIX = "Invalid op_system expression."
 _UNSUPPORTED_FEATURE_PREFIX = "Unsupported op_system feature."
 
 
-def _raise_invalid_rhs_spec(
-    *, missing: list[str] | None = None, detail: str | None = None
-) -> NoReturn:
-    """Raise a standardized RHS specification error.
+class InvalidRhsSpecError(ValueError):
+    """Raised when an op_system RHS spec is structurally invalid.
 
-    Args:
-        missing: Optional list of missing field names.
-        detail: Optional additional detail string.
-
-    Raises:
-        ValueError: Always.
+    Attributes:
+        missing: Optional list of missing required field names.
+        detail: Optional human-readable detail describing the violation.
     """
-    parts: list[str] = [_INVALID_RHS_SPEC_PREFIX]
-    if missing:
-        parts.append(f"Missing required field(s): {sorted(set(missing))}.")
-    if detail:
-        parts.append(f"Detail: {detail}")
-    raise ValueError(" ".join(parts))
+
+    def __init__(
+        self,
+        *,
+        missing: list[str] | None = None,
+        detail: str | None = None,
+    ) -> None:
+        self.missing = list(missing) if missing else None
+        self.detail = detail
+        parts: list[str] = [_INVALID_RHS_SPEC_PREFIX]
+        if missing:
+            parts.append(f"Missing required field(s): {sorted(set(missing))}.")
+        if detail:
+            parts.append(f"Detail: {detail}")
+        super().__init__(" ".join(parts))
 
 
-def _raise_invalid_expression(*, detail: str) -> NoReturn:
-    """Raise a standardized expression error.
+class InvalidExpressionError(ValueError):
+    """Raised when an op_system expression cannot be parsed/validated.
 
-    Args:
-        detail: Error detail.
-
-    Raises:
-        ValueError: Always.
+    Attributes:
+        detail: Human-readable detail describing the parse/validation failure.
     """
-    msg = f"{_INVALID_EXPRESSION_PREFIX} Detail: {detail}"
-    raise ValueError(msg)
+
+    def __init__(self, *, detail: str) -> None:
+        self.detail = detail
+        super().__init__(f"{_INVALID_EXPRESSION_PREFIX} Detail: {detail}")
 
 
-def _raise_unsupported_feature(*, feature: str, detail: str | None = None) -> NoReturn:
-    """Raise a standardized unsupported feature error.
+class UnsupportedFeatureError(NotImplementedError):
+    """Raised when a spec references an op_system feature that is not yet supported.
 
-    Args:
-        feature: Feature identifier.
+    Attributes:
+        feature: Identifier for the unsupported feature.
         detail: Optional additional detail.
-
-    Raises:
-        NotImplementedError: Always.
     """
-    msg = f"{_UNSUPPORTED_FEATURE_PREFIX} Feature '{feature}' is not supported."
-    if detail:
-        msg = f"{msg} Detail: {detail}"
-    raise NotImplementedError(msg)
+
+    def __init__(self, *, feature: str, detail: str | None = None) -> None:
+        self.feature = feature
+        self.detail = detail
+        msg = f"{_UNSUPPORTED_FEATURE_PREFIX} Feature {feature!r} is not supported."
+        if detail:
+            msg = f"{msg} Detail: {detail}"
+        super().__init__(msg)

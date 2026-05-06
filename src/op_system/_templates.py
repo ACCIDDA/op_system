@@ -44,7 +44,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
 
-from op_system._errors import _raise_invalid_rhs_spec
+from op_system._errors import InvalidRhsSpecError
 
 # Matches "Name[...]" with optional surrounding whitespace.
 _STATE_TEMPLATE_RE = re.compile(r"\s*([A-Za-z_][A-Za-z0-9_]*)\[(.+)\]\s*")
@@ -116,6 +116,9 @@ def parse_selector(s: str) -> tuple[str, list[SelectorToken]]:
 
     Returns:
         ``(base, tokens)`` where tokens is empty for bare names.
+
+    Raises:
+        InvalidRhsSpecError: If validation fails.
     """
     m = _STATE_TEMPLATE_RE.fullmatch(s)
     if not m:
@@ -129,7 +132,7 @@ def parse_selector(s: str) -> tuple[str, list[SelectorToken]]:
         if "=" in tok:
             axis, coord = [p.strip() for p in tok.split("=", 1)]
             if not axis or not coord:
-                _raise_invalid_rhs_spec(
+                raise InvalidRhsSpecError(
                     detail=f"invalid pinned selector token {tok!r} in {s!r}"
                 )
             tokens.append(PinnedToken(axis=axis, coord=coord))
@@ -141,7 +144,7 @@ def parse_selector(s: str) -> tuple[str, list[SelectorToken]]:
     for tok in tokens:
         ax = tok.axis
         if ax in seen_axes:
-            _raise_invalid_rhs_spec(detail=f"duplicate axis {ax!r} in selector {s!r}")
+            raise InvalidRhsSpecError(detail=f"duplicate axis {ax!r} in selector {s!r}")
         seen_axes.add(ax)
 
     return base, tokens
@@ -165,6 +168,9 @@ def render_selector(
 
     Returns:
         Concrete name string, e.g. ``"X__age_a0__vax_u__imm_X0"``.
+
+    Raises:
+        InvalidRhsSpecError: If validation fails.
     """
     if not tokens:
         return base
@@ -173,7 +179,7 @@ def render_selector(
     for tok in tokens:
         if isinstance(tok, WildcardToken):
             if axis_lookup is not None and tok.axis not in axis_lookup:
-                _raise_invalid_rhs_spec(
+                raise InvalidRhsSpecError(
                     detail=f"selector references unknown axis {tok.axis!r}"
                 )
             if tok.axis not in assignment:
@@ -195,13 +201,13 @@ def render_selector(
         else:  # PinnedToken
             if axis_lookup is not None:
                 if tok.axis not in axis_lookup:
-                    _raise_invalid_rhs_spec(
+                    raise InvalidRhsSpecError(
                         detail=(
                             f"selector pinned axis {tok.axis!r} references unknown axis"
                         )
                     )
                 if tok.coord not in axis_lookup[tok.axis]:
-                    _raise_invalid_rhs_spec(
+                    raise InvalidRhsSpecError(
                         detail=(
                             f"selector pinned coord {tok.coord!r} not in "
                             f"axis {tok.axis!r} coords"
@@ -231,6 +237,9 @@ def expand_selector(
         List of ``(concrete_name, assignment)`` pairs, one per wildcard
         combination.  For bare names with no tokens, returns a single
         ``[(name, {})]``.
+
+    Raises:
+        InvalidRhsSpecError: If validation fails.
     """
     ctx = f" in {context}" if context else ""
     base, tokens = parse_selector(s)
@@ -242,12 +251,12 @@ def expand_selector(
     wildcards: list[WildcardToken] = []
     for tok in tokens:
         if tok.axis not in axis_lookup:
-            _raise_invalid_rhs_spec(
+            raise InvalidRhsSpecError(
                 detail=f"selector axis {tok.axis!r} not defined{ctx}"
             )
         if isinstance(tok, PinnedToken):
             if tok.coord not in axis_lookup[tok.axis]:
-                _raise_invalid_rhs_spec(
+                raise InvalidRhsSpecError(
                     detail=(
                         f"selector pinned coord {tok.coord!r} not in "
                         f"axis {tok.axis!r} coords{ctx}"
@@ -422,17 +431,20 @@ def expand_apply_to(
 
     Returns:
         Flat list of concrete (or bare) state name strings.
+
+    Raises:
+        InvalidRhsSpecError: If validation fails.
     """
     ctx = f" in {context}" if context else ""
     if not isinstance(apply_to_raw, (list, tuple)) or not apply_to_raw:
-        _raise_invalid_rhs_spec(
+        raise InvalidRhsSpecError(
             detail=f"apply_to must be a non-empty list of state names{ctx}"
         )
 
     result: list[str] = []
     for j, entry in enumerate(apply_to_raw):
         if not isinstance(entry, str) or not entry.strip():
-            _raise_invalid_rhs_spec(
+            raise InvalidRhsSpecError(
                 detail=f"apply_to[{j}] must be a non-empty string{ctx}"
             )
         entry_s = entry.strip()
@@ -441,7 +453,7 @@ def expand_apply_to(
         )
         for name, _ in expanded:
             if state_set is not None and name not in state_set:
-                _raise_invalid_rhs_spec(
+                raise InvalidRhsSpecError(
                     detail=f"apply_to entry {name!r} not in state{ctx}"
                 )
             result.append(name)

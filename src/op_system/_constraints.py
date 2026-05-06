@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Any, NamedTuple
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
 
-from op_system._errors import _raise_invalid_rhs_spec
+from op_system._errors import InvalidRhsSpecError
 from op_system._helpers import _ensure_mapping
 
 
@@ -42,9 +42,12 @@ def _validate_constraint_axes(
         ['age', 'vax']
         >>> sorted(seen)
         ['age', 'vax']
+
+    Raises:
+        InvalidRhsSpecError: If validation fails.
     """
     if not isinstance(rule_axes_raw, (list, tuple)) or len(rule_axes_raw) < 2:
-        _raise_invalid_rhs_spec(
+        raise InvalidRhsSpecError(
             detail=(
                 f"constraints[{idx}].axes must be a list of at least two axis names"
             )
@@ -53,15 +56,15 @@ def _validate_constraint_axes(
     seen: set[str] = set()
     for j, ax_name in enumerate(rule_axes_raw):
         if not isinstance(ax_name, str) or not (ax_s := ax_name.strip()):
-            _raise_invalid_rhs_spec(
+            raise InvalidRhsSpecError(
                 detail=f"constraints[{idx}].axes[{j}] must be a non-empty string"
             )
         if ax_s not in axis_names:
-            _raise_invalid_rhs_spec(
+            raise InvalidRhsSpecError(
                 detail=f"constraints[{idx}].axes references unknown axis {ax_s!r}"
             )
         if ax_s in seen:
-            _raise_invalid_rhs_spec(
+            raise InvalidRhsSpecError(
                 detail=f"constraints[{idx}].axes contains duplicate axis {ax_s!r}"
             )
         seen.add(ax_s)
@@ -76,23 +79,26 @@ def _resolve_constraint_mode(
 
     Returns:
         Tuple of (mode string, raw rule list).
+
+    Raises:
+        InvalidRhsSpecError: If validation fails.
     """
     has_allow = "allow" in entry_map
     has_exclude = "exclude" in entry_map
     if has_allow and has_exclude:
-        _raise_invalid_rhs_spec(
+        raise InvalidRhsSpecError(
             detail=(
                 f"constraints[{idx}] must specify either 'allow' or 'exclude', not both"
             )
         )
     if not has_allow and not has_exclude:
-        _raise_invalid_rhs_spec(
+        raise InvalidRhsSpecError(
             detail=f"constraints[{idx}] must specify 'allow' or 'exclude'"
         )
     mode = "allow" if has_allow else "exclude"
     raw_rules = entry_map[mode]
     if not isinstance(raw_rules, list) or not raw_rules:
-        _raise_invalid_rhs_spec(
+        raise InvalidRhsSpecError(
             detail=f"constraints[{idx}].{mode} must be a non-empty list"
         )
     return mode, raw_rules
@@ -109,13 +115,16 @@ def _validate_constraint_rule(
 
     Returns:
         Validated mapping of axis name to list of coordinate strings.
+
+    Raises:
+        InvalidRhsSpecError: If validation fails.
     """
     rule_map = _ensure_mapping(rule, name=label)
     validated: dict[str, list[str]] = {}
     for key, val in rule_map.items():
         key_s = str(key).strip()
         if key_s not in rule_axis_set:
-            _raise_invalid_rhs_spec(
+            raise InvalidRhsSpecError(
                 detail=(
                     f"{label} references axis {key_s!r} not in "
                     f"constraint axes {sorted(rule_axis_set)}"
@@ -129,14 +138,14 @@ def _validate_constraint_rule(
             coords = [str(val).strip()]
         for coord in coords:
             if coord not in axis_lookup[key_s]:
-                _raise_invalid_rhs_spec(
+                raise InvalidRhsSpecError(
                     detail=(
                         f"{label} references unknown coord {coord!r} for axis {key_s!r}"
                     )
                 )
         validated[key_s] = coords
     if not validated:
-        _raise_invalid_rhs_spec(detail=f"{label} must specify at least one axis")
+        raise InvalidRhsSpecError(detail=f"{label} must specify at least one axis")
     return validated
 
 
@@ -153,11 +162,14 @@ def _normalize_constraints(
 
     Returns:
         List of validated ``ConstraintRule`` named tuples.
+
+    Raises:
+        InvalidRhsSpecError: If validation fails.
     """
     if raw_constraints is None:
         return []
     if not isinstance(raw_constraints, list):
-        _raise_invalid_rhs_spec(detail="constraints must be a list")
+        raise InvalidRhsSpecError(detail="constraints must be a list")
     if not raw_constraints:
         return []
 
