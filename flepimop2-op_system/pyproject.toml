@@ -54,6 +54,10 @@ include = ["src/flepimop2/system/op_system/py.typed"]
 # --- uv monorepo wiring: satisfy op-system from the sibling directory ---
 [tool.uv.sources]
 op-system = { path = ".." }
+# flepimop2 0.2.0 (PyPI) predates the ParameterAPI used by this adapter
+# (ModelStateSpecification, ParameterRequest, AxisCollection).  Until the
+# next flepimop2 release, pin to the development tip on main.
+flepimop2 = { git = "https://github.com/ACCIDDA/flepimop2", branch = "main" }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
