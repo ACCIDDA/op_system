@@ -20,6 +20,7 @@ whitelist, and evaluation runs with empty builtins.
 from __future__ import annotations
 
 import ast
+import importlib
 from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import (
@@ -518,6 +519,10 @@ def _make_eval_fn(  # noqa: C901
 def compile_rhs(rhs: NormalizedRhs, *, xp: object) -> CompiledRhs:
     """Compile a normalized RHS into a runnable evaluation function.
 
+    Always attempts the vectorized eval path that operates on shaped buffers
+    (one tensor expression per state template) and falls back automatically
+    to the scalar path when the spec falls outside the supported subset.
+
     Args:
         rhs: Normalized RHS produced by `op_system.specs.normalize_rhs`.
         xp: Array backend namespace.
@@ -531,12 +536,21 @@ def compile_rhs(rhs: NormalizedRhs, *, xp: object) -> CompiledRhs:
             detail="Only 'expr' and 'transitions' are supported in v1.",
         )
 
-    eval_fn = _make_eval_fn(
-        state_names=rhs.state_names,
-        aliases=rhs.aliases,
-        equations=rhs.equations,
-        xp=xp,
+    # Lazy load via importlib to avoid a static circular import
+    # (op_system._vectorize imports helpers from this module).
+    vec = importlib.import_module("op_system._vectorize")
+    plan = vec.build_vector_plan(rhs)
+    eval_fn: EvalFn | None = (
+        vec.make_vectorized_eval_fn(plan, xp=xp) if plan is not None else None
     )
+
+    if eval_fn is None:
+        eval_fn = _make_eval_fn(
+            state_names=rhs.state_names,
+            aliases=rhs.aliases,
+            equations=rhs.equations,
+            xp=xp,
+        )
 
     return CompiledRhs(
         state_names=rhs.state_names,

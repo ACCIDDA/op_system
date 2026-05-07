@@ -17,6 +17,7 @@ import pytest
 from op_system._constraints import _ConstraintRule, _normalize_constraints
 from op_system.specs import (
     NormalizedRhs,
+    StateTemplate,
     normalize_expr_rhs,
     normalize_rhs,
     normalize_transitions_rhs,
@@ -1339,3 +1340,94 @@ def test_transitions_pinned_from_endpoint_expands_correctly() -> None:
     assert to_states == {"R__age_y__vax_u", "R__age_y__vax_v"}
     # Old-age states exist in state_names but are untouched by this transition.
     assert "S__age_o__vax_u" in out.state_names
+
+
+def test_state_templates_wildcard_only_records_shape_and_offset() -> None:
+    """Pure-wildcard state entries produce a single shaped StateTemplate."""
+    spec = {
+        "kind": "transitions",
+        "state": ["S[age, vax]", "I[age, vax]", "R[age, vax]"],
+        "axes": [
+            {"name": "age", "kind": "categorical", "coords": ["y", "o"]},
+            {"name": "vax", "kind": "categorical", "coords": ["u", "v"]},
+        ],
+        "transitions": [
+            {"from": "S[age, vax]", "to": "I[age, vax]", "rate": "beta"},
+        ],
+    }
+    out = normalize_transitions_rhs(spec)
+    assert len(out.state_templates) == 3
+    s_tpl = out.state_templates[0]
+    assert isinstance(s_tpl, StateTemplate)
+    assert s_tpl.base == "S"
+    assert s_tpl.axes == ("age", "vax")
+    assert s_tpl.shape == (2, 2)
+    assert len(s_tpl.expanded_names) == 4
+    assert s_tpl.offset == out.state_names.index(s_tpl.expanded_names[0])
+    # Templates cover the full state vector contiguously in declared order.
+    flat = tuple(n for tpl in out.state_templates for n in tpl.expanded_names)
+    assert flat == out.state_names
+
+
+def test_state_templates_mixed_scalar_and_wildcard() -> None:
+    """A bare scalar state next to a wildcard template yields scalar+shaped."""
+    spec = {
+        "kind": "transitions",
+        "state": ["S[age]", "D"],
+        "axes": [
+            {"name": "age", "kind": "categorical", "coords": ["y", "o"]},
+        ],
+        "transitions": [
+            {"from": "S[age]", "to": "D", "rate": "mu"},
+        ],
+    }
+    out = normalize_transitions_rhs(spec)
+    assert len(out.state_templates) == 2
+    s_tpl, d_tpl = out.state_templates
+    assert s_tpl.axes == ("age",)
+    assert s_tpl.shape == (2,)
+    assert d_tpl.axes == ()
+    assert d_tpl.shape == ()
+    assert d_tpl.expanded_names == ("D",)
+    assert d_tpl.offset == out.state_names.index("D")
+
+
+def test_state_templates_pinned_only_treated_as_scalar() -> None:
+    """Pinned-only selectors expand to a single scalar StateTemplate."""
+    spec = {
+        "kind": "transitions",
+        "state": ["S[age=y]", "S[age=o]", "I[age]"],
+        "axes": [
+            {"name": "age", "kind": "categorical", "coords": ["y", "o"]},
+        ],
+        "transitions": [
+            {"from": "S[age]", "to": "I[age]", "rate": "beta"},
+        ],
+    }
+    out = normalize_transitions_rhs(spec)
+    assert len(out.state_templates) == 3
+    assert out.state_templates[0].axes == ()
+    assert out.state_templates[0].shape == ()
+    assert out.state_templates[0].expanded_names == ("S__age_y",)
+    assert out.state_templates[1].expanded_names == ("S__age_o",)
+    assert out.state_templates[2].axes == ("age",)
+    assert out.state_templates[2].shape == (2,)
+
+
+def test_state_templates_expr_kind_populated() -> None:
+    """expr-kind RHS also exposes state_templates aligned with state_names."""
+    spec = {
+        "kind": "expr",
+        "state": ["S[age]", "I[age]"],
+        "axes": [
+            {"name": "age", "kind": "categorical", "coords": ["y", "o"]},
+        ],
+        "equations": {
+            "S[age]": "0",
+            "I[age]": "0",
+        },
+    }
+    out = normalize_expr_rhs(spec)
+    assert len(out.state_templates) == 2
+    flat = tuple(n for tpl in out.state_templates for n in tpl.expanded_names)
+    assert flat == out.state_names

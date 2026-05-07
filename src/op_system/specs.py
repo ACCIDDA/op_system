@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from op_system._normalize import (
     NormalizedRhs,
+    StateTemplate,
     normalize_expr_rhs,
     normalize_rhs,
     normalize_transitions_rhs,
@@ -28,6 +29,7 @@ __all__ = [
     "NormalizedRhs",
     "PinnedToken",
     "SelectorToken",
+    "StateTemplate",
     "WildcardToken",
     "normalize_expr_rhs",
     "normalize_rhs",
