@@ -1019,8 +1019,7 @@ whitelist, and evaluation runs with empty builtins.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/op_system/compile.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">169</span>
-<span class="normal">170</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">170</span>
 <span class="normal">171</span>
 <span class="normal">172</span>
 <span class="normal">173</span>
@@ -1035,7 +1034,8 @@ whitelist, and evaluation runs with empty builtins.</p>
 <span class="normal">182</span>
 <span class="normal">183</span>
 <span class="normal">184</span>
-<span class="normal">185</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">bind</span><span class="p">(</span>
+<span class="normal">185</span>
+<span class="normal">186</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">bind</span><span class="p">(</span>
     <span class="bp">self</span><span class="p">,</span> <span class="n">params</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">object</span><span class="p">]</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Callable</span><span class="p">[[</span><span class="nb">object</span><span class="p">,</span> <span class="nb">object</span><span class="p">],</span> <span class="n">Float64Array</span><span class="p">]:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Bind parameter values and return a 2-arg RHS: rhs(t, y) -&gt; dydt.</span>
@@ -1127,6 +1127,9 @@ whitelist, and evaluation runs with empty builtins.</p>
     <div class="doc doc-contents ">
 
         <p>Compile a normalized RHS into a runnable evaluation function.</p>
+<p>Always attempts the vectorized eval path that operates on shaped buffers
+(one tensor expression per state template) and falls back automatically
+to the scalar path when the spec falls outside the supported subset.</p>
 
 
 <p><span class="doc-section-title">Parameters:</span></p>
@@ -1145,7 +1148,7 @@ whitelist, and evaluation runs with empty builtins.</p>
                 <code>rhs</code>
             </td>
             <td>
-                  <code><a class="autorefs autorefs-internal" title="NormalizedRhs(kind, state_names, equations, aliases, param_names, all_symbols, meta)
+                  <code><a class="autorefs autorefs-internal" title="NormalizedRhs(kind, state_names, equations, aliases, param_names, all_symbols, meta, state_templates=())
 
   
       dataclass
@@ -1209,8 +1212,7 @@ whitelist, and evaluation runs with empty builtins.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/op_system/compile.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">518</span>
-<span class="normal">519</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">519</span>
 <span class="normal">520</span>
 <span class="normal">521</span>
 <span class="normal">522</span>
@@ -1237,8 +1239,26 @@ whitelist, and evaluation runs with empty builtins.</p>
 <span class="normal">543</span>
 <span class="normal">544</span>
 <span class="normal">545</span>
-<span class="normal">546</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">compile_rhs</span><span class="p">(</span><span class="n">rhs</span><span class="p">:</span> <span class="n">NormalizedRhs</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">xp</span><span class="p">:</span> <span class="nb">object</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">CompiledRhs</span><span class="p">:</span>
+<span class="normal">546</span>
+<span class="normal">547</span>
+<span class="normal">548</span>
+<span class="normal">549</span>
+<span class="normal">550</span>
+<span class="normal">551</span>
+<span class="normal">552</span>
+<span class="normal">553</span>
+<span class="normal">554</span>
+<span class="normal">555</span>
+<span class="normal">556</span>
+<span class="normal">557</span>
+<span class="normal">558</span>
+<span class="normal">559</span>
+<span class="normal">560</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">compile_rhs</span><span class="p">(</span><span class="n">rhs</span><span class="p">:</span> <span class="n">NormalizedRhs</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">xp</span><span class="p">:</span> <span class="nb">object</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">CompiledRhs</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Compile a normalized RHS into a runnable evaluation function.</span>
+
+<span class="sd">    Always attempts the vectorized eval path that operates on shaped buffers</span>
+<span class="sd">    (one tensor expression per state template) and falls back automatically</span>
+<span class="sd">    to the scalar path when the spec falls outside the supported subset.</span>
 
 <span class="sd">    Args:</span>
 <span class="sd">        rhs: Normalized RHS produced by `op_system.specs.normalize_rhs`.</span>
@@ -1253,12 +1273,21 @@ whitelist, and evaluation runs with empty builtins.</p>
             <span class="n">detail</span><span class="o">=</span><span class="s2">&quot;Only &#39;expr&#39; and &#39;transitions&#39; are supported in v1.&quot;</span><span class="p">,</span>
         <span class="p">)</span>
 
-    <span class="n">eval_fn</span> <span class="o">=</span> <span class="n">_make_eval_fn</span><span class="p">(</span>
-        <span class="n">state_names</span><span class="o">=</span><span class="n">rhs</span><span class="o">.</span><span class="n">state_names</span><span class="p">,</span>
-        <span class="n">aliases</span><span class="o">=</span><span class="n">rhs</span><span class="o">.</span><span class="n">aliases</span><span class="p">,</span>
-        <span class="n">equations</span><span class="o">=</span><span class="n">rhs</span><span class="o">.</span><span class="n">equations</span><span class="p">,</span>
-        <span class="n">xp</span><span class="o">=</span><span class="n">xp</span><span class="p">,</span>
+    <span class="c1"># Lazy load via importlib to avoid a static circular import</span>
+    <span class="c1"># (op_system._vectorize imports helpers from this module).</span>
+    <span class="n">vec</span> <span class="o">=</span> <span class="n">importlib</span><span class="o">.</span><span class="n">import_module</span><span class="p">(</span><span class="s2">&quot;op_system._vectorize&quot;</span><span class="p">)</span>
+    <span class="n">plan</span> <span class="o">=</span> <span class="n">vec</span><span class="o">.</span><span class="n">build_vector_plan</span><span class="p">(</span><span class="n">rhs</span><span class="p">)</span>
+    <span class="n">eval_fn</span><span class="p">:</span> <span class="n">EvalFn</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">vec</span><span class="o">.</span><span class="n">make_vectorized_eval_fn</span><span class="p">(</span><span class="n">plan</span><span class="p">,</span> <span class="n">xp</span><span class="o">=</span><span class="n">xp</span><span class="p">)</span> <span class="k">if</span> <span class="n">plan</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span>
     <span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">eval_fn</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">eval_fn</span> <span class="o">=</span> <span class="n">_make_eval_fn</span><span class="p">(</span>
+            <span class="n">state_names</span><span class="o">=</span><span class="n">rhs</span><span class="o">.</span><span class="n">state_names</span><span class="p">,</span>
+            <span class="n">aliases</span><span class="o">=</span><span class="n">rhs</span><span class="o">.</span><span class="n">aliases</span><span class="p">,</span>
+            <span class="n">equations</span><span class="o">=</span><span class="n">rhs</span><span class="o">.</span><span class="n">equations</span><span class="p">,</span>
+            <span class="n">xp</span><span class="o">=</span><span class="n">xp</span><span class="p">,</span>
+        <span class="p">)</span>
 
     <span class="k">return</span> <span class="n">CompiledRhs</span><span class="p">(</span>
         <span class="n">state_names</span><span class="o">=</span><span class="n">rhs</span><span class="o">.</span><span class="n">state_names</span><span class="p">,</span>
