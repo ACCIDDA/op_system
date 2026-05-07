@@ -20,6 +20,8 @@ from types import MappingProxyType
 
 import numpy as np
 import pytest
+from flepimop2.axis import AxisCollection
+from flepimop2.parameter.abc import ModelStateSpecification, ParameterRequest
 from flepimop2.typing import SystemProtocol
 
 from flepimop2.system.op_system import OpSystemSystem
@@ -465,9 +467,6 @@ def test_requested_parameters_returns_compiled_param_names(
     sir_spec: dict[str, object],
 ) -> None:
     """Every name in compiled.param_names becomes a scalar ParameterRequest."""
-    from flepimop2.axis import AxisCollection
-    from flepimop2.parameter.abc import ParameterRequest
-
     sys = OpSystemSystem(spec=sir_spec)
     requests = sys.requested_parameters(AxisCollection())
     assert set(requests.keys()) == {"beta", "gamma"}
@@ -478,8 +477,6 @@ def test_requested_parameters_returns_compiled_param_names(
 
 def test_requested_parameters_includes_initial_state_seeds() -> None:
     """Seed parameter names appear in requested_parameters even if absent from rates."""
-    from flepimop2.axis import AxisCollection
-
     spec: dict[str, object] = {
         "kind": "transitions",
         "axes": [{"name": "vax", "coords": ["u", "v"]}],
@@ -497,8 +494,6 @@ def test_requested_parameters_includes_initial_state_seeds() -> None:
 
 def test_requested_parameters_excludes_mixing_kernels() -> None:
     """Mixing-kernel names are computed internally, not requested from configuration."""
-    from flepimop2.axis import AxisCollection
-
     spec: dict[str, object] = {
         "kind": "expr",
         "axes": [{"name": "loc", "coords": ["0", "1"]}],
@@ -519,9 +514,6 @@ def test_requested_parameters_excludes_mixing_kernels() -> None:
 
 def test_model_state_is_empty_specification(sir_spec: dict[str, object]) -> None:
     """model_state returns an empty ModelStateSpecification (engine assembles state)."""
-    from flepimop2.axis import AxisCollection
-    from flepimop2.parameter.abc import ModelStateSpecification
-
     sys = OpSystemSystem(spec=sir_spec)
     spec = sys.model_state(AxisCollection())
     assert isinstance(spec, ModelStateSpecification)
@@ -530,8 +522,6 @@ def test_model_state_is_empty_specification(sir_spec: dict[str, object]) -> None
 
 def test_requested_parameters_includes_operator_velocity() -> None:
     """Operator velocity/rate parameter symbols are surfaced for engine plugins."""
-    from flepimop2.axis import AxisCollection
-
     spec: dict[str, object] = {
         "kind": "transitions",
         "axes": [{"name": "k", "coords": ["0", "1", "2"]}],

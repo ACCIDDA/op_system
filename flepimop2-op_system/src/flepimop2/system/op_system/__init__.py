@@ -29,12 +29,12 @@ from __future__ import annotations
 import functools
 import importlib
 import sys
+from collections.abc import Mapping
 from types import MappingProxyType
 from typing import (
     TYPE_CHECKING,
     Any,
     Literal,
-    Mapping,
     NamedTuple,
     SupportsFloat,
     SupportsIndex,
@@ -42,7 +42,6 @@ from typing import (
 )
 
 import numpy as np
-from flepimop2.axis import AxisCollection
 from flepimop2.configuration import ModuleModel
 from flepimop2.parameter.abc import ModelStateSpecification, ParameterRequest
 from flepimop2.system.abc import SystemABC
@@ -65,6 +64,7 @@ __version__ = "0.1.0"
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+    from flepimop2.axis import AxisCollection
     from flepimop2.typing import Float64NDArray
 
 
@@ -168,7 +168,7 @@ class OpSystemSystem(ModuleModel, SystemABC):  # noqa: D101
     @override
     def requested_parameters(
         self,
-        axes: AxisCollection,  # noqa: ARG002
+        axes: AxisCollection,
     ) -> dict[IdentifierString, ParameterRequest]:
         """Declare the scalar parameters consumed by the compiled RHS.
 
@@ -201,29 +201,44 @@ class OpSystemSystem(ModuleModel, SystemABC):  # noqa: D101
         # Operator velocity/rate fields are consumed by engine plugins (not by
         # the compiled rhs eval_fn), but still need to be in the params dict.
         for op in self._compiled_rhs.meta.get("operators") or ():
-            for field in ("velocity", "rate"):
-                value = op.get(field) if isinstance(op, Mapping) else None
-                if isinstance(value, str) and value.isidentifier():
-                    if value in requests or value == "t":
-                        continue
-                    requests[value] = ParameterRequest(name=value)
-            kernel = op.get("kernel") if isinstance(op, Mapping) else None
-            if isinstance(kernel, Mapping):
-                kernel_params = kernel.get("params")
-                if isinstance(kernel_params, Mapping):
-                    for value in kernel_params.values():
-                        if (
-                            isinstance(value, str)
-                            and value.isidentifier()
-                            and value not in requests
-                        ):
-                            requests[value] = ParameterRequest(name=value)
+            self._collect_operator_param_requests(op, requests)
         return requests
 
+    @staticmethod
+    def _collect_operator_param_requests(
+        op: object,
+        requests: dict[IdentifierString, ParameterRequest],
+    ) -> None:
+        """Add velocity/rate/kernel-param names referenced by `op` to `requests`."""
+        if not isinstance(op, Mapping):
+            return
+        for field in ("velocity", "rate"):
+            value = op.get(field)
+            if (
+                isinstance(value, str)
+                and value.isidentifier()
+                and value != "t"
+                and value not in requests
+            ):
+                requests[value] = ParameterRequest(name=value)
+        kernel = op.get("kernel")
+        if not isinstance(kernel, Mapping):
+            return
+        kernel_params = kernel.get("params")
+        if not isinstance(kernel_params, Mapping):
+            return
+        for value in kernel_params.values():
+            if (
+                isinstance(value, str)
+                and value.isidentifier()
+                and value not in requests
+            ):
+                requests[value] = ParameterRequest(name=value)
+
     @override
-    def model_state(  # noqa: PLR6301
+    def model_state(
         self,
-        axes: AxisCollection,  # noqa: ARG002
+        axes: AxisCollection,
     ) -> ModelStateSpecification | None:
         """Declare an empty model-state specification.
 
