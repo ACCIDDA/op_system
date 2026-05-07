@@ -474,7 +474,7 @@ def test_compile_rhs_with_jax_backend_diffrax_smoke() -> None:
             y0=jnp.asarray([1.0]),
             args={"beta": beta},
             saveat=diffrax.SaveAt(t1=True),
-        ).ys[0]
+        ).ys[0, 0]
 
     out = jax.jit(solve)(0.5)
     expected = np.exp(-0.5)
