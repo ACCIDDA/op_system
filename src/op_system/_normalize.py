@@ -69,6 +69,42 @@ _ALLOWED_KERNEL_FORMS: dict[str, tuple[str, ...]] = {
 
 
 @dataclass(frozen=True, slots=True)
+class StateTemplate:
+    """Structural record for a state template prior to scalar expansion.
+
+    A spec like ``state: ["S[age, vax]"]`` over axes ``age`` (size 4) and
+    ``vax`` (size 2) produces a single `StateTemplate` with `base="S"`,
+    `axes=("age", "vax")`, `shape=(4, 2)`, and `expanded_names` listing the
+    eight scalar state names in cartesian-product order (`age` outer,
+    `vax` inner — matching `itertools.product` and the order used to expand
+    the flat state vector).
+
+    Non-templated entries (e.g. a bare ``"D"`` in `state`) are also reported
+    as `StateTemplate` records with ``axes=()``, ``shape=()``, and a single
+    `expanded_names = ("D",)` so consumers can iterate templates uniformly.
+
+    Attributes:
+        base: Compartment name without selector brackets (e.g. ``"S"``).
+        axes: Wildcard axes in declaration order. Empty for scalar templates.
+        shape: Per-axis sizes in `axes` order. Empty for scalar templates.
+        expanded_names: Flat scalar state names, in cartesian-product order
+            over `axes` (consistent with `state_names`).
+        coord_assignments: For each entry in `expanded_names`, the
+            ``axis -> coord`` mapping. Empty dict for scalar templates.
+        offset: Index of `expanded_names[0]` within the parent
+            `NormalizedRhs.state_names` tuple (i.e. where this template's
+            slice starts in the flat state vector).
+    """
+
+    base: str
+    axes: tuple[str, ...]
+    shape: tuple[int, ...]
+    expanded_names: tuple[str, ...]
+    coord_assignments: tuple[Mapping[str, str], ...]
+    offset: int
+
+
+@dataclass(frozen=True, slots=True)
 class NormalizedRhs:
     """Normalized RHS representation suitable for compilation/execution."""
 
@@ -79,6 +115,7 @@ class NormalizedRhs:
     param_names: tuple[str, ...]
     all_symbols: frozenset[str]
     meta: Mapping[str, Any]
+    state_templates: tuple[StateTemplate, ...] = ()
 
 
 # ---------------------------------------------------------------------------
@@ -694,6 +731,84 @@ def _collect_alias_symbols(
         tree = _parse_expr(expr_s)
         symbols |= _collect_names(tree)
     return symbols
+
+
+def _build_state_templates(
+    state_raw: list[str],
+    *,
+    axes: list[dict[str, Any]],
+    state_template_map: Mapping[str, list[tuple[str, dict[str, str]]]],
+    state_expanded: list[str],
+) -> tuple[StateTemplate, ...]:
+    """Build per-template structural records aligned with `state_expanded`.
+
+    Walks the user-declared `state_raw` in order. For each entry, looks up
+    the template in `state_template_map` (if present) or treats it as a
+    scalar. Records the offset of each template's first expanded name in
+    the flat `state_expanded` list so consumers can recover contiguous
+    per-template slices of the state vector.
+
+    Returns:
+        Tuple of `StateTemplate`, one per entry in `state_raw`, in order.
+
+    Notes:
+        Pinned-only templates (e.g. `S[vax=u]`) are reported as scalar
+        templates because they expand to exactly one cell each. Only
+        wildcard templates carry shape information used by vectorized
+        evaluation.
+    """
+    axis_size = {ax["name"]: len(ax.get("coords", ())) for ax in axes}
+    name_to_idx = {n: i for i, n in enumerate(state_expanded)}
+    templates: list[StateTemplate] = []
+    for entry in state_raw:
+        base, tokens = parse_selector(entry)
+        wildcards = [t for t in tokens if isinstance(t, WildcardToken)]
+        pinned = [t for t in tokens if isinstance(t, PinnedToken)]
+        if wildcards:
+            # Canonical key matches what `_expand_state_templates` builds.
+            template_key = f"{base}[{','.join(wt.axis for wt in wildcards)}]"
+            results = state_template_map.get(template_key, [])
+            ax_names = tuple(wt.axis for wt in wildcards)
+            shape = tuple(axis_size[a] for a in ax_names)
+            expanded_names = tuple(name for name, _ in results)
+            coords = tuple(dict(coord_map) for _, coord_map in results)
+            offset = name_to_idx[expanded_names[0]] if expanded_names else 0
+            templates.append(
+                StateTemplate(
+                    base=base,
+                    axes=ax_names,
+                    shape=shape,
+                    expanded_names=expanded_names,
+                    coord_assignments=coords,
+                    offset=offset,
+                )
+            )
+        elif pinned:
+            template_key = f"{base}[{','.join(f'{t.axis}={t.coord}' for t in pinned)}]"
+            results = state_template_map.get(template_key, [])
+            for scalar_name, coord_map in results:
+                templates.append(
+                    StateTemplate(
+                        base=base,
+                        axes=(),
+                        shape=(),
+                        expanded_names=(scalar_name,),
+                        coord_assignments=(dict(coord_map),),
+                        offset=name_to_idx[scalar_name],
+                    )
+                )
+        else:
+            templates.append(
+                StateTemplate(
+                    base=base,
+                    axes=(),
+                    shape=(),
+                    expanded_names=(base,),
+                    coord_assignments=({},),
+                    offset=name_to_idx[base],
+                )
+            )
+    return tuple(templates)
 
 
 def _expand_state_templates(
@@ -1873,11 +1988,13 @@ def _apply_transition_chains(
 
         if entry_cfg is not None:
             entry_from, entry_rate = entry_cfg
-            transitions_raw.append({
-                "from": entry_from,
-                "to": stage_names[0],
-                "rate": entry_rate,
-            })
+            transitions_raw.append(
+                {
+                    "from": entry_from,
+                    "to": stage_names[0],
+                    "rate": entry_rate,
+                }
+            )
 
         transitions_raw.extend(
             {
@@ -1890,11 +2007,13 @@ def _apply_transition_chains(
 
         if exit_cfg is not None:
             sink_s, sink_rate = exit_cfg
-            transitions_raw.append({
-                "from": stage_names[-1],
-                "to": sink_s,
-                "rate": sink_rate or forward_rates[-1],
-            })
+            transitions_raw.append(
+                {
+                    "from": stage_names[-1],
+                    "to": sink_s,
+                    "rate": sink_rate or forward_rates[-1],
+                }
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -2211,6 +2330,12 @@ def normalize_expr_rhs(spec: Mapping[str, Any]) -> NormalizedRhs:
         ),
         all_symbols=frozenset(all_syms | set(aliases.keys())),
         meta=meta,
+        state_templates=_build_state_templates(
+            state_raw,
+            axes=axes_meta,
+            state_template_map=state_template_map,
+            state_expanded=state_expanded,
+        ),
     )
 
 
@@ -2311,9 +2436,9 @@ def normalize_transitions_rhs(
         "kernels": meta_parts[2],
         "operators": meta_parts[3],
     }
-    meta.update({
-        k: spec[k] for k in ("sources", "couplings", "constraints") if k in spec
-    })
+    meta.update(
+        {k: spec[k] for k in ("sources", "couplings", "constraints") if k in spec}
+    )
 
     chain_block = spec.get("chain")
     if chain_block:
@@ -2387,4 +2512,10 @@ def normalize_transitions_rhs(
         ),
         all_symbols=frozenset(all_syms | set(aliases.keys())),
         meta={**meta, "transitions": transitions_expanded},
+        state_templates=_build_state_templates(
+            state_raw,
+            axes=axes_meta,
+            state_template_map=state_template_map,
+            state_expanded=state_expanded,
+        ),
     )
