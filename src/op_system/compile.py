@@ -220,31 +220,33 @@ _ALLOWED_NODES: tuple[type[ast.AST], ...] = (
 )
 
 _ALLOWED_CALL_ROOTS: tuple[str, ...] = ("np",)
-_ALLOWED_CALL_FUNCS: frozenset[str] = frozenset({
-    # NumPy scalar math; keep small initially.
-    "abs",
-    "exp",
-    "expm1",
-    "log",
-    "log1p",
-    "log2",
-    "log10",
-    "sqrt",
-    "maximum",
-    "minimum",
-    "clip",
-    "where",
-    # Trig and hyperbolic.
-    "sin",
-    "cos",
-    "tan",
-    "sinh",
-    "cosh",
-    "tanh",
-    # Geometry-ish.
-    "hypot",
-    "arctan2",
-})
+_ALLOWED_CALL_FUNCS: frozenset[str] = frozenset(
+    {
+        # NumPy scalar math; keep small initially.
+        "abs",
+        "exp",
+        "expm1",
+        "log",
+        "log1p",
+        "log2",
+        "log10",
+        "sqrt",
+        "maximum",
+        "minimum",
+        "clip",
+        "where",
+        # Trig and hyperbolic.
+        "sin",
+        "cos",
+        "tan",
+        "sinh",
+        "cosh",
+        "tanh",
+        # Geometry-ish.
+        "hypot",
+        "arctan2",
+    }
+)
 
 _ALLOWED_HELPER_FUNCS: frozenset[str] = frozenset({"sum_state", "sum_prefix"})
 
@@ -515,12 +517,18 @@ def _make_eval_fn(  # noqa: C901
 # -----------------------------------------------------------------------------
 
 
-def compile_rhs(rhs: NormalizedRhs, *, xp: object) -> CompiledRhs:
+def compile_rhs(
+    rhs: NormalizedRhs, *, xp: object, vectorized: bool = False
+) -> CompiledRhs:
     """Compile a normalized RHS into a runnable evaluation function.
 
     Args:
         rhs: Normalized RHS produced by `op_system.specs.normalize_rhs`.
         xp: Array backend namespace.
+        vectorized: If True, attempt to compile a vectorized eval path that
+            operates on shaped buffers (one tensor expression per state
+            template). Falls back to the scalar path automatically if the spec
+            doesn't fit the supported subset. Defaults to False.
 
     Returns:
         A `CompiledRhs` containing an `eval_fn(t, y, **params) -> dydt`.
@@ -531,12 +539,21 @@ def compile_rhs(rhs: NormalizedRhs, *, xp: object) -> CompiledRhs:
             detail="Only 'expr' and 'transitions' are supported in v1.",
         )
 
-    eval_fn = _make_eval_fn(
-        state_names=rhs.state_names,
-        aliases=rhs.aliases,
-        equations=rhs.equations,
-        xp=xp,
-    )
+    eval_fn: EvalFn | None = None
+    if vectorized:
+        from op_system._vectorize import build_vector_plan, make_vectorized_eval_fn
+
+        plan = build_vector_plan(rhs)
+        if plan is not None:
+            eval_fn = make_vectorized_eval_fn(plan, xp=xp)
+
+    if eval_fn is None:
+        eval_fn = _make_eval_fn(
+            state_names=rhs.state_names,
+            aliases=rhs.aliases,
+            equations=rhs.equations,
+            xp=xp,
+        )
 
     return CompiledRhs(
         state_names=rhs.state_names,

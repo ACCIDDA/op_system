@@ -1,0 +1,978 @@
+"""op_system._vectorize.
+
+Vectorized compile path for templated RHS specifications.
+
+Strategy: emit one shaped tensor expression per state template, operating on
+buffers reshaped from contiguous slices of the flat state vector. For numpy
+this slashes interpreter overhead; for JAX it slashes JIT compile time
+massively because the emitted graph is O(#templates) instead of O(#cells).
+
+Falls back to the scalar compile path if the spec doesn't fit the supported
+subset (mixed scalar/templated states, alias names that can't be parsed,
+expressions whose first cell isn't structurally identical to the last cell,
+etc.).
+
+Supported subset (v1):
+- All states are pure-template wildcard entries (e.g. ``S[age, vax]``).
+- Aliases are either scalar or pure-template wildcard entries whose expanded
+  names parse cleanly as ``base__axis_coord__...``.
+- Equation/alias expressions reference only: scalar params, ``t``, ``np``,
+  templated states, templated aliases, and Python arithmetic operators.
+
+Anything outside that subset triggers fallback.
+"""
+
+from __future__ import annotations
+
+import ast
+import math
+from collections.abc import Iterable, Mapping
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any, cast
+
+import numpy as np
+
+from op_system.compile import (
+    _SAFE_BUILTINS,
+    _is_numpy_backend,
+    _parse_expr,
+    _validate_ast,
+)
+
+if TYPE_CHECKING:
+    from types import CodeType
+
+    from numpy.typing import NDArray
+
+    from op_system.compile import EvalFn, Float64Array
+    from op_system.specs import NormalizedRhs
+
+    Float64Array = NDArray[np.float64]
+else:
+    Float64Array = Any
+
+
+# ---------------------------------------------------------------------------
+# Internal data structures
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True, slots=True)
+class _BufferTemplate:
+    """Records a templated buffer (state or alias) for the rewriter."""
+
+    base: str
+    axes: tuple[str, ...]
+    shape: tuple[int, ...]
+    expanded_names: tuple[str, ...]
+    coord_assignments: tuple[Mapping[str, str], ...]
+    offset: int  # only meaningful for state templates; 0 otherwise
+
+
+@dataclass(frozen=True, slots=True)
+class _ScalarBinding:
+    """Records a scalar (non-templated) symbol exposed to the env."""
+
+    name: str  # symbol seen by expressions
+    source: str  # state name / alias name / param name
+    kind: str  # "state" | "alias" | "param"
+
+
+@dataclass(frozen=True, slots=True)
+class _EqGroup:
+    """Plan for a single state template's equations.
+
+    Each code yields an array of shape ``vec_shape`` (in ``vec_axes`` order).
+    There are ``prod(unroll_shape)`` codes, one per Cartesian combination of
+    ``unroll_axes`` coords. At eval time the per-code outputs are stacked into
+    shape ``unroll_shape + vec_shape`` then transposed via ``assembly_perm``
+    so the trailing flatten matches the template's natural cell order.
+    """
+
+    base: str
+    codes: tuple["CodeType", ...]
+    vec_axes: tuple[str, ...]
+    vec_shape: tuple[int, ...]
+    unroll_axes: tuple[str, ...]
+    unroll_shape: tuple[int, ...]
+    assembly_perm: tuple[int, ...]
+    full_shape: tuple[int, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class _VectorPlan:
+    """Compiled plan for vectorized evaluation of one RHS spec."""
+
+    state_templates: tuple[_BufferTemplate, ...]
+    alias_templates: tuple[_BufferTemplate, ...]
+    param_templates: tuple[_BufferTemplate, ...]
+    alias_codes: tuple[tuple[str, "CodeType", tuple[int, ...]], ...]
+    eq_groups: tuple[_EqGroup, ...]
+    n_state: int
+
+
+# ---------------------------------------------------------------------------
+# Name parsing / template inference
+# ---------------------------------------------------------------------------
+
+
+def _parse_expanded_name(
+    name: str, axes: list[tuple[str, list[str]]]
+) -> tuple[str, dict[str, str]]:
+    """Parse an expanded name like ``base__age_y__vax_u`` -> (base, coords).
+
+    Returns ``(name, {})`` if the name does not match the expected pattern.
+    """
+    parts = name.split("__")
+    if len(parts) < 2:
+        return name, {}
+    base = parts[0]
+    coords: dict[str, str] = {}
+    for piece in parts[1:]:
+        matched = False
+        for ax_name, ax_coords in axes:
+            prefix = ax_name + "_"
+            if piece.startswith(prefix):
+                coord_val = piece[len(prefix) :]
+                if coord_val in ax_coords:
+                    if ax_name in coords:
+                        return name, {}
+                    coords[ax_name] = coord_val
+                    matched = True
+                    break
+        if not matched:
+            return name, {}
+    return base, coords
+
+
+def _infer_templates_from_names(
+    names: "Iterable[str]", axes: list[tuple[str, list[str]]]
+) -> dict[str, _BufferTemplate] | None:
+    """Group names by inferred template base. Returns None if any group is
+    inconsistent (mismatched axes, missing cartesian-product members, etc.).
+
+    A name with no parseable axis suffixes becomes a scalar template
+    (axes=(), shape=()).
+    """
+    by_base: dict[str, list[tuple[str, dict[str, str]]]] = {}
+    for name in names:
+        base, coords = _parse_expanded_name(name, axes)
+        by_base.setdefault(base, []).append((name, coords))
+
+    axis_size = {ax: len(coord_list) for ax, coord_list in axes}
+    axis_index = {
+        ax: {c: i for i, c in enumerate(coord_list)} for ax, coord_list in axes
+    }
+
+    templates: dict[str, _BufferTemplate] = {}
+    for base, members in by_base.items():
+        if len(members) == 1 and not members[0][1]:
+            templates[base] = _BufferTemplate(
+                base=base,
+                axes=(),
+                shape=(),
+                expanded_names=(members[0][0],),
+                coord_assignments=({},),
+                offset=0,
+            )
+            continue
+        first_axes = tuple(members[0][1].keys())
+        if not first_axes:
+            return None
+        for _, c in members:
+            if tuple(c.keys()) != first_axes:
+                return None
+        shape = tuple(axis_size[a] for a in first_axes)
+        if len(members) != math.prod(shape):
+            return None
+        members.sort(
+            key=lambda item: tuple(axis_index[a][item[1][a]] for a in first_axes)
+        )
+        templates[base] = _BufferTemplate(
+            base=base,
+            axes=first_axes,
+            shape=shape,
+            expanded_names=tuple(n for n, _ in members),
+            coord_assignments=tuple(c for _, c in members),
+            offset=0,
+        )
+    return templates
+
+
+def _infer_alias_templates(
+    aliases: "Mapping[str, str]", axes: list[tuple[str, list[str]]]
+) -> tuple[dict[str, _BufferTemplate], dict[str, str]] | None:
+    """Group aliases by inferred template base.
+
+    Returns ``(templates_by_base, name_to_base)`` or ``None`` on failure.
+    """
+    templates = _infer_templates_from_names(aliases.keys(), axes)
+    if templates is None:
+        return None
+    name_to_base = {n: t.base for t in templates.values() for n in t.expanded_names}
+    return templates, name_to_base
+
+
+# ---------------------------------------------------------------------------
+# AST rewriter
+# ---------------------------------------------------------------------------
+
+
+def _build_access_ast(
+    *,
+    src_base: str,
+    src_axes: tuple[str, ...],
+    src_coords: Mapping[str, str],
+    src_axis_index: Mapping[str, Mapping[str, int]],
+    target_axes: tuple[str, ...],
+    cell_coords: Mapping[str, str],
+) -> ast.expr:
+    """Build an AST node accessing a templated buffer for one cell of a target.
+
+    Returns an expression with shape broadcastable to ``target_axes``' shape.
+    Returns the bare buffer name when src and target axes match exactly.
+    """
+    buf_name = ast.Name(id=f"{src_base}_buf", ctx=ast.Load())
+    if not src_axes:
+        return buf_name
+
+    # Step 1: index the src buffer. Tied axes (axis in target_axes and same
+    # coord as cell_coords[axis]) become slice(None); fixed axes become an
+    # integer index.
+    index_parts: list[ast.expr] = []
+    tied_axis_order: list[str] = []  # in src axes order
+    for ax in src_axes:
+        coord_val = src_coords[ax]
+        if ax in target_axes and cell_coords.get(ax) == coord_val:
+            index_parts.append(ast.Slice(lower=None, upper=None, step=None))
+            tied_axis_order.append(ax)
+        else:
+            idx = src_axis_index[ax][coord_val]
+            index_parts.append(ast.Constant(value=idx))
+
+    if len(index_parts) == 1:
+        slice_node = index_parts[0]
+    else:
+        slice_node = ast.Tuple(elts=index_parts, ctx=ast.Load())
+    accessed: ast.expr = ast.Subscript(value=buf_name, slice=slice_node, ctx=ast.Load())
+
+    if not tied_axis_order:
+        # Pure scalar after indexing.
+        return accessed
+
+    # Step 2: align tied axes to target_axes order, inserting size-1 dims for
+    # target axes not in src.
+    if tuple(tied_axis_order) == target_axes:
+        return accessed
+
+    # Build a tuple subscript with slice(None) for kept axes and None for
+    # broadcast axes, plus a transpose if needed.
+    if set(tied_axis_order) == set(target_axes):
+        # Pure transpose to target order.
+        perm = tuple(tied_axis_order.index(a) for a in target_axes)
+        return ast.Call(
+            func=ast.Attribute(
+                value=ast.Name(id="np", ctx=ast.Load()),
+                attr="transpose",
+                ctx=ast.Load(),
+            ),
+            args=[
+                accessed,
+                ast.Tuple(elts=[ast.Constant(value=p) for p in perm], ctx=ast.Load()),
+            ],
+            keywords=[],
+        )
+
+    # tied is a strict subset of target; transpose then add None axes.
+    if not set(tied_axis_order).issubset(set(target_axes)):
+        # src has axes target doesn't; should have been fully fixed above.
+        msg = "internal: untied axis not in target"
+        raise RuntimeError(msg)
+
+    # Transpose tied axes into the order they appear within target_axes.
+    target_kept_order = tuple(a for a in target_axes if a in tied_axis_order)
+    if tuple(tied_axis_order) != target_kept_order:
+        perm = tuple(tied_axis_order.index(a) for a in target_kept_order)
+        accessed = ast.Call(
+            func=ast.Attribute(
+                value=ast.Name(id="np", ctx=ast.Load()),
+                attr="transpose",
+                ctx=ast.Load(),
+            ),
+            args=[
+                accessed,
+                ast.Tuple(elts=[ast.Constant(value=p) for p in perm], ctx=ast.Load()),
+            ],
+            keywords=[],
+        )
+
+    # Now insert size-1 axes via subscript with None placeholders.
+    elts: list[ast.expr] = []
+    for ax in target_axes:
+        if ax in tied_axis_order:
+            elts.append(ast.Slice(lower=None, upper=None, step=None))
+        else:
+            elts.append(ast.Constant(value=None))
+    return ast.Subscript(
+        value=accessed,
+        slice=ast.Tuple(elts=elts, ctx=ast.Load()),
+        ctx=ast.Load(),
+    )
+
+
+class _NameRewriter(ast.NodeTransformer):
+    """Rewrites Name nodes in a per-cell expression into shaped buffer access.
+
+    Unrecognized names are left as-is (treated as scalar params / specials).
+    """
+
+    def __init__(
+        self,
+        *,
+        target_axes: tuple[str, ...],
+        cell_coords: Mapping[str, str],
+        name_to_template: Mapping[str, _BufferTemplate],
+        name_to_coords: Mapping[str, Mapping[str, str]],
+        axis_index: Mapping[str, Mapping[str, int]],
+    ) -> None:
+        self._target_axes = target_axes
+        self._cell_coords = cell_coords
+        self._name_to_template = name_to_template
+        self._name_to_coords = name_to_coords
+        self._axis_index = axis_index
+
+    def visit_Name(self, node: ast.Name) -> ast.AST:  # noqa: N802
+        tpl = self._name_to_template.get(node.id)
+        if tpl is None:
+            return node
+        if not tpl.axes:
+            return ast.Name(id=f"{tpl.base}_buf", ctx=ast.Load())
+        return _build_access_ast(
+            src_base=tpl.base,
+            src_axes=tpl.axes,
+            src_coords=self._name_to_coords[node.id],
+            src_axis_index=self._axis_index,
+            target_axes=self._target_axes,
+            cell_coords=self._cell_coords,
+        )
+
+
+def _rewrite_cell_to_vector(
+    *,
+    expr: str,
+    target_axes: tuple[str, ...],
+    cell_coords: Mapping[str, str],
+    name_to_template: Mapping[str, _BufferTemplate],
+    name_to_coords: Mapping[str, Mapping[str, str]],
+    axis_index: Mapping[str, Mapping[str, int]],
+) -> ast.Expression:
+    tree = _parse_expr(expr)
+    _validate_ast(tree, expr=expr)
+    rewriter = _NameRewriter(
+        target_axes=target_axes,
+        cell_coords=cell_coords,
+        name_to_template=name_to_template,
+        name_to_coords=name_to_coords,
+        axis_index=axis_index,
+    )
+    new_tree = cast("ast.Expression", rewriter.visit(tree))
+    ast.fix_missing_locations(new_tree)
+    return new_tree
+
+
+# ---------------------------------------------------------------------------
+# Sum-pattern recognizer
+# ---------------------------------------------------------------------------
+
+
+def _flatten_addsub(node: ast.expr) -> list[tuple[int, ast.expr]]:
+    """Flatten an Add/Sub tree into (sign, leaf-expr) terms (iterative)."""
+    terms: list[tuple[int, ast.expr]] = []
+    stack: list[tuple[ast.expr, int]] = [(node, 1)]
+    while stack:
+        n, sign = stack.pop()
+        if isinstance(n, ast.BinOp) and isinstance(n.op, ast.Add):
+            stack.append((n.right, sign))
+            stack.append((n.left, sign))
+        elif isinstance(n, ast.BinOp) and isinstance(n.op, ast.Sub):
+            stack.append((n.right, -sign))
+            stack.append((n.left, sign))
+        elif isinstance(n, ast.UnaryOp) and isinstance(n.op, ast.USub):
+            stack.append((n.operand, -sign))
+        elif isinstance(n, ast.UnaryOp) and isinstance(n.op, ast.UAdd):
+            stack.append((n.operand, sign))
+        else:
+            terms.append((sign, n))
+    return terms
+
+
+def _classify_buf_subscript(
+    node: ast.expr,
+) -> tuple[str, tuple[int, ...]] | None:
+    """If ``node`` is ``<name>_buf[<int_tuple>]``, return (name, indices)."""
+    if not isinstance(node, ast.Subscript):
+        return None
+    if not isinstance(node.value, ast.Name):
+        return None
+    name = node.value.id
+    if not name.endswith("_buf"):
+        return None
+    slc = node.slice
+    if isinstance(slc, ast.Constant) and isinstance(slc.value, int):
+        return name, (slc.value,)
+    if isinstance(slc, ast.Tuple):
+        idxs: list[int] = []
+        for elt in slc.elts:
+            if isinstance(elt, ast.Constant) and isinstance(elt.value, int):
+                idxs.append(elt.value)
+            else:
+                return None
+        return name, tuple(idxs)
+    return None
+
+
+def _make_sum_call(buf_name: str) -> ast.expr:
+    return ast.Call(
+        func=ast.Attribute(
+            value=ast.Name(id="np", ctx=ast.Load()),
+            attr="sum",
+            ctx=ast.Load(),
+        ),
+        args=[ast.Name(id=buf_name, ctx=ast.Load())],
+        keywords=[],
+    )
+
+
+def _reassemble_addsub(terms: list[tuple[int, ast.expr]]) -> ast.expr:
+    if not terms:
+        return ast.Constant(value=0.0)
+    sign, expr = terms[0]
+    out: ast.expr = expr if sign > 0 else ast.UnaryOp(op=ast.USub(), operand=expr)
+    for s, e in terms[1:]:
+        op: ast.operator = ast.Add() if s > 0 else ast.Sub()
+        out = ast.BinOp(left=out, op=op, right=e)
+    return out
+
+
+def _collapse_full_buffer_sums(
+    tree: ast.Expression, buf_shapes: Mapping[str, tuple[int, ...]]
+) -> ast.Expression:
+    """Replace sums-over-all-cells of a buffer with ``np.sum(buf)``.
+
+    Operates iteratively to avoid blowing Python's recursion limit on the
+    very long Add chains produced by aggregator aliases (e.g. an alias that
+    sums every cell of a templated state). Within each Add/Sub chain found in
+    the tree, pure ``<name>_buf[<int_tuple>]`` terms are grouped by
+    ``(name, sign)``; if the set of indices for a group exhausts the full
+    Cartesian product of the buffer's shape, those terms are collapsed into a
+    single ``np.sum(buf)`` call. Other terms in the chain are left untouched.
+    """
+
+    def collapse_chain(node: ast.expr) -> ast.expr:
+        terms = _flatten_addsub(node)
+        groups: dict[tuple[str, int], list[tuple[int, ...]]] = {}
+        other: list[tuple[int, ast.expr]] = []
+        order: list[tuple[str, int]] = []
+        for sign, leaf in terms:
+            cls = _classify_buf_subscript(leaf)
+            if cls is None or cls[0] not in buf_shapes:
+                other.append((sign, leaf))
+                continue
+            key = (cls[0], sign)
+            if key not in groups:
+                groups[key] = []
+                order.append(key)
+            groups[key].append(cls[1])
+        collapsed: list[tuple[int, ast.expr]] = list(other)
+        changed = False
+        for key in order:
+            name, sign = key
+            idxs = groups[key]
+            shape = buf_shapes[name]
+            expected = math.prod(shape) if shape else 1
+            if (
+                len(idxs) == expected
+                and len(set(idxs)) == expected
+                and all(
+                    len(t) == len(shape)
+                    and all(0 <= ti < si for ti, si in zip(t, shape))
+                    for t in idxs
+                )
+            ):
+                collapsed.append((sign, _make_sum_call(name)))
+                changed = True
+            else:
+                for t in idxs:
+                    slice_node: ast.expr
+                    if len(t) == 1:
+                        slice_node = ast.Constant(value=t[0])
+                    else:
+                        slice_node = ast.Tuple(
+                            elts=[ast.Constant(value=v) for v in t],
+                            ctx=ast.Load(),
+                        )
+                    collapsed.append(
+                        (
+                            sign,
+                            ast.Subscript(
+                                value=ast.Name(id=name, ctx=ast.Load()),
+                                slice=slice_node,
+                                ctx=ast.Load(),
+                            ),
+                        )
+                    )
+        if not changed:
+            return node
+        return _reassemble_addsub(collapsed)
+
+    def is_addsub(n: ast.AST) -> bool:
+        return isinstance(n, ast.BinOp) and isinstance(n.op, (ast.Add, ast.Sub))
+
+    # Collapse the root expression, then iteratively descend into the
+    # collapsed body's non-Add/Sub children to find embedded chains. We
+    # carefully avoid recursing into the original (uncollapsed) Add chain.
+    body = tree.body
+    if is_addsub(body):
+        body = collapse_chain(body)
+    new_tree = ast.Expression(body=body)
+
+    stack: list[ast.AST] = [body]
+    while stack:
+        node = stack.pop()
+        for fld, val in ast.iter_fields(node):
+            if isinstance(val, list):
+                for i, child in enumerate(val):
+                    if not isinstance(child, ast.AST):
+                        continue
+                    if is_addsub(child):
+                        new_child = collapse_chain(child)
+                        val[i] = new_child
+                        stack.append(new_child)
+                    else:
+                        stack.append(child)
+            elif isinstance(val, ast.AST):
+                if is_addsub(val):
+                    new_child = collapse_chain(val)
+                    setattr(node, fld, new_child)
+                    stack.append(new_child)
+                else:
+                    stack.append(val)
+
+    ast.fix_missing_locations(new_tree)
+    return new_tree
+
+
+def _vectorize_template_equations(
+    *,
+    template: _BufferTemplate,
+    equations: tuple[str, ...],
+    name_to_template: Mapping[str, _BufferTemplate],
+    name_to_coords: Mapping[str, Mapping[str, str]],
+    axis_index: Mapping[str, Mapping[str, int]],
+) -> (
+    tuple[
+        tuple["CodeType", ...],
+        tuple[str, ...],  # vec_axes
+        tuple[int, ...],  # vec_shape
+        tuple[str, ...],  # unroll_axes
+        tuple[int, ...],  # unroll_shape
+        tuple[int, ...],  # assembly_perm
+    ]
+    | None
+):
+    """Build shaped code object(s) for a state template's equations.
+
+    Tries vectorized axis subsets in increasing complexity:
+    1. All axes vectorized (no unrolling).
+    2. Each single axis unrolled, all others vectorized — handles boundary
+       conditions on one axis (e.g. the X compartment's ``imm`` axis).
+    3. Pairs of axes unrolled (rare).
+    Within each candidate subset, the first and last cell of every unroll
+    bin must produce structurally identical AST after rewriting.
+    """
+    size = math.prod(template.shape) if template.shape else 1
+    cell_exprs = equations[template.offset : template.offset + size]
+    if len(cell_exprs) != size or size == 0:
+        return None
+    n_axes = len(template.axes)
+
+    # Enumerate candidate unroll-axis index subsets, smallest first.
+    from itertools import combinations as _comb
+
+    candidates: list[tuple[int, ...]] = []
+    for k in range(n_axes + 1):
+        for combo in _comb(range(n_axes), k):
+            candidates.append(combo)
+
+    # Strides for converting (axis-coord-index tuple) → flat cell index in
+    # ``coord_assignments`` (template.axes order, last varies fastest).
+    strides: list[int] = [0] * n_axes
+    s = 1
+    for i in range(n_axes - 1, -1, -1):
+        strides[i] = s
+        s *= template.shape[i]
+
+    for unroll_idx in candidates:
+        unroll_set = set(unroll_idx)
+        vec_idx = tuple(i for i in range(n_axes) if i not in unroll_set)
+        unroll_axes = tuple(template.axes[i] for i in unroll_idx)
+        vec_axes = tuple(template.axes[i] for i in vec_idx)
+        unroll_shape = tuple(template.shape[i] for i in unroll_idx)
+        vec_shape = tuple(template.shape[i] for i in vec_idx)
+        unroll_size = math.prod(unroll_shape) if unroll_shape else 1
+        vec_size = math.prod(vec_shape) if vec_shape else 1
+
+        # Iterate unroll bins in row-major over unroll_axes.
+        codes: list[CodeType] = []
+        ok = True
+        for u in range(unroll_size):
+            # Decode u into per-unroll-axis coord indices.
+            u_coord_idx: list[int] = []
+            rem = u
+            for j in range(len(unroll_axes) - 1, -1, -1):
+                u_coord_idx.insert(0, rem % unroll_shape[j])
+                rem //= unroll_shape[j]
+            # Compute the "base" flat index contribution from unroll axes.
+            base_flat = 0
+            for k_pos, ax_pos in enumerate(unroll_idx):
+                base_flat += u_coord_idx[k_pos] * strides[ax_pos]
+
+            # First and last cells of the bin = vec_axes coord indices all
+            # zero / all (size-1).
+            def _bin_flat(vec_coord_idx: list[int]) -> int:
+                f = base_flat
+                for k_pos, ax_pos in enumerate(vec_idx):
+                    f += vec_coord_idx[k_pos] * strides[ax_pos]
+                return f
+
+            first_idx = _bin_flat([0] * len(vec_idx))
+            last_idx = _bin_flat([vec_shape[k] - 1 for k in range(len(vec_idx))])
+
+            try:
+                first_tree = _rewrite_cell_to_vector(
+                    expr=cell_exprs[first_idx],
+                    target_axes=vec_axes,
+                    cell_coords=template.coord_assignments[first_idx],
+                    name_to_template=name_to_template,
+                    name_to_coords=name_to_coords,
+                    axis_index=axis_index,
+                )
+            except (ValueError, RuntimeError):
+                ok = False
+                break
+            if vec_size > 1:
+                try:
+                    last_tree = _rewrite_cell_to_vector(
+                        expr=cell_exprs[last_idx],
+                        target_axes=vec_axes,
+                        cell_coords=template.coord_assignments[last_idx],
+                        name_to_template=name_to_template,
+                        name_to_coords=name_to_coords,
+                        axis_index=axis_index,
+                    )
+                except (ValueError, RuntimeError):
+                    ok = False
+                    break
+                if ast.dump(first_tree) != ast.dump(last_tree):
+                    ok = False
+                    break
+            try:
+                codes.append(
+                    compile(first_tree, filename="<op_system_vec>", mode="eval")
+                )
+            except (ValueError, TypeError, SyntaxError):
+                ok = False
+                break
+        if not ok:
+            continue
+
+        # Build assembly_perm: source axis order is unroll_axes + vec_axes,
+        # target is template.axes. perm[i] = position-in-source of template.axes[i].
+        source_order = list(unroll_axes) + list(vec_axes)
+        source_pos = {a: i for i, a in enumerate(source_order)}
+        assembly_perm = tuple(source_pos[a] for a in template.axes)
+        return (
+            tuple(codes),
+            vec_axes,
+            vec_shape,
+            unroll_axes,
+            unroll_shape,
+            assembly_perm,
+        )
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Plan construction
+# ---------------------------------------------------------------------------
+
+
+def build_vector_plan(rhs: NormalizedRhs) -> _VectorPlan | None:
+    """Try to build a vectorized plan for ``rhs``. Returns None on fallback."""
+    if not rhs.state_templates:
+        return None
+    # Require all states to be wildcard templates (have axes).
+    if any(not tpl.shape for tpl in rhs.state_templates):
+        return None
+    # Require axes meta to be present.
+    axes_meta = rhs.meta.get("axes") if isinstance(rhs.meta, Mapping) else None
+    if not axes_meta:
+        return None
+
+    axes_pairs: list[tuple[str, list[str]]] = []
+    for ax in axes_meta:
+        if not isinstance(ax, Mapping):
+            return None
+        coords = ax.get("coords")
+        if not coords:
+            return None
+        axes_pairs.append((ax["name"], list(coords)))
+    axis_index = {ax: {c: i for i, c in enumerate(coords)} for ax, coords in axes_pairs}
+
+    state_buffers: list[_BufferTemplate] = []
+    name_to_template: dict[str, _BufferTemplate] = {}
+    name_to_coords: dict[str, Mapping[str, str]] = {}
+    for tpl in rhs.state_templates:
+        buf = _BufferTemplate(
+            base=tpl.base,
+            axes=tpl.axes,
+            shape=tpl.shape,
+            expanded_names=tpl.expanded_names,
+            coord_assignments=tpl.coord_assignments,
+            offset=tpl.offset,
+        )
+        state_buffers.append(buf)
+        for nm, coord_map in zip(tpl.expanded_names, tpl.coord_assignments):
+            name_to_template[nm] = buf
+            name_to_coords[nm] = coord_map
+
+    alias_inference = _infer_alias_templates(rhs.aliases, axes_pairs)
+    if alias_inference is None:
+        return None
+    alias_buffers_by_base, _ = alias_inference
+    alias_buffers = list(alias_buffers_by_base.values())
+    for buf in alias_buffers:
+        for nm, coord_map in zip(buf.expanded_names, buf.coord_assignments):
+            name_to_template[nm] = buf
+            name_to_coords[nm] = coord_map
+
+    # Param templates: same name-parsing approach as aliases. These are
+    # gathered from caller-supplied scalar params at eval time into shaped
+    # buffers exposed under ``<base>_buf``.
+    param_templates_by_base = _infer_templates_from_names(rhs.param_names, axes_pairs)
+    if param_templates_by_base is None:
+        return None
+    param_buffers = list(param_templates_by_base.values())
+    for buf in param_buffers:
+        # Skip scalars — they remain available under their original name.
+        if not buf.axes:
+            continue
+        for nm, coord_map in zip(buf.expanded_names, buf.coord_assignments):
+            name_to_template[nm] = buf
+            name_to_coords[nm] = coord_map
+
+    # Buffer-name → shape table, used by the sum-pattern collapser to
+    # recognize sums-over-all-cells of a buffer and rewrite them as
+    # ``np.sum(buf)``.
+    buf_shapes: dict[str, tuple[int, ...]] = {}
+    for buf in (*state_buffers, *alias_buffers, *param_buffers):
+        if buf.axes:
+            buf_shapes[f"{buf.base}_buf"] = buf.shape
+
+    # Vectorize aliases (in declaration order — best-effort dependency order).
+    alias_codes: list[tuple[str, CodeType, tuple[int, ...]]] = []
+    for buf in alias_buffers:
+        try:
+            if buf.axes:
+                tree = _rewrite_cell_to_vector(
+                    expr=rhs.aliases[buf.expanded_names[0]],
+                    target_axes=buf.axes,
+                    cell_coords=buf.coord_assignments[0],
+                    name_to_template=name_to_template,
+                    name_to_coords=name_to_coords,
+                    axis_index=axis_index,
+                )
+                if len(buf.expanded_names) > 1:
+                    last_tree = _rewrite_cell_to_vector(
+                        expr=rhs.aliases[buf.expanded_names[-1]],
+                        target_axes=buf.axes,
+                        cell_coords=buf.coord_assignments[-1],
+                        name_to_template=name_to_template,
+                        name_to_coords=name_to_coords,
+                        axis_index=axis_index,
+                    )
+                    if ast.dump(tree) != ast.dump(last_tree):
+                        return None
+            else:
+                # Scalar alias: rewrite through the same engine so referenced
+                # templated state cells become buffer-index accesses.
+                tree = _rewrite_cell_to_vector(
+                    expr=rhs.aliases[buf.expanded_names[0]],
+                    target_axes=(),
+                    cell_coords={},
+                    name_to_template=name_to_template,
+                    name_to_coords=name_to_coords,
+                    axis_index=axis_index,
+                )
+            tree = _collapse_full_buffer_sums(tree, buf_shapes)
+            code = compile(tree, filename="<op_system_vec>", mode="eval")
+        except (ValueError, RuntimeError, TypeError, SyntaxError):
+            return None
+        alias_codes.append((buf.base, code, buf.shape))
+
+    # Vectorize per-template equations.
+    eq_groups: list[_EqGroup] = []
+    for buf in state_buffers:
+        result = _vectorize_template_equations(
+            template=buf,
+            equations=rhs.equations,
+            name_to_template=name_to_template,
+            name_to_coords=name_to_coords,
+            axis_index=axis_index,
+        )
+        if result is None:
+            return None
+        codes, vec_axes, vec_shape, unroll_axes, unroll_shape, assembly_perm = result
+        eq_groups.append(
+            _EqGroup(
+                base=buf.base,
+                codes=codes,
+                vec_axes=vec_axes,
+                vec_shape=vec_shape,
+                unroll_axes=unroll_axes,
+                unroll_shape=unroll_shape,
+                assembly_perm=assembly_perm,
+                full_shape=buf.shape,
+            )
+        )
+
+    return _VectorPlan(
+        state_templates=tuple(state_buffers),
+        alias_templates=tuple(alias_buffers),
+        param_templates=tuple(param_buffers),
+        alias_codes=tuple(alias_codes),
+        eq_groups=tuple(eq_groups),
+        n_state=len(rhs.state_names),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Runtime eval function
+# ---------------------------------------------------------------------------
+
+
+def make_vectorized_eval_fn(plan: _VectorPlan, *, xp: object) -> EvalFn:
+    """Return an ``eval_fn(t, y, **params)`` driven by ``plan``."""
+    state_templates = plan.state_templates
+    alias_codes = plan.alias_codes
+    eq_groups = plan.eq_groups
+    n_state = plan.n_state
+    is_numpy = _is_numpy_backend(xp)
+
+    # Pre-compute param buffer assembly recipes: (base, expanded_names, shape)
+    # — at eval time we stack the corresponding param values.
+    param_recipes: list[tuple[str, tuple[str, ...], tuple[int, ...]]] = [
+        (buf.base, buf.expanded_names, buf.shape)
+        for buf in plan.param_templates
+        if buf.axes
+    ]
+
+    def eval_fn(t: object, y: object, **params: object) -> Float64Array:
+        if is_numpy:
+            y_in = np.asarray(y, dtype=np.float64)
+            t_val: object = np.float64(cast("Any", t))
+        else:
+            y_in = cast("Any", xp).asarray(y)
+            t_val = cast("Any", xp).asarray(t)
+        if y_in.shape != (n_state,):
+            msg = (
+                f"state has an invalid shape/value. expected (n_state={n_state},), "
+                f"got {y_in.shape}"
+            )
+            raise ValueError(msg)
+
+        env: dict[str, object] = {"np": xp, "t": t_val}
+        env.update(params)
+
+        # Assemble templated param buffers from caller-supplied scalars.
+        for base, names, shape in param_recipes:
+            try:
+                vals = [params[n] for n in names]
+            except KeyError as exc:
+                msg = f"missing param {exc!s} for templated buffer {base!r}"
+                raise ValueError(msg) from exc
+            if is_numpy:
+                env[f"{base}_buf"] = np.asarray(vals, dtype=np.float64).reshape(shape)
+            else:
+                xp_ns = cast("Any", xp)
+                env[f"{base}_buf"] = xp_ns.reshape(xp_ns.asarray(vals), shape)
+
+        # Build state buffers via reshape on contiguous slices.
+        for tpl in state_templates:
+            size = math.prod(tpl.shape)
+            slc = y_in[tpl.offset : tpl.offset + size]
+            env[f"{tpl.base}_buf"] = (
+                slc.reshape(tpl.shape)
+                if is_numpy
+                else cast("Any", xp).reshape(slc, tpl.shape)
+            )
+
+        # Eval alias buffers in declaration order.
+        for base, code, shape in alias_codes:
+            try:
+                val = eval(code, {"__builtins__": _SAFE_BUILTINS}, env)  # noqa: S307
+            except (NameError, ValueError, TypeError, ArithmeticError) as exc:
+                msg = f"alias {base!r} evaluation failed: {exc!r}"
+                raise ValueError(msg) from exc
+            if shape:
+                if is_numpy:
+                    val = np.broadcast_to(val, shape)
+                else:
+                    val = cast("Any", xp).broadcast_to(val, shape)
+            env[f"{base}_buf"] = val
+
+        # Eval per-template equation buffers and concatenate.
+        pieces: list[object] = []
+        for grp in eq_groups:
+            bin_results: list[object] = []
+            for code in grp.codes:
+                try:
+                    val = eval(code, {"__builtins__": _SAFE_BUILTINS}, env)  # noqa: S307
+                except (NameError, ValueError, TypeError, ArithmeticError) as exc:
+                    msg = f"equation {grp.base!r} evaluation failed: {exc!r}"
+                    raise ValueError(msg) from exc
+                if is_numpy:
+                    arr = np.broadcast_to(
+                        np.asarray(val, dtype=np.float64), grp.vec_shape
+                    )
+                else:
+                    xp_ns = cast("Any", xp)
+                    arr = xp_ns.broadcast_to(xp_ns.asarray(val), grp.vec_shape)
+                bin_results.append(arr)
+
+            if not grp.unroll_axes:
+                # Fully vectorized — single result already in template order.
+                whole = bin_results[0]
+            else:
+                if is_numpy:
+                    stacked = np.stack(cast("Any", bin_results), axis=0).reshape(
+                        grp.unroll_shape + grp.vec_shape
+                    )
+                    whole = np.transpose(stacked, grp.assembly_perm)
+                else:
+                    xp_ns = cast("Any", xp)
+                    stacked = xp_ns.reshape(
+                        xp_ns.stack(bin_results, axis=0),
+                        grp.unroll_shape + grp.vec_shape,
+                    )
+                    whole = xp_ns.transpose(stacked, grp.assembly_perm)
+            if is_numpy:
+                pieces.append(np.asarray(whole).reshape(-1))
+            else:
+                pieces.append(cast("Any", xp).reshape(whole, (-1,)))
+
+        if is_numpy:
+            return cast("Float64Array", np.concatenate(pieces))
+        return cast("Float64Array", cast("Any", xp).concatenate(pieces))
+
+    return eval_fn
