@@ -125,7 +125,7 @@ def test_apply_along_explicit_kernel_sum_on_continuous_axis_errors() -> None:
             "tot": "apply_along(x=i, u[x=i], kernel=sum)",
         },
     }
-    with pytest.raises(ValueError, match=r"requires categorical axes"):
+    with pytest.raises(ValueError, match=r"requires categorical or ordinal axes"):
         normalize_expr_rhs(spec)
 
 
@@ -344,3 +344,98 @@ def test_apply_along_filter_mixed_with_full_axis_in_multi_binding() -> None:
         for v in ("v", "w"):
             assert f"I__age_{a}__vax_{v}" in eq
         assert f"I__age_{a}__vax_u" not in eq
+
+
+def test_apply_along_ordinal_axis_full_expansion_uses_uniform_weights() -> None:
+    """A bound ordinal axis (no filter) should expand like a categorical axis."""
+    spec = {
+        "kind": "expr",
+        "axes": [
+            {"name": "imm", "type": "ordinal", "coords": ["X0", "X1", "X2", "X3"]},
+        ],
+        "state": ["pop[imm]", "total"],
+        "equations": {
+            "pop[imm]": "0.0",
+            "total": "apply_along(imm=k, pop[imm=k])",
+        },
+    }
+    out = normalize_expr_rhs(spec)
+    eq = out.equations[-1]
+    for c in ("X0", "X1", "X2", "X3"):
+        assert f"pop__imm_{c}" in eq
+
+
+def test_apply_along_ordinal_filter_inclusive_index_range() -> None:
+    """An ordinal `in [lo_label, hi_label]` filter selects the inclusive index range."""
+    spec = {
+        "kind": "expr",
+        "axes": [
+            {
+                "name": "imm",
+                "type": "ordinal",
+                "coords": ["X0", "X1", "X2", "X3", "X4"],
+            },
+        ],
+        "state": ["pop[imm]", "covered"],
+        "equations": {
+            "pop[imm]": "0.0",
+            "covered": "apply_along(imm=k in [X1, X3], pop[imm=k])",
+        },
+    }
+    out = normalize_expr_rhs(spec)
+    eq = out.equations[-1]
+    for c in ("X1", "X2", "X3"):
+        assert f"pop__imm_{c}" in eq
+    for c in ("X0", "X4"):
+        assert f"pop__imm_{c}" not in eq
+
+
+def test_apply_along_ordinal_filter_requires_two_endpoints() -> None:
+    """An ordinal-axis filter must be exactly `[lo_label, hi_label]`."""
+    spec = {
+        "kind": "expr",
+        "axes": [
+            {"name": "imm", "type": "ordinal", "coords": ["X0", "X1", "X2", "X3"]},
+        ],
+        "state": ["pop[imm]", "covered"],
+        "equations": {
+            "pop[imm]": "0.0",
+            "covered": "apply_along(imm=k in [X0, X1, X2], pop[imm=k])",
+        },
+    }
+    with pytest.raises(Exception, match="2-element"):
+        normalize_expr_rhs(spec)
+
+
+def test_apply_along_ordinal_filter_unknown_endpoint_errors() -> None:
+    """An ordinal filter referencing an undeclared coord label is rejected."""
+    spec = {
+        "kind": "expr",
+        "axes": [
+            {"name": "imm", "type": "ordinal", "coords": ["X0", "X1", "X2", "X3"]},
+        ],
+        "state": ["pop[imm]", "covered"],
+        "equations": {
+            "pop[imm]": "0.0",
+            "covered": "apply_along(imm=k in [X1, X9], pop[imm=k])",
+        },
+    }
+    with pytest.raises(Exception, match="unknown coords"):
+        normalize_expr_rhs(spec)
+
+
+def test_apply_along_ordinal_filter_reversed_endpoints_errors() -> None:
+    """An ordinal filter with index(lo) > index(hi) is rejected."""
+    spec = {
+        "kind": "expr",
+        "axes": [
+            {"name": "imm", "type": "ordinal", "coords": ["X0", "X1", "X2", "X3"]},
+        ],
+        "state": ["pop[imm]", "covered"],
+        "equations": {
+            "pop[imm]": "0.0",
+            "covered": "apply_along(imm=k in [X3, X1], pop[imm=k])",
+        },
+    }
+    with pytest.raises(Exception, match="index"):
+        normalize_expr_rhs(spec)

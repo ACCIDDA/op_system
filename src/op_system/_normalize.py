@@ -1207,13 +1207,14 @@ def _select_apply_along_kernel(
         str(ax.get("name")): str(ax.get("type", "")) for ax in axes
     }
     types = {axis_types.get(ax) for ax, _, _ in bindings}
+    sum_compatible = {"categorical", "ordinal"}
     if kernel_form == "sum":
-        bad = [ax for ax, _, _ in bindings if axis_types.get(ax) != "categorical"]
+        bad = [ax for ax, _, _ in bindings if axis_types.get(ax) not in sum_compatible]
         if bad:
             raise InvalidRhsSpecError(
                 detail=(
-                    f"apply_along(kernel=sum) requires categorical axes; "
-                    f"got non-categorical: {bad}"
+                    f"apply_along(kernel=sum) requires categorical or ordinal axes; "
+                    f"got incompatible: {bad}"
                 )
             )
         return "sum"
@@ -1227,7 +1228,7 @@ def _select_apply_along_kernel(
                 )
             )
         return "integrate"
-    if types == {"categorical"}:
+    if types and types.issubset(sum_compatible):
         return "sum"
     if types == {"continuous"}:
         return "integrate"
@@ -1294,6 +1295,10 @@ def _build_apply_along_axis_options(
 
     - **Categorical**: ``filt`` is the explicit list of coord names to retain.
       Unknown coords are rejected.
+    - **Ordinal**: ``filt`` must be exactly ``[lo_label, hi_label]`` -- two
+      coord names interpreted as the inclusive index range from
+      ``index(lo_label)`` to ``index(hi_label)`` along the declared axis
+      order.  All coords in that contiguous slice are retained with weight 1.
     - **Continuous**: ``filt`` is interpreted as the closed sub-interval
       endpoints ``[lo, hi]`` (must be exactly two numeric values).  All axis
       coords ``c`` with ``lo <= c <= hi`` are retained, and trapezoidal
@@ -1310,20 +1315,27 @@ def _build_apply_along_axis_options(
 
     Raises:
         InvalidRhsSpecError: If the axis has no coords; if a categorical
-            filter lists an unknown coord; if a continuous-axis filter is not
-            a 2-element ``[lo, hi]`` pair, has ``lo > hi``, or selects no
+            filter lists an unknown coord; if an ordinal filter is not a
+            2-element ``[lo_label, hi_label]`` pair, names an unknown coord,
+            or has ``index(lo) > index(hi)``; if a continuous-axis filter is
+            not a 2-element ``[lo, hi]`` pair, has ``lo > hi``, or selects no
             axis coords; or if a continuous axis is missing trapezoidal
             ``deltas``.
     """
     coords = [str(c) for c in axis.get("coords", [])]
     if not coords:
         raise InvalidRhsSpecError(detail=f"apply_along axis {ax_name!r} has no coords")
-    is_continuous = str(axis.get("type", "")) == "continuous"
+    ax_type = str(axis.get("type", ""))
+    is_continuous = ax_type == "continuous"
+    is_ordinal = ax_type == "ordinal"
     if kernel != "integrate":
         if filt is None:
             return [(c, 1.0) for c in coords]
         if is_continuous:
             sub_coords = _continuous_subinterval_coords(ax_name, coords, filt)
+            return [(c, 1.0) for c in sub_coords]
+        if is_ordinal:
+            sub_coords = _ordinal_subrange_coords(ax_name, coords, filt)
             return [(c, 1.0) for c in sub_coords]
         unknown = [c for c in filt if c not in coords]
         if unknown:
@@ -1398,6 +1410,58 @@ def _continuous_subinterval_coords(
             )
         )
     return sub
+
+
+def _ordinal_subrange_coords(
+    ax_name: str, coords: list[str], filt: list[str]
+) -> list[str]:
+    """Resolve an ordinal-axis ``in [lo_label, hi_label]`` filter to retained coords.
+
+    The two filter entries must be coord labels declared on the axis.  The
+    inclusive index range from ``index(lo_label)`` to ``index(hi_label)``
+    along the declared axis order is returned.
+
+    Args:
+        ax_name: Name of the bound axis (used in error messages).
+        coords: All axis coords as strings, in declared axis order.
+        filt: Filter list parsed from the spec; must contain exactly two
+            coord labels ``[lo_label, hi_label]`` with
+            ``index(lo_label) <= index(hi_label)``.
+
+    Returns:
+        List of coord strings (in axis order) for the inclusive index range.
+
+    Raises:
+        InvalidRhsSpecError: If ``filt`` is not a 2-element list, an endpoint
+            is not a declared coord label, or ``index(lo) > index(hi)``.
+    """
+    if len(filt) != 2:
+        raise InvalidRhsSpecError(
+            detail=(
+                f"apply_along axis {ax_name!r} ordinal filter must be a "
+                f"2-element [lo_label, hi_label] range (got {len(filt)} entries)"
+            )
+        )
+    lo_label, hi_label = filt[0], filt[1]
+    unknown = [c for c in (lo_label, hi_label) if c not in coords]
+    if unknown:
+        raise InvalidRhsSpecError(
+            detail=(
+                f"apply_along axis {ax_name!r} ordinal filter has unknown "
+                f"coords: {unknown}"
+            )
+        )
+    lo_idx = coords.index(lo_label)
+    hi_idx = coords.index(hi_label)
+    if lo_idx > hi_idx:
+        raise InvalidRhsSpecError(
+            detail=(
+                f"apply_along axis {ax_name!r} ordinal filter endpoints must "
+                f"satisfy index(lo) <= index(hi) (got [{lo_label!r}, {hi_label!r}] "
+                f"at indices [{lo_idx}, {hi_idx}])"
+            )
+        )
+    return coords[lo_idx : hi_idx + 1]
 
 
 def _expand_apply_along(expr: str, *, axes: list[dict[str, Any]]) -> str:  # noqa: PLR0914

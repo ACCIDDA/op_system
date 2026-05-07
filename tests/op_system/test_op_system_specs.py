@@ -204,7 +204,7 @@ def test_apply_along_kernel_sum_rejects_continuous_axis() -> None:
         "state": ["S[age]"],
         "equations": {"S[age]": "-apply_along(age=i, S[age=i], kernel=sum)"},
     }
-    with pytest.raises(ValueError, match=r"requires categorical axes"):
+    with pytest.raises(ValueError, match=r"requires categorical or ordinal axes"):
         normalize_expr_rhs(spec)
 
 

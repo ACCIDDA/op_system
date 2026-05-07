@@ -65,9 +65,11 @@ def _normalize_axis_name(ax_map: Mapping[str, Any], *, idx: int, seen: set[str])
 
 def _normalize_axis_type(ax_map: Mapping[str, Any], *, idx: int) -> str:
     ax_type = str(ax_map.get("type", "categorical")).strip().lower()
-    if ax_type not in {"categorical", "continuous"}:
+    if ax_type not in {"categorical", "ordinal", "continuous"}:
         raise InvalidRhsSpecError(
-            detail=f"axes[{idx}].type must be 'categorical' or 'continuous'"
+            detail=(
+                f"axes[{idx}].type must be 'categorical', 'ordinal', or 'continuous'"
+            )
         )
     return ax_type
 
@@ -92,13 +94,15 @@ def _normalize_axis_coords(
     if not isinstance(coords_obj, (list, tuple)) or not coords_obj:
         raise InvalidRhsSpecError(detail=f"axes[{idx}].coords must be a non-empty list")
     coords = list(coords_obj)
-    if ax_type == "categorical":
+    if ax_type in {"categorical", "ordinal"}:
         for j, v in enumerate(coords):
             if not isinstance(v, str) or not str(v).strip():
                 raise InvalidRhsSpecError(
                     detail=f"axes[{idx}].coords[{j}] must be a non-empty string"
                 )
             coords[j] = str(v).strip()
+        if len(set(coords)) != len(coords):
+            raise InvalidRhsSpecError(detail=f"axes[{idx}].coords must be unique")
         return coords, len(coords)
 
     for j, v in enumerate(coords):
@@ -228,8 +232,8 @@ def _normalize_single_axis(
         coords, resolved_size = _normalize_axis_coords(
             coords_obj, idx=idx, ax_type=ax_type
         )
-    elif ax_type == "categorical":
-        raise InvalidRhsSpecError(detail=f"axes[{idx}] categorical requires coords")
+    elif ax_type in {"categorical", "ordinal"}:
+        raise InvalidRhsSpecError(detail=f"axes[{idx}] {ax_type} requires coords")
     else:
         coords, resolved_size = _generate_continuous_coords(
             domain=domain, size_obj=size_obj, spacing=spacing, idx=idx
