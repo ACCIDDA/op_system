@@ -136,21 +136,21 @@ def test_normalize_rhs_preserves_reserved_blocks_in_meta() -> None:
     assert out.meta.get("sources") == {"S": "0.0"}
 
 
-def test_expr_template_expansion_and_sum_over() -> None:
-    """Templates over categorical axes expand state and equations; sum_over unrolls."""
+def test_expr_template_expansion_and_apply_along() -> None:
+    """Templates over categorical axes expand state and equations."""
     spec = {
         "kind": "expr",
         "axes": [{"name": "pop", "coords": ["p1", "p2"]}],
         "state": ["S[pop]", "I[pop]"],
         "equations": {
-            "S[pop]": "-beta * S[pop] * sum_over(pop=j, I[pop=j])",
-            "I[pop]": "beta * S[pop] * sum_over(pop=j, I[pop=j]) - gamma * I[pop]",
+            "S[pop]": "-beta * S[pop] * apply_along(pop=j, I[pop=j])",
+            "I[pop]": "beta * S[pop] * apply_along(pop=j, I[pop=j]) - gamma * I[pop]",
         },
     }
 
     out = normalize_expr_rhs(spec)
     assert set(out.state_names) == {"S__pop_p1", "S__pop_p2", "I__pop_p1", "I__pop_p2"}
-    # sum_over should be unrolled to explicit sums
+    # apply_along should be unrolled to explicit sums
     assert any("I__pop_p1" in eq and "I__pop_p2" in eq for eq in out.equations)
     assert out.param_names == ("beta", "gamma")
 
@@ -189,8 +189,8 @@ def test_alias_and_param_templates_expand_over_axes() -> None:
     assert set(out.param_names) == expected_params
 
 
-def test_sum_over_rejects_continuous_axis() -> None:
-    """sum_over on a continuous axis should raise an error."""
+def test_apply_along_kernel_sum_rejects_continuous_axis() -> None:
+    """apply_along(kernel=sum) on a continuous axis should raise an error."""
     spec = {
         "kind": "expr",
         "axes": [
@@ -202,14 +202,14 @@ def test_sum_over_rejects_continuous_axis() -> None:
             }
         ],
         "state": ["S[age]"],
-        "equations": {"S[age]": "-sum_over(age=i, S[age])"},
+        "equations": {"S[age]": "-apply_along(age=i, S[age=i], kernel=sum)"},
     }
-    with pytest.raises(ValueError, match=r"sum_over axis .* must be categorical"):
+    with pytest.raises(ValueError, match=r"requires categorical or ordinal axes"):
         normalize_expr_rhs(spec)
 
 
-def test_integrate_over_expands_with_continuous_deltas() -> None:
-    """integrate_over uses trapezoidal weights from continuous axis coords."""
+def test_apply_along_integrate_expands_with_continuous_deltas() -> None:
+    """apply_along uses trapezoidal weights from continuous axis coords."""
     spec = {
         "kind": "expr",
         "axes": [
@@ -222,7 +222,7 @@ def test_integrate_over_expands_with_continuous_deltas() -> None:
         "state": ["u[x]", "v"],
         "equations": {
             "u[x]": "0.0",
-            "v": "integrate_over(x=i, u[x=i])",
+            "v": "apply_along(x=i, u[x=i])",
         },
     }
 
@@ -239,8 +239,8 @@ def test_integrate_over_expands_with_continuous_deltas() -> None:
     assert "u__x_3_0" in eq_v
 
 
-def test_integrate_over_rejects_categorical_axis() -> None:
-    """integrate_over on a categorical axis should raise an error."""
+def test_apply_along_kernel_integrate_rejects_categorical_axis() -> None:
+    """apply_along(kernel=integrate) on a categorical axis should raise an error."""
     spec = {
         "kind": "expr",
         "axes": [
@@ -249,11 +249,11 @@ def test_integrate_over_rejects_categorical_axis() -> None:
                 "coords": ["a", "b"],
             }
         ],
-        "state": ["x"],
-        "equations": {"x": "integrate_over(g=i, x)"},
+        "state": ["x[g]"],
+        "equations": {"x[g]": "apply_along(g=i, x[g=i], kernel=integrate)"},
     }
 
-    with pytest.raises(ValueError, match=r"must be continuous"):
+    with pytest.raises(ValueError, match=r"requires continuous axes"):
         normalize_expr_rhs(spec)
 
 
@@ -1262,102 +1262,6 @@ def test_coord_shift_rejects_bad_arrow_syntax() -> None:
     }
     with pytest.raises(ValueError, match="from_coord -> to_coord"):
         normalize_transitions_rhs(spec)
-
-
-# sum_over IN filter tests
-# ---------------------------------------------------------------------------
-
-
-def test_sum_over_in_filter_subsets_coords() -> None:
-    """sum_over with IN filter sums only the listed coords."""
-    spec = {
-        "kind": "expr",
-        "axes": [{"name": "vax", "coords": ["u", "v", "w"]}],
-        "state": ["S[vax]"],
-        "equations": {
-            "S[vax]": "-S[vax]",
-        },
-        "aliases": {
-            "covered": "sum_over(vax=j IN [v, w], S[vax=j])",
-        },
-    }
-    out = normalize_expr_rhs(spec)
-    covered_eq = out.aliases["covered"]
-    # Only v and w should appear, not u
-    assert "S__vax_v" in covered_eq
-    assert "S__vax_w" in covered_eq
-    assert "S__vax_u" not in covered_eq
-
-
-def test_sum_over_no_filter_unchanged() -> None:
-    """sum_over without IN filter still expands over all coords."""
-    spec = {
-        "kind": "expr",
-        "axes": [{"name": "vax", "coords": ["u", "v", "w"]}],
-        "state": ["S[vax]"],
-        "equations": {"S[vax]": "-S[vax]"},
-        "aliases": {"N": "sum_over(vax=j, S[vax=j])"},
-    }
-    out = normalize_expr_rhs(spec)
-    n_eq = out.aliases["N"]
-    assert "S__vax_u" in n_eq
-    assert "S__vax_v" in n_eq
-    assert "S__vax_w" in n_eq
-
-
-def test_sum_over_in_filter_single_coord() -> None:
-    """sum_over IN filter with a single coord produces a single term."""
-    spec = {
-        "kind": "expr",
-        "axes": [{"name": "vax", "coords": ["u", "v", "w"]}],
-        "state": ["S[vax]"],
-        "equations": {"S[vax]": "-S[vax]"},
-        "aliases": {"just_u": "sum_over(vax=j IN [u], S[vax=j])"},
-    }
-    out = normalize_expr_rhs(spec)
-    eq = out.aliases["just_u"]
-    assert "S__vax_u" in eq
-    assert "S__vax_v" not in eq
-    assert "S__vax_w" not in eq
-
-
-def test_sum_over_in_filter_rejects_unknown_coord() -> None:
-    """sum_over IN filter with an unknown coord raises."""
-    spec = {
-        "kind": "expr",
-        "axes": [{"name": "vax", "coords": ["u", "v", "w"]}],
-        "state": ["S[vax]"],
-        "equations": {"S[vax]": "-S[vax]"},
-        "aliases": {"bad": "sum_over(vax=j IN [v, z], S[vax=j])"},
-    }
-    with pytest.raises(ValueError, match=r"unknown coord.*z.*vax"):
-        normalize_expr_rhs(spec)
-
-
-def test_sum_over_in_filter_rejects_empty_filter() -> None:
-    """sum_over IN [] with no coords raises."""
-    spec = {
-        "kind": "expr",
-        "axes": [{"name": "vax", "coords": ["u", "v", "w"]}],
-        "state": ["S[vax]"],
-        "equations": {"S[vax]": "-S[vax]"},
-        "aliases": {"bad": "sum_over(vax=j IN [], S[vax=j])"},
-    }
-    with pytest.raises(ValueError, match=r"IN filter.*empty"):
-        normalize_expr_rhs(spec)
-
-
-def test_sum_over_in_filter_rejects_duplicate_coord() -> None:
-    """sum_over IN filter with a repeated coord raises."""
-    spec = {
-        "kind": "expr",
-        "axes": [{"name": "vax", "coords": ["u", "v", "w"]}],
-        "state": ["S[vax]"],
-        "equations": {"S[vax]": "-S[vax]"},
-        "aliases": {"bad": "sum_over(vax=j IN [v, v], S[vax=j])"},
-    }
-    with pytest.raises(ValueError, match=r"duplicate coord"):
-        normalize_expr_rhs(spec)
 
 
 # ---------------------------------------------------------------------------
