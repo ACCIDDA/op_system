@@ -13,7 +13,6 @@ from __future__ import annotations
 import re
 
 import pytest
-
 from op_system._constraints import _ConstraintRule, _normalize_constraints
 from op_system.specs import (
     NormalizedRhs,
@@ -1310,6 +1309,146 @@ def test_initial_state_pinned_key_invalid_coord_rejected() -> None:
     }
     with pytest.raises(ValueError, match=r"pinned coord"):
         normalize_transitions_rhs(spec)
+
+
+# -- shaped initial_state values -----------------------------------------------
+
+
+def _shaped_ic_axes_spec() -> dict:
+    return {
+        "kind": "transitions",
+        "axes": [
+            {"name": "age", "coords": ["y", "o"]},
+            {"name": "vax", "coords": ["u", "v"]},
+            {"name": "imm", "coords": ["X0", "X1"]},
+        ],
+        "state": ["X[age,vax,imm]"],
+        "transitions": [
+            {"from": "X[age,vax,imm]", "to": "X[age,vax,imm]", "rate": "alpha"},
+        ],
+    }
+
+
+def test_initial_state_shaped_full_wildcards() -> None:
+    """Shaped IC over all-wildcard LHS records (name, axes, coords) per cell."""
+    spec = _shaped_ic_axes_spec()
+    spec["initial_state"] = {
+        "X[age,vax,imm]": {"shaped": "x_init", "axes": ["age", "vax", "imm"]},
+    }
+    out = normalize_transitions_rhs(spec)
+    ic = out.meta["initial_state"]
+    # 2 * 2 * 2 = 8 cells.
+    assert len(ic) == 8
+    entry = ic["X__age_y__vax_u__imm_X0"]
+    assert entry == {
+        "shaped": "x_init",
+        "axes": ("age", "vax", "imm"),
+        "coords": {"age": "y", "vax": "u", "imm": "X0"},
+    }
+    # Distinct cells get distinct coord assignments but share name + axes.
+    other = ic["X__age_o__vax_v__imm_X1"]
+    assert other["shaped"] == "x_init"
+    assert other["axes"] == ("age", "vax", "imm")
+    assert other["coords"] == {"age": "o", "vax": "v", "imm": "X1"}
+
+
+def test_initial_state_shaped_partial_with_pinned_axis() -> None:
+    """Shaped IC works when LHS pins one axis (covers a slice only)."""
+    spec = _shaped_ic_axes_spec()
+    spec["initial_state"] = {
+        "X[age,vax=u,imm]": {"shaped": "x_unvax_init", "axes": ["age", "imm"]},
+        "X[age,vax=v,imm]": {"shaped": "x_vax_init", "axes": ["age", "imm"]},
+    }
+    out = normalize_transitions_rhs(spec)
+    ic = out.meta["initial_state"]
+    assert len(ic) == 8
+    unvax = ic["X__age_y__vax_u__imm_X0"]
+    assert unvax["shaped"] == "x_unvax_init"
+    assert unvax["axes"] == ("age", "imm")
+    assert unvax["coords"] == {"age": "y", "imm": "X0"}
+    vax = ic["X__age_o__vax_v__imm_X1"]
+    assert vax["shaped"] == "x_vax_init"
+    assert vax["coords"] == {"age": "o", "imm": "X1"}
+
+
+def test_initial_state_shaped_axis_order_independent_of_lhs() -> None:
+    """Shaped axes preserve the user's declared order, not the LHS order."""
+    spec = _shaped_ic_axes_spec()
+    spec["initial_state"] = {
+        "X[age,vax,imm]": {"shaped": "x_init", "axes": ["imm", "age", "vax"]},
+    }
+    out = normalize_transitions_rhs(spec)
+    ic = out.meta["initial_state"]
+    entry = ic["X__age_y__vax_u__imm_X0"]
+    assert entry["axes"] == ("imm", "age", "vax")
+    assert entry["coords"] == {"age": "y", "vax": "u", "imm": "X0"}
+
+
+def test_initial_state_shaped_axis_not_bound_by_lhs_rejected() -> None:
+    """Shaped axes must all be wildcards or pinned coords on the LHS."""
+    spec = _shaped_ic_axes_spec()
+    spec["initial_state"] = {
+        # LHS has no `vax` token at all (ill-formed selector for the X
+        # state, but exercised here only to confirm the missing-axis error
+        # path; expand_selector will reject the LHS first if X requires vax.)
+        "X[age,imm]": {"shaped": "x_init", "axes": ["age", "vax", "imm"]},
+    }
+    with pytest.raises(ValueError):
+        normalize_transitions_rhs(spec)
+
+
+def test_initial_state_shaped_unknown_axis_rejected() -> None:
+    spec = _shaped_ic_axes_spec()
+    spec["initial_state"] = {
+        "X[age,vax,imm]": {"shaped": "x_init", "axes": ["age", "bogus"]},
+    }
+    with pytest.raises(ValueError, match=r"shaped axis 'bogus' not defined"):
+        normalize_transitions_rhs(spec)
+
+
+def test_initial_state_shaped_missing_name_rejected() -> None:
+    spec = _shaped_ic_axes_spec()
+    spec["initial_state"] = {
+        "X[age,vax,imm]": {"axes": ["age", "vax", "imm"]},
+    }
+    with pytest.raises(ValueError, match=r"shaped"):
+        normalize_transitions_rhs(spec)
+
+
+def test_initial_state_shaped_unknown_key_rejected() -> None:
+    spec = _shaped_ic_axes_spec()
+    spec["initial_state"] = {
+        "X[age,vax,imm]": {
+            "shaped": "x_init",
+            "axes": ["age", "vax", "imm"],
+            "shape": [2, 2, 2],
+        },
+    }
+    with pytest.raises(ValueError, match=r"unknown"):
+        normalize_transitions_rhs(spec)
+
+
+def test_initial_state_shaped_and_scalar_mixed() -> None:
+    """A spec may freely mix scalar and shaped IC entries across compartments."""
+    spec = {
+        "kind": "transitions",
+        "axes": [
+            {"name": "age", "coords": ["y", "o"]},
+            {"name": "vax", "coords": ["u", "v"]},
+        ],
+        "state": ["S[age,vax]", "I[age,vax]"],
+        "transitions": [
+            {"from": "S[age,vax]", "to": "I[age,vax]", "rate": "alpha"},
+        ],
+        "initial_state": {
+            "S[age,vax]": {"shaped": "s_init", "axes": ["age", "vax"]},
+            "I[age,vax]": "i_init",
+        },
+    }
+    out = normalize_transitions_rhs(spec)
+    ic = out.meta["initial_state"]
+    assert ic["S__age_y__vax_u"]["shaped"] == "s_init"
+    assert ic["I__age_y__vax_u"] == "i_init"
 
 
 def test_transitions_pinned_from_endpoint_expands_correctly() -> None:

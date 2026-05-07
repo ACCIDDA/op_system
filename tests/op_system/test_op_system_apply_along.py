@@ -16,7 +16,6 @@ derived from the axis ``deltas``).  These tests cover:
 from __future__ import annotations
 
 import pytest
-
 from op_system.specs import normalize_expr_rhs
 
 
@@ -211,7 +210,13 @@ def test_apply_along_inside_arithmetic_expression() -> None:
 
 
 def test_apply_along_nested_inside_apply_along() -> None:
-    """Nested apply_along calls should expand correctly to a flat product."""
+    """Nested apply_along calls should expand to canonical-order state names.
+
+    Even though the inner ``apply_along`` binds ``vax`` first and the outer
+    binds ``age``, the resulting bracket-collapsed names must follow the
+    canonical axis order taken from the spec's ``axes:`` list, so they
+    match what ``state: ["I[age, vax]"]`` produces directly.
+    """
     spec = {
         "kind": "expr",
         "axes": [
@@ -226,11 +231,40 @@ def test_apply_along_nested_inside_apply_along() -> None:
     }
     out = normalize_expr_rhs(spec)
     eq_n = out.equations[-1]
-    # Nested expansion consumes the inner-bound axis first, so suffix order
-    # follows binding order (vax then age) rather than bracket order.
     for a in ("y", "o"):
         for v in ("u", "v"):
-            assert f"I__vax_{v}__age_{a}" in eq_n
+            assert f"I__age_{a}__vax_{v}" in eq_n
+            # The reversed (binding-order) form should not appear.
+            assert f"I__vax_{v}__age_{a}" not in eq_n
+
+
+def test_apply_along_nested_three_axes_canonical_order() -> None:
+    """Triple-nested apply_along should still produce canonical-order names."""
+    spec = {
+        "kind": "expr",
+        "axes": [
+            {"name": "age", "coords": ["y", "o"]},
+            {"name": "vax", "coords": ["u", "v"]},
+            {"name": "imm", "type": "ordinal", "coords": ["x0", "x1"]},
+        ],
+        "state": ["X[age, vax, imm]", "N"],
+        "equations": {
+            "X[age, vax, imm]": "0.0",
+            # Inner-most binds imm, middle binds vax, outer binds age — the
+            # exact pathological pattern that triggered the SMH R19 KeyError.
+            "N": (
+                "apply_along(age=a, "
+                "apply_along(vax=b, "
+                "apply_along(imm=k, X[age=a, vax=b, imm=k])))"
+            ),
+        },
+    }
+    out = normalize_expr_rhs(spec)
+    eq_n = out.equations[-1]
+    for a in ("y", "o"):
+        for v in ("u", "v"):
+            for k in ("x0", "x1"):
+                assert f"X__age_{a}__vax_{v}__imm_{k}" in eq_n
 
 
 def test_apply_along_categorical_filter_subsets_coords() -> None:

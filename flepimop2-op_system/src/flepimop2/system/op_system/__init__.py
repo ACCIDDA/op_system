@@ -108,11 +108,22 @@ class OpSystemSystem(ModuleModel, SystemABC):  # noqa: D101
 
         operators = self._extract_operators(compiled)
         operator_axis = self._extract_operator_axis(compiled)
+        # Preserve the user-declared coordinate labels (typically strings
+        # like ``unvaccinated`` / ``age65to100``) alongside the numeric
+        # ``axis_coords`` arrays.  Engine plugins use this to translate
+        # shaped-IC coord assignments back to integer indices.
+        axis_labels: dict[str, tuple[str, ...]] = {}
+        for ax in compiled.meta.get("axes", []) or []:
+            name = ax.get("name")
+            coords = ax.get("coords")
+            if isinstance(name, str) and isinstance(coords, (list, tuple)):
+                axis_labels[name] = tuple(str(c) for c in coords)
         self.options = {
             **dict(self.options or {}),
             "axis_order": axes_meta.axis_order,
             "axis_sizes": axes_meta.axis_sizes,
             "axis_coords": axes_meta.axis_coords,
+            "axis_labels": axis_labels,
             "state_names": compiled.state_names,
             "initial_state": compiled.meta.get("initial_state"),
             "state_shape": shape_dims,
@@ -194,10 +205,38 @@ class OpSystemSystem(ModuleModel, SystemABC):  # noqa: D101
                 continue
             requests[name] = ParameterRequest(name=name)
         init_map = (self.options or {}).get("initial_state") or {}
-        for param_name in init_map.values():
-            if param_name in requests:
-                continue
-            requests[param_name] = ParameterRequest(name=param_name)
+        for entry in init_map.values():
+            if isinstance(entry, str):
+                # Scalar IC entry: a single shared parameter.
+                if entry in requests:
+                    continue
+                requests[entry] = ParameterRequest(name=entry)
+            elif isinstance(entry, Mapping) and "shaped" in entry:
+                # Shaped IC entry: one ParameterRequest per (name, axes)
+                # tuple, requested with the declared shape so the engine
+                # can index into it per state cell using `entry["coords"]`.
+                shaped_name = entry["shaped"]
+                shaped_axes = tuple(entry.get("axes", ()))
+                existing = requests.get(shaped_name)
+                if existing is not None:
+                    if tuple(existing.axes) != shaped_axes:
+                        raise ValueError(
+                            f"initial_state shaped entry for "
+                            f"{shaped_name!r} declares axes "
+                            f"{shaped_axes!r} but the same name was "
+                            f"already requested with axes "
+                            f"{tuple(existing.axes)!r}"
+                        )
+                    continue
+                requests[shaped_name] = ParameterRequest(
+                    name=shaped_name, axes=shaped_axes
+                )
+            else:
+                raise ValueError(
+                    f"initial_state entry has unexpected type "
+                    f"{type(entry).__name__!r}; expected a parameter name "
+                    "string or a shaped-entry mapping"
+                )
         # Operator velocity/rate fields are consumed by engine plugins (not by
         # the compiled rhs eval_fn), but still need to be in the params dict.
         for op in self._compiled_rhs.meta.get("operators") or ():
