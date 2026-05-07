@@ -22,7 +22,11 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
-from op_system._axes import _normalize_axes, _normalize_bracket_key
+from op_system._axes import (
+    _compute_axis_deltas,
+    _normalize_axes,
+    _normalize_bracket_key,
+)
 from op_system._errors import InvalidRhsSpecError, UnsupportedFeatureError
 from op_system._helpers import (
     _ensure_mapping,
@@ -1079,14 +1083,18 @@ def _split_top_level_commas(s: str) -> list[str]:
 
 _KERNEL_KW_RE = re.compile(r"^kernel\s*=\s*(.+)$", re.DOTALL)
 _AXIS_BIND_RE = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.+)$", re.DOTALL)
+_AXIS_FILTER_RE = re.compile(
+    r"^([A-Za-z_][A-Za-z0-9_]*)\s+in\s+\[([^\[\]]*)\]\s*$",
+    re.IGNORECASE | re.DOTALL,
+)
 _APPLY_ALONG_KERNELS = frozenset({"sum", "integrate"})
 
 
-def _parse_apply_along_args(  # noqa: C901
+def _parse_apply_along_args(  # noqa: C901, PLR0912
     args_str: str,
     *,
     axis_names: set[str],
-) -> tuple[list[tuple[str, str]], str | None, str]:
+) -> tuple[list[tuple[str, str, list[str] | None]], str | None, str]:
     """Parse the argument list of an ``apply_along(...)`` call.
 
     Args:
@@ -1096,22 +1104,24 @@ def _parse_apply_along_args(  # noqa: C901
 
     Returns:
         Tuple ``(axis_bindings, kernel_form, inner_expr)`` where
-        ``axis_bindings`` is a list of ``(axis_name, var_name)`` pairs in
-        declaration order, ``kernel_form`` is ``"sum"``, ``"integrate"``
-        or ``None`` (meaning auto-select from axis types), and
-        ``inner_expr`` is the bound inner expression.
+        ``axis_bindings`` is a list of ``(axis_name, var_name, filter)``
+        triples in declaration order.  ``filter`` is the optional list of
+        coord names parsed from ``axis=var in [c1, c2, ...]``, or ``None``
+        if the binding takes the full axis.  ``kernel_form`` is ``"sum"``,
+        ``"integrate"`` or ``None`` (meaning auto-select from axis types),
+        and ``inner_expr`` is the bound inner expression.
 
     Raises:
         InvalidRhsSpecError: If the argument list is malformed (no args,
             empty arg, duplicate ``kernel=``, unknown kernel name, missing
-            axis bindings, non-identifier var name, or wrong number of
-            inner expressions).
+            axis bindings, non-identifier var name, empty filter list, or
+            wrong number of inner expressions).
     """
     parts = _split_top_level_commas(args_str)
     if not parts or all(not p for p in parts):
         raise InvalidRhsSpecError(detail="apply_along(...) requires arguments")
 
-    bindings: list[tuple[str, str]] = []
+    bindings: list[tuple[str, str, list[str] | None]] = []
     kernel_form: str | None = None
     inner_parts: list[str] = []
 
@@ -1137,7 +1147,21 @@ def _parse_apply_along_args(  # noqa: C901
         bm = _AXIS_BIND_RE.match(part)
         if bm is not None and bm.group(1) in axis_names:
             ax_name = bm.group(1)
-            var_name = bm.group(2).strip()
+            rhs = bm.group(2).strip()
+            fm = _AXIS_FILTER_RE.match(rhs)
+            if fm is not None:
+                var_name = fm.group(1).strip()
+                filter_coords = [c.strip() for c in fm.group(2).split(",") if c.strip()]
+                if not filter_coords:
+                    raise InvalidRhsSpecError(
+                        detail=(
+                            f"apply_along(...) axis filter {ax_name}={var_name} "
+                            "in [...] requires at least one coord"
+                        )
+                    )
+            else:
+                var_name = rhs
+                filter_coords = None
             if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", var_name):
                 raise InvalidRhsSpecError(
                     detail=(
@@ -1145,7 +1169,7 @@ def _parse_apply_along_args(  # noqa: C901
                         "must bind to an identifier"
                     )
                 )
-            bindings.append((ax_name, var_name))
+            bindings.append((ax_name, var_name, filter_coords))
             continue
         inner_parts.append(part)
 
@@ -1164,7 +1188,7 @@ def _parse_apply_along_args(  # noqa: C901
 
 
 def _select_apply_along_kernel(
-    bindings: list[tuple[str, str]],
+    bindings: list[tuple[str, str, list[str] | None]],
     kernel_form: str | None,
     *,
     axes: list[dict[str, Any]],
@@ -1182,9 +1206,9 @@ def _select_apply_along_kernel(
     axis_types: dict[str, str] = {
         str(ax.get("name")): str(ax.get("type", "")) for ax in axes
     }
-    types = {axis_types.get(ax) for ax, _ in bindings}
+    types = {axis_types.get(ax) for ax, _, _ in bindings}
     if kernel_form == "sum":
-        bad = [ax for ax, _ in bindings if axis_types.get(ax) != "categorical"]
+        bad = [ax for ax, _, _ in bindings if axis_types.get(ax) != "categorical"]
         if bad:
             raise InvalidRhsSpecError(
                 detail=(
@@ -1194,7 +1218,7 @@ def _select_apply_along_kernel(
             )
         return "sum"
     if kernel_form == "integrate":
-        bad = [ax for ax, _ in bindings if axis_types.get(ax) != "continuous"]
+        bad = [ax for ax, _, _ in bindings if axis_types.get(ax) != "continuous"]
         if bad:
             raise InvalidRhsSpecError(
                 detail=(
@@ -1257,6 +1281,125 @@ def _substitute_apply_along_brackets(expr: str, bound: Mapping[str, str]) -> str
     return pat.sub(_sub, expr)
 
 
+def _build_apply_along_axis_options(
+    ax_name: str,
+    filt: list[str] | None,
+    *,
+    kernel: str,
+    axis: dict[str, Any],
+) -> list[tuple[str, float]]:
+    """Build the per-axis ``(coord, weight)`` list for one apply_along binding.
+
+    Filter semantics depend on axis type:
+
+    - **Categorical**: ``filt`` is the explicit list of coord names to retain.
+      Unknown coords are rejected.
+    - **Continuous**: ``filt`` is interpreted as the closed sub-interval
+      endpoints ``[lo, hi]`` (must be exactly two numeric values).  All axis
+      coords ``c`` with ``lo <= c <= hi`` are retained, and trapezoidal
+      weights are recomputed for that sub-interval.
+
+    Args:
+        ax_name: Name of the bound axis.
+        filt: Optional ``in [...]`` filter; ``None`` for full axis.
+        kernel: ``"sum"`` or ``"integrate"``.
+        axis: The axis dict from the normalized spec.
+
+    Returns:
+        List of ``(coord_str, weight)`` pairs to be combined under ``product``.
+
+    Raises:
+        InvalidRhsSpecError: If the axis has no coords; if a categorical
+            filter lists an unknown coord; if a continuous-axis filter is not
+            a 2-element ``[lo, hi]`` pair, has ``lo > hi``, or selects no
+            axis coords; or if a continuous axis is missing trapezoidal
+            ``deltas``.
+    """
+    coords = [str(c) for c in axis.get("coords", [])]
+    if not coords:
+        raise InvalidRhsSpecError(detail=f"apply_along axis {ax_name!r} has no coords")
+    is_continuous = str(axis.get("type", "")) == "continuous"
+    if kernel != "integrate":
+        if filt is None:
+            return [(c, 1.0) for c in coords]
+        if is_continuous:
+            sub_coords = _continuous_subinterval_coords(ax_name, coords, filt)
+            return [(c, 1.0) for c in sub_coords]
+        unknown = [c for c in filt if c not in coords]
+        if unknown:
+            raise InvalidRhsSpecError(
+                detail=(
+                    f"apply_along axis {ax_name!r} filter has unknown coords: {unknown}"
+                )
+            )
+        return [(c, 1.0) for c in filt]
+    deltas = axis.get("deltas") or []
+    if len(deltas) != len(coords):
+        raise InvalidRhsSpecError(
+            detail=f"apply_along axis {ax_name!r} missing or mismatched deltas"
+        )
+    if filt is None:
+        return [(c, float(d)) for c, d in zip(coords, deltas, strict=True)]
+    sub_coords = _continuous_subinterval_coords(ax_name, coords, filt)
+    sub_floats = [float(c) for c in sub_coords]
+    sub_deltas = _compute_axis_deltas(sub_floats, idx=0)
+    return list(zip(sub_coords, sub_deltas, strict=True))
+
+
+def _continuous_subinterval_coords(
+    ax_name: str, coords: list[str], filt: list[str]
+) -> list[str]:
+    """Resolve a continuous-axis ``in [lo, hi]`` filter to retained coord strings.
+
+    Args:
+        ax_name: Name of the bound axis (used in error messages).
+        coords: All axis coords as strings, in axis order.
+        filt: Filter list parsed from the spec; must contain exactly two
+            numeric values ``[lo, hi]`` with ``lo <= hi``.
+
+    Returns:
+        List of coord strings (in axis order) for which ``lo <= c <= hi``.
+
+    Raises:
+        InvalidRhsSpecError: If ``filt`` is not a 2-element list, the
+            endpoints are not numeric, ``lo > hi``, or no axis coord falls in
+            the closed interval ``[lo, hi]``.
+    """
+    if len(filt) != 2:
+        raise InvalidRhsSpecError(
+            detail=(
+                f"apply_along axis {ax_name!r} continuous filter must be a "
+                f"2-element [lo, hi] interval (got {len(filt)} entries)"
+            )
+        )
+    try:
+        lo = float(filt[0])
+        hi = float(filt[1])
+    except ValueError as exc:
+        raise InvalidRhsSpecError(
+            detail=(
+                f"apply_along axis {ax_name!r} continuous filter endpoints must "
+                f"be numeric (got {filt!r})"
+            )
+        ) from exc
+    if lo > hi:
+        raise InvalidRhsSpecError(
+            detail=(
+                f"apply_along axis {ax_name!r} continuous filter endpoints must "
+                f"satisfy lo <= hi (got [{lo}, {hi}])"
+            )
+        )
+    sub = [c for c in coords if lo <= float(c) <= hi]
+    if not sub:
+        raise InvalidRhsSpecError(
+            detail=(
+                f"apply_along axis {ax_name!r} continuous filter [{lo}, {hi}] "
+                "selects no axis coords"
+            )
+        )
+    return sub
+
+
 def _expand_apply_along(expr: str, *, axes: list[dict[str, Any]]) -> str:  # noqa: PLR0914
     """Expand ``apply_along(...)`` calls directly to weighted sums.
 
@@ -1267,12 +1410,14 @@ def _expand_apply_along(expr: str, *, axes: list[dict[str, Any]]) -> str:  # noq
     expansion, so ``name[ax1=c1, ax2=c2, ...]`` brackets that fully bind
     apply_along axes collapse to ``name__ax1_<c1>__ax2_<c2>``.
 
+    A binding may restrict expansion to a subset of an axis with the
+    ``axis=var in [c1, c2, ...]`` form.  For categorical axes the listed
+    coords just filter the expansion set.  For continuous axes the listed
+    coords must be a contiguous slice of the axis coords (in axis order),
+    and trapezoidal weights are recomputed for that sub-interval.
+
     Returns:
         Expression string with ``apply_along`` calls fully expanded.
-
-    Raises:
-        InvalidRhsSpecError: If a bound axis has no coords, or if a
-            continuous axis is missing trapezoidal ``deltas``.
     """
     axis_lookup = {str(ax.get("name")): ax for ax in axes if ax.get("name")}
     out = expr
@@ -1290,34 +1435,20 @@ def _expand_apply_along(expr: str, *, axes: list[dict[str, Any]]) -> str:  # noq
         # inner expression for substitution.
         inner = _expand_apply_along(inner, axes=axes)
 
-        # Build per-axis (coord, weight) lists.
-        axis_options: list[list[tuple[str, float]]] = []
-        for ax_name, _var in bindings:
-            ax = axis_lookup[ax_name]
-            coords = [str(c) for c in ax.get("coords", [])]
-            if not coords:
-                raise InvalidRhsSpecError(
-                    detail=f"apply_along axis {ax_name!r} has no coords"
-                )
-            if kernel == "integrate":
-                deltas = ax.get("deltas") or []
-                if len(deltas) != len(coords):
-                    raise InvalidRhsSpecError(
-                        detail=(
-                            f"apply_along axis {ax_name!r} missing or mismatched deltas"
-                        )
-                    )
-                axis_options.append([
-                    (c, float(d)) for c, d in zip(coords, deltas, strict=True)
-                ])
-            else:
-                axis_options.append([(c, 1.0) for c in coords])
+        axis_options = [
+            _build_apply_along_axis_options(
+                ax_name, filt, kernel=kernel, axis=axis_lookup[ax_name]
+            )
+            for ax_name, _var, filt in bindings
+        ]
 
         terms: list[str] = []
         for combo in product(*axis_options):
             replaced = inner
             bound: dict[str, str] = {}
-            for (ax_name, var_name), (coord, _w) in zip(bindings, combo, strict=True):
+            for (ax_name, var_name, _filt), (coord, _w) in zip(
+                bindings, combo, strict=True
+            ):
                 replaced = re.sub(rf"\b{re.escape(var_name)}\b", coord, replaced)
                 bound[ax_name] = coord
             replaced = _substitute_apply_along_brackets(replaced, bound)

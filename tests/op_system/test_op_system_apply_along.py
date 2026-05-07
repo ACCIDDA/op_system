@@ -231,3 +231,116 @@ def test_apply_along_nested_inside_apply_along() -> None:
     for a in ("y", "o"):
         for v in ("u", "v"):
             assert f"I__vax_{v}__age_{a}" in eq_n
+
+
+def test_apply_along_categorical_filter_subsets_coords() -> None:
+    """`axis=var in [c1, c2]` should restrict expansion to the listed coords."""
+    spec = {
+        "kind": "expr",
+        "axes": [{"name": "vax", "coords": ["u", "v", "w"]}],
+        "state": ["pop[vax]", "covered"],
+        "equations": {
+            "pop[vax]": "0.0",
+            "covered": "apply_along(vax=j in [v, w], pop[vax=j])",
+        },
+    }
+    out = normalize_expr_rhs(spec)
+    eq = out.equations[-1]
+    assert "pop__vax_v" in eq
+    assert "pop__vax_w" in eq
+    assert "pop__vax_u" not in eq
+
+
+def test_apply_along_continuous_filter_recomputes_trapezoidal_deltas() -> None:
+    """A `[lo, hi]` filter on a continuous axis should re-trapezoid weights."""
+    spec = {
+        "kind": "expr",
+        "axes": [
+            {"name": "x", "type": "continuous", "coords": [0.0, 1.0, 3.0, 4.0]},
+        ],
+        "state": ["u[x]", "v"],
+        "equations": {
+            "u[x]": "0.0",
+            "v": "apply_along(x=i in [1.0, 4.0], u[x=i])",
+        },
+    }
+    out = normalize_expr_rhs(spec)
+    eq = out.equations[-1]
+    # Sub-interval coords [1.0, 3.0, 4.0] -> trapezoidal weights [1.0, 1.5, 0.5]
+    assert "u__x_1_0" in eq
+    assert "u__x_3_0" in eq
+    assert "u__x_4_0" in eq
+    assert "u__x_0_0" not in eq
+    assert "1.5" in eq  # interior sub-interval weight
+    assert "0.5" in eq  # right endpoint sub-interval weight
+
+
+def test_apply_along_continuous_filter_requires_two_endpoints() -> None:
+    """A continuous-axis filter must be exactly `[lo, hi]`."""
+    spec = {
+        "kind": "expr",
+        "axes": [
+            {"name": "x", "type": "continuous", "coords": [0.0, 1.0, 3.0, 4.0]},
+        ],
+        "state": ["u[x]", "v"],
+        "equations": {
+            "u[x]": "0.0",
+            "v": "apply_along(x=i in [0.0, 1.0, 3.0], u[x=i])",
+        },
+    }
+    with pytest.raises(Exception, match="2-element"):
+        normalize_expr_rhs(spec)
+
+
+def test_apply_along_continuous_filter_empty_subinterval_errors() -> None:
+    """A continuous-axis filter that selects no axis coords should be rejected."""
+    spec = {
+        "kind": "expr",
+        "axes": [
+            {"name": "x", "type": "continuous", "coords": [0.0, 1.0, 3.0, 4.0]},
+        ],
+        "state": ["u[x]", "v"],
+        "equations": {
+            "u[x]": "0.0",
+            "v": "apply_along(x=i in [1.5, 2.5], u[x=i])",
+        },
+    }
+    with pytest.raises(Exception, match="selects no axis coords"):
+        normalize_expr_rhs(spec)
+
+
+def test_apply_along_filter_unknown_coord_errors() -> None:
+    """A filter that lists an unknown coord should be rejected."""
+    spec = {
+        "kind": "expr",
+        "axes": [{"name": "vax", "coords": ["u", "v", "w"]}],
+        "state": ["pop[vax]", "covered"],
+        "equations": {
+            "pop[vax]": "0.0",
+            "covered": "apply_along(vax=j in [v, x], pop[vax=j])",
+        },
+    }
+    with pytest.raises(Exception, match="unknown coords"):
+        normalize_expr_rhs(spec)
+
+
+def test_apply_along_filter_mixed_with_full_axis_in_multi_binding() -> None:
+    """A multi-axis call may filter one axis and leave another unfiltered."""
+    spec = {
+        "kind": "expr",
+        "axes": [
+            {"name": "age", "coords": ["y", "o"]},
+            {"name": "vax", "coords": ["u", "v", "w"]},
+        ],
+        "state": ["I[age, vax]", "N"],
+        "equations": {
+            "I[age, vax]": "0.0",
+            "N": "apply_along(age=a, vax=b in [v, w], I[age=a, vax=b])",
+        },
+    }
+    out = normalize_expr_rhs(spec)
+    eq = out.equations[-1]
+    for a in ("y", "o"):
+        for v in ("v", "w"):
+            assert f"I__age_{a}__vax_{v}" in eq
+        assert f"I__age_{a}__vax_u" not in eq
