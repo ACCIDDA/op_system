@@ -459,3 +459,95 @@ def test_option_initial_state_templated() -> None:
         "S__vax_v": "S0__vax_v",
         "D": "D0",
     }
+
+
+def test_requested_parameters_returns_compiled_param_names(
+    sir_spec: dict[str, object],
+) -> None:
+    """Every name in compiled.param_names becomes a scalar ParameterRequest."""
+    from flepimop2.axis import AxisCollection
+    from flepimop2.parameter.abc import ParameterRequest
+
+    sys = OpSystemSystem(spec=sir_spec)
+    requests = sys.requested_parameters(AxisCollection())
+    assert set(requests.keys()) == {"beta", "gamma"}
+    assert all(isinstance(r, ParameterRequest) for r in requests.values())
+    assert all(r.axes == () for r in requests.values())
+    assert all(not r.broadcast for r in requests.values())
+
+
+def test_requested_parameters_includes_initial_state_seeds() -> None:
+    """Seed parameter names appear in requested_parameters even if absent from rates."""
+    from flepimop2.axis import AxisCollection
+
+    spec: dict[str, object] = {
+        "kind": "transitions",
+        "axes": [{"name": "vax", "coords": ["u", "v"]}],
+        "state": ["S[vax]", "D"],
+        "transitions": [
+            {"from": "S[vax]", "to": "D", "rate": "mu"},
+        ],
+        "initial_state": {"S[vax]": "S0[vax]", "D": "D0"},
+    }
+    sys = OpSystemSystem(spec=spec)
+    names = set(sys.requested_parameters(AxisCollection()).keys())
+    # Rate-expression params + per-coord-expanded seed names + scalar D0
+    assert {"mu", "S0__vax_u", "S0__vax_v", "D0"} <= names
+
+
+def test_requested_parameters_excludes_mixing_kernels() -> None:
+    """Mixing-kernel names are computed internally, not requested from configuration."""
+    from flepimop2.axis import AxisCollection
+
+    spec: dict[str, object] = {
+        "kind": "expr",
+        "axes": [{"name": "loc", "coords": ["0", "1"]}],
+        "kernels": [
+            {
+                "name": "contact",
+                "form": "gaussian",
+                "params": {"scale": 1.0, "sigma": 0.5},
+            },
+        ],
+        "state": ["S[loc]"],
+        "equations": {"S[loc]": "-S[loc]"},
+    }
+    sys = OpSystemSystem(spec=spec)
+    requested = set(sys.requested_parameters(AxisCollection()).keys())
+    assert "contact" not in requested
+
+
+def test_model_state_is_empty_specification(sir_spec: dict[str, object]) -> None:
+    """model_state returns an empty ModelStateSpecification (engine assembles state)."""
+    from flepimop2.axis import AxisCollection
+    from flepimop2.parameter.abc import ModelStateSpecification
+
+    sys = OpSystemSystem(spec=sir_spec)
+    spec = sys.model_state(AxisCollection())
+    assert isinstance(spec, ModelStateSpecification)
+    assert spec.parameter_names == ()
+
+
+def test_requested_parameters_includes_operator_velocity() -> None:
+    """Operator velocity/rate parameter symbols are surfaced for engine plugins."""
+    from flepimop2.axis import AxisCollection
+
+    spec: dict[str, object] = {
+        "kind": "transitions",
+        "axes": [{"name": "k", "coords": ["0", "1", "2"]}],
+        "state": ["X[k]"],
+        "transitions": [
+            {"from": "X[k]", "to": "X[k]", "rate": "0.0"},
+        ],
+        "operators": [
+            {
+                "kind": "advection",
+                "axis": "k",
+                "bc": "absorbing",
+                "velocity": "waning_rate",
+            },
+        ],
+    }
+    sys = OpSystemSystem(spec=spec)
+    requested = set(sys.requested_parameters(AxisCollection()).keys())
+    assert "waning_rate" in requested

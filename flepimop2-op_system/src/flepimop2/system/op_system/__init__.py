@@ -34,6 +34,7 @@ from typing import (
     TYPE_CHECKING,
     Any,
     Literal,
+    Mapping,
     NamedTuple,
     SupportsFloat,
     SupportsIndex,
@@ -41,7 +42,9 @@ from typing import (
 )
 
 import numpy as np
+from flepimop2.axis import AxisCollection
 from flepimop2.configuration import ModuleModel
+from flepimop2.parameter.abc import ModelStateSpecification, ParameterRequest
 from flepimop2.system.abc import SystemABC
 from flepimop2.typing import (
     IdentifierString,
@@ -148,8 +151,99 @@ class OpSystemSystem(ModuleModel, SystemABC):  # noqa: D101
     def _bind_impl(
         self, params: dict[IdentifierString, Any] | None = None
     ) -> SystemProtocol:
-        """Return a stepper with any static parameters partially applied."""
-        return functools.partial(self._stepper, **(params or {}))
+        """Return a stepper with any static parameters partially applied.
+
+        The returned callable additionally exposes ``option(name, default=...)``
+        so that engine plugins (notably the diffrax wrapper engine) can read
+        compiled metadata — ``state_names``, ``initial_state`` map, axis
+        order/coords/sizes, declared operators, etc. — from the bound
+        stepper.  This bridges the WrapperEngine contract (which only forwards
+        the bound callable, not the System object) with op_system's need to
+        publish per-spec layout information to its consumers.
+        """
+        bound = functools.partial(self._stepper, **(params or {}))
+        bound.option = self.option  # type: ignore[attr-defined]
+        return cast("SystemProtocol", bound)
+
+    @override
+    def requested_parameters(
+        self,
+        axes: AxisCollection,  # noqa: ARG002
+    ) -> dict[IdentifierString, ParameterRequest]:
+        """Declare the scalar parameters consumed by the compiled RHS.
+
+        Returns:
+            Mapping of parameter name to a scalar `ParameterRequest`.
+
+        Notes:
+            op_system rewrites axis-indexed selectors like ``theta[imm]`` into
+            per-coord scalar names (``theta__imm_X0`` ...) at compile time, so
+            every entry in `compiled.param_names` is requested as a scalar.
+            Initial-state seed names (referenced from `meta['initial_state']`
+            but not necessarily from any rate expression) are also requested
+            so engine plugins can assemble the state vector from `params`.
+            Mixing-kernel names are computed internally and excluded.
+        """
+        requests: dict[IdentifierString, ParameterRequest] = {}
+        mixing_kernel_names = set((self.options or {}).get("mixing_kernels", {}).keys())
+        # Names provided by the compiled-RHS runtime environment, not by config
+        # (numpy/jax namespace, simulation time, and built-in summation helpers).
+        builtin_names = {"np", "t", "sum_state", "sum_prefix"}
+        for name in self._compiled_rhs.param_names:
+            if name in mixing_kernel_names or name in builtin_names or name in requests:
+                continue
+            requests[name] = ParameterRequest(name=name)
+        init_map = (self.options or {}).get("initial_state") or {}
+        for param_name in init_map.values():
+            if param_name in requests:
+                continue
+            requests[param_name] = ParameterRequest(name=param_name)
+        # Operator velocity/rate fields are consumed by engine plugins (not by
+        # the compiled rhs eval_fn), but still need to be in the params dict.
+        for op in self._compiled_rhs.meta.get("operators") or ():
+            for field in ("velocity", "rate"):
+                value = op.get(field) if isinstance(op, Mapping) else None
+                if isinstance(value, str) and value.isidentifier():
+                    if value in requests or value == "t":
+                        continue
+                    requests[value] = ParameterRequest(name=value)
+            kernel = op.get("kernel") if isinstance(op, Mapping) else None
+            if isinstance(kernel, Mapping):
+                kernel_params = kernel.get("params")
+                if isinstance(kernel_params, Mapping):
+                    for value in kernel_params.values():
+                        if (
+                            isinstance(value, str)
+                            and value.isidentifier()
+                            and value not in requests
+                        ):
+                            requests[value] = ParameterRequest(name=value)
+        return requests
+
+    @override
+    def model_state(  # noqa: PLR6301
+        self,
+        axes: AxisCollection,  # noqa: ARG002
+    ) -> ModelStateSpecification | None:
+        """Declare an empty model-state specification.
+
+        Returns:
+            An empty `ModelStateSpecification`.
+
+        Notes:
+            op_system's compartment vector is not assembled by flepimop2 from
+            `ModelStateSpecification.parameter_names` because seed parameters
+            are reused across many state cells (e.g. one ``zero_init`` for
+            every empty compartment), which `ModelStateSpecification` forbids
+            (`parameter_names must be unique`).  Engine plugins instead
+            consume ``system.options['initial_state']`` (a
+            ``state_name -> param_name`` map) together with the resolved
+            ``params`` dict to build the state vector themselves.  Returning
+            an empty specification here just keeps the simulator's resolve
+            path satisfied without claiming an assembly contract op_system
+            does not own.
+        """
+        return ModelStateSpecification(parameter_names=())
 
     @staticmethod
     def _extract_axes_meta(compiled: CompiledRhs) -> _AxesMeta:
