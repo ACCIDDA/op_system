@@ -11,10 +11,9 @@ Covers:
 from __future__ import annotations
 
 import numpy as np
-import pytest
 
 from op_system._vectorize import build_vector_plan
-from op_system.compile import compile_rhs
+from op_system.compile import _make_eval_fn, compile_rhs
 from op_system.specs import normalize_rhs
 
 
@@ -68,11 +67,19 @@ def _sir_templated_param_spec() -> dict[str, object]:
 
 def _eval_equal(spec: dict[str, object], **call_params: float) -> None:
     rhs = normalize_rhs(spec)
-    c_s = compile_rhs(rhs, xp=np)
-    c_v = compile_rhs(rhs, xp=np, vectorized=True)
+    # ``compile_rhs`` always attempts the vectorized path; bypass it via
+    # ``_make_eval_fn`` to keep an independent scalar reference for this
+    # equivalence check.
+    scalar_eval = _make_eval_fn(
+        state_names=rhs.state_names,
+        aliases=rhs.aliases,
+        equations=rhs.equations,
+        xp=np,
+    )
+    c_v = compile_rhs(rhs, xp=np)
     rng = np.random.RandomState(0)
     y = rng.rand(len(rhs.state_names))
-    out_s = c_s.eval_fn(0.0, y, **call_params)
+    out_s = scalar_eval(0.0, y, **call_params)
     out_v = c_v.eval_fn(0.0, y, **call_params)
     assert np.allclose(out_s, out_v, atol=1e-12, rtol=0.0), (
         f"max abs diff = {np.max(np.abs(out_s - out_v))}"
@@ -138,21 +145,20 @@ def test_fallback_on_non_templated_spec() -> None:
     }
     rhs = normalize_rhs(spec)
     assert build_vector_plan(rhs) is None
-    # Compiling with ``vectorized=True`` must not raise.
-    c = compile_rhs(rhs, xp=np, vectorized=True)
+    # Compiling must transparently fall back and not raise.
+    c = compile_rhs(rhs, xp=np)
     out = c.eval_fn(0.0, np.array([1.0, 2.0]))
     assert np.allclose(out, np.array([-1.0, -1.0]))
 
 
-@pytest.mark.parametrize("vectorized", [False, True])
-def test_compile_rhs_vectorized_kwarg(vectorized: bool) -> None:  # noqa: FBT001
-    """Both ``vectorized`` settings produce well-shaped finite eval output.
+def test_compile_rhs_returns_finite_output() -> None:
+    """``compile_rhs`` produces a finite, correctly-shaped eval output.
 
-    Both ``vectorized=False`` and ``vectorized=True`` produce eval_fns that
-    yield finite, correctly-shaped output for a supported spec.
+    Exercises the default (vectorized-with-fallback) path on a supported
+    templated spec.
     """
     rhs = normalize_rhs(_sir_two_axis_spec())
-    c = compile_rhs(rhs, xp=np, vectorized=vectorized)
+    c = compile_rhs(rhs, xp=np)
     rng = np.random.RandomState(1)
     y = rng.rand(len(rhs.state_names))
     out = c.eval_fn(0.0, y, beta=0.3, gamma=0.1)

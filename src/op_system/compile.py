@@ -516,18 +516,16 @@ def _make_eval_fn(  # noqa: C901
 # -----------------------------------------------------------------------------
 
 
-def compile_rhs(
-    rhs: NormalizedRhs, *, xp: object, vectorized: bool = False
-) -> CompiledRhs:
+def compile_rhs(rhs: NormalizedRhs, *, xp: object) -> CompiledRhs:
     """Compile a normalized RHS into a runnable evaluation function.
+
+    Always attempts the vectorized eval path that operates on shaped buffers
+    (one tensor expression per state template) and falls back automatically
+    to the scalar path when the spec falls outside the supported subset.
 
     Args:
         rhs: Normalized RHS produced by `op_system.specs.normalize_rhs`.
         xp: Array backend namespace.
-        vectorized: If True, attempt to compile a vectorized eval path that
-            operates on shaped buffers (one tensor expression per state
-            template). Falls back to the scalar path automatically if the spec
-            doesn't fit the supported subset. Defaults to False.
 
     Returns:
         A `CompiledRhs` containing an `eval_fn(t, y, **params) -> dydt`.
@@ -538,14 +536,13 @@ def compile_rhs(
             detail="Only 'expr' and 'transitions' are supported in v1.",
         )
 
-    eval_fn: EvalFn | None = None
-    if vectorized:
-        # Lazy load via importlib to avoid a static circular import
-        # (op_system._vectorize imports helpers from this module).
-        vec = importlib.import_module("op_system._vectorize")
-        plan = vec.build_vector_plan(rhs)
-        if plan is not None:
-            eval_fn = vec.make_vectorized_eval_fn(plan, xp=xp)
+    # Lazy load via importlib to avoid a static circular import
+    # (op_system._vectorize imports helpers from this module).
+    vec = importlib.import_module("op_system._vectorize")
+    plan = vec.build_vector_plan(rhs)
+    eval_fn: EvalFn | None = (
+        vec.make_vectorized_eval_fn(plan, xp=xp) if plan is not None else None
+    )
 
     if eval_fn is None:
         eval_fn = _make_eval_fn(
