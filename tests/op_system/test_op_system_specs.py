@@ -13,6 +13,7 @@ from __future__ import annotations
 import re
 
 import pytest
+
 from op_system._constraints import _ConstraintRule, _normalize_constraints
 from op_system.specs import (
     NormalizedRhs,
@@ -1383,8 +1384,10 @@ def test_state_templates_mixed_scalar_and_wildcard() -> None:
     out = normalize_transitions_rhs(spec)
     assert len(out.state_templates) == 2
     s_tpl, d_tpl = out.state_templates
-    assert s_tpl.axes == ("age",) and s_tpl.shape == (2,)
-    assert d_tpl.axes == () and d_tpl.shape == ()
+    assert s_tpl.axes == ("age",)
+    assert s_tpl.shape == (2,)
+    assert d_tpl.axes == ()
+    assert d_tpl.shape == ()
     assert d_tpl.expanded_names == ("D",)
     assert d_tpl.offset == out.state_names.index("D")
 

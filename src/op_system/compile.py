@@ -20,6 +20,7 @@ whitelist, and evaluation runs with empty builtins.
 from __future__ import annotations
 
 import ast
+import importlib
 from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import (
@@ -220,33 +221,31 @@ _ALLOWED_NODES: tuple[type[ast.AST], ...] = (
 )
 
 _ALLOWED_CALL_ROOTS: tuple[str, ...] = ("np",)
-_ALLOWED_CALL_FUNCS: frozenset[str] = frozenset(
-    {
-        # NumPy scalar math; keep small initially.
-        "abs",
-        "exp",
-        "expm1",
-        "log",
-        "log1p",
-        "log2",
-        "log10",
-        "sqrt",
-        "maximum",
-        "minimum",
-        "clip",
-        "where",
-        # Trig and hyperbolic.
-        "sin",
-        "cos",
-        "tan",
-        "sinh",
-        "cosh",
-        "tanh",
-        # Geometry-ish.
-        "hypot",
-        "arctan2",
-    }
-)
+_ALLOWED_CALL_FUNCS: frozenset[str] = frozenset({
+    # NumPy scalar math; keep small initially.
+    "abs",
+    "exp",
+    "expm1",
+    "log",
+    "log1p",
+    "log2",
+    "log10",
+    "sqrt",
+    "maximum",
+    "minimum",
+    "clip",
+    "where",
+    # Trig and hyperbolic.
+    "sin",
+    "cos",
+    "tan",
+    "sinh",
+    "cosh",
+    "tanh",
+    # Geometry-ish.
+    "hypot",
+    "arctan2",
+})
 
 _ALLOWED_HELPER_FUNCS: frozenset[str] = frozenset({"sum_state", "sum_prefix"})
 
@@ -541,11 +540,12 @@ def compile_rhs(
 
     eval_fn: EvalFn | None = None
     if vectorized:
-        from op_system._vectorize import build_vector_plan, make_vectorized_eval_fn
-
-        plan = build_vector_plan(rhs)
+        # Lazy load via importlib to avoid a static circular import
+        # (op_system._vectorize imports helpers from this module).
+        vec = importlib.import_module("op_system._vectorize")
+        plan = vec.build_vector_plan(rhs)
         if plan is not None:
-            eval_fn = make_vectorized_eval_fn(plan, xp=xp)
+            eval_fn = vec.make_vectorized_eval_fn(plan, xp=xp)
 
     if eval_fn is None:
         eval_fn = _make_eval_fn(

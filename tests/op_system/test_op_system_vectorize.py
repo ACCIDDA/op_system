@@ -12,13 +12,18 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
+
 from op_system._vectorize import build_vector_plan
 from op_system.compile import compile_rhs
 from op_system.specs import normalize_rhs
 
 
 def _sir_two_axis_spec() -> dict[str, object]:
-    """Templated SIR over (age, loc) with a sum-over-all-cells alias."""
+    """Templated SIR over (age, loc) with a sum-over-all-cells alias.
+
+    Returns:
+        A spec dict suitable for passing to ``normalize_rhs``.
+    """
     return {
         "kind": "expr",
         "axes": [
@@ -44,7 +49,11 @@ def _sir_two_axis_spec() -> dict[str, object]:
 
 
 def _sir_templated_param_spec() -> dict[str, object]:
-    """SIR with templated param ``gamma`` per (age,) — exercises param buffer."""
+    """SIR with templated param ``gamma`` per (age,) — exercises param buffer.
+
+    Returns:
+        A spec dict suitable for passing to ``normalize_rhs``.
+    """
     return {
         "kind": "expr",
         "axes": [{"name": "age", "coords": ["y", "o"]}],
@@ -71,14 +80,17 @@ def _eval_equal(spec: dict[str, object], **call_params: float) -> None:
 
 
 def test_vectorized_matches_scalar_two_axis_sir() -> None:
+    """Vectorized eval matches scalar eval on a two-axis templated SIR."""
     _eval_equal(_sir_two_axis_spec(), beta=0.3, gamma=0.1)
 
 
 def test_vectorized_matches_scalar_templated_param() -> None:
+    """Vectorized eval matches scalar eval with a per-axis templated param."""
     _eval_equal(
         _sir_templated_param_spec(),
         beta=0.4,
-        **{"gamma__age_y": 0.1, "gamma__age_o": 0.2},
+        gamma__age_y=0.1,
+        gamma__age_o=0.2,
     )
 
 
@@ -100,8 +112,10 @@ def test_sum_pattern_recognized_for_alias_over_full_template() -> None:
 
 
 def test_full_vectorization_when_no_structural_variation() -> None:
-    """When all cells of a template are structurally identical, the
-    vectorizer should fully vectorize (no unrolling).
+    """Fully-vectorize when all cells of a template are structurally identical.
+
+    The vectorizer should produce a single shaped code per template (no
+    unrolling) when no axis introduces structural variation.
     """
     rhs = normalize_rhs(_sir_two_axis_spec())
     plan = build_vector_plan(rhs)
@@ -112,8 +126,10 @@ def test_full_vectorization_when_no_structural_variation() -> None:
 
 
 def test_fallback_on_non_templated_spec() -> None:
-    """A purely scalar (non-templated) RHS yields ``None`` for the plan and
-    the compile path silently falls back to the scalar engine.
+    """Silently fall back to the scalar engine for non-templated specs.
+
+    A purely scalar (non-templated) RHS yields ``None`` for the plan and the
+    compile path silently falls back to the scalar engine.
     """
     spec = {
         "kind": "expr",
@@ -129,9 +145,11 @@ def test_fallback_on_non_templated_spec() -> None:
 
 
 @pytest.mark.parametrize("vectorized", [False, True])
-def test_compile_rhs_vectorized_kwarg(vectorized: bool) -> None:
-    """Both ``vectorized=False`` and ``vectorized=True`` produce eval_fns
-    that yield finite, correctly-shaped output for a supported spec.
+def test_compile_rhs_vectorized_kwarg(vectorized: bool) -> None:  # noqa: FBT001
+    """Both ``vectorized`` settings produce well-shaped finite eval output.
+
+    Both ``vectorized=False`` and ``vectorized=True`` produce eval_fns that
+    yield finite, correctly-shaped output for a supported spec.
     """
     rhs = normalize_rhs(_sir_two_axis_spec())
     c = compile_rhs(rhs, xp=np, vectorized=vectorized)

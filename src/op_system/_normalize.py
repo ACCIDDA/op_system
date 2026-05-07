@@ -1988,13 +1988,11 @@ def _apply_transition_chains(
 
         if entry_cfg is not None:
             entry_from, entry_rate = entry_cfg
-            transitions_raw.append(
-                {
-                    "from": entry_from,
-                    "to": stage_names[0],
-                    "rate": entry_rate,
-                }
-            )
+            transitions_raw.append({
+                "from": entry_from,
+                "to": stage_names[0],
+                "rate": entry_rate,
+            })
 
         transitions_raw.extend(
             {
@@ -2007,13 +2005,11 @@ def _apply_transition_chains(
 
         if exit_cfg is not None:
             sink_s, sink_rate = exit_cfg
-            transitions_raw.append(
-                {
-                    "from": stage_names[-1],
-                    "to": sink_s,
-                    "rate": sink_rate or forward_rates[-1],
-                }
-            )
+            transitions_raw.append({
+                "from": stage_names[-1],
+                "to": sink_s,
+                "rate": sink_rate or forward_rates[-1],
+            })
 
 
 # ---------------------------------------------------------------------------
@@ -2436,9 +2432,9 @@ def normalize_transitions_rhs(
         "kernels": meta_parts[2],
         "operators": meta_parts[3],
     }
-    meta.update(
-        {k: spec[k] for k in ("sources", "couplings", "constraints") if k in spec}
-    )
+    meta.update({
+        k: spec[k] for k in ("sources", "couplings", "constraints") if k in spec
+    })
 
     chain_block = spec.get("chain")
     if chain_block:

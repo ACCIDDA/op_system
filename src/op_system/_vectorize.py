@@ -28,6 +28,7 @@ import ast
 import math
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
+from itertools import combinations as _comb
 from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
@@ -42,12 +43,8 @@ from op_system.compile import (
 if TYPE_CHECKING:
     from types import CodeType
 
-    from numpy.typing import NDArray
-
     from op_system.compile import EvalFn, Float64Array
     from op_system.specs import NormalizedRhs
-
-    Float64Array = NDArray[np.float64]
 else:
     Float64Array = Any
 
@@ -90,7 +87,7 @@ class _EqGroup:
     """
 
     base: str
-    codes: tuple["CodeType", ...]
+    codes: tuple[CodeType, ...]
     vec_axes: tuple[str, ...]
     vec_shape: tuple[int, ...]
     unroll_axes: tuple[str, ...]
@@ -106,7 +103,7 @@ class _VectorPlan:
     state_templates: tuple[_BufferTemplate, ...]
     alias_templates: tuple[_BufferTemplate, ...]
     param_templates: tuple[_BufferTemplate, ...]
-    alias_codes: tuple[tuple[str, "CodeType", tuple[int, ...]], ...]
+    alias_codes: tuple[tuple[str, CodeType, tuple[int, ...]], ...]
     eq_groups: tuple[_EqGroup, ...]
     n_state: int
 
@@ -122,6 +119,10 @@ def _parse_expanded_name(
     """Parse an expanded name like ``base__age_y__vax_u`` -> (base, coords).
 
     Returns ``(name, {})`` if the name does not match the expected pattern.
+
+    Returns:
+        Tuple ``(base, coords)`` where ``coords`` maps axis name to coord
+        value. Falls back to ``(name, {})`` if parsing fails.
     """
     parts = name.split("__")
     if len(parts) < 2:
@@ -146,13 +147,19 @@ def _parse_expanded_name(
 
 
 def _infer_templates_from_names(
-    names: "Iterable[str]", axes: list[tuple[str, list[str]]]
+    names: Iterable[str], axes: list[tuple[str, list[str]]]
 ) -> dict[str, _BufferTemplate] | None:
-    """Group names by inferred template base. Returns None if any group is
-    inconsistent (mismatched axes, missing cartesian-product members, etc.).
+    """Group names by inferred template base.
+
+    Returns ``None`` if any group is inconsistent (mismatched axes, missing
+    cartesian-product members, etc.).
 
     A name with no parseable axis suffixes becomes a scalar template
     (axes=(), shape=()).
+
+    Returns:
+        A mapping from base name to ``_BufferTemplate`` on success, or
+        ``None`` if the names cannot be grouped consistently.
     """
     by_base: dict[str, list[tuple[str, dict[str, str]]]] = {}
     for name in names:
@@ -200,11 +207,13 @@ def _infer_templates_from_names(
 
 
 def _infer_alias_templates(
-    aliases: "Mapping[str, str]", axes: list[tuple[str, list[str]]]
+    aliases: Mapping[str, str], axes: list[tuple[str, list[str]]]
 ) -> tuple[dict[str, _BufferTemplate], dict[str, str]] | None:
     """Group aliases by inferred template base.
 
-    Returns ``(templates_by_base, name_to_base)`` or ``None`` on failure.
+    Returns:
+        ``(templates_by_base, name_to_base)`` on success or ``None`` on
+        failure.
     """
     templates = _infer_templates_from_names(aliases.keys(), axes)
     if templates is None:
@@ -218,7 +227,7 @@ def _infer_alias_templates(
 # ---------------------------------------------------------------------------
 
 
-def _build_access_ast(
+def _build_access_ast(  # noqa: C901, PLR0912, PLR0913
     *,
     src_base: str,
     src_axes: tuple[str, ...],
@@ -231,6 +240,14 @@ def _build_access_ast(
 
     Returns an expression with shape broadcastable to ``target_axes``' shape.
     Returns the bare buffer name when src and target axes match exactly.
+
+    Returns:
+        An ``ast.expr`` node accessing the source buffer in a way that
+        broadcasts/transposes to the target template's cell layout.
+
+    Raises:
+        RuntimeError: If a source axis is not tied to and not fixed against
+            the target axes (an internal inconsistency).
     """
     buf_name = ast.Name(id=f"{src_base}_buf", ctx=ast.Load())
     if not src_axes:
@@ -341,7 +358,7 @@ class _NameRewriter(ast.NodeTransformer):
         self._name_to_coords = name_to_coords
         self._axis_index = axis_index
 
-    def visit_Name(self, node: ast.Name) -> ast.AST:  # noqa: N802
+    def visit_Name(self, node: ast.Name) -> ast.AST:
         tpl = self._name_to_template.get(node.id)
         if tpl is None:
             return node
@@ -357,7 +374,7 @@ class _NameRewriter(ast.NodeTransformer):
         )
 
 
-def _rewrite_cell_to_vector(
+def _rewrite_cell_to_vector(  # noqa: PLR0913
     *,
     expr: str,
     target_axes: tuple[str, ...],
@@ -366,6 +383,12 @@ def _rewrite_cell_to_vector(
     name_to_coords: Mapping[str, Mapping[str, str]],
     axis_index: Mapping[str, Mapping[str, int]],
 ) -> ast.Expression:
+    """Rewrite a per-cell expression string into a shaped buffer expression.
+
+    Returns:
+        An ``ast.Expression`` whose body evaluates to an array shaped per
+        ``target_axes`` (or a scalar when ``target_axes`` is empty).
+    """
     tree = _parse_expr(expr)
     _validate_ast(tree, expr=expr)
     rewriter = _NameRewriter(
@@ -386,17 +409,20 @@ def _rewrite_cell_to_vector(
 
 
 def _flatten_addsub(node: ast.expr) -> list[tuple[int, ast.expr]]:
-    """Flatten an Add/Sub tree into (sign, leaf-expr) terms (iterative)."""
+    """Flatten an Add/Sub tree into (sign, leaf-expr) terms (iterative).
+
+    Returns:
+        A list of ``(sign, leaf_expr)`` pairs in the original left-to-right
+        order of the flattened tree.
+    """
     terms: list[tuple[int, ast.expr]] = []
     stack: list[tuple[ast.expr, int]] = [(node, 1)]
     while stack:
         n, sign = stack.pop()
         if isinstance(n, ast.BinOp) and isinstance(n.op, ast.Add):
-            stack.append((n.right, sign))
-            stack.append((n.left, sign))
+            stack.extend(((n.right, sign), (n.left, sign)))
         elif isinstance(n, ast.BinOp) and isinstance(n.op, ast.Sub):
-            stack.append((n.right, -sign))
-            stack.append((n.left, sign))
+            stack.extend(((n.right, -sign), (n.left, sign)))
         elif isinstance(n, ast.UnaryOp) and isinstance(n.op, ast.USub):
             stack.append((n.operand, -sign))
         elif isinstance(n, ast.UnaryOp) and isinstance(n.op, ast.UAdd):
@@ -406,10 +432,15 @@ def _flatten_addsub(node: ast.expr) -> list[tuple[int, ast.expr]]:
     return terms
 
 
-def _classify_buf_subscript(
+def _classify_buf_subscript(  # noqa: PLR0911
     node: ast.expr,
 ) -> tuple[str, tuple[int, ...]] | None:
-    """If ``node`` is ``<name>_buf[<int_tuple>]``, return (name, indices)."""
+    """If ``node`` is ``<name>_buf[<int_tuple>]``, return (name, indices).
+
+    Returns:
+        ``(buffer_name, index_tuple)`` if the node matches the expected
+        constant-indexed buffer subscript pattern, otherwise ``None``.
+    """
     if not isinstance(node, ast.Subscript):
         return None
     if not isinstance(node.value, ast.Name):
@@ -454,7 +485,7 @@ def _reassemble_addsub(terms: list[tuple[int, ast.expr]]) -> ast.expr:
     return out
 
 
-def _collapse_full_buffer_sums(
+def _collapse_full_buffer_sums(  # noqa: C901, PLR0915
     tree: ast.Expression, buf_shapes: Mapping[str, tuple[int, ...]]
 ) -> ast.Expression:
     """Replace sums-over-all-cells of a buffer with ``np.sum(buf)``.
@@ -466,6 +497,10 @@ def _collapse_full_buffer_sums(
     ``(name, sign)``; if the set of indices for a group exhausts the full
     Cartesian product of the buffer's shape, those terms are collapsed into a
     single ``np.sum(buf)`` call. Other terms in the chain are left untouched.
+
+    Returns:
+        A possibly-rewritten ``ast.Expression`` equivalent to ``tree`` but
+        with full-buffer sums collapsed where detected.
     """
 
     def collapse_chain(node: ast.expr) -> ast.expr:
@@ -495,7 +530,7 @@ def _collapse_full_buffer_sums(
                 and len(set(idxs)) == expected
                 and all(
                     len(t) == len(shape)
-                    and all(0 <= ti < si for ti, si in zip(t, shape))
+                    and all(0 <= ti < si for ti, si in zip(t, shape, strict=True))
                     for t in idxs
                 )
             ):
@@ -511,16 +546,14 @@ def _collapse_full_buffer_sums(
                             elts=[ast.Constant(value=v) for v in t],
                             ctx=ast.Load(),
                         )
-                    collapsed.append(
-                        (
-                            sign,
-                            ast.Subscript(
-                                value=ast.Name(id=name, ctx=ast.Load()),
-                                slice=slice_node,
-                                ctx=ast.Load(),
-                            ),
-                        )
-                    )
+                    collapsed.append((
+                        sign,
+                        ast.Subscript(
+                            value=ast.Name(id=name, ctx=ast.Load()),
+                            slice=slice_node,
+                            ctx=ast.Load(),
+                        ),
+                    ))
         if not changed:
             return node
         return _reassemble_addsub(collapsed)
@@ -545,14 +578,14 @@ def _collapse_full_buffer_sums(
                     if not isinstance(child, ast.AST):
                         continue
                     if is_addsub(child):
-                        new_child = collapse_chain(child)
+                        new_child = collapse_chain(cast("ast.expr", child))
                         val[i] = new_child
                         stack.append(new_child)
                     else:
                         stack.append(child)
             elif isinstance(val, ast.AST):
                 if is_addsub(val):
-                    new_child = collapse_chain(val)
+                    new_child = collapse_chain(cast("ast.expr", val))
                     setattr(node, fld, new_child)
                     stack.append(new_child)
                 else:
@@ -562,7 +595,7 @@ def _collapse_full_buffer_sums(
     return new_tree
 
 
-def _vectorize_template_equations(
+def _vectorize_template_equations(  # noqa: C901, PLR0912, PLR0914, PLR0915
     *,
     template: _BufferTemplate,
     equations: tuple[str, ...],
@@ -571,7 +604,7 @@ def _vectorize_template_equations(
     axis_index: Mapping[str, Mapping[str, int]],
 ) -> (
     tuple[
-        tuple["CodeType", ...],
+        tuple[CodeType, ...],
         tuple[str, ...],  # vec_axes
         tuple[int, ...],  # vec_shape
         tuple[str, ...],  # unroll_axes
@@ -589,6 +622,11 @@ def _vectorize_template_equations(
     3. Pairs of axes unrolled (rare).
     Within each candidate subset, the first and last cell of every unroll
     bin must produce structurally identical AST after rewriting.
+
+    Returns:
+        A tuple of ``(codes, vec_axes, vec_shape, unroll_axes,
+        unroll_shape, assembly_perm)`` describing the chosen vectorization
+        plan, or ``None`` if no candidate succeeds.
     """
     size = math.prod(template.shape) if template.shape else 1
     cell_exprs = equations[template.offset : template.offset + size]
@@ -597,12 +635,9 @@ def _vectorize_template_equations(
     n_axes = len(template.axes)
 
     # Enumerate candidate unroll-axis index subsets, smallest first.
-    from itertools import combinations as _comb
-
     candidates: list[tuple[int, ...]] = []
     for k in range(n_axes + 1):
-        for combo in _comb(range(n_axes), k):
-            candidates.append(combo)
+        candidates.extend(_comb(range(n_axes), k))
 
     # Strides for converting (axis-coord-index tuple) → flat cell index in
     # ``coord_assignments`` (template.axes order, last varies fastest).
@@ -639,7 +674,11 @@ def _vectorize_template_equations(
 
             # First and last cells of the bin = vec_axes coord indices all
             # zero / all (size-1).
-            def _bin_flat(vec_coord_idx: list[int]) -> int:
+            def _bin_flat(
+                vec_coord_idx: list[int],
+                base_flat: int = base_flat,
+                vec_idx: tuple[int, ...] = vec_idx,
+            ) -> int:
                 f = base_flat
                 for k_pos, ax_pos in enumerate(vec_idx):
                     f += vec_coord_idx[k_pos] * strides[ax_pos]
@@ -707,8 +746,14 @@ def _vectorize_template_equations(
 # ---------------------------------------------------------------------------
 
 
-def build_vector_plan(rhs: NormalizedRhs) -> _VectorPlan | None:
-    """Try to build a vectorized plan for ``rhs``. Returns None on fallback."""
+def build_vector_plan(rhs: NormalizedRhs) -> _VectorPlan | None:  # noqa: C901, PLR0911, PLR0912, PLR0914, PLR0915
+    """Try to build a vectorized plan for ``rhs``.
+
+    Returns:
+        A ``_VectorPlan`` describing the vectorized layout, or ``None`` to
+        signal that the spec is unsupported and the caller should fall back
+        to the scalar engine.
+    """
     if not rhs.state_templates:
         return None
     # Require all states to be wildcard templates (have axes).
@@ -742,7 +787,9 @@ def build_vector_plan(rhs: NormalizedRhs) -> _VectorPlan | None:
             offset=tpl.offset,
         )
         state_buffers.append(buf)
-        for nm, coord_map in zip(tpl.expanded_names, tpl.coord_assignments):
+        for nm, coord_map in zip(
+            tpl.expanded_names, tpl.coord_assignments, strict=True
+        ):
             name_to_template[nm] = buf
             name_to_coords[nm] = coord_map
 
@@ -752,7 +799,9 @@ def build_vector_plan(rhs: NormalizedRhs) -> _VectorPlan | None:
     alias_buffers_by_base, _ = alias_inference
     alias_buffers = list(alias_buffers_by_base.values())
     for buf in alias_buffers:
-        for nm, coord_map in zip(buf.expanded_names, buf.coord_assignments):
+        for nm, coord_map in zip(
+            buf.expanded_names, buf.coord_assignments, strict=True
+        ):
             name_to_template[nm] = buf
             name_to_coords[nm] = coord_map
 
@@ -767,7 +816,9 @@ def build_vector_plan(rhs: NormalizedRhs) -> _VectorPlan | None:
         # Skip scalars — they remain available under their original name.
         if not buf.axes:
             continue
-        for nm, coord_map in zip(buf.expanded_names, buf.coord_assignments):
+        for nm, coord_map in zip(
+            buf.expanded_names, buf.coord_assignments, strict=True
+        ):
             name_to_template[nm] = buf
             name_to_coords[nm] = coord_map
 
@@ -861,7 +912,7 @@ def build_vector_plan(rhs: NormalizedRhs) -> _VectorPlan | None:
 # ---------------------------------------------------------------------------
 
 
-def make_vectorized_eval_fn(plan: _VectorPlan, *, xp: object) -> EvalFn:
+def make_vectorized_eval_fn(plan: _VectorPlan, *, xp: object) -> EvalFn:  # noqa: C901, PLR0915
     """Return an ``eval_fn(t, y, **params)`` driven by ``plan``."""
     state_templates = plan.state_templates
     alias_codes = plan.alias_codes
@@ -877,7 +928,7 @@ def make_vectorized_eval_fn(plan: _VectorPlan, *, xp: object) -> EvalFn:
         if buf.axes
     ]
 
-    def eval_fn(t: object, y: object, **params: object) -> Float64Array:
+    def eval_fn(t: object, y: object, **params: object) -> Float64Array:  # noqa: C901, PLR0912, PLR0915
         if is_numpy:
             y_in = np.asarray(y, dtype=np.float64)
             t_val: object = np.float64(cast("Any", t))
@@ -920,7 +971,9 @@ def make_vectorized_eval_fn(plan: _VectorPlan, *, xp: object) -> EvalFn:
         # Eval alias buffers in declaration order.
         for base, code, shape in alias_codes:
             try:
-                val = eval(code, {"__builtins__": _SAFE_BUILTINS}, env)  # noqa: S307
+                val = eval(  # noqa: S307
+                    code, {"__builtins__": _SAFE_BUILTINS}, env
+                )
             except (NameError, ValueError, TypeError, ArithmeticError) as exc:
                 msg = f"alias {base!r} evaluation failed: {exc!r}"
                 raise ValueError(msg) from exc
@@ -937,7 +990,9 @@ def make_vectorized_eval_fn(plan: _VectorPlan, *, xp: object) -> EvalFn:
             bin_results: list[object] = []
             for code in grp.codes:
                 try:
-                    val = eval(code, {"__builtins__": _SAFE_BUILTINS}, env)  # noqa: S307
+                    val = eval(  # noqa: S307
+                        code, {"__builtins__": _SAFE_BUILTINS}, env
+                    )
                 except (NameError, ValueError, TypeError, ArithmeticError) as exc:
                     msg = f"equation {grp.base!r} evaluation failed: {exc!r}"
                     raise ValueError(msg) from exc
@@ -953,26 +1008,25 @@ def make_vectorized_eval_fn(plan: _VectorPlan, *, xp: object) -> EvalFn:
             if not grp.unroll_axes:
                 # Fully vectorized — single result already in template order.
                 whole = bin_results[0]
+            elif is_numpy:
+                stacked = np.stack(cast("Any", bin_results), axis=0).reshape(
+                    grp.unroll_shape + grp.vec_shape
+                )
+                whole = np.transpose(stacked, grp.assembly_perm)
             else:
-                if is_numpy:
-                    stacked = np.stack(cast("Any", bin_results), axis=0).reshape(
-                        grp.unroll_shape + grp.vec_shape
-                    )
-                    whole = np.transpose(stacked, grp.assembly_perm)
-                else:
-                    xp_ns = cast("Any", xp)
-                    stacked = xp_ns.reshape(
-                        xp_ns.stack(bin_results, axis=0),
-                        grp.unroll_shape + grp.vec_shape,
-                    )
-                    whole = xp_ns.transpose(stacked, grp.assembly_perm)
+                xp_ns = cast("Any", xp)
+                stacked = xp_ns.reshape(
+                    xp_ns.stack(bin_results, axis=0),
+                    grp.unroll_shape + grp.vec_shape,
+                )
+                whole = xp_ns.transpose(stacked, grp.assembly_perm)
             if is_numpy:
                 pieces.append(np.asarray(whole).reshape(-1))
             else:
                 pieces.append(cast("Any", xp).reshape(whole, (-1,)))
 
         if is_numpy:
-            return cast("Float64Array", np.concatenate(pieces))
+            return cast("Float64Array", np.concatenate(cast("Any", pieces)))
         return cast("Float64Array", cast("Any", xp).concatenate(pieces))
 
     return eval_fn
