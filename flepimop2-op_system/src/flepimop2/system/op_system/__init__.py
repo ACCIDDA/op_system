@@ -84,7 +84,7 @@ class OpSystemSystem(ModuleModel, SystemABC):  # noqa: D101
 
     model_config = ConfigDict(extra="allow")
 
-    def model_post_init(self, context: Any) -> None:  # noqa: ANN401
+    def model_post_init(self, context: Any) -> None:  # noqa: ANN401, PLR0914
         """Compile `op_system` specification and prepare stepper and shape helpers."""
         del context
 
@@ -177,7 +177,7 @@ class OpSystemSystem(ModuleModel, SystemABC):  # noqa: D101
         return cast("SystemProtocol", bound)
 
     @override
-    def requested_parameters(
+    def requested_parameters(  # noqa: C901, PLR0912
         self,
         axes: AxisCollection,
     ) -> dict[IdentifierString, ParameterRequest]:
@@ -186,8 +186,14 @@ class OpSystemSystem(ModuleModel, SystemABC):  # noqa: D101
         Returns:
             Mapping of parameter name to a `ParameterRequest`. Names that
             appear as shaped-parameter references (``theta[imm]``) in the
-            spec are requested as shaped (one ndarray); everything else is
-            requested as a scalar.
+            spec are requested as shaped (one ndarray); time-varying
+            parameters (e.g. ``beta[time, age]``) are requested with their
+            full axes including the configured time axis.
+
+        Raises:
+            ValueError: If an `initial_state` entry has an unexpected type,
+                or a shaped IC entry collides with an existing request that
+                declares a different axis tuple for the same parameter name.
 
         Notes:
             Initial-state seed names (referenced from `meta['initial_state']`
@@ -201,15 +207,30 @@ class OpSystemSystem(ModuleModel, SystemABC):  # noqa: D101
         # (numpy/jax namespace, simulation time, and built-in summation helpers).
         builtin_names = {"np", "t", "sum_state", "sum_prefix"}
 
-        # Shaped parameters first, so a later scalar-name collision is a hard
-        # error rather than a silent overwrite.
+        # Non-time-varying shaped parameters first.  ``shaped_params`` in
+        # meta carries reduced (non-time) axes for tv params, but tv names
+        # are emitted separately below with their full axes; skip them here.
         shaped_meta = self._compiled_rhs.meta.get("shaped_params") or ()
+        time_varying_meta = self._compiled_rhs.meta.get("time_varying_params") or ()
+        time_varying_names = {name for name, _ in time_varying_meta}
         for shaped_name, shaped_axes in shaped_meta:
             if shaped_name in mixing_kernel_names or shaped_name in builtin_names:
+                continue
+            if shaped_name in time_varying_names:
                 continue
             requests[shaped_name] = ParameterRequest(
                 name=shaped_name, axes=tuple(shaped_axes)
             )
+
+        # Time-varying parameters: a single ParameterRequest per name with
+        # the full axes tuple (including the configured time axis).  At
+        # call time the compiled wrapper interpolates along the time axis
+        # using the time axis's declared ``coords`` as the grid, so the
+        # supplied array must be shaped exactly as declared in the spec.
+        for tv_name, tv_axes in time_varying_meta:
+            if tv_name in mixing_kernel_names or tv_name in builtin_names:
+                continue
+            requests[tv_name] = ParameterRequest(name=tv_name, axes=tuple(tv_axes))
 
         for name in self._compiled_rhs.param_names:
             if name in mixing_kernel_names or name in builtin_names or name in requests:
@@ -231,23 +252,25 @@ class OpSystemSystem(ModuleModel, SystemABC):  # noqa: D101
                 existing = requests.get(shaped_name)
                 if existing is not None:
                     if tuple(existing.axes) != shaped_axes:
-                        raise ValueError(
+                        msg = (
                             f"initial_state shaped entry for "
                             f"{shaped_name!r} declares axes "
                             f"{shaped_axes!r} but the same name was "
                             f"already requested with axes "
                             f"{tuple(existing.axes)!r}"
                         )
+                        raise ValueError(msg)
                     continue
                 requests[shaped_name] = ParameterRequest(
                     name=shaped_name, axes=shaped_axes
                 )
             else:
-                raise ValueError(
+                msg = (
                     f"initial_state entry has unexpected type "
                     f"{type(entry).__name__!r}; expected a parameter name "
                     "string or a shaped-entry mapping"
                 )
+                raise ValueError(msg)
         # Operator velocity/rate fields are consumed by engine plugins (not by
         # the compiled rhs eval_fn), but still need to be in the params dict.
         for op in self._compiled_rhs.meta.get("operators") or ():

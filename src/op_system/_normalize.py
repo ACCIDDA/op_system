@@ -119,6 +119,7 @@ class NormalizedRhs:
     meta: Mapping[str, Any]
     state_templates: tuple[StateTemplate, ...] = ()
     shaped_params: tuple[tuple[str, tuple[str, ...]], ...] = ()
+    time_varying_params: tuple[tuple[str, tuple[str, ...]], ...] = ()
 
 
 # ---------------------------------------------------------------------------
@@ -736,9 +737,12 @@ def _collect_alias_symbols(
     return symbols
 
 
-_SHAPED_PARAM_BUILTIN_NAMES: frozenset[str] = frozenset(
-    {"np", "t", "sum_state", "sum_prefix"}
-)
+_SHAPED_PARAM_BUILTIN_NAMES: frozenset[str] = frozenset({
+    "np",
+    "t",
+    "sum_state",
+    "sum_prefix",
+})
 
 
 def _scan_shaped_param_refs(
@@ -788,6 +792,135 @@ def _scan_shaped_param_refs(
             else:
                 result[base] = axes_tuple
     return result
+
+
+def _resolve_time_axis_name(spec: Mapping[str, Any]) -> str:
+    """Return the configured time-axis name (default ``"time"``).
+
+    Raises:
+        InvalidRhsSpecError: If ``time_axis`` is present but not a non-empty
+            string.
+    """
+    raw = spec.get("time_axis", "time")
+    if not isinstance(raw, str) or not raw.strip():
+        raise InvalidRhsSpecError(
+            detail="time_axis must be a non-empty identifier string"
+        )
+    return raw.strip()
+
+
+def _reject_legacy_time_varying_field(spec: Mapping[str, Any]) -> None:
+    """Raise a migration-friendly error if the legacy ``time_varying`` field is present.
+
+    Time-varying parameters are now declared implicitly: any shaped reference
+    such as ``beta[time, age]`` (where ``time`` matches the configured
+    ``time_axis``) is interpolated at runtime.
+
+    Raises:
+        InvalidRhsSpecError: If ``spec`` contains a ``time_varying`` key.
+    """
+    if "time_varying" in spec:
+        raise InvalidRhsSpecError(
+            detail=(
+                "the top-level 'time_varying' field has been removed; declare "
+                "time-varying parameters implicitly by subscripting them with "
+                "the configured time axis (default 'time'), e.g. "
+                "'beta[time, age]'."
+            )
+        )
+
+
+def _partition_time_varying_shaped(
+    shaped_params: Mapping[str, tuple[str, ...]],
+    *,
+    time_axis_name: str,
+    axis_lookup: Mapping[str, list[str]],
+) -> tuple[dict[str, tuple[str, ...]], dict[str, tuple[str, ...]]]:
+    """Split shaped-parameter axes into non-time-varying and time-varying.
+
+    A shaped parameter is "time-varying" when the configured time axis
+    appears in its axes tuple.  The returned ``shaped_reduced`` mapping
+    drops the time axis from each tv parameter so downstream substitution
+    treats it as a shape over the remaining (non-time) axes; the
+    ``time_varying_full`` mapping retains the full axes tuple (with time)
+    for the parameter request and the runtime interpolation wrapper.
+
+    Returns:
+        Pair ``(shaped_reduced, time_varying_full)``.
+
+    Raises:
+        InvalidRhsSpecError: If a parameter declares the time axis but the
+            axis itself was not declared in the spec's ``axes`` block.
+    """
+    shaped_reduced: dict[str, tuple[str, ...]] = {}
+    time_varying_full: dict[str, tuple[str, ...]] = {}
+    for name, axes in shaped_params.items():
+        if time_axis_name not in axes:
+            shaped_reduced[name] = axes
+            continue
+        if time_axis_name not in axis_lookup:
+            raise InvalidRhsSpecError(
+                detail=(
+                    f"parameter {name!r} is subscripted with the time axis "
+                    f"{time_axis_name!r} but no such axis is declared in 'axes'"
+                )
+            )
+        reduced = tuple(ax for ax in axes if ax != time_axis_name)
+        shaped_reduced[name] = reduced
+        time_varying_full[name] = axes
+    return shaped_reduced, time_varying_full
+
+
+def _strip_time_axis_in_expr(
+    expr: str,
+    *,
+    tv_full_axes: Mapping[str, tuple[str, ...]],
+    time_axis_name: str,
+) -> str:
+    """Rewrite ``name[time, age]`` → ``name[age]`` (or bare ``name``) in ``expr``.
+
+    Only matches bracket templates whose base appears in ``tv_full_axes``
+    and whose bracket entries equal the registered full axes tuple.
+
+    Returns:
+        The rewritten expression.
+    """
+    if not tv_full_axes or not expr:
+        return expr
+
+    def _rewrite(match: re.Match[str]) -> str:
+        base = match.group(1)
+        full = tv_full_axes.get(base)
+        if full is None:
+            return match.group(0)
+        parts = tuple(p.strip() for p in match.group(2).split(","))
+        if parts != full:
+            return match.group(0)
+        reduced = tuple(p for p in parts if p != time_axis_name)
+        if not reduced:
+            return base
+        return f"{base}[{', '.join(reduced)}]"
+
+    return _INLINE_TEMPLATE_RE.sub(_rewrite, expr)
+
+
+def _strip_time_axis_in_mapping(
+    mapping: dict[str, Any],
+    *,
+    tv_full_axes: Mapping[str, tuple[str, ...]],
+    time_axis_name: str,
+) -> None:
+    """In-place rewrite of all string values in ``mapping``.
+
+    Delegates to :func:`_strip_time_axis_in_expr` for each value.
+    """
+    if not tv_full_axes:
+        return
+    for key, value in list(mapping.items()):
+        if isinstance(value, str):
+            mapping[key] = _strip_time_axis_in_expr(
+                value, tv_full_axes=tv_full_axes, time_axis_name=time_axis_name
+            )
 
 
 def _build_state_templates(
@@ -960,9 +1093,10 @@ def _expand_alias_templates(
 
 _INITIAL_STATE_SHAPED_KEY = "shaped"
 _INITIAL_STATE_SHAPED_AXES_KEY = "axes"
-_INITIAL_STATE_SHAPED_ALLOWED_KEYS = frozenset(
-    (_INITIAL_STATE_SHAPED_KEY, _INITIAL_STATE_SHAPED_AXES_KEY)
-)
+_INITIAL_STATE_SHAPED_ALLOWED_KEYS = frozenset((
+    _INITIAL_STATE_SHAPED_KEY,
+    _INITIAL_STATE_SHAPED_AXES_KEY,
+))
 
 
 def _normalize_shaped_initial_state_value(
@@ -1573,7 +1707,7 @@ def _select_apply_along_kernel(
     )
 
 
-def _substitute_apply_along_brackets(
+def _substitute_apply_along_brackets(  # noqa: C901
     expr: str,
     bound: Mapping[str, str],
     *,
@@ -1609,8 +1743,11 @@ def _substitute_apply_along_brackets(
         Walks ``__``-separated segments from the right, consuming each one
         whose ``<axis>_`` prefix matches a known axis.  Stops at the first
         non-matching segment; everything to its left is treated as the base
-        name.  Returns ``(base, [(axis, coord), ...])`` where the suffix
-        pairs are in left-to-right (original) order.
+        name.
+
+        Returns:
+            ``(base, [(axis, coord), ...])`` where the suffix pairs are in
+            left-to-right (original) order.
         """
         if not priority:
             return name, []
@@ -1625,9 +1762,12 @@ def _substitute_apply_along_brackets(
             # axis names share a prefix.
             best: str | None = None
             for ax in priority:
-                if tok.startswith(f"{ax}_") and len(tok) > len(ax) + 1:
-                    if best is None or len(ax) > len(best):
-                        best = ax
+                if (
+                    tok.startswith(f"{ax}_")
+                    and len(tok) > len(ax) + 1
+                    and (best is None or len(ax) > len(best))
+                ):
+                    best = ax
             if best is None:
                 break
             coord = tok[len(best) + 1 :]
@@ -1933,7 +2073,7 @@ def _expand_helpers(expr: str, *, axes: list[dict[str, Any]]) -> str:
     return _expand_apply_along(expr, axes=axes)
 
 
-def _resolve_template_equation(
+def _resolve_template_equation(  # noqa: PLR0913
     *,
     name: str,
     equations_map: Mapping[str, Any],
@@ -1974,7 +2114,7 @@ def _resolve_template_equation(
     return None
 
 
-def _gather_equations(
+def _gather_equations(  # noqa: PLR0913
     state: list[str],
     equations_map: Mapping[str, Any],
     all_syms: set[str],
@@ -2282,13 +2422,11 @@ def _apply_transition_chains(
 
         if entry_cfg is not None:
             entry_from, entry_rate = entry_cfg
-            transitions_raw.append(
-                {
-                    "from": entry_from,
-                    "to": stage_names[0],
-                    "rate": entry_rate,
-                }
-            )
+            transitions_raw.append({
+                "from": entry_from,
+                "to": stage_names[0],
+                "rate": entry_rate,
+            })
 
         transitions_raw.extend(
             {
@@ -2301,13 +2439,11 @@ def _apply_transition_chains(
 
         if exit_cfg is not None:
             sink_s, sink_rate = exit_cfg
-            transitions_raw.append(
-                {
-                    "from": stage_names[-1],
-                    "to": sink_s,
-                    "rate": sink_rate or forward_rates[-1],
-                }
-            )
+            transitions_raw.append({
+                "from": stage_names[-1],
+                "to": sink_s,
+                "rate": sink_rate or forward_rates[-1],
+            })
 
 
 # ---------------------------------------------------------------------------
@@ -2524,7 +2660,7 @@ def normalize_rhs(spec: Mapping[str, Any] | None) -> NormalizedRhs:
     return normalize_expr_rhs(spec)  # unreachable; satisfies return type checker
 
 
-def normalize_expr_rhs(spec: Mapping[str, Any]) -> NormalizedRhs:
+def normalize_expr_rhs(spec: Mapping[str, Any]) -> NormalizedRhs:  # noqa: C901, PLR0914
     """Normalize an expression-based RHS specification.
 
     Args:
@@ -2590,6 +2726,25 @@ def normalize_expr_rhs(spec: Mapping[str, Any]) -> NormalizedRhs:
         name_blocklist=name_blocklist,
         axis_lookup=axis_lookup_dict,
     )
+    _reject_legacy_time_varying_field(spec)
+    time_axis_name = _resolve_time_axis_name(spec)
+    shaped_params, time_varying_full = _partition_time_varying_shaped(
+        shaped_params,
+        time_axis_name=time_axis_name,
+        axis_lookup=axis_lookup_dict,
+    )
+    if time_varying_full:
+        _strip_time_axis_in_mapping(
+            equations_map,
+            tv_full_axes=time_varying_full,
+            time_axis_name=time_axis_name,
+        )
+        if isinstance(meta_parts[0], dict):
+            _strip_time_axis_in_mapping(
+                meta_parts[0],
+                tv_full_axes=time_varying_full,
+                time_axis_name=time_axis_name,
+            )
 
     aliases, alias_template_map = _expand_alias_templates(
         meta_parts[0],
@@ -2639,8 +2794,11 @@ def normalize_expr_rhs(spec: Mapping[str, Any]) -> NormalizedRhs:
     )
 
     meta["shaped_params"] = tuple(sorted(shaped_params.items()))
+    meta["time_axis"] = time_axis_name
+    meta["time_varying_params"] = tuple(sorted(time_varying_full.items()))
 
     shaped_set = set(shaped_params)
+    time_varying_set = set(time_varying_full)
     return NormalizedRhs(
         kind="expr",
         state_names=tuple(state_expanded),
@@ -2652,6 +2810,7 @@ def normalize_expr_rhs(spec: Mapping[str, Any]) -> NormalizedRhs:
             if sym not in set(state_expanded)
             and sym not in aliases
             and sym not in shaped_set
+            and sym not in time_varying_set
         ),
         all_symbols=frozenset(all_syms | set(aliases.keys())),
         meta=meta,
@@ -2662,6 +2821,7 @@ def normalize_expr_rhs(spec: Mapping[str, Any]) -> NormalizedRhs:
             state_expanded=state_expanded,
         ),
         shaped_params=tuple(sorted(shaped_params.items())),
+        time_varying_params=tuple(sorted(time_varying_full.items())),
     )
 
 
@@ -2723,7 +2883,7 @@ def _build_transition_equations(
     return equations
 
 
-def normalize_transitions_rhs(
+def normalize_transitions_rhs(  # noqa: C901, PLR0912, PLR0914, PLR0915
     spec: Mapping[str, Any],
 ) -> NormalizedRhs:
     """Normalize a transition-based RHS specification (diagram/hazard semantics).
@@ -2762,9 +2922,9 @@ def normalize_transitions_rhs(
         "kernels": meta_parts[2],
         "operators": meta_parts[3],
     }
-    meta.update(
-        {k: spec[k] for k in ("sources", "couplings", "constraints") if k in spec}
-    )
+    meta.update({
+        k: spec[k] for k in ("sources", "couplings", "constraints") if k in spec
+    })
 
     chain_block = spec.get("chain")
     if chain_block:
@@ -2808,6 +2968,37 @@ def normalize_transitions_rhs(
         name_blocklist=name_blocklist,
         axis_lookup=axis_lookup_dict,
     )
+    _reject_legacy_time_varying_field(spec)
+    time_axis_name = _resolve_time_axis_name(spec)
+    shaped_params, time_varying_full = _partition_time_varying_shaped(
+        shaped_params,
+        time_axis_name=time_axis_name,
+        axis_lookup=axis_lookup_dict,
+    )
+    if time_varying_full:
+        if isinstance(meta_parts[0], dict):
+            _strip_time_axis_in_mapping(
+                meta_parts[0],
+                tv_full_axes=time_varying_full,
+                time_axis_name=time_axis_name,
+            )
+        for tr in transitions_raw:
+            if not isinstance(tr, _MappingABC):
+                continue
+            r = tr.get("rate")
+            if isinstance(r, str):
+                tr["rate"] = _strip_time_axis_in_expr(  # type: ignore[index]
+                    r,
+                    tv_full_axes=time_varying_full,
+                    time_axis_name=time_axis_name,
+                )
+            n = tr.get("name")
+            if isinstance(n, str):
+                tr["name"] = _strip_time_axis_in_expr(  # type: ignore[index]
+                    n,
+                    tv_full_axes=time_varying_full,
+                    time_axis_name=time_axis_name,
+                )
 
     aliases, alias_template_map = _expand_alias_templates(
         meta_parts[0],
@@ -2860,8 +3051,11 @@ def normalize_transitions_rhs(
     )
 
     meta["shaped_params"] = tuple(sorted(shaped_params.items()))
+    meta["time_axis"] = time_axis_name
+    meta["time_varying_params"] = tuple(sorted(time_varying_full.items()))
 
     shaped_set = set(shaped_params)
+    time_varying_set = set(time_varying_full)
     return NormalizedRhs(
         kind="transitions",
         state_names=tuple(state_expanded),
@@ -2870,7 +3064,10 @@ def normalize_transitions_rhs(
         param_names=_sorted_unique(
             sym
             for sym in all_syms
-            if sym not in state_set and sym not in aliases and sym not in shaped_set
+            if sym not in state_set
+            and sym not in aliases
+            and sym not in shaped_set
+            and sym not in time_varying_set
         ),
         all_symbols=frozenset(all_syms | set(aliases.keys())),
         meta={**meta, "transitions": transitions_expanded},
@@ -2881,4 +3078,5 @@ def normalize_transitions_rhs(
             state_expanded=state_expanded,
         ),
         shaped_params=tuple(sorted(shaped_params.items())),
+        time_varying_params=tuple(sorted(time_varying_full.items())),
     )

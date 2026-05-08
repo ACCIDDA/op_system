@@ -227,33 +227,31 @@ _ALLOWED_NODES: tuple[type[ast.AST], ...] = (
 )
 
 _ALLOWED_CALL_ROOTS: tuple[str, ...] = ("np",)
-_ALLOWED_CALL_FUNCS: frozenset[str] = frozenset(
-    {
-        # NumPy scalar math; keep small initially.
-        "abs",
-        "exp",
-        "expm1",
-        "log",
-        "log1p",
-        "log2",
-        "log10",
-        "sqrt",
-        "maximum",
-        "minimum",
-        "clip",
-        "where",
-        # Trig and hyperbolic.
-        "sin",
-        "cos",
-        "tan",
-        "sinh",
-        "cosh",
-        "tanh",
-        # Geometry-ish.
-        "hypot",
-        "arctan2",
-    }
-)
+_ALLOWED_CALL_FUNCS: frozenset[str] = frozenset({
+    # NumPy scalar math; keep small initially.
+    "abs",
+    "exp",
+    "expm1",
+    "log",
+    "log1p",
+    "log2",
+    "log10",
+    "sqrt",
+    "maximum",
+    "minimum",
+    "clip",
+    "where",
+    # Trig and hyperbolic.
+    "sin",
+    "cos",
+    "tan",
+    "sinh",
+    "cosh",
+    "tanh",
+    # Geometry-ish.
+    "hypot",
+    "arctan2",
+})
 
 _ALLOWED_HELPER_FUNCS: frozenset[str] = frozenset({"sum_state", "sum_prefix"})
 
@@ -524,6 +522,121 @@ def _make_eval_fn(  # noqa: C901
 # -----------------------------------------------------------------------------
 
 
+def _interp_along_axis(
+    t: object, ts: object, grid: object, *, axis: int, xp: object
+) -> object:
+    """Linearly interpolate ``grid`` along axis ``axis`` at scalar ``t``.
+
+    For a 1-D ``grid`` of shape ``(N,)`` returns a scalar; for an N-D
+    ``grid`` whose ``axis``-th dimension has length ``N`` returns an array
+    with that dimension removed.  Boundary behaviour is constant
+    extrapolation (clamp to the nearest end-point), matching
+    :func:`numpy.interp`.
+
+    Args:
+        t: Scalar evaluation time.
+        ts: 1-D monotonically non-decreasing array of grid times of length N.
+        grid: Array whose ``axis``-th dimension indexes ``ts``.
+        axis: Position of the time axis within ``grid``'s shape.
+        xp: Array backend namespace (numpy or jax.numpy).
+
+    Returns:
+        Interpolated value with ``grid``'s shape minus the ``axis`` slot.
+    """
+    backend = cast("Any", xp)
+    ts_arr = backend.asarray(ts)
+    grid_arr = backend.asarray(grid)
+    if axis != 0:
+        grid_arr = backend.moveaxis(grid_arr, axis, 0)
+    n = ts_arr.shape[0]
+    t_val = backend.asarray(t)
+    raw_idx = backend.searchsorted(ts_arr, t_val, side="right")
+    idx_right = backend.clip(raw_idx, 1, n - 1)
+    idx_left = idx_right - 1
+    t_left = ts_arr[idx_left]
+    t_right = ts_arr[idx_right]
+    span = t_right - t_left
+    raw_w = (t_val - t_left) / backend.where(
+        span == 0, backend.asarray(1.0, dtype=span.dtype), span
+    )
+    w = backend.clip(raw_w, 0.0, 1.0)
+    g_left = grid_arr[idx_left]
+    g_right = grid_arr[idx_right]
+    if g_left.ndim > 0:
+        w = backend.reshape(w, (1,) * g_left.ndim)
+    return (1.0 - w) * g_left + w * g_right
+
+
+def _wrap_eval_fn_for_time_varying(
+    eval_fn: EvalFn,
+    *,
+    time_varying_params: tuple[tuple[str, tuple[str, ...]], ...],
+    time_axis_name: str,
+    axes_meta: tuple[Mapping[str, Any], ...],
+    xp: object,
+) -> EvalFn:
+    """Wrap ``eval_fn`` so each time-varying name is interpolated at runtime.
+
+    For each ``(name, full_axes)`` in ``time_varying_params`` the wrapper
+    expects a single kwarg ``name`` whose shape matches ``full_axes``.  At
+    every call the wrapper interpolates that array along the time-axis
+    position using the time axis's declared coordinates as the grid, and
+    re-injects the reduced-shape result under ``name`` before delegating to
+    ``eval_fn``.
+
+    Args:
+        eval_fn: The unwrapped evaluator returned by the vectorized or
+            scalar compile path.
+        time_varying_params: Pairs ``(name, full_axes)`` declared
+            time-varying by the spec.  Each ``full_axes`` tuple must
+            contain ``time_axis_name``.
+        time_axis_name: The configured time-axis name (default ``"time"``).
+        axes_meta: Normalized axes records (each a mapping with ``name``
+            and ``coords``).  Used to look up the time-axis ``coords``
+            array baked into the wrapper closure as the interpolation grid.
+        xp: Array backend namespace, threaded through to
+            :func:`_interp_along_axis`.
+
+    Returns:
+        A new `EvalFn` with the same shape contract as ``eval_fn``.
+    """
+    if not time_varying_params:
+        return eval_fn
+    backend = cast("Any", xp)
+    ts_lookup = {
+        ax["name"]: backend.asarray(ax["coords"], dtype=backend.float64)
+        for ax in axes_meta
+        if ax.get("name") == time_axis_name
+    }
+    if time_axis_name not in ts_lookup:
+        _raise_parameter_error(
+            detail=(
+                f"time-varying parameters declared but the configured time "
+                f"axis {time_axis_name!r} is missing from the spec axes."
+            )
+        )
+    ts = ts_lookup[time_axis_name]
+    plan = tuple(
+        (name, full_axes.index(time_axis_name))
+        for name, full_axes in time_varying_params
+    )
+
+    def wrapped(t: object, y: object, **params: object) -> Float64Array:
+        for name, axis_pos in plan:
+            if name not in params:
+                _raise_parameter_error(
+                    detail=(
+                        f"time-varying parameter {name!r} requires the bare "
+                        f"{name!r} kwarg at call time."
+                    )
+                )
+            grid = params.pop(name)
+            params[name] = _interp_along_axis(t, ts, grid, axis=axis_pos, xp=xp)
+        return eval_fn(t, y, **params)
+
+    return wrapped
+
+
 def compile_rhs(rhs: NormalizedRhs, *, xp: object) -> CompiledRhs:
     """Compile a normalized RHS into a runnable evaluation function.
 
@@ -560,9 +673,17 @@ def compile_rhs(rhs: NormalizedRhs, *, xp: object) -> CompiledRhs:
             xp=xp,
         )
 
+    eval_fn = _wrap_eval_fn_for_time_varying(
+        eval_fn,
+        time_varying_params=rhs.time_varying_params,
+        time_axis_name=str(rhs.meta.get("time_axis", "time")),
+        axes_meta=tuple(rhs.meta.get("axes") or ()),
+        xp=xp,
+    )
+
     return CompiledRhs(
         state_names=rhs.state_names,
-        param_names=rhs.param_names,
+        param_names=tuple(rhs.param_names),
         eval_fn=eval_fn,
         meta=rhs.meta,
     )

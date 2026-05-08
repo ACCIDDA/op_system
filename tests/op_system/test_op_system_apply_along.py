@@ -16,6 +16,7 @@ derived from the axis ``deltas``).  These tests cover:
 from __future__ import annotations
 
 import pytest
+
 from op_system.specs import normalize_expr_rhs
 
 

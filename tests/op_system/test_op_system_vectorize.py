@@ -11,6 +11,7 @@ Covers:
 from __future__ import annotations
 
 import numpy as np
+
 from op_system._vectorize import build_vector_plan
 from op_system.compile import _make_eval_fn, compile_rhs
 from op_system.specs import normalize_rhs
@@ -64,7 +65,7 @@ def _sir_templated_param_spec() -> dict[str, object]:
     }
 
 
-def _eval_equal(spec: dict[str, object], **call_params: float) -> None:
+def _eval_equal(spec: dict[str, object], **call_params: object) -> None:
     rhs = normalize_rhs(spec)
     # ``compile_rhs`` always attempts the vectorized path; bypass it via
     # ``_make_eval_fn`` to keep an independent scalar reference for this
