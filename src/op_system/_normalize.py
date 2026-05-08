@@ -2799,6 +2799,8 @@ def normalize_expr_rhs(spec: Mapping[str, Any]) -> NormalizedRhs:  # noqa: C901,
 
     shaped_set = set(shaped_params)
     time_varying_set = set(time_varying_full)
+    axis_name_set = set(axis_lookup_dict)
+    template_base_set = {parse_selector(k)[0] for k in template_map_all}
     return NormalizedRhs(
         kind="expr",
         state_names=tuple(state_expanded),
@@ -2811,6 +2813,9 @@ def normalize_expr_rhs(spec: Mapping[str, Any]) -> NormalizedRhs:  # noqa: C901,
             and sym not in aliases
             and sym not in shaped_set
             and sym not in time_varying_set
+            and sym not in axis_name_set
+            and sym not in template_base_set
+            and sym not in _SHAPED_PARAM_BUILTIN_NAMES
         ),
         all_symbols=frozenset(all_syms | set(aliases.keys())),
         meta=meta,
@@ -3056,6 +3061,8 @@ def normalize_transitions_rhs(  # noqa: C901, PLR0912, PLR0914, PLR0915
 
     shaped_set = set(shaped_params)
     time_varying_set = set(time_varying_full)
+    axis_name_set = set(axis_lookup_dict)
+    template_base_set = {parse_selector(k)[0] for k in template_map_all}
     return NormalizedRhs(
         kind="transitions",
         state_names=tuple(state_expanded),
@@ -3068,6 +3075,9 @@ def normalize_transitions_rhs(  # noqa: C901, PLR0912, PLR0914, PLR0915
             and sym not in aliases
             and sym not in shaped_set
             and sym not in time_varying_set
+            and sym not in axis_name_set
+            and sym not in template_base_set
+            and sym not in _SHAPED_PARAM_BUILTIN_NAMES
         ),
         all_symbols=frozenset(all_syms | set(aliases.keys())),
         meta={**meta, "transitions": transitions_expanded},
