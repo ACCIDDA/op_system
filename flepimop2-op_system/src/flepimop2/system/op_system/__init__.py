@@ -84,7 +84,7 @@ class OpSystemSystem(ModuleModel, SystemABC):  # noqa: D101
 
     model_config = ConfigDict(extra="allow")
 
-    def model_post_init(self, context: Any) -> None:  # noqa: ANN401
+    def model_post_init(self, context: Any) -> None:  # noqa: ANN401, PLR0914
         """Compile `op_system` specification and prepare stepper and shape helpers."""
         del context
 
@@ -108,11 +108,22 @@ class OpSystemSystem(ModuleModel, SystemABC):  # noqa: D101
 
         operators = self._extract_operators(compiled)
         operator_axis = self._extract_operator_axis(compiled)
+        # Preserve the user-declared coordinate labels (typically strings
+        # like ``unvaccinated`` / ``age65to100``) alongside the numeric
+        # ``axis_coords`` arrays.  Engine plugins use this to translate
+        # shaped-IC coord assignments back to integer indices.
+        axis_labels: dict[str, tuple[str, ...]] = {}
+        for ax in compiled.meta.get("axes", []) or []:
+            name = ax.get("name")
+            coords = ax.get("coords")
+            if isinstance(name, str) and isinstance(coords, (list, tuple)):
+                axis_labels[name] = tuple(str(c) for c in coords)
         self.options = {
             **dict(self.options or {}),
             "axis_order": axes_meta.axis_order,
             "axis_sizes": axes_meta.axis_sizes,
             "axis_coords": axes_meta.axis_coords,
+            "axis_labels": axis_labels,
             "state_names": compiled.state_names,
             "initial_state": compiled.meta.get("initial_state"),
             "state_shape": shape_dims,
@@ -166,19 +177,25 @@ class OpSystemSystem(ModuleModel, SystemABC):  # noqa: D101
         return cast("SystemProtocol", bound)
 
     @override
-    def requested_parameters(
+    def requested_parameters(  # noqa: C901, PLR0912
         self,
         axes: AxisCollection,
     ) -> dict[IdentifierString, ParameterRequest]:
-        """Declare the scalar parameters consumed by the compiled RHS.
+        """Declare the parameters consumed by the compiled RHS.
 
         Returns:
-            Mapping of parameter name to a scalar `ParameterRequest`.
+            Mapping of parameter name to a `ParameterRequest`. Names that
+            appear as shaped-parameter references (``theta[imm]``) in the
+            spec are requested as shaped (one ndarray); time-varying
+            parameters (e.g. ``beta[time, age]``) are requested with their
+            full axes including the configured time axis.
+
+        Raises:
+            ValueError: If an `initial_state` entry has an unexpected type,
+                or a shaped IC entry collides with an existing request that
+                declares a different axis tuple for the same parameter name.
 
         Notes:
-            op_system rewrites axis-indexed selectors like ``theta[imm]`` into
-            per-coord scalar names (``theta__imm_X0`` ...) at compile time, so
-            every entry in `compiled.param_names` is requested as a scalar.
             Initial-state seed names (referenced from `meta['initial_state']`
             but not necessarily from any rate expression) are also requested
             so engine plugins can assemble the state vector from `params`.
@@ -189,15 +206,71 @@ class OpSystemSystem(ModuleModel, SystemABC):  # noqa: D101
         # Names provided by the compiled-RHS runtime environment, not by config
         # (numpy/jax namespace, simulation time, and built-in summation helpers).
         builtin_names = {"np", "t", "sum_state", "sum_prefix"}
+
+        # Non-time-varying shaped parameters first.  ``shaped_params`` in
+        # meta carries reduced (non-time) axes for tv params, but tv names
+        # are emitted separately below with their full axes; skip them here.
+        shaped_meta = self._compiled_rhs.meta.get("shaped_params") or ()
+        time_varying_meta = self._compiled_rhs.meta.get("time_varying_params") or ()
+        time_varying_names = {name for name, _ in time_varying_meta}
+        for shaped_name, shaped_axes in shaped_meta:
+            if shaped_name in mixing_kernel_names or shaped_name in builtin_names:
+                continue
+            if shaped_name in time_varying_names:
+                continue
+            requests[shaped_name] = ParameterRequest(
+                name=shaped_name, axes=tuple(shaped_axes)
+            )
+
+        # Time-varying parameters: a single ParameterRequest per name with
+        # the full axes tuple (including the configured time axis).  At
+        # call time the compiled wrapper interpolates along the time axis
+        # using the time axis's declared ``coords`` as the grid, so the
+        # supplied array must be shaped exactly as declared in the spec.
+        for tv_name, tv_axes in time_varying_meta:
+            if tv_name in mixing_kernel_names or tv_name in builtin_names:
+                continue
+            requests[tv_name] = ParameterRequest(name=tv_name, axes=tuple(tv_axes))
+
         for name in self._compiled_rhs.param_names:
             if name in mixing_kernel_names or name in builtin_names or name in requests:
                 continue
             requests[name] = ParameterRequest(name=name)
         init_map = (self.options or {}).get("initial_state") or {}
-        for param_name in init_map.values():
-            if param_name in requests:
-                continue
-            requests[param_name] = ParameterRequest(name=param_name)
+        for entry in init_map.values():
+            if isinstance(entry, str):
+                # Scalar IC entry: a single shared parameter.
+                if entry in requests:
+                    continue
+                requests[entry] = ParameterRequest(name=entry)
+            elif isinstance(entry, Mapping) and "shaped" in entry:
+                # Shaped IC entry: one ParameterRequest per (name, axes)
+                # tuple, requested with the declared shape so the engine
+                # can index into it per state cell using `entry["coords"]`.
+                shaped_name = entry["shaped"]
+                shaped_axes = tuple(entry.get("axes", ()))
+                existing = requests.get(shaped_name)
+                if existing is not None:
+                    if tuple(existing.axes) != shaped_axes:
+                        msg = (
+                            f"initial_state shaped entry for "
+                            f"{shaped_name!r} declares axes "
+                            f"{shaped_axes!r} but the same name was "
+                            f"already requested with axes "
+                            f"{tuple(existing.axes)!r}"
+                        )
+                        raise ValueError(msg)
+                    continue
+                requests[shaped_name] = ParameterRequest(
+                    name=shaped_name, axes=shaped_axes
+                )
+            else:
+                msg = (
+                    f"initial_state entry has unexpected type "
+                    f"{type(entry).__name__!r}; expected a parameter name "
+                    "string or a shaped-entry mapping"
+                )
+                raise ValueError(msg)
         # Operator velocity/rate fields are consumed by engine plugins (not by
         # the compiled rhs eval_fn), but still need to be in the params dict.
         for op in self._compiled_rhs.meta.get("operators") or ():

@@ -65,7 +65,7 @@ def _sir_templated_param_spec() -> dict[str, object]:
     }
 
 
-def _eval_equal(spec: dict[str, object], **call_params: float) -> None:
+def _eval_equal(spec: dict[str, object], **call_params: object) -> None:
     rhs = normalize_rhs(spec)
     # ``compile_rhs`` always attempts the vectorized path; bypass it via
     # ``_make_eval_fn`` to keep an independent scalar reference for this
@@ -96,8 +96,7 @@ def test_vectorized_matches_scalar_templated_param() -> None:
     _eval_equal(
         _sir_templated_param_spec(),
         beta=0.4,
-        gamma__age_y=0.1,
-        gamma__age_o=0.2,
+        gamma=np.array([0.1, 0.2]),
     )
 
 

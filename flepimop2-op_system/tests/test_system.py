@@ -541,3 +541,50 @@ def test_requested_parameters_includes_operator_velocity() -> None:
     sys = OpSystemSystem(spec=spec)
     requested = set(sys.requested_parameters(AxisCollection()).keys())
     assert "waning_rate" in requested
+
+
+def test_requested_parameters_emits_full_axes_for_time_varying() -> None:
+    """Time-varying names emit a single ParameterRequest with full axes."""
+    spec: dict[str, object] = {
+        "kind": "expr",
+        "axes": [
+            {"name": "age", "coords": ["young", "old"]},
+            {
+                "name": "time",
+                "type": "continuous",
+                "domain": {"lb": 0.0, "ub": 1.0},
+                "size": 2,
+            },
+        ],
+        "state": ["S[age]"],
+        "equations": {"S[age]": "-nu[time, age] * S[age] - beta[time] * S[age]"},
+    }
+    sys = OpSystemSystem(spec=spec)
+    requested = sys.requested_parameters(AxisCollection())
+    # Each time-varying name appears once with its declared full axes;
+    # no _grid/_ts pair anymore.
+    assert "nu_grid" not in requested
+    assert "beta_ts" not in requested
+    assert requested["nu"].axes == ("time", "age")
+    assert requested["beta"].axes == ("time",)
+
+
+def test_requested_parameters_honours_time_axis_option() -> None:
+    """The time axis name is configurable via the spec's ``time_axis`` field."""
+    spec: dict[str, object] = {
+        "kind": "expr",
+        "axes": [
+            {
+                "name": "day",
+                "type": "continuous",
+                "domain": {"lb": 0.0, "ub": 1.0},
+                "size": 2,
+            }
+        ],
+        "state": ["S"],
+        "equations": {"S": "-beta[day] * S"},
+        "time_axis": "day",
+    }
+    sys = OpSystemSystem(spec=spec)
+    requested = sys.requested_parameters(AxisCollection())
+    assert requested["beta"].axes == ("day",)

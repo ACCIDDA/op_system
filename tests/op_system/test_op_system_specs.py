@@ -12,9 +12,12 @@ from __future__ import annotations
 
 import re
 
+import numpy as np
 import pytest
 
+from op_system import compile_rhs
 from op_system._constraints import _ConstraintRule, _normalize_constraints
+from op_system._errors import InvalidRhsSpecError
 from op_system.specs import (
     NormalizedRhs,
     StateTemplate,
@@ -180,14 +183,266 @@ def test_alias_and_param_templates_expand_over_axes() -> None:
     assert any("beta__age_y" in eq for eq in out.equations)
     assert any("beta__age_o" in eq for eq in out.equations)
 
-    expected_params = {
-        "b0",
-        "gamma",
-        "k_base",
-        "offset__age_y",
-        "offset__age_o",
-    }
+    # ``offset[age]`` is now a shaped parameter (not per-coord scalars and
+    # not included in ``param_names`` — those list scalar params only).
+    expected_params = {"b0", "gamma", "k_base"}
     assert set(out.param_names) == expected_params
+    assert dict(out.shaped_params) == {"offset": ("age",)}
+
+
+def test_shaped_param_single_axis_rewrites_to_literal_subscript() -> None:
+    """A bare ``theta[ax]`` ref becomes a literal ``theta[idx]`` subscript."""
+    spec = {
+        "kind": "expr",
+        "axes": [{"name": "imm", "coords": ["x0", "x1", "x2"]}],
+        "state": ["S[imm]"],
+        "equations": {"S[imm]": "-theta[imm] * S[imm]"},
+    }
+    out = normalize_expr_rhs(spec)
+    assert dict(out.shaped_params) == {"theta": ("imm",)}
+    assert out.equations == (
+        "-theta[0] * S__imm_x0",
+        "-theta[1] * S__imm_x1",
+        "-theta[2] * S__imm_x2",
+    )
+    # ``theta`` must not appear in the per-coord scalar param list.
+    assert "theta" not in out.param_names
+
+
+def test_shaped_param_multi_axis_rewrites_in_axis_order() -> None:
+    """Multi-axis shaped params emit indices in the registered axis order."""
+    spec = {
+        "kind": "expr",
+        "axes": [
+            {"name": "age", "coords": ["y", "o"]},
+            {"name": "vax", "coords": ["u", "v"]},
+        ],
+        "state": ["S[age, vax]"],
+        "equations": {"S[age, vax]": "-phi[age, vax] * S[age, vax]"},
+    }
+    out = normalize_expr_rhs(spec)
+    assert dict(out.shaped_params) == {"phi": ("age", "vax")}
+    assert "-phi[0, 0] * S__age_y__vax_u" in out.equations
+    assert "-phi[1, 1] * S__age_o__vax_v" in out.equations
+
+
+def test_shaped_param_inconsistent_axes_rejected() -> None:
+    """Inconsistent shaped-param axes across references must error."""
+    spec = {
+        "kind": "expr",
+        "axes": [
+            {"name": "age", "coords": ["y", "o"]},
+            {"name": "vax", "coords": ["u", "v"]},
+        ],
+        "state": ["S[age, vax]"],
+        "equations": {
+            "S[age, vax]": "-phi[age, vax] * S[age, vax] + phi[vax, age]",
+        },
+    }
+    with pytest.raises(InvalidRhsSpecError, match="inconsistent axes"):
+        normalize_expr_rhs(spec)
+
+
+def test_shaped_param_in_alias_body_propagates() -> None:
+    """Shaped-param subscripts in alias bodies survive to expanded equations."""
+    spec = {
+        "kind": "expr",
+        "axes": [{"name": "imm", "coords": ["x0", "x1"]}],
+        "state": ["S[imm]"],
+        "aliases": {"k[imm]": "kappa[imm] * 2"},
+        "equations": {"S[imm]": "-k[imm] * S[imm]"},
+    }
+    out = normalize_expr_rhs(spec)
+    assert dict(out.shaped_params) == {"kappa": ("imm",)}
+    assert out.aliases == {
+        "k__imm_x0": "kappa[0] * 2",
+        "k__imm_x1": "kappa[1] * 2",
+    }
+
+
+def test_shaped_param_in_transitions_rate() -> None:
+    """Shaped params work the same way inside ``transitions``-kind specs."""
+    spec = {
+        "kind": "transitions",
+        "axes": [{"name": "imm", "coords": ["x0", "x1", "x2"]}],
+        "state": ["S[imm]", "I[imm]"],
+        "transitions": [
+            {"from": "S[imm]", "to": "I[imm]", "rate": "theta[imm] * I[imm]"},
+        ],
+    }
+    out = normalize_rhs(spec)
+    assert dict(out.shaped_params) == {"theta": ("imm",)}
+    expanded = out.meta["transitions"]
+    rates = sorted(tr["rate"] for tr in expanded)
+    assert rates == [
+        "theta[0] * I__imm_x0",
+        "theta[1] * I__imm_x1",
+        "theta[2] * I__imm_x2",
+    ]
+
+
+def test_shaped_param_eval_end_to_end_scalar_backend() -> None:
+    """Compile + eval an RHS that uses a shaped parameter end-to-end."""
+    spec = {
+        "kind": "expr",
+        "axes": [{"name": "imm", "coords": ["x0", "x1", "x2"]}],
+        "state": ["S[imm]"],
+        "equations": {"S[imm]": "-theta[imm] * S[imm]"},
+    }
+    rhs = normalize_rhs(spec)
+    assert "theta" not in rhs.param_names
+    c = compile_rhs(rhs, xp=np)
+    y = np.array([10.0, 20.0, 40.0])
+    out = c.eval_fn(0.0, y, theta=np.array([0.1, 0.2, 0.5]))
+    assert np.allclose(out, np.array([-1.0, -4.0, -20.0]))
+
+
+def test_time_varying_scalar_records_meta_and_excludes_param() -> None:
+    """A param subscripted with the time axis becomes time-varying."""
+    spec = {
+        "kind": "expr",
+        "axes": [
+            {"name": "imm", "coords": ["x0", "x1"]},
+            {
+                "name": "time",
+                "type": "continuous",
+                "domain": {"lb": 0.0, "ub": 2.0},
+                "size": 3,
+            },
+        ],
+        "state": ["S[imm]"],
+        "equations": {"S[imm]": "-beta[time] * S[imm]"},
+    }
+    rhs = normalize_rhs(spec)
+    assert rhs.time_varying_params == (("beta", ("time",)),)
+    assert rhs.meta["time_varying_params"] == (("beta", ("time",)),)
+    # Tv shaped names live in shaped_params with the time axis stripped.
+    assert dict(rhs.shaped_params) == {"beta": ()}
+    assert "beta" not in rhs.param_names
+    c = compile_rhs(rhs, xp=np)
+    # The compile contract is now a single bare-name kwarg per tv param.
+    assert "beta_grid" not in c.param_names
+    assert "beta_ts" not in c.param_names
+
+
+def test_time_varying_scalar_eval_interpolates() -> None:
+    """Compile + eval interpolates a time-varying scalar at run time."""
+    spec = {
+        "kind": "expr",
+        "axes": [
+            {"name": "imm", "coords": ["x0", "x1"]},
+            {
+                "name": "time",
+                "type": "continuous",
+                "domain": {"lb": 0.0, "ub": 2.0},
+                "size": 3,
+            },
+        ],
+        "state": ["S[imm]"],
+        "equations": {"S[imm]": "-beta[time] * S[imm]"},
+    }
+    c = compile_rhs(normalize_rhs(spec), xp=np)
+    grid = np.array([0.1, 0.3, 0.5])  # values at time=[0, 1, 2]
+    y = np.array([10.0, 20.0])
+    # At t=0.5 -> beta = 0.2
+    out = c.eval_fn(0.5, y, beta=grid)
+    assert np.allclose(out, np.array([-2.0, -4.0]))
+
+
+def test_time_varying_shaped_eval_interpolates_per_axis() -> None:
+    """A time-varying shaped param interpolates per axis cell at run time."""
+    spec = {
+        "kind": "expr",
+        "axes": [
+            {"name": "age", "coords": ["young", "old"]},
+            {
+                "name": "time",
+                "type": "continuous",
+                "domain": {"lb": 0.0, "ub": 1.0},
+                "size": 2,
+            },
+        ],
+        "state": ["S[age]"],
+        "equations": {"S[age]": "-nu[time, age] * S[age]"},
+    }
+    rhs = normalize_rhs(spec)
+    assert rhs.time_varying_params == (("nu", ("time", "age")),)
+    # The reduced shape (axes minus time) is what shaped_params records.
+    assert dict(rhs.shaped_params) == {"nu": ("age",)}
+    c = compile_rhs(rhs, xp=np)
+    grid = np.array([[0.1, 0.3], [0.5, 0.7]])  # shape (n_time=2, n_age=2)
+    y = np.array([10.0, 20.0])
+    # At t=0.5 -> nu = (0.3, 0.5)
+    out = c.eval_fn(0.5, y, nu=grid)
+    assert np.allclose(out, np.array([-3.0, -10.0]))
+
+
+def test_time_varying_axis_can_be_trailing() -> None:
+    """The time axis can appear in any position of a tv param's shape."""
+    spec = {
+        "kind": "expr",
+        "axes": [
+            {"name": "age", "coords": ["young", "old"]},
+            {
+                "name": "time",
+                "type": "continuous",
+                "domain": {"lb": 0.0, "ub": 1.0},
+                "size": 2,
+            },
+        ],
+        "state": ["S[age]"],
+        "equations": {"S[age]": "-nu[age, time] * S[age]"},
+    }
+    rhs = normalize_rhs(spec)
+    assert rhs.time_varying_params == (("nu", ("age", "time")),)
+    c = compile_rhs(rhs, xp=np)
+    grid = np.array([[0.1, 0.5], [0.3, 0.7]])  # shape (n_age=2, n_time=2)
+    y = np.array([10.0, 20.0])
+    # At t=0.5 -> nu interp along trailing axis = (0.3, 0.5).
+    out = c.eval_fn(0.5, y, nu=grid)
+    assert np.allclose(out, np.array([-3.0, -10.0]))
+
+
+def test_legacy_time_varying_field_rejected() -> None:
+    """The legacy ``time_varying`` field is rejected with a migration hint."""
+    spec = {
+        "kind": "expr",
+        "axes": [{"name": "imm", "coords": ["x0"]}],
+        "state": ["S[imm]"],
+        "equations": {"S[imm]": "-beta * S[imm]"},
+        "time_varying": ["beta"],
+    }
+    with pytest.raises(InvalidRhsSpecError, match=r"time_varying.*has been removed"):
+        normalize_rhs(spec)
+
+
+def test_time_varying_in_transitions_kind() -> None:
+    """The implicit time-axis subscript also works for the transitions kind."""
+    spec = {
+        "kind": "transitions",
+        "axes": [
+            {"name": "imm", "coords": ["x0", "x1"]},
+            {
+                "name": "time",
+                "type": "continuous",
+                "domain": {"lb": 0.0, "ub": 1.0},
+                "size": 2,
+            },
+        ],
+        "state": ["S[imm]", "I[imm]"],
+        "transitions": [
+            {"from": "S[imm]", "to": "I[imm]", "rate": "beta[time]"},
+        ],
+    }
+    rhs = normalize_rhs(spec)
+    assert rhs.time_varying_params == (("beta", ("time",)),)
+    c = compile_rhs(rhs, xp=np)
+    grid = np.array([0.0, 1.0])  # values at time=[0, 1]
+    # State order is (S[x0], S[x1], I[x0], I[x1]).
+    y = np.array([10.0, 5.0, 0.0, 0.0])
+    out = c.eval_fn(0.5, y, beta=grid)
+    # beta=0.5; flow=beta*source -> dS=[-5,-2.5], dI=[5,2.5].
+    assert np.allclose(out, np.array([-5.0, -2.5, 5.0, 2.5]))
 
 
 def test_apply_along_kernel_sum_rejects_continuous_axis() -> None:
@@ -1310,6 +1565,149 @@ def test_initial_state_pinned_key_invalid_coord_rejected() -> None:
     }
     with pytest.raises(ValueError, match=r"pinned coord"):
         normalize_transitions_rhs(spec)
+
+
+# -- shaped initial_state values -----------------------------------------------
+
+
+def _shaped_ic_axes_spec() -> dict[str, object]:
+    return {
+        "kind": "transitions",
+        "axes": [
+            {"name": "age", "coords": ["y", "o"]},
+            {"name": "vax", "coords": ["u", "v"]},
+            {"name": "imm", "coords": ["X0", "X1"]},
+        ],
+        "state": ["X[age,vax,imm]"],
+        "transitions": [
+            {"from": "X[age,vax,imm]", "to": "X[age,vax,imm]", "rate": "alpha"},
+        ],
+    }
+
+
+def test_initial_state_shaped_full_wildcards() -> None:
+    """Shaped IC over all-wildcard LHS records (name, axes, coords) per cell."""
+    spec = _shaped_ic_axes_spec()
+    spec["initial_state"] = {
+        "X[age,vax,imm]": {"shaped": "x_init", "axes": ["age", "vax", "imm"]},
+    }
+    out = normalize_transitions_rhs(spec)
+    ic = out.meta["initial_state"]
+    # 2 * 2 * 2 = 8 cells.
+    assert len(ic) == 8
+    entry = ic["X__age_y__vax_u__imm_X0"]
+    assert entry == {
+        "shaped": "x_init",
+        "axes": ("age", "vax", "imm"),
+        "coords": {"age": "y", "vax": "u", "imm": "X0"},
+    }
+    # Distinct cells get distinct coord assignments but share name + axes.
+    other = ic["X__age_o__vax_v__imm_X1"]
+    assert other["shaped"] == "x_init"
+    assert other["axes"] == ("age", "vax", "imm")
+    assert other["coords"] == {"age": "o", "vax": "v", "imm": "X1"}
+
+
+def test_initial_state_shaped_partial_with_pinned_axis() -> None:
+    """Shaped IC works when LHS pins one axis (covers a slice only)."""
+    spec = _shaped_ic_axes_spec()
+    spec["initial_state"] = {
+        "X[age,vax=u,imm]": {"shaped": "x_unvax_init", "axes": ["age", "imm"]},
+        "X[age,vax=v,imm]": {"shaped": "x_vax_init", "axes": ["age", "imm"]},
+    }
+    out = normalize_transitions_rhs(spec)
+    ic = out.meta["initial_state"]
+    assert len(ic) == 8
+    unvax = ic["X__age_y__vax_u__imm_X0"]
+    assert unvax["shaped"] == "x_unvax_init"
+    assert unvax["axes"] == ("age", "imm")
+    assert unvax["coords"] == {"age": "y", "imm": "X0"}
+    vax = ic["X__age_o__vax_v__imm_X1"]
+    assert vax["shaped"] == "x_vax_init"
+    assert vax["coords"] == {"age": "o", "imm": "X1"}
+
+
+def test_initial_state_shaped_axis_order_independent_of_lhs() -> None:
+    """Shaped axes preserve the user's declared order, not the LHS order."""
+    spec = _shaped_ic_axes_spec()
+    spec["initial_state"] = {
+        "X[age,vax,imm]": {"shaped": "x_init", "axes": ["imm", "age", "vax"]},
+    }
+    out = normalize_transitions_rhs(spec)
+    ic = out.meta["initial_state"]
+    entry = ic["X__age_y__vax_u__imm_X0"]
+    assert entry["axes"] == ("imm", "age", "vax")
+    assert entry["coords"] == {"age": "y", "vax": "u", "imm": "X0"}
+
+
+def test_initial_state_shaped_axis_not_bound_by_lhs_rejected() -> None:
+    """Shaped axes must all be wildcards or pinned coords on the LHS."""
+    spec = _shaped_ic_axes_spec()
+    spec["initial_state"] = {
+        # LHS has no `vax` token at all (ill-formed selector for the X
+        # state, but exercised here only to confirm the missing-axis error
+        # path; expand_selector will reject the LHS first if X requires vax.)
+        "X[age,imm]": {"shaped": "x_init", "axes": ["age", "vax", "imm"]},
+    }
+    with pytest.raises(ValueError, match=r"shaped"):
+        normalize_transitions_rhs(spec)
+
+
+def test_initial_state_shaped_unknown_axis_rejected() -> None:
+    """A shaped IC entry naming an axis absent from the spec is rejected."""
+    spec = _shaped_ic_axes_spec()
+    spec["initial_state"] = {
+        "X[age,vax,imm]": {"shaped": "x_init", "axes": ["age", "bogus"]},
+    }
+    with pytest.raises(ValueError, match=r"shaped axis 'bogus' not defined"):
+        normalize_transitions_rhs(spec)
+
+
+def test_initial_state_shaped_missing_name_rejected() -> None:
+    """A shaped IC entry without a ``shaped`` key is rejected."""
+    spec = _shaped_ic_axes_spec()
+    spec["initial_state"] = {
+        "X[age,vax,imm]": {"axes": ["age", "vax", "imm"]},
+    }
+    with pytest.raises(ValueError, match=r"shaped"):
+        normalize_transitions_rhs(spec)
+
+
+def test_initial_state_shaped_unknown_key_rejected() -> None:
+    """A shaped IC entry carrying an unknown key is rejected."""
+    spec = _shaped_ic_axes_spec()
+    spec["initial_state"] = {
+        "X[age,vax,imm]": {
+            "shaped": "x_init",
+            "axes": ["age", "vax", "imm"],
+            "shape": [2, 2, 2],
+        },
+    }
+    with pytest.raises(ValueError, match=r"unknown"):
+        normalize_transitions_rhs(spec)
+
+
+def test_initial_state_shaped_and_scalar_mixed() -> None:
+    """A spec may freely mix scalar and shaped IC entries across compartments."""
+    spec = {
+        "kind": "transitions",
+        "axes": [
+            {"name": "age", "coords": ["y", "o"]},
+            {"name": "vax", "coords": ["u", "v"]},
+        ],
+        "state": ["S[age,vax]", "I[age,vax]"],
+        "transitions": [
+            {"from": "S[age,vax]", "to": "I[age,vax]", "rate": "alpha"},
+        ],
+        "initial_state": {
+            "S[age,vax]": {"shaped": "s_init", "axes": ["age", "vax"]},
+            "I[age,vax]": "i_init",
+        },
+    }
+    out = normalize_transitions_rhs(spec)
+    ic = out.meta["initial_state"]
+    assert ic["S__age_y__vax_u"]["shaped"] == "s_init"
+    assert ic["I__age_y__vax_u"] == "i_init"
 
 
 def test_transitions_pinned_from_endpoint_expands_correctly() -> None:

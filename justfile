@@ -81,7 +81,7 @@ test-provider: provider-sync
 [group('dev')]
 provider-sync:
 	cd {{provider_dir}} && uv venv --clear
-	cd {{provider_dir}} && uv sync --dev
+	cd {{provider_dir}} && uv sync --dev --reinstall-package op-system
 
 # Run type checks in both packages
 [group('dev')]
