@@ -297,6 +297,88 @@ def test_shaped_param_eval_end_to_end_scalar_backend() -> None:
     assert np.allclose(out, np.array([-1.0, -4.0, -20.0]))
 
 
+def test_alias_subscript_axis_token_does_not_leak_into_param_names() -> None:
+    """Axis names that appear only as subscripts in aliases are not params.
+
+    Regression for the case where a non-time axis token (e.g. ``loc``)
+    used in an alias like ``foi: r0_loc[loc] * ...`` was incorrectly
+    surfaced in ``NormalizedRhs.param_names`` because
+    ``_collect_alias_symbols`` walks every ``ast.Name`` (descending into
+    ``Subscript.slice``) and the previous filter only excluded the time
+    axis via ``time_varying_params``.
+    """
+    spec = {
+        "kind": "expr",
+        "axes": [{"name": "loc", "coords": ["a", "b", "c"]}],
+        "state": ["S[loc]"],
+        "aliases": {"foi": "beta * r0_loc[loc]"},
+        "equations": {"S[loc]": "-foi * S[loc]"},
+    }
+    rhs = normalize_expr_rhs(spec)
+    assert "loc" not in rhs.param_names
+    assert dict(rhs.shaped_params) == {"r0_loc": ("loc",)}
+    assert set(rhs.param_names) == {"beta"}
+
+
+def test_transition_rate_axis_token_does_not_leak_into_param_names() -> None:
+    """Same regression as above but for the ``transitions`` rhs kind."""
+    spec = {
+        "kind": "transitions",
+        "axes": [{"name": "loc", "coords": ["a", "b"]}],
+        "state": ["S[loc]", "I[loc]"],
+        "transitions": [
+            {"from": "S[loc]", "to": "I[loc]", "rate": "beta * r0_loc[loc]"}
+        ],
+    }
+    rhs = normalize_transitions_rhs(spec)
+    assert "loc" not in rhs.param_names
+    assert dict(rhs.shaped_params) == {"r0_loc": ("loc",)}
+    assert set(rhs.param_names) == {"beta"}
+
+
+def test_unexpanded_alias_template_state_base_does_not_leak() -> None:
+    """A bare templated-state base in a non-templated alias is not a param.
+
+    ``_collect_alias_symbols`` walks every ``ast.Name`` and only the alias
+    *names* matching a template are expanded per coord by
+    ``_expand_alias_templates``.  An unexpanded alias like
+    ``foi: beta * sum_state(S[loc])`` therefore yields the bare
+    ``ast.Name('S')`` -- which previously fell through into ``param_names``
+    because the filter only excluded the post-expansion state names
+    (``S__loc_a`` etc.), not the template base.
+    """
+    spec = {
+        "kind": "expr",
+        "axes": [{"name": "loc", "coords": ["a", "b"]}],
+        "state": ["S[loc]"],
+        "aliases": {"foi": "beta * sum_state(S[loc])"},
+        "equations": {"S[loc]": "-foi"},
+    }
+    rhs = normalize_expr_rhs(spec)
+    assert "S" not in rhs.param_names
+    assert "sum_state" not in rhs.param_names
+    assert set(rhs.param_names) == {"beta"}
+
+
+def test_unexpanded_alias_template_alias_base_does_not_leak() -> None:
+    """A bare templated-alias base in a non-templated alias is not a param."""
+    spec = {
+        "kind": "expr",
+        "axes": [{"name": "loc", "coords": ["a", "b"]}],
+        "state": ["S[loc]"],
+        "aliases": {
+            "k[loc]": "k_base * mult[loc]",
+            "foi": "beta * sum_state(k[loc])",
+        },
+        "equations": {"S[loc]": "-foi"},
+    }
+    rhs = normalize_expr_rhs(spec)
+    assert "k" not in rhs.param_names
+    assert "sum_state" not in rhs.param_names
+    assert dict(rhs.shaped_params) == {"mult": ("loc",)}
+    assert set(rhs.param_names) == {"beta", "k_base"}
+
+
 def test_time_varying_scalar_records_meta_and_excludes_param() -> None:
     """A param subscripted with the time axis becomes time-varying."""
     spec = {
