@@ -2203,7 +2203,12 @@ backend selection.</p>
 <span class="normal">2822</span>
 <span class="normal">2823</span>
 <span class="normal">2824</span>
-<span class="normal">2825</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">normalize_expr_rhs</span><span class="p">(</span><span class="n">spec</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">NormalizedRhs</span><span class="p">:</span>  <span class="c1"># noqa: C901, PLR0914</span>
+<span class="normal">2825</span>
+<span class="normal">2826</span>
+<span class="normal">2827</span>
+<span class="normal">2828</span>
+<span class="normal">2829</span>
+<span class="normal">2830</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">normalize_expr_rhs</span><span class="p">(</span><span class="n">spec</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">NormalizedRhs</span><span class="p">:</span>  <span class="c1"># noqa: C901, PLR0914</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Normalize an expression-based RHS specification.</span>
 
 <span class="sd">    Args:</span>
@@ -2342,6 +2347,8 @@ backend selection.</p>
 
     <span class="n">shaped_set</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">shaped_params</span><span class="p">)</span>
     <span class="n">time_varying_set</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">time_varying_full</span><span class="p">)</span>
+    <span class="n">axis_name_set</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">axis_lookup_dict</span><span class="p">)</span>
+    <span class="n">template_base_set</span> <span class="o">=</span> <span class="p">{</span><span class="n">parse_selector</span><span class="p">(</span><span class="n">k</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">template_map_all</span><span class="p">}</span>
     <span class="k">return</span> <span class="n">NormalizedRhs</span><span class="p">(</span>
         <span class="n">kind</span><span class="o">=</span><span class="s2">&quot;expr&quot;</span><span class="p">,</span>
         <span class="n">state_names</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(</span><span class="n">state_expanded</span><span class="p">),</span>
@@ -2354,6 +2361,9 @@ backend selection.</p>
             <span class="ow">and</span> <span class="n">sym</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">aliases</span>
             <span class="ow">and</span> <span class="n">sym</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">shaped_set</span>
             <span class="ow">and</span> <span class="n">sym</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">time_varying_set</span>
+            <span class="ow">and</span> <span class="n">sym</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">axis_name_set</span>
+            <span class="ow">and</span> <span class="n">sym</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">template_base_set</span>
+            <span class="ow">and</span> <span class="n">sym</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">_SHAPED_PARAM_BUILTIN_NAMES</span>
         <span class="p">),</span>
         <span class="n">all_symbols</span><span class="o">=</span><span class="nb">frozenset</span><span class="p">(</span><span class="n">all_syms</span> <span class="o">|</span> <span class="nb">set</span><span class="p">(</span><span class="n">aliases</span><span class="o">.</span><span class="n">keys</span><span class="p">())),</span>
         <span class="n">meta</span><span class="o">=</span><span class="n">meta</span><span class="p">,</span>
@@ -2608,12 +2618,7 @@ backend selection.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/op_system/_normalize.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">2886</span>
-<span class="normal">2887</span>
-<span class="normal">2888</span>
-<span class="normal">2889</span>
-<span class="normal">2890</span>
-<span class="normal">2891</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">2891</span>
 <span class="normal">2892</span>
 <span class="normal">2893</span>
 <span class="normal">2894</span>
@@ -2804,7 +2809,17 @@ backend selection.</p>
 <span class="normal">3079</span>
 <span class="normal">3080</span>
 <span class="normal">3081</span>
-<span class="normal">3082</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">normalize_transitions_rhs</span><span class="p">(</span>  <span class="c1"># noqa: C901, PLR0912, PLR0914, PLR0915</span>
+<span class="normal">3082</span>
+<span class="normal">3083</span>
+<span class="normal">3084</span>
+<span class="normal">3085</span>
+<span class="normal">3086</span>
+<span class="normal">3087</span>
+<span class="normal">3088</span>
+<span class="normal">3089</span>
+<span class="normal">3090</span>
+<span class="normal">3091</span>
+<span class="normal">3092</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">normalize_transitions_rhs</span><span class="p">(</span>  <span class="c1"># noqa: C901, PLR0912, PLR0914, PLR0915</span>
     <span class="n">spec</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">NormalizedRhs</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Normalize a transition-based RHS specification (diagram/hazard semantics).</span>
@@ -2977,6 +2992,8 @@ backend selection.</p>
 
     <span class="n">shaped_set</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">shaped_params</span><span class="p">)</span>
     <span class="n">time_varying_set</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">time_varying_full</span><span class="p">)</span>
+    <span class="n">axis_name_set</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">axis_lookup_dict</span><span class="p">)</span>
+    <span class="n">template_base_set</span> <span class="o">=</span> <span class="p">{</span><span class="n">parse_selector</span><span class="p">(</span><span class="n">k</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">template_map_all</span><span class="p">}</span>
     <span class="k">return</span> <span class="n">NormalizedRhs</span><span class="p">(</span>
         <span class="n">kind</span><span class="o">=</span><span class="s2">&quot;transitions&quot;</span><span class="p">,</span>
         <span class="n">state_names</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(</span><span class="n">state_expanded</span><span class="p">),</span>
@@ -2989,6 +3006,9 @@ backend selection.</p>
             <span class="ow">and</span> <span class="n">sym</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">aliases</span>
             <span class="ow">and</span> <span class="n">sym</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">shaped_set</span>
             <span class="ow">and</span> <span class="n">sym</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">time_varying_set</span>
+            <span class="ow">and</span> <span class="n">sym</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">axis_name_set</span>
+            <span class="ow">and</span> <span class="n">sym</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">template_base_set</span>
+            <span class="ow">and</span> <span class="n">sym</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">_SHAPED_PARAM_BUILTIN_NAMES</span>
         <span class="p">),</span>
         <span class="n">all_symbols</span><span class="o">=</span><span class="nb">frozenset</span><span class="p">(</span><span class="n">all_syms</span> <span class="o">|</span> <span class="nb">set</span><span class="p">(</span><span class="n">aliases</span><span class="o">.</span><span class="n">keys</span><span class="p">())),</span>
         <span class="n">meta</span><span class="o">=</span><span class="p">{</span><span class="o">**</span><span class="n">meta</span><span class="p">,</span> <span class="s2">&quot;transitions&quot;</span><span class="p">:</span> <span class="n">transitions_expanded</span><span class="p">},</span>
