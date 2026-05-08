@@ -11,7 +11,6 @@ Covers:
 from __future__ import annotations
 
 import numpy as np
-
 from op_system._vectorize import build_vector_plan
 from op_system.compile import _make_eval_fn, compile_rhs
 from op_system.specs import normalize_rhs
@@ -96,8 +95,7 @@ def test_vectorized_matches_scalar_templated_param() -> None:
     _eval_equal(
         _sir_templated_param_spec(),
         beta=0.4,
-        gamma__age_y=0.1,
-        gamma__age_o=0.2,
+        gamma=np.array([0.1, 0.2]),
     )
 
 

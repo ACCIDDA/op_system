@@ -348,18 +348,30 @@ def _build_chain_stage_names(cname: str, *, length: int) -> list[str]:
 # ---------------------------------------------------------------------------
 
 
-def _extract_placeholders_from_expr(expr: str) -> set[str]:
+def _extract_placeholders_from_expr(
+    expr: str,
+    *,
+    shaped_param_names: set[str] | None = None,
+) -> set[str]:
     """
     Extract wildcard placeholder axis names from ``[...]`` tokens in an expression.
 
     Only bare axis names (not ``axis=coord`` pins) are treated as placeholders.
+    When ``shaped_param_names`` is provided, ``[...]`` tokens whose base name
+    is a registered shaped parameter are skipped — such references are
+    rewritten to literal-index subscripts and must not trigger axis
+    expansion at the call site.
 
     Returns:
         Set of placeholder names referenced inside bracket templates.
     """
     placeholders: set[str] = set()
-    for match in _PLACEHOLDER_RE.finditer(expr):
-        inner = match.group(1)
+    skip = shaped_param_names or set()
+    for match in _INLINE_TEMPLATE_RE.finditer(expr):
+        base = match.group(1)
+        if base in skip:
+            continue
+        inner = match.group(2)
         for part in inner.split(","):
             part_s = part.strip()
             if part_s and "=" not in part_s:
@@ -401,6 +413,8 @@ def _apply_template_substitutions(
     *,
     assignment: Mapping[str, str],
     template_map: Mapping[str, list[tuple[str, dict[str, str]]]],
+    shaped_params: Mapping[str, tuple[str, ...]] | None = None,
+    axis_lookup: Mapping[str, list[str]] | None = None,
 ) -> str:
     """Replace template references in ``expr_s`` using a concrete assignment.
 
@@ -408,14 +422,25 @@ def _apply_template_substitutions(
     and inline placeholder syntax like ``theta[age,pop]`` when the
     placeholders are covered by ``assignment``.
 
+    When ``shaped_params`` and ``axis_lookup`` are provided, references to
+    a registered shaped parameter (e.g. ``theta[imm]`` for a parameter
+    declared shaped over ``("imm",)``) are rewritten as literal-index
+    subscripts (``theta[5]``) into the shaped buffer instead of being
+    expanded to per-coord scalar names.
+
     Returns:
         Expression string with template tokens replaced.
     """
     expr_out = expr_s
+    shaped = shaped_params or {}
 
-    # Explicit template keys from the template map.
+    # Explicit template keys from the template map. Skip any whose base
+    # collides with a registered shaped parameter — those are rewritten by
+    # the inline replacer below.
     for template_key in template_map:
         base, tokens = parse_selector(template_key)
+        if base in shaped:
+            continue
         wildcards = [t for t in tokens if isinstance(t, WildcardToken)]
         if not wildcards or any(wt.axis not in assignment for wt in wildcards):
             continue
@@ -431,6 +456,18 @@ def _apply_template_substitutions(
         phs = [p.strip() for p in inner.split(",") if p.strip() and "=" not in p]
         if not phs or any(ph not in assignment for ph in phs):
             return match.group(0)
+        if inner_base in shaped:
+            registered = shaped[inner_base]
+            if tuple(phs) != registered:
+                # Different ordering or axes — leave for downstream to flag.
+                return match.group(0)
+            if axis_lookup is None:
+                return match.group(0)
+            try:
+                idxs = [axis_lookup[ax].index(assignment[ax]) for ax in registered]
+            except (KeyError, ValueError):
+                return match.group(0)
+            return f"{inner_base}[{', '.join(str(i) for i in idxs)}]"
         return _render_template_name(inner_base, phs, assignment)
 
     return _INLINE_TEMPLATE_RE.sub(_inline_replacer, expr_out)

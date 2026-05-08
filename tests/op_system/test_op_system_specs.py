@@ -12,8 +12,11 @@ from __future__ import annotations
 
 import re
 
+import numpy as np
 import pytest
+from op_system import compile_rhs
 from op_system._constraints import _ConstraintRule, _normalize_constraints
+from op_system._errors import InvalidRhsSpecError
 from op_system.specs import (
     NormalizedRhs,
     StateTemplate,
@@ -179,14 +182,118 @@ def test_alias_and_param_templates_expand_over_axes() -> None:
     assert any("beta__age_y" in eq for eq in out.equations)
     assert any("beta__age_o" in eq for eq in out.equations)
 
-    expected_params = {
-        "b0",
-        "gamma",
-        "k_base",
-        "offset__age_y",
-        "offset__age_o",
-    }
+    # ``offset[age]`` is now a shaped parameter (not per-coord scalars and
+    # not included in ``param_names`` — those list scalar params only).
+    expected_params = {"b0", "gamma", "k_base"}
     assert set(out.param_names) == expected_params
+    assert dict(out.shaped_params) == {"offset": ("age",)}
+
+
+def test_shaped_param_single_axis_rewrites_to_literal_subscript() -> None:
+    """A bare ``theta[ax]`` ref becomes a literal ``theta[idx]`` subscript."""
+    spec = {
+        "kind": "expr",
+        "axes": [{"name": "imm", "coords": ["x0", "x1", "x2"]}],
+        "state": ["S[imm]"],
+        "equations": {"S[imm]": "-theta[imm] * S[imm]"},
+    }
+    out = normalize_expr_rhs(spec)
+    assert dict(out.shaped_params) == {"theta": ("imm",)}
+    assert out.equations == (
+        "-theta[0] * S__imm_x0",
+        "-theta[1] * S__imm_x1",
+        "-theta[2] * S__imm_x2",
+    )
+    # ``theta`` must not appear in the per-coord scalar param list.
+    assert "theta" not in out.param_names
+
+
+def test_shaped_param_multi_axis_rewrites_in_axis_order() -> None:
+    """Multi-axis shaped params emit indices in the registered axis order."""
+    spec = {
+        "kind": "expr",
+        "axes": [
+            {"name": "age", "coords": ["y", "o"]},
+            {"name": "vax", "coords": ["u", "v"]},
+        ],
+        "state": ["S[age, vax]"],
+        "equations": {"S[age, vax]": "-phi[age, vax] * S[age, vax]"},
+    }
+    out = normalize_expr_rhs(spec)
+    assert dict(out.shaped_params) == {"phi": ("age", "vax")}
+    assert "-phi[0, 0] * S__age_y__vax_u" in out.equations
+    assert "-phi[1, 1] * S__age_o__vax_v" in out.equations
+
+
+def test_shaped_param_inconsistent_axes_rejected() -> None:
+    """Inconsistent shaped-param axes across references must error."""
+    spec = {
+        "kind": "expr",
+        "axes": [
+            {"name": "age", "coords": ["y", "o"]},
+            {"name": "vax", "coords": ["u", "v"]},
+        ],
+        "state": ["S[age, vax]"],
+        "equations": {
+            "S[age, vax]": "-phi[age, vax] * S[age, vax] + phi[vax, age]",
+        },
+    }
+    with pytest.raises(InvalidRhsSpecError, match="inconsistent axes"):
+        normalize_expr_rhs(spec)
+
+
+def test_shaped_param_in_alias_body_propagates() -> None:
+    """Shaped-param subscripts in alias bodies survive to expanded equations."""
+    spec = {
+        "kind": "expr",
+        "axes": [{"name": "imm", "coords": ["x0", "x1"]}],
+        "state": ["S[imm]"],
+        "aliases": {"k[imm]": "kappa[imm] * 2"},
+        "equations": {"S[imm]": "-k[imm] * S[imm]"},
+    }
+    out = normalize_expr_rhs(spec)
+    assert dict(out.shaped_params) == {"kappa": ("imm",)}
+    assert out.aliases == {
+        "k__imm_x0": "kappa[0] * 2",
+        "k__imm_x1": "kappa[1] * 2",
+    }
+
+
+def test_shaped_param_in_transitions_rate() -> None:
+    """Shaped params work the same way inside ``transitions``-kind specs."""
+    spec = {
+        "kind": "transitions",
+        "axes": [{"name": "imm", "coords": ["x0", "x1", "x2"]}],
+        "state": ["S[imm]", "I[imm]"],
+        "transitions": [
+            {"from": "S[imm]", "to": "I[imm]", "rate": "theta[imm] * I[imm]"},
+        ],
+    }
+    out = normalize_rhs(spec)
+    assert dict(out.shaped_params) == {"theta": ("imm",)}
+    expanded = out.meta["transitions"]
+    rates = sorted(tr["rate"] for tr in expanded)
+    assert rates == [
+        "theta[0] * I__imm_x0",
+        "theta[1] * I__imm_x1",
+        "theta[2] * I__imm_x2",
+    ]
+
+
+def test_shaped_param_eval_end_to_end_scalar_backend() -> None:
+    """Compile + eval an RHS that uses a shaped parameter end-to-end."""
+    spec = {
+        "kind": "expr",
+        "axes": [{"name": "imm", "coords": ["x0", "x1", "x2"]}],
+        "state": ["S[imm]"],
+        "equations": {"S[imm]": "-theta[imm] * S[imm]"},
+    }
+    rhs = normalize_rhs(spec)
+    assert "theta" not in rhs.param_names
+    c = compile_rhs(rhs, xp=np)
+    y = np.array([10.0, 20.0, 40.0])
+    out = c.eval_fn(0.0, y, theta=np.array([0.1, 0.2, 0.5]))
+    assert np.allclose(out, np.array([-1.0, -4.0, -20.0]))
 
 
 def test_apply_along_kernel_sum_rejects_continuous_axis() -> None:

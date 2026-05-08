@@ -218,34 +218,42 @@ _ALLOWED_NODES: tuple[type[ast.AST], ...] = (
     ast.Or,
     ast.BoolOp,
     ast.IfExp,
+    # Subscripts are needed for shaped-parameter buffer access (``theta[5]``)
+    # and for ``np.array``-style index expressions emitted by template
+    # substitution.
+    ast.Subscript,
+    ast.Index,
+    ast.Tuple,
 )
 
 _ALLOWED_CALL_ROOTS: tuple[str, ...] = ("np",)
-_ALLOWED_CALL_FUNCS: frozenset[str] = frozenset({
-    # NumPy scalar math; keep small initially.
-    "abs",
-    "exp",
-    "expm1",
-    "log",
-    "log1p",
-    "log2",
-    "log10",
-    "sqrt",
-    "maximum",
-    "minimum",
-    "clip",
-    "where",
-    # Trig and hyperbolic.
-    "sin",
-    "cos",
-    "tan",
-    "sinh",
-    "cosh",
-    "tanh",
-    # Geometry-ish.
-    "hypot",
-    "arctan2",
-})
+_ALLOWED_CALL_FUNCS: frozenset[str] = frozenset(
+    {
+        # NumPy scalar math; keep small initially.
+        "abs",
+        "exp",
+        "expm1",
+        "log",
+        "log1p",
+        "log2",
+        "log10",
+        "sqrt",
+        "maximum",
+        "minimum",
+        "clip",
+        "where",
+        # Trig and hyperbolic.
+        "sin",
+        "cos",
+        "tan",
+        "sinh",
+        "cosh",
+        "tanh",
+        # Geometry-ish.
+        "hypot",
+        "arctan2",
+    }
+)
 
 _ALLOWED_HELPER_FUNCS: frozenset[str] = frozenset({"sum_state", "sum_prefix"})
 

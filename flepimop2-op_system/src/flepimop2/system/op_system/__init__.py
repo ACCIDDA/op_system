@@ -181,15 +181,15 @@ class OpSystemSystem(ModuleModel, SystemABC):  # noqa: D101
         self,
         axes: AxisCollection,
     ) -> dict[IdentifierString, ParameterRequest]:
-        """Declare the scalar parameters consumed by the compiled RHS.
+        """Declare the parameters consumed by the compiled RHS.
 
         Returns:
-            Mapping of parameter name to a scalar `ParameterRequest`.
+            Mapping of parameter name to a `ParameterRequest`. Names that
+            appear as shaped-parameter references (``theta[imm]``) in the
+            spec are requested as shaped (one ndarray); everything else is
+            requested as a scalar.
 
         Notes:
-            op_system rewrites axis-indexed selectors like ``theta[imm]`` into
-            per-coord scalar names (``theta__imm_X0`` ...) at compile time, so
-            every entry in `compiled.param_names` is requested as a scalar.
             Initial-state seed names (referenced from `meta['initial_state']`
             but not necessarily from any rate expression) are also requested
             so engine plugins can assemble the state vector from `params`.
@@ -200,6 +200,17 @@ class OpSystemSystem(ModuleModel, SystemABC):  # noqa: D101
         # Names provided by the compiled-RHS runtime environment, not by config
         # (numpy/jax namespace, simulation time, and built-in summation helpers).
         builtin_names = {"np", "t", "sum_state", "sum_prefix"}
+
+        # Shaped parameters first, so a later scalar-name collision is a hard
+        # error rather than a silent overwrite.
+        shaped_meta = self._compiled_rhs.meta.get("shaped_params") or ()
+        for shaped_name, shaped_axes in shaped_meta:
+            if shaped_name in mixing_kernel_names or shaped_name in builtin_names:
+                continue
+            requests[shaped_name] = ParameterRequest(
+                name=shaped_name, axes=tuple(shaped_axes)
+            )
+
         for name in self._compiled_rhs.param_names:
             if name in mixing_kernel_names or name in builtin_names or name in requests:
                 continue

@@ -21,7 +21,7 @@ from itertools import product
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping, Sequence
+    from collections.abc import Iterable, Mapping, Sequence
 
 from op_system._axes import (
     _compute_axis_deltas,
@@ -37,6 +37,7 @@ from op_system._helpers import (
 )
 from op_system._symbols import _collect_names, _parse_expr
 from op_system._templates import (
+    _INLINE_TEMPLATE_RE,
     PinnedToken,
     SelectorToken,
     WildcardToken,
@@ -117,6 +118,7 @@ class NormalizedRhs:
     all_symbols: frozenset[str]
     meta: Mapping[str, Any]
     state_templates: tuple[StateTemplate, ...] = ()
+    shaped_params: tuple[tuple[str, tuple[str, ...]], ...] = ()
 
 
 # ---------------------------------------------------------------------------
@@ -734,6 +736,60 @@ def _collect_alias_symbols(
     return symbols
 
 
+_SHAPED_PARAM_BUILTIN_NAMES: frozenset[str] = frozenset(
+    {"np", "t", "sum_state", "sum_prefix"}
+)
+
+
+def _scan_shaped_param_refs(
+    expressions: Iterable[str],
+    *,
+    name_blocklist: set[str],
+    axis_lookup: Mapping[str, list[str]],
+) -> dict[str, tuple[str, ...]]:
+    """Scan expressions for shaped-parameter references.
+
+    A shaped parameter reference is a token of the form ``name[ax1,ax2,...]``
+    where ``name`` is not in ``name_blocklist`` (states, aliases, recognized
+    built-ins) and every bracket entry is a bare axis name (no pinned coords)
+    registered in ``axis_lookup``.  Each such ``name`` is recorded as shaped
+    over the tuple of axes appearing in its first occurrence; subsequent
+    occurrences must use the same axes in the same order.
+
+    Returns:
+        Mapping from base name to its registered axes tuple.
+
+    Raises:
+        InvalidRhsSpecError: If a name is referenced with inconsistent axes.
+    """
+    result: dict[str, tuple[str, ...]] = {}
+    for expr in expressions:
+        if not expr:
+            continue
+        for match in _INLINE_TEMPLATE_RE.finditer(expr):
+            base = match.group(1)
+            if base in name_blocklist or base in _SHAPED_PARAM_BUILTIN_NAMES:
+                continue
+            inner = match.group(2)
+            parts = [p.strip() for p in inner.split(",")]
+            if not parts or any(not p or "=" in p for p in parts):
+                continue
+            if any(p not in axis_lookup for p in parts):
+                continue
+            axes_tuple = tuple(parts)
+            if base in result:
+                if result[base] != axes_tuple:
+                    raise InvalidRhsSpecError(
+                        detail=(
+                            f"shaped parameter {base!r} referenced with "
+                            f"inconsistent axes: {result[base]} vs {axes_tuple}"
+                        )
+                    )
+            else:
+                result[base] = axes_tuple
+    return result
+
+
 def _build_state_templates(
     state_raw: list[str],
     *,
@@ -858,6 +914,8 @@ def _expand_alias_templates(
     *,
     axes: list[dict[str, Any]],
     template_map_seed: Mapping[str, list[tuple[str, dict[str, str]]]],
+    shaped_params: Mapping[str, tuple[str, ...]] | None = None,
+    axis_lookup: Mapping[str, list[str]] | None = None,
 ) -> tuple[dict[str, str], dict[str, list[tuple[str, dict[str, str]]]]]:
     """Expand templated alias names and substitute inline placeholders.
 
@@ -890,6 +948,8 @@ def _expand_alias_templates(
                     expr_s,
                     assignment=assignment,
                     template_map=combined_template_map,
+                    shaped_params=shaped_params,
+                    axis_lookup=axis_lookup,
                 )
                 aliases_out[expanded_name] = substituted
         else:
@@ -1124,6 +1184,7 @@ class _TransitionEndpoints:
     axes: list[dict[str, Any]]
     template_map: Mapping[str, list[tuple[str, dict[str, str]]]]
     axis_lookup: dict[str, list[str]]
+    shaped_params: Mapping[str, tuple[str, ...]] | None = None
 
 
 def _collect_transition_wildcard_axes(
@@ -1140,9 +1201,14 @@ def _collect_transition_wildcard_axes(
         if isinstance(tok, WildcardToken) and tok.axis not in seen:
             wildcard_axes.append(tok.axis)
             seen.add(tok.axis)
-    expr_placeholders = _extract_placeholders_from_expr(endpoints.rate_s)
+    skip = set(endpoints.shaped_params or {})
+    expr_placeholders = _extract_placeholders_from_expr(
+        endpoints.rate_s, shaped_param_names=skip
+    )
     if endpoints.name_s:
-        expr_placeholders |= _extract_placeholders_from_expr(endpoints.name_s)
+        expr_placeholders |= _extract_placeholders_from_expr(
+            endpoints.name_s, shaped_param_names=skip
+        )
     for ph in sorted(expr_placeholders):
         if ph not in seen:
             if ph not in endpoints.axis_lookup:
@@ -1166,7 +1232,11 @@ def _render_transition_combo(
         Expanded transition mapping with concrete from/to/rate fields.
     """
     rate_sub = _apply_template_substitutions(
-        endpoints.rate_s, assignment=assignment, template_map=endpoints.template_map
+        endpoints.rate_s,
+        assignment=assignment,
+        template_map=endpoints.template_map,
+        shaped_params=endpoints.shaped_params,
+        axis_lookup=endpoints.axis_lookup,
     )
     tr_out: dict[str, Any] = dict(tr_base)
     tr_out["from"] = render_selector(
@@ -1184,7 +1254,11 @@ def _render_transition_combo(
     tr_out["rate"] = _expand_helpers(rate_sub, axes=endpoints.axes)
     if endpoints.name_s:
         tr_out["name"] = _apply_template_substitutions(
-            endpoints.name_s, assignment=assignment, template_map=endpoints.template_map
+            endpoints.name_s,
+            assignment=assignment,
+            template_map=endpoints.template_map,
+            shaped_params=endpoints.shaped_params,
+            axis_lookup=endpoints.axis_lookup,
         )
     return tr_out
 
@@ -1195,6 +1269,7 @@ def _expand_single_transition(
     axes: list[dict[str, Any]],
     template_map: Mapping[str, list[tuple[str, dict[str, str]]]],
     axis_lookup: dict[str, list[str]],
+    shaped_params: Mapping[str, tuple[str, ...]] | None = None,
 ) -> list[dict[str, Any]]:
     """Expand one transition template over all wildcard combinations.
 
@@ -1222,6 +1297,7 @@ def _expand_single_transition(
         axes=axes,
         template_map=template_map,
         axis_lookup=axis_lookup,
+        shaped_params=shaped_params,
     )
     wildcard_axes = _collect_transition_wildcard_axes(endpoints)
 
@@ -1251,6 +1327,7 @@ def _expand_transition_templates(
     *,
     axes: list[dict[str, Any]],
     template_map: Mapping[str, list[tuple[str, dict[str, str]]]],
+    shaped_params: Mapping[str, tuple[str, ...]] | None = None,
 ) -> list[dict[str, Any]]:
     """Expand templated transitions over categorical axes.
 
@@ -1271,6 +1348,7 @@ def _expand_transition_templates(
                 axes=axes,
                 template_map=template_map,
                 axis_lookup=axis_lookup,
+                shaped_params=shaped_params,
             )
         )
     return expanded
@@ -1862,6 +1940,8 @@ def _resolve_template_equation(
     axes: list[dict[str, Any]],
     template_map: Mapping[str, list[tuple[str, dict[str, str]]]],
     all_syms: set[str],
+    shaped_params: Mapping[str, tuple[str, ...]] | None = None,
+    axis_lookup: Mapping[str, list[str]] | None = None,
 ) -> str | None:
     """Resolve an equation for a templated state name.
 
@@ -1882,7 +1962,11 @@ def _resolve_template_equation(
                 )
             expr_s = _expand_helpers(expr.strip(), axes=axes)
             expr_s = _apply_template_substitutions(
-                expr_s, assignment=assignment, template_map=template_map
+                expr_s,
+                assignment=assignment,
+                template_map=template_map,
+                shaped_params=shaped_params,
+                axis_lookup=axis_lookup,
             )
             tree = _parse_expr(expr_s)
             all_syms |= _collect_names(tree)
@@ -1897,6 +1981,8 @@ def _gather_equations(
     *,
     axes: list[dict[str, Any]],
     template_map: Mapping[str, list[tuple[str, dict[str, str]]]] | None = None,
+    shaped_params: Mapping[str, tuple[str, ...]] | None = None,
+    axis_lookup: Mapping[str, list[str]] | None = None,
 ) -> list[str]:
     """Gather and expand one equation string per state variable.
 
@@ -1927,6 +2013,8 @@ def _gather_equations(
             axes=axes,
             template_map=template_map,
             all_syms=all_syms,
+            shaped_params=shaped_params,
+            axis_lookup=axis_lookup,
         )
         if expr_res is None:
             raise InvalidRhsSpecError(detail=f"Missing equation for state {name!r}")
@@ -2483,8 +2571,32 @@ def normalize_expr_rhs(spec: Mapping[str, Any]) -> NormalizedRhs:
     if len(state_expanded) != len(set(state_expanded)):
         raise InvalidRhsSpecError(detail="expanded state contains duplicates")
 
+    # Pre-scan raw aliases + equations for shaped-parameter references before
+    # alias/template expansion mangles bracketed bases into per-coord names.
+    axis_lookup_dict: dict[str, list[str]] = build_axis_lookup(axes_meta)
+    aliases_raw_map = meta_parts[0] or {}
+    name_blocklist = (
+        {parse_selector(s)[0] for s in state_raw}
+        | set(state_expanded)
+        | {parse_selector(_normalize_bracket_key(k))[0] for k in aliases_raw_map}
+        | set(aliases_raw_map.keys())
+    )
+    raw_expressions: list[str] = [
+        v for v in aliases_raw_map.values() if isinstance(v, str)
+    ]
+    raw_expressions.extend(v for v in equations_map.values() if isinstance(v, str))
+    shaped_params = _scan_shaped_param_refs(
+        raw_expressions,
+        name_blocklist=name_blocklist,
+        axis_lookup=axis_lookup_dict,
+    )
+
     aliases, alias_template_map = _expand_alias_templates(
-        meta_parts[0], axes=axes_meta, template_map_seed=state_template_map
+        meta_parts[0],
+        axes=axes_meta,
+        template_map_seed=state_template_map,
+        shaped_params=shaped_params,
+        axis_lookup=axis_lookup_dict,
     )
     template_map_all = {**state_template_map, **alias_template_map}
 
@@ -2515,6 +2627,8 @@ def normalize_expr_rhs(spec: Mapping[str, Any]) -> NormalizedRhs:
         all_syms,
         axes=axes_meta,
         template_map=template_map_all,
+        shaped_params=shaped_params,
+        axis_lookup=axis_lookup_dict,
     )
 
     _maybe_attach_initial_state(
@@ -2524,6 +2638,9 @@ def normalize_expr_rhs(spec: Mapping[str, Any]) -> NormalizedRhs:
         template_map=template_map_all,
     )
 
+    meta["shaped_params"] = tuple(sorted(shaped_params.items()))
+
+    shaped_set = set(shaped_params)
     return NormalizedRhs(
         kind="expr",
         state_names=tuple(state_expanded),
@@ -2532,7 +2649,9 @@ def normalize_expr_rhs(spec: Mapping[str, Any]) -> NormalizedRhs:
         param_names=_sorted_unique(
             sym
             for sym in all_syms
-            if sym not in set(state_expanded) and sym not in aliases
+            if sym not in set(state_expanded)
+            and sym not in aliases
+            and sym not in shaped_set
         ),
         all_symbols=frozenset(all_syms | set(aliases.keys())),
         meta=meta,
@@ -2542,6 +2661,7 @@ def normalize_expr_rhs(spec: Mapping[str, Any]) -> NormalizedRhs:
             state_template_map=state_template_map,
             state_expanded=state_expanded,
         ),
+        shaped_params=tuple(sorted(shaped_params.items())),
     )
 
 
@@ -2663,8 +2783,38 @@ def normalize_transitions_rhs(
     if len(state_expanded) != len(set(state_expanded)):
         raise InvalidRhsSpecError(detail="expanded state contains duplicates")
 
+    # Pre-scan raw aliases + transition rates for shaped-parameter references.
+    axis_lookup_dict: dict[str, list[str]] = build_axis_lookup(axes_meta)
+    aliases_raw_map = meta_parts[0] or {}
+    name_blocklist = (
+        {parse_selector(s)[0] for s in state_raw}
+        | set(state_expanded)
+        | {parse_selector(_normalize_bracket_key(k))[0] for k in aliases_raw_map}
+        | set(aliases_raw_map.keys())
+    )
+    raw_expressions: list[str] = [
+        v for v in aliases_raw_map.values() if isinstance(v, str)
+    ]
+    for tr in transitions_raw:
+        if isinstance(tr, _MappingABC):
+            r = tr.get("rate")
+            if isinstance(r, str):
+                raw_expressions.append(r)
+            n = tr.get("name")
+            if isinstance(n, str):
+                raw_expressions.append(n)
+    shaped_params = _scan_shaped_param_refs(
+        raw_expressions,
+        name_blocklist=name_blocklist,
+        axis_lookup=axis_lookup_dict,
+    )
+
     aliases, alias_template_map = _expand_alias_templates(
-        meta_parts[0], axes=axes_meta, template_map_seed=state_template_map
+        meta_parts[0],
+        axes=axes_meta,
+        template_map_seed=state_template_map,
+        shaped_params=shaped_params,
+        axis_lookup=axis_lookup_dict,
     )
     template_map_all = {**state_template_map, **alias_template_map}
 
@@ -2690,6 +2840,7 @@ def normalize_transitions_rhs(
         transitions_raw,
         axes=axes_meta,
         template_map=template_map_all,
+        shaped_params=shaped_params,
     )
 
     for idx, tr_map in enumerate(transitions_expanded):
@@ -2708,13 +2859,18 @@ def normalize_transitions_rhs(
         template_map=template_map_all,
     )
 
+    meta["shaped_params"] = tuple(sorted(shaped_params.items()))
+
+    shaped_set = set(shaped_params)
     return NormalizedRhs(
         kind="transitions",
         state_names=tuple(state_expanded),
         equations=tuple(_build_transition_equations(state_expanded, d_terms)),
         aliases=aliases,
         param_names=_sorted_unique(
-            sym for sym in all_syms if sym not in state_set and sym not in aliases
+            sym
+            for sym in all_syms
+            if sym not in state_set and sym not in aliases and sym not in shaped_set
         ),
         all_symbols=frozenset(all_syms | set(aliases.keys())),
         meta={**meta, "transitions": transitions_expanded},
@@ -2724,4 +2880,5 @@ def normalize_transitions_rhs(
             state_template_map=state_template_map,
             state_expanded=state_expanded,
         ),
+        shaped_params=tuple(sorted(shaped_params.items())),
     )
