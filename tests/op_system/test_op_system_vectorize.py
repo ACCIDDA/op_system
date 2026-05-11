@@ -163,3 +163,129 @@ def test_compile_rhs_returns_finite_output() -> None:
     out = c.eval_fn(0.0, y, beta=0.3, gamma=0.1)
     assert out.shape == (len(rhs.state_names),)
     assert np.all(np.isfinite(out))
+
+
+# ---------------------------------------------------------------------------
+# Regression coverage for op_system #95: shaped-param subscripts in equations
+# / aliases (e.g. ``r0_loc[loc]``) must not force per-cell unrolling along
+# the subscripted axis.
+# ---------------------------------------------------------------------------
+
+
+def _sir_shaped_param_in_rate_spec() -> dict[str, object]:
+    """Two-axis templated SIR with a shaped param subscripted by axis name.
+
+    The transition rate uses ``k[loc]``, which the normalizer expands to
+    ``k[<int>]`` per cell. The vectorizer must recognize this and rewrite
+    the cell expression so the loc axis stays vectorized rather than
+    unrolling to one code per loc.
+
+    Returns:
+        A spec dict suitable for passing to ``normalize_rhs``.
+    """
+    return {
+        "kind": "expr",
+        "axes": [
+            {"name": "age", "coords": ["y", "o"]},
+            {"name": "loc", "coords": ["a", "b", "c"]},
+        ],
+        "state": ["S[age, loc]", "I[age, loc]"],
+        "params": ["beta", "gamma"],
+        "equations": {
+            "S[age, loc]": "-beta * k[loc] * S[age, loc] * I[age, loc]",
+            "I[age, loc]": (
+                "beta * k[loc] * S[age, loc] * I[age, loc] - gamma * I[age, loc]"
+            ),
+        },
+    }
+
+
+def test_shaped_param_subscript_keeps_axis_vectorized() -> None:
+    """Subscripting a shaped param by axis name must not unroll that axis.
+
+    Regression test for op_system #95: a transition rate of the form
+    ``k[loc] * S[age, loc] * ...`` is normalized into per-cell expansions
+    ``k[0] * ...``, ``k[1] * ...`` etc. Pre-fix this defeated the equation
+    vectorizer's first/last-cell AST-equality check, causing it to fall
+    back to per-cell unrolling along ``loc``. Post-fix, ``loc`` stays in
+    the vec-axes set and the template is compiled to a single shaped code.
+    """
+    rhs = normalize_rhs(_sir_shaped_param_in_rate_spec())
+    plan = build_vector_plan(rhs)
+    assert plan is not None
+    by_base = {grp.base: grp for grp in plan.eq_groups}
+    for base in ("S", "I"):
+        grp = by_base[base]
+        assert "loc" in grp.vec_axes, (
+            f"{base!r} should keep loc vectorized, got "
+            f"vec_axes={grp.vec_axes} unroll_axes={grp.unroll_axes}"
+        )
+        assert "loc" not in grp.unroll_axes
+        assert len(grp.codes) == 1, (
+            f"{base!r} should compile to a single shaped code, got {len(grp.codes)}"
+        )
+
+
+def test_shaped_param_subscript_eval_matches_scalar() -> None:
+    """Numerical equivalence with a shaped param subscripted in equations."""
+    _eval_equal(
+        _sir_shaped_param_in_rate_spec(),
+        beta=0.3,
+        gamma=0.1,
+        k=np.array([1.0, 2.0, 0.5]),
+    )
+
+
+def test_shaped_param_subscript_in_alias_keeps_axis_vectorized() -> None:
+    """Subscripting a shaped param by axis name inside an alias body.
+
+    Same regression target as the equation form, but driven through an
+    alias used by downstream transitions.
+    """
+    spec: dict[str, object] = {
+        "kind": "expr",
+        "axes": [
+            {"name": "age", "coords": ["y", "o"]},
+            {"name": "loc", "coords": ["a", "b", "c"]},
+        ],
+        "state": ["S[age, loc]", "I[age, loc]"],
+        "params": ["beta", "gamma"],
+        "aliases": {
+            "scaled[age, loc]": "beta * k[loc] * S[age, loc] * I[age, loc]",
+        },
+        "equations": {
+            "S[age, loc]": "-scaled[age, loc]",
+            "I[age, loc]": "scaled[age, loc] - gamma * I[age, loc]",
+        },
+    }
+    rhs = normalize_rhs(spec)
+    plan = build_vector_plan(rhs)
+    assert plan is not None
+    for grp in plan.eq_groups:
+        assert grp.unroll_axes == ()
+        assert len(grp.codes) == 1
+    _eval_equal(spec, beta=0.3, gamma=0.1, k=np.array([1.0, 2.0, 0.5]))
+
+
+def test_shaped_param_subscript_partial_axes_eval_matches_scalar() -> None:
+    """Shaped param indexed by a single axis when target has multiple axes.
+
+    Verifies the broadcast path that inserts size-1 dims for target axes
+    not in the subscript axis set.
+    """
+    spec: dict[str, object] = {
+        "kind": "expr",
+        "axes": [
+            {"name": "age", "coords": ["y", "o"]},
+            {"name": "loc", "coords": ["a", "b"]},
+        ],
+        "state": ["S[age, loc]", "I[age, loc]"],
+        "params": ["beta"],
+        "equations": {
+            "S[age, loc]": "-beta * c[age] * S[age, loc] * I[age, loc]",
+            "I[age, loc]": (
+                "beta * c[age] * S[age, loc] * I[age, loc] - d[loc] * I[age, loc]"
+            ),
+        },
+    }
+    _eval_equal(spec, beta=0.3, c=np.array([1.0, 0.5]), d=np.array([0.1, 0.2]))
