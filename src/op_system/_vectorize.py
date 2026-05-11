@@ -972,7 +972,14 @@ def build_vector_plan(rhs: NormalizedRhs) -> _VectorPlan | None:  # noqa: C901, 
         coords = ax.get("coords")
         if not coords:
             return None
-        axes_pairs.append((ax["name"], list(coords)))
+        # Stringify coords to match the convention in
+        # ``_templates.build_axis_lookup`` (and therefore the per-cell
+        # ``coord_assignments`` carried by state templates).  For categorical
+        # axes coords are already strings; for continuous axes declared with
+        # explicit numeric coords (e.g. ``[0.0, 5.0, ...]``) the unconverted
+        # raw values would key ``axis_index`` by ``float`` while lookups use
+        # ``str(float)``, causing ``KeyError`` in ``_build_access_ast``.
+        axes_pairs.append((ax["name"], [str(c) for c in coords]))
     axis_index = {ax: {c: i for i, c in enumerate(coords)} for ax, coords in axes_pairs}
 
     state_buffers: list[_BufferTemplate] = []
