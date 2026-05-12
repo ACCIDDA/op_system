@@ -292,8 +292,10 @@ def test_shaped_param_subscript_partial_axes_eval_matches_scalar() -> None:
 
 
 def test_continuous_axis_with_pinned_selector_transition_compiles() -> None:
-    """Regression for #97: ``kind: transitions`` with a continuous axis and a
-    pinned-coord selector on a categorical axis must compile.
+    """Regression for #97: continuous axis with pinned-coord selector must compile.
+
+    ``kind: transitions`` with a continuous axis and a pinned-coord selector on
+    a categorical axis must compile.
 
     Previously, ``build_vector_plan`` keyed ``axis_index`` by the raw
     continuous-axis coords (e.g. ``float`` ``0.0``) while per-cell
