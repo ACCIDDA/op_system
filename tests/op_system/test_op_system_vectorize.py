@@ -289,3 +289,31 @@ def test_shaped_param_subscript_partial_axes_eval_matches_scalar() -> None:
         },
     }
     _eval_equal(spec, beta=0.3, c=np.array([1.0, 0.5]), d=np.array([0.1, 0.2]))
+
+
+def test_continuous_axis_with_pinned_selector_transition_compiles() -> None:
+    """Regression for #97: continuous axis with pinned-coord selector must compile.
+
+    ``kind: transitions`` with a continuous axis and a pinned-coord selector on
+    a categorical axis must compile.
+
+    Previously, ``build_vector_plan`` keyed ``axis_index`` by the raw
+    continuous-axis coords (e.g. ``float`` ``0.0``) while per-cell
+    ``coord_assignments`` stringified them (``'0.0'``), causing a
+    ``KeyError: '0.0'`` from ``_build_access_ast`` when a transition's
+    ``to:`` template needed a scalar lookup against the continuous axis.
+    """
+    spec: dict[str, object] = {
+        "kind": "transitions",
+        "axes": [
+            {"name": "age", "type": "continuous", "coords": [0.0, 5.0, 10.0]},
+            {"name": "imm", "coords": ["x0", "x10"]},
+        ],
+        "state": ["S[age]", "X[age, imm]"],
+        "transitions": [
+            {"from": "S[age]", "to": "X[age, imm=x10]", "rate": "0.1"},
+        ],
+    }
+    rhs = normalize_rhs(spec)
+    plan = build_vector_plan(rhs)
+    assert plan is not None
