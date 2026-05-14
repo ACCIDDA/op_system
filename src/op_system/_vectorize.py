@@ -672,6 +672,114 @@ def _make_sum_call(buf_name: str) -> ast.expr:
     )
 
 
+def _extract_weighted_buf_subscript(
+    node: ast.expr,
+) -> tuple[float, str, tuple[int, ...]] | None:
+    """If ``node`` reduces to ``(prod-of-consts) * <name>_buf[<int_tuple>]``.
+
+    Walks an arbitrarily-nested ``Mult`` tree, accumulating numeric
+    ``Constant`` factors (with ``UnaryOp(USub|UAdd, Constant)`` allowed) and
+    matching exactly one buffer subscript leaf. Returns ``None`` if the leaf
+    isn't of this shape or contains non-constant non-buffer factors.
+
+    Returns:
+        ``(weight, buffer_name, index_tuple)`` on match, else ``None``.
+    """
+    weight = 1.0
+    buf_match: tuple[str, tuple[int, ...]] | None = None
+    stack: list[ast.expr] = [node]
+    while stack:
+        n = stack.pop()
+        if isinstance(n, ast.BinOp) and isinstance(n.op, ast.Mult):
+            stack.extend((n.left, n.right))
+            continue
+        if isinstance(n, ast.UnaryOp) and isinstance(n.op, ast.UAdd):
+            stack.append(n.operand)
+            continue
+        if isinstance(n, ast.UnaryOp) and isinstance(n.op, ast.USub):
+            inner = n.operand
+            if isinstance(inner, ast.Constant) and isinstance(
+                inner.value, (int, float)
+            ):
+                weight *= -float(inner.value)
+                continue
+            return None
+        if isinstance(n, ast.Constant) and isinstance(n.value, (int, float)):
+            weight *= float(n.value)
+            continue
+        cls = _classify_buf_subscript(n)
+        if cls is None or buf_match is not None:
+            return None
+        buf_match = cls
+    if buf_match is None:
+        return None
+    name, idx = buf_match
+    return weight, name, idx
+
+
+def _make_weighted_sum_call(
+    buf_name: str,
+    weights_in_index_order: list[float],
+    shape: tuple[int, ...],
+) -> ast.expr:
+    """Build ``np.sum(np.asarray([...], dtype=np.float64).reshape(shape) * buf)``.
+
+    ``weights_in_index_order`` is the flat list of per-cell weights in C-order
+    matching ``np.ndindex(*shape)``. For 1-D buffers the ``reshape`` is
+    omitted.
+
+    Returns:
+        The constructed ``ast.expr`` for the fused weighted reduction.
+    """
+    weights_list = ast.List(
+        elts=[ast.Constant(value=float(w)) for w in weights_in_index_order],
+        ctx=ast.Load(),
+    )
+    asarray: ast.expr = ast.Call(
+        func=ast.Attribute(
+            value=ast.Name(id="np", ctx=ast.Load()),
+            attr="asarray",
+            ctx=ast.Load(),
+        ),
+        args=[weights_list],
+        keywords=[
+            ast.keyword(
+                arg="dtype",
+                value=ast.Attribute(
+                    value=ast.Name(id="np", ctx=ast.Load()),
+                    attr="float64",
+                    ctx=ast.Load(),
+                ),
+            ),
+        ],
+    )
+    if len(shape) > 1:
+        asarray = ast.Call(
+            func=ast.Attribute(value=asarray, attr="reshape", ctx=ast.Load()),
+            args=[
+                ast.Tuple(
+                    elts=[ast.Constant(value=int(s)) for s in shape],
+                    ctx=ast.Load(),
+                ),
+            ],
+            keywords=[],
+        )
+    product = ast.BinOp(
+        left=asarray,
+        op=ast.Mult(),
+        right=ast.Name(id=buf_name, ctx=ast.Load()),
+    )
+    return ast.Call(
+        func=ast.Attribute(
+            value=ast.Name(id="np", ctx=ast.Load()),
+            attr="sum",
+            ctx=ast.Load(),
+        ),
+        args=[product],
+        keywords=[],
+    )
+
+
 def _reassemble_addsub(terms: list[tuple[int, ast.expr]]) -> ast.expr:
     if not terms:
         return ast.Constant(value=0.0)
@@ -683,6 +791,86 @@ def _reassemble_addsub(terms: list[tuple[int, ast.expr]]) -> ast.expr:
     return out
 
 
+def _is_constant_expr(node: ast.expr) -> bool:
+    """Return ``True`` if ``node`` evaluates to a numeric constant.
+
+    Recognises numeric ``Constant`` literals, unary +/- on such literals, and
+    ``Mult``/``Div`` of constant subexpressions. Used by the constant-over-Add
+    distributor to decide whether ``c * (a + b)`` may be flattened to
+    ``c*a + c*b``.
+    """
+    if isinstance(node, ast.Constant):
+        return isinstance(node.value, (int, float))
+    if isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.UAdd, ast.USub)):
+        return _is_constant_expr(node.operand)
+    if isinstance(node, ast.BinOp) and isinstance(node.op, (ast.Mult, ast.Div)):
+        return _is_constant_expr(node.left) and _is_constant_expr(node.right)
+    return False
+
+
+def _distribute_const_over_add(tree: ast.Expression) -> ast.Expression:
+    """Rewrite ``c * (a + b)`` as ``c*a + c*b`` (and the symmetric form).
+
+    A pre-pass for the buffer-sum collapser: the normalize-time expansion of
+    nested ``apply_along`` calls produces structures like
+    ``w_age_i * (S_buf[i,0] + S_buf[i,1] + ...)`` where the weight is gated
+    behind a parenthesized inner sum, hiding the per-cell weighted leaves
+    from the leaf-classifier. Distributing constant factors over Add chains
+    flattens these into a single Add chain of ``w * S_buf[...]`` terms that
+    the collapser can fold into one fused reduction.
+
+    Operates bottom-up; iterates to fixed point on each rewrite point. Only
+    distributes when one side of the ``Mult`` is a numeric constant — never
+    distributes runtime-variable factors (which would change semantics for
+    backends with shaped operands).
+
+    Returns:
+        A possibly-rewritten ``ast.Expression`` semantically equal to
+        ``tree`` with constant-multipliers pushed inside Add/Sub chains.
+    """
+
+    class _Distributor(ast.NodeTransformer):
+        def visit_BinOp(self, node: ast.BinOp) -> ast.AST:
+            # Recurse first so inner distributions surface upward.
+            self.generic_visit(node)
+            if not isinstance(node.op, ast.Mult):
+                return node
+            # Identify the (constant, addsub) sides; either ordering is fine.
+            const_side: ast.expr | None = None
+            chain_side: ast.expr | None = None
+            if (
+                _is_constant_expr(node.left)
+                and isinstance(node.right, ast.BinOp)
+                and isinstance(node.right.op, (ast.Add, ast.Sub))
+            ):
+                const_side = node.left
+                chain_side = node.right
+            elif (
+                _is_constant_expr(node.right)
+                and isinstance(node.left, ast.BinOp)
+                and isinstance(node.left.op, (ast.Add, ast.Sub))
+            ):
+                const_side = node.right
+                chain_side = node.left
+            if const_side is None or chain_side is None:
+                return node
+            terms = _flatten_addsub(chain_side)
+            new_terms: list[tuple[int, ast.expr]] = [
+                (
+                    sign,
+                    ast.BinOp(left=const_side, op=ast.Mult(), right=leaf),
+                )
+                for sign, leaf in terms
+            ]
+            return _reassemble_addsub(new_terms)
+
+    transformer = _Distributor()
+    new_body = cast("ast.expr", transformer.visit(tree.body))
+    new_tree = ast.Expression(body=new_body)
+    ast.fix_missing_locations(new_tree)
+    return new_tree
+
+
 def _collapse_full_buffer_sums(  # noqa: C901, PLR0915
     tree: ast.Expression, buf_shapes: Mapping[str, tuple[int, ...]]
 ) -> ast.Expression:
@@ -691,39 +879,57 @@ def _collapse_full_buffer_sums(  # noqa: C901, PLR0915
     Operates iteratively to avoid blowing Python's recursion limit on the
     very long Add chains produced by aggregator aliases (e.g. an alias that
     sums every cell of a templated state). Within each Add/Sub chain found in
-    the tree, pure ``<name>_buf[<int_tuple>]`` terms are grouped by
+    the tree, leaves of the form ``<name>_buf[<int_tuple>]`` (or that pattern
+    multiplied by a product of constant numeric factors) are grouped by
     ``(name, sign)``; if the set of indices for a group exhausts the full
     Cartesian product of the buffer's shape, those terms are collapsed into a
-    single ``np.sum(buf)`` call. Other terms in the chain are left untouched.
+    single fused reduction. Bare-subscript groups become ``np.sum(buf)``;
+    weighted groups become ``np.sum(weights * buf)`` where ``weights`` is a
+    constant array shaped to ``buf``. This collapses the long weighted-sum
+    expansion of ``apply_along(..., kernel=integrate)`` into a single fused
+    multiply+reduce. Other terms in the chain are left untouched.
 
     Returns:
         A possibly-rewritten ``ast.Expression`` equivalent to ``tree`` but
         with full-buffer sums collapsed where detected.
     """
 
-    def collapse_chain(node: ast.expr) -> ast.expr:
+    def collapse_chain(node: ast.expr) -> ast.expr:  # noqa: C901, PLR0912, PLR0914, PLR0915
         terms = _flatten_addsub(node)
-        groups: dict[tuple[str, int], list[tuple[int, ...]]] = {}
+        # group key (buf_name, sign) -> list of (idx_tuple, weight); weight is
+        # 1.0 when the leaf was a bare buffer subscript, otherwise the product
+        # of constant factors multiplying the subscript.
+        groups: dict[tuple[str, int], list[tuple[tuple[int, ...], float]]] = {}
         other: list[tuple[int, ast.expr]] = []
         order: list[tuple[str, int]] = []
         for sign, leaf in terms:
+            name: str
+            idx: tuple[int, ...]
+            weight: float
             cls = _classify_buf_subscript(leaf)
-            if cls is None or cls[0] not in buf_shapes:
-                other.append((sign, leaf))
-                continue
-            key = (cls[0], sign)
+            if cls is not None and cls[0] in buf_shapes:
+                name, idx = cls
+                weight = 1.0
+            else:
+                wcls = _extract_weighted_buf_subscript(leaf)
+                if wcls is None or wcls[1] not in buf_shapes:
+                    other.append((sign, leaf))
+                    continue
+                weight, name, idx = wcls
+            key = (name, sign)
             if key not in groups:
                 groups[key] = []
                 order.append(key)
-            groups[key].append(cls[1])
+            groups[key].append((idx, weight))
         collapsed: list[tuple[int, ast.expr]] = list(other)
         changed = False
         for key in order:
             name, sign = key
-            idxs = groups[key]
+            items = groups[key]
+            idxs = [t for t, _w in items]
             shape = buf_shapes[name]
             expected = math.prod(shape) if shape else 1
-            if (
+            full_cover = (
                 len(idxs) == expected
                 and len(set(idxs)) == expected
                 and all(
@@ -731,11 +937,31 @@ def _collapse_full_buffer_sums(  # noqa: C901, PLR0915
                     and all(0 <= ti < si for ti, si in zip(t, shape, strict=True))
                     for t in idxs
                 )
-            ):
-                collapsed.append((sign, _make_sum_call(name)))
+            )
+            if full_cover:
+                # Exact equality with 1.0 is intentional: weights of exactly 1.0
+                # arise from bare buffer subscripts (no constant factor) or
+                # from explicit literal ``1.0`` in the source. Near-1.0 weights
+                # (e.g. trapezoidal endpoints) must take the weighted-sum path.
+                if all(w == 1.0 for _t, w in items):  # noqa: RUF069
+                    collapsed.append((sign, _make_sum_call(name)))
+                else:
+                    weight_map = dict(items)
+                    flat_weights = (
+                        [
+                            weight_map[tuple(int(i) for i in t)]
+                            for t in np.ndindex(*shape)
+                        ]
+                        if shape
+                        else [weight_map[()]]
+                    )
+                    collapsed.append((
+                        sign,
+                        _make_weighted_sum_call(name, flat_weights, shape),
+                    ))
                 changed = True
             else:
-                for t in idxs:
+                for t, w in items:
                     slice_node: ast.expr
                     if len(t) == 1:
                         slice_node = ast.Constant(value=t[0])
@@ -744,14 +970,24 @@ def _collapse_full_buffer_sums(  # noqa: C901, PLR0915
                             elts=[ast.Constant(value=v) for v in t],
                             ctx=ast.Load(),
                         )
-                    collapsed.append((
-                        sign,
-                        ast.Subscript(
-                            value=ast.Name(id=name, ctx=ast.Load()),
-                            slice=slice_node,
-                            ctx=ast.Load(),
-                        ),
-                    ))
+                    sub = ast.Subscript(
+                        value=ast.Name(id=name, ctx=ast.Load()),
+                        slice=slice_node,
+                        ctx=ast.Load(),
+                    )
+                    leaf_expr: ast.expr
+                    # Same intent as above: only an exact 1.0 weight may be
+                    # dropped; any other value must be re-emitted as an
+                    # explicit ``Constant * Subscript`` factor.
+                    if w == 1.0:  # noqa: RUF069
+                        leaf_expr = sub
+                    else:
+                        leaf_expr = ast.BinOp(
+                            left=ast.Constant(value=float(w)),
+                            op=ast.Mult(),
+                            right=sub,
+                        )
+                    collapsed.append((sign, leaf_expr))
         if not changed:
             return node
         return _reassemble_addsub(collapsed)
@@ -1092,6 +1328,7 @@ def build_vector_plan(rhs: NormalizedRhs) -> _VectorPlan | None:  # noqa: C901, 
                     axis_index=axis_index,
                     shaped_param_axes=shaped_param_axes,
                 )
+            tree = _distribute_const_over_add(tree)
             tree = _collapse_full_buffer_sums(tree, buf_shapes)
             code = compile(tree, filename="<op_system_vec>", mode="eval")
         except (ValueError, RuntimeError, TypeError, SyntaxError):

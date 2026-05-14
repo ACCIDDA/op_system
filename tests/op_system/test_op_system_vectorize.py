@@ -10,6 +10,8 @@ Covers:
 
 from __future__ import annotations
 
+import dis
+
 import numpy as np
 
 from op_system._vectorize import build_vector_plan
@@ -317,3 +319,92 @@ def test_continuous_axis_with_pinned_selector_transition_compiles() -> None:
     rhs = normalize_rhs(spec)
     plan = build_vector_plan(rhs)
     assert plan is not None
+
+
+# ---------------------------------------------------------------------------
+# Weighted-sum collapse: fused multiply+reduce for ``apply_along(integrate)``
+# ---------------------------------------------------------------------------
+
+
+def _continuum_integrate_spec() -> dict[str, object]:
+    """Templated SIR with an alias that ``apply_along``-integrates over age.
+
+    The continuous-age axis is integrated via trapezoidal weights inside an
+    alias scalar. Post-normalize this is a long Add chain of
+    ``<weight_const> * <S>_buf[<age_idx>, <loc_idx>]`` terms covering every
+    cell of ``S``; the weighted-sum collapser must fold it into a single
+    fused ``np.sum(weights * S_buf)`` call.
+
+    Returns:
+        A spec dict suitable for passing to ``normalize_rhs``.
+    """
+    return {
+        "kind": "expr",
+        "axes": [
+            {"name": "age", "type": "continuous", "coords": [0.0, 1.0, 3.0, 4.0]},
+            {"name": "loc", "coords": ["a", "b"]},
+        ],
+        "state": ["S[age, loc]", "I[age, loc]"],
+        "params": ["beta", "gamma"],
+        "aliases": {
+            # Integrate S over age, sum over loc → scalar.
+            "S_total": (
+                "apply_along(age=a, "
+                "apply_along(loc=l, S[age=a, loc=l], kernel=sum), "
+                "kernel=integrate)"
+            ),
+        },
+        "equations": {
+            "S[age, loc]": "-beta * S[age, loc] * S_total",
+            "I[age, loc]": ("beta * S[age, loc] * S_total - gamma * I[age, loc]"),
+        },
+    }
+
+
+def test_weighted_apply_along_collapses_to_fused_reduction() -> None:
+    """``apply_along(integrate)`` should fuse weights into one reduction.
+
+    The ``S_total`` alias expands to a long chain of
+    ``w_age[i] * S_buf[i, j]`` terms covering every cell of ``S_buf``. The
+    weighted-sum collapser must rewrite this into a single
+    ``np.sum(<weights> * S_buf)`` fused multiply+reduce (no broadcast
+    intermediate, no per-cell load chain).
+    """
+    rhs = normalize_rhs(_continuum_integrate_spec())
+    plan = build_vector_plan(rhs)
+    assert plan is not None
+    alias_codes = {base: code for base, code, _shape in plan.alias_codes}
+    assert "S_total" in alias_codes
+    code = alias_codes["S_total"]
+    assert "S_buf" in code.co_names
+    # Structural assertions: post-collapse the alias must reference its
+    # buffer at most once and reference both ``asarray`` and ``sum`` (a
+    # single fused multiply-reduce). The un-collapsed form would reference
+    # ``S_buf`` once per cell and never call ``asarray``/``sum``.
+    s_buf_loads = sum(
+        1
+        for instr in dis.get_instructions(code)
+        if instr.opname.startswith("LOAD_") and instr.argval == "S_buf"
+    )
+    assert s_buf_loads == 1, (
+        f"expected a single fused S_buf load after collapse, got {s_buf_loads}"
+    )
+    assert "asarray" in code.co_names
+    assert "sum" in code.co_names
+
+    # The collapser must emit at least one numeric weight constant. Python
+    # may fold a list of numeric literals into a tuple constant, so search
+    # both flat and nested constants.
+    def _has_float(obj: object) -> bool:
+        if isinstance(obj, float):
+            return True
+        if isinstance(obj, (list, tuple, set, frozenset)):
+            return any(_has_float(x) for x in obj)
+        return False
+
+    assert any(_has_float(c) for c in code.co_consts)
+
+
+def test_weighted_apply_along_eval_matches_scalar() -> None:
+    """Numerical equivalence between fused-reduce and scalar eval paths."""
+    _eval_equal(_continuum_integrate_spec(), beta=0.3, gamma=0.1)
