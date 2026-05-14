@@ -407,3 +407,168 @@ def test_weighted_apply_along_collapses_to_fused_reduction() -> None:
 def test_weighted_apply_along_eval_matches_scalar() -> None:
     """Numerical equivalence between fused-reduce and scalar eval paths."""
     _eval_equal(_continuum_integrate_spec(), beta=0.3, gamma=0.1)
+
+
+# ---------------------------------------------------------------------------
+# Uniform-weight collapse (op_system#103 regression guard)
+#
+# When ``_distribute_const_over_add`` pushes an outer constant factor over a
+# ``kernel=sum`` apply_along chain, every leaf in the resulting Add chain
+# carries the same weight ``c``. The collapser must emit
+# ``c * np.sum(buf)`` rather than ``np.sum(np.asarray([c, ..., c]) * buf)``;
+# the inlined uniform array form bloats the JAX trace and balloons XLA
+# compile time on large network/categorical models (see issue #103).
+# ---------------------------------------------------------------------------
+
+
+def _network_outer_const_spec() -> dict[str, object]:
+    """Categorical SIR whose alias has a constant factor outside ``kernel=sum``.
+
+    The ``S_scaled`` alias multiplies a numeric constant by a full-axis
+    ``apply_along(kernel=sum)`` over a templated state. Post-normalize this
+    expands to ``0.25 * (S__age_y__loc_a + S__age_y__loc_b + ...)``; after
+    ``_distribute_const_over_add`` the chain becomes
+    ``0.25*S_buf[0,0] + 0.25*S_buf[0,1] + ...`` — a uniform-weight chain
+    that the collapser must fold back to ``0.25 * np.sum(S_buf)``.
+
+    Returns:
+        A spec dict suitable for passing to ``normalize_rhs``.
+    """
+    return {
+        "kind": "expr",
+        "axes": [
+            {"name": "age", "coords": ["y", "o"]},
+            {"name": "loc", "coords": ["a", "b"]},
+        ],
+        "state": ["S[age, loc]", "I[age, loc]"],
+        "params": ["beta", "gamma"],
+        "aliases": {
+            "S_scaled": (
+                "0.25 * apply_along(age=a, "
+                "apply_along(loc=l, S[age=a, loc=l], kernel=sum), "
+                "kernel=sum)"
+            ),
+        },
+        "equations": {
+            "S[age, loc]": "-beta * S[age, loc] * S_scaled",
+            "I[age, loc]": ("beta * S[age, loc] * S_scaled - gamma * I[age, loc]"),
+        },
+    }
+
+
+def test_uniform_weight_chain_collapses_without_inlined_array() -> None:
+    """Uniform-weight full-cover chain must emit ``c*np.sum(buf)``.
+
+    Regression test for op_system#103: the previous emission used
+    ``np.sum(np.asarray([c, c, ..., c]).reshape(shape) * buf)``, embedding
+    an inlined Python literal of length ``prod(shape)`` in every alias
+    that had any outer constant factor multiplying a ``kernel=sum``
+    apply_along. On large network configs this produced multi-minute XLA
+    compiles. The fix must (a) keep ``S_buf`` referenced once, (b) keep
+    ``sum`` referenced, and (c) NOT emit ``asarray`` for this case.
+    """
+    rhs = normalize_rhs(_network_outer_const_spec())
+    plan = build_vector_plan(rhs)
+    assert plan is not None
+    alias_codes = {base: code for base, code, _shape in plan.alias_codes}
+    assert "S_scaled" in alias_codes
+    code = alias_codes["S_scaled"]
+    s_buf_loads = sum(
+        1
+        for instr in dis.get_instructions(code)
+        if instr.opname.startswith("LOAD_") and instr.argval == "S_buf"
+    )
+    assert s_buf_loads == 1, (
+        f"expected a single fused S_buf load after collapse, got {s_buf_loads}"
+    )
+    assert "sum" in code.co_names, (
+        "uniform-weight chain should collapse to a single np.sum call"
+    )
+    assert "asarray" not in code.co_names, (
+        "uniform-weight chain must NOT emit an inlined np.asarray weight "
+        "array (regression of op_system#103); expected c * np.sum(buf) form"
+    )
+    # The constant factor 0.25 must survive somewhere in co_consts.
+    assert any(
+        isinstance(c, float) and c == 0.25  # noqa: RUF069
+        for c in code.co_consts
+    ), f"expected 0.25 constant in co_consts, got {code.co_consts}"
+
+
+def test_uniform_weight_chain_eval_matches_scalar() -> None:
+    """Numerical equivalence on the uniform-weight collapse path."""
+    _eval_equal(_network_outer_const_spec(), beta=0.3, gamma=0.1)
+
+
+# ---------------------------------------------------------------------------
+# Recursion-safety on long Add chains (op_system#103 regression guard)
+#
+# Aggregator aliases that sum across a large templated state expand at
+# normalize time to a single Add chain with one term per cell. With the
+# previous recursive ``ast.NodeTransformer``-based ``_distribute_const_over_add``
+# pass, chains beyond Python's default ~1000-frame limit raised a silent
+# ``RecursionError`` that was swallowed by the blanket ``except`` in
+# ``build_vector_plan``, dropping the model to the scalar fallback (a 100x
+# slowdown on real workloads). The pass must now be iterative on the outer
+# chain and survive arbitrarily long aliases.
+# ---------------------------------------------------------------------------
+
+
+def _huge_chain_spec(n_loc: int) -> dict[str, object]:
+    """Categorical SIR with ``n_loc`` locations and a constant-scaled aggregator.
+
+    The ``S_scaled`` alias forces ``_distribute_const_over_add`` to walk a
+    chain of ``n_loc`` Add terms; the outer ``0.25`` factor must be pushed
+    inside before the collapser can fold the chain into ``c * np.sum(buf)``.
+
+    Args:
+        n_loc: Number of synthetic location coords (chain length).
+
+    Returns:
+        A spec dict suitable for passing to ``normalize_rhs``.
+    """
+    coords = [f"l{i:04d}" for i in range(n_loc)]
+    return {
+        "kind": "expr",
+        "axes": [{"name": "loc", "coords": coords}],
+        "state": ["S[loc]", "I[loc]"],
+        "params": ["beta", "gamma"],
+        "aliases": {
+            "S_scaled": "0.25 * apply_along(loc=l, S[loc=l], kernel=sum)",
+        },
+        "equations": {
+            "S[loc]": "-beta * S[loc] * S_scaled",
+            "I[loc]": "beta * S[loc] * S_scaled - gamma * I[loc]",
+        },
+    }
+
+
+def test_long_add_chain_does_not_raise_recursionerror() -> None:
+    """Chains far beyond ``sys.getrecursionlimit()`` must vectorize cleanly.
+
+    Regression guard for op_system#103: the previous recursive pass blew the
+    Python C-stack on any aggregator alias whose expanded Add chain exceeded
+    the default 1000-frame recursion limit. Picks ``n_loc`` well above any
+    plausible default limit so that a recursive implementation would fail
+    even if the user has bumped ``setrecursionlimit`` modestly.
+    """
+    rhs = normalize_rhs(_huge_chain_spec(n_loc=2500))
+    plan = build_vector_plan(rhs)
+    assert plan is not None, (
+        "build_vector_plan returned None on a long-chain alias - "
+        "_distribute_const_over_add likely raised RecursionError that "
+        "was swallowed by the blanket except in build_vector_plan"
+    )
+    alias_codes = {base: code for base, code, _shape in plan.alias_codes}
+    assert "S_scaled" in alias_codes
+    code = alias_codes["S_scaled"]
+    # Must still collapse to the fused np.sum(buf) form, not unroll 2500 loads.
+    s_buf_loads = sum(
+        1
+        for instr in dis.get_instructions(code)
+        if instr.opname.startswith("LOAD_") and instr.argval == "S_buf"
+    )
+    assert s_buf_loads == 1, (
+        f"long chain should still collapse to a single S_buf load, "
+        f"got {s_buf_loads}"
+    )

@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import ast
 import math
+import sys
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from itertools import combinations as _comb
@@ -822,10 +823,23 @@ def _distribute_const_over_add(tree: ast.Expression) -> ast.Expression:
     flattens these into a single Add chain of ``w * S_buf[...]`` terms that
     the collapser can fold into one fused reduction.
 
-    Operates bottom-up; iterates to fixed point on each rewrite point. Only
-    distributes when one side of the ``Mult`` is a numeric constant — never
-    distributes runtime-variable factors (which would change semantics for
-    backends with shaped operands).
+    Iterative implementation: the top-level Add/Sub chain is flattened into a
+    term list (via :func:`_flatten_addsub`, itself iterative) and each leaf
+    is rewritten in isolation. This avoids the per-node Python frame that an
+    ``ast.NodeTransformer.visit`` would consume on right- or left-nested
+    Add chains thousands of nodes deep (e.g. aggregator aliases that sum
+    every cell of a templated state). Within each leaf we use a recursive
+    visitor; leaf depth is bounded by expression complexity (typically <=5),
+    not by chain length, so it is safe.
+
+    Distribution at a leaf may itself produce a new Add/Sub chain (when the
+    rewritten leaf is ``c*a + c*b``). Such leaves are folded back into the
+    outer term list with appropriate sign propagation, and the pass iterates
+    to a fixed point.
+
+    Only distributes when one side of the ``Mult`` is a numeric constant -
+    never distributes runtime-variable factors (which would change semantics
+    for backends with shaped operands).
 
     Returns:
         A possibly-rewritten ``ast.Expression`` semantically equal to
@@ -867,9 +881,40 @@ def _distribute_const_over_add(tree: ast.Expression) -> ast.Expression:
             ]
             return _reassemble_addsub(new_terms)
 
+    def _is_addsub(n: ast.AST) -> bool:
+        return isinstance(n, ast.BinOp) and isinstance(n.op, (ast.Add, ast.Sub))
+
     transformer = _Distributor()
-    new_body = cast("ast.expr", transformer.visit(tree.body))
-    new_tree = ast.Expression(body=new_body)
+    body = tree.body
+    if _is_addsub(body):
+        # Iteratively flatten the (possibly enormous) outer chain and rewrite
+        # each leaf in isolation. Loop to a fixed point so distribution that
+        # produces new sub-chains gets refolded into the outer chain.
+        max_passes = 64  # safety bound; convergence is typically immediate
+        for _ in range(max_passes):
+            terms = _flatten_addsub(body)
+            new_terms: list[tuple[int, ast.expr]] = []
+            any_changed = False
+            for sign, leaf in terms:
+                # ``leaf`` is by construction not an Add/Sub root; depth is
+                # bounded by leaf complexity, so the recursive visit is safe.
+                rewritten = cast("ast.expr", transformer.visit(leaf))
+                if _is_addsub(rewritten):
+                    sub_terms = _flatten_addsub(rewritten)
+                    for ssign, sleaf in sub_terms:
+                        new_terms.append((sign * ssign, sleaf))
+                    any_changed = True
+                else:
+                    if rewritten is not leaf:
+                        any_changed = True
+                    new_terms.append((sign, rewritten))
+            body = _reassemble_addsub(new_terms)
+            if not any_changed:
+                break
+    else:
+        # No top-level chain: the body itself is shallow enough to recurse.
+        body = cast("ast.expr", transformer.visit(body))
+    new_tree = ast.Expression(body=body)
     ast.fix_missing_locations(new_tree)
     return new_tree
 
@@ -942,12 +987,42 @@ def _collapse_full_buffer_sums(  # noqa: C901, PLR0915
                 )
             )
             if full_cover:
-                # Exact equality with 1.0 is intentional: weights of exactly 1.0
-                # arise from bare buffer subscripts (no constant factor) or
-                # from explicit literal ``1.0`` in the source. Near-1.0 weights
-                # (e.g. trapezoidal endpoints) must take the weighted-sum path.
-                if all(w == 1.0 for _t, w in items):  # noqa: RUF069
+                # Three emission cases for a full-cover Add chain over ``buf``:
+                #
+                # 1. All weights exactly 1.0 (bare buffer subscripts) ->
+                #    ``np.sum(buf)``.
+                # 2. All weights equal to some constant ``c != 1.0`` (typical
+                #    when ``_distribute_const_over_add`` pushed an outer
+                #    constant factor like ``dt`` over a ``kernel=sum``
+                #    apply_along chain) -> ``c * np.sum(buf)``. Without this
+                #    branch we would emit ``np.sum(np.asarray([c,...]) * buf)``
+                #    with an inlined uniform weight array of length
+                #    ``prod(shape)``, which on large network/categorical
+                #    models bloats the JAX trace and balloons XLA compile
+                #    time (see op_system#103).
+                # 3. Heterogeneous weights (true ``kernel=integrate`` with
+                #    trapezoidal endpoints, or any non-uniform weight set)
+                #    -> ``np.sum(weights_arr * buf)`` via the fused-reduce
+                #    helper.
+                #
+                # Exact float equality is intentional: weights here come
+                # either from explicit literal coefficients in the source
+                # or from constant factors propagated by
+                # ``_distribute_const_over_add``. Near-1.0 weights from
+                # trapezoidal kernels (e.g. ``0.5``) take the weighted-sum
+                # path in case 3.
+                ws = [w for _t, w in items]
+                if all(w == 1.0 for w in ws):  # noqa: RUF069
                     collapsed.append((sign, _make_sum_call(name)))
+                elif all(w == ws[0] for w in ws):  # noqa: RUF069
+                    collapsed.append((
+                        sign,
+                        ast.BinOp(
+                            left=ast.Constant(value=float(ws[0])),
+                            op=ast.Mult(),
+                            right=_make_sum_call(name),
+                        ),
+                    ))
                 else:
                     weight_map = dict(items)
                     flat_weights = (
@@ -1194,6 +1269,44 @@ def build_vector_plan(rhs: NormalizedRhs) -> _VectorPlan | None:  # noqa: C901, 
         signal that the spec is unsupported and the caller should fall back
         to the scalar engine.
     """
+    # Several internal passes still rely on recursive AST walks (notably
+    # ``_NameRewriter`` and CPython's ``ast.fix_missing_locations`` /
+    # ``compile``). On models whose normalize-time expansion produces long
+    # ``apply_along(kernel=sum)`` Add chains - e.g. aggregator aliases that
+    # sum every cell of a templated state - those walks consume one Python
+    # frame per chain node and blow the default 1000-frame recursion limit,
+    # silently dropping the model to the scalar fallback. Bump the limit
+    # for the duration of this call sized to a safe upper bound on the
+    # longest alias-or-equation expression. This is a temporary safety net
+    # while the recursive passes are migrated to iterative term-list form
+    # (op_system#103); it does not eliminate the underlying C-stack ceiling
+    # (~10-20k frames on typical builds), so it cannot rescue extreme
+    # workloads (e.g. continuum models with >50k-cell aggregators) - those
+    # require the structured-IR refactor tracked separately.
+    longest_expr = 0
+    for s in rhs.equations:
+        if isinstance(s, str) and len(s) > longest_expr:
+            longest_expr = len(s)
+    for s in rhs.aliases.values():
+        if isinstance(s, str) and len(s) > longest_expr:
+            longest_expr = len(s)
+    # Heuristic: each Add term in the expanded form is on the order of 8-16
+    # characters ("S__loc_l0001 + "), and the recursive walk depth roughly
+    # tracks term count plus a small constant for surrounding nodes.
+    needed = max(2000, longest_expr // 4 + 1000)
+    saved_limit = sys.getrecursionlimit()
+    if needed > saved_limit:
+        sys.setrecursionlimit(needed)
+    try:
+        return _build_vector_plan_inner(rhs)
+    finally:
+        sys.setrecursionlimit(saved_limit)
+
+
+def _build_vector_plan_inner(  # noqa: C901, PLR0911, PLR0912, PLR0914, PLR0915
+    rhs: NormalizedRhs,
+) -> _VectorPlan | None:
+    """Vectorized-plan construction body (see ``build_vector_plan``)."""
     if not rhs.state_templates:
         return None
     # Require all states to be wildcard templates (have axes).
