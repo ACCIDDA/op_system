@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import ast
 import importlib
+import warnings
 from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import (
@@ -46,21 +47,55 @@ Float64Array = NDArray[np.float64]
 ScalarLike = SupportsFloat | SupportsIndex | str | bytes | None
 _SAFE_BUILTINS = {"__import__": __import__}
 
-
-class _BackendNamespace(Protocol):
-    def asarray(self, obj: object, dtype: object | None = None) -> object: ...
-
-    def stack(self, arrays: list[object]) -> object: ...
-
-    def sum(self, arr: object) -> object: ...
+_NUMERIC_DTYPE_KINDS = frozenset({"b", "i", "u", "f", "c"})
 
 
 class _Indexable(Protocol):
-    def __getitem__(self, idx: int) -> object: ...
+    def __getitem__(self, idx: int | slice) -> object: ...
 
 
-def _is_numpy_backend(xp: object) -> bool:
-    return xp is np or getattr(xp, "__name__", "") == "numpy"
+def _namespace_of(y: object) -> Any:  # noqa: ANN401
+    """Return the Array-API namespace of ``y``.
+
+    Raises:
+        TypeError: If ``y`` does not implement ``__array_namespace__``.
+            NumPy >= 2.0 arrays, JAX arrays (concrete and traced),
+            and PyTorch tensors (via array-api compat) all qualify.
+    """
+    ns_fn = getattr(y, "__array_namespace__", None)
+    if ns_fn is None:
+        msg = (
+            "op_system eval_fn requires Array-API arrays for `y` "
+            "(NumPy >= 2.0, JAX, PyTorch). Got "
+            f"{type(y).__name__!r} which does not implement "
+            "__array_namespace__()."
+        )
+        raise TypeError(msg)
+    return ns_fn()
+
+
+def _check_numeric_dtype(xp: Any, dtype: object) -> None:  # noqa: ANN401
+    """Validate that ``dtype`` is numeric in the Array-API sense.
+
+    Mirrors :meth:`flepimop2.parameter.abc.ParameterValue.__post_init__`:
+    use ``xp.isdtype(dtype, "numeric")`` and fall back to ``dtype.kind``
+    for namespaces that predate ``isdtype``. Does *not* coerce.
+
+    Raises:
+        TypeError: If ``dtype`` is not a numeric Array-API dtype.
+    """
+    isdtype = getattr(xp, "isdtype", None)
+    if isdtype is not None:
+        try:
+            if isdtype(dtype, "numeric"):
+                return
+        except (TypeError, ValueError):
+            pass
+    kind = getattr(dtype, "kind", None)
+    if kind in _NUMERIC_DTYPE_KINDS:
+        return
+    msg = f"op_system requires numeric array dtype, got {dtype!r}"
+    raise TypeError(msg)
 
 
 # -----------------------------------------------------------------------------
@@ -429,12 +464,13 @@ def _evaluate_equations(
     *,
     eq_code: list[CodeType],
     env: Mapping[str, object],
-    xp: object,
+    xp: Any,  # noqa: ANN401
 ) -> Float64Array:
     """Evaluate equation code objects against an environment.
 
     Returns:
-        Derivative vector aligned to the provided state ordering.
+        Derivative vector aligned to the provided state ordering, in the
+        same array namespace as ``xp`` (i.e. as the input ``y``).
     """
     out_vals: list[object] = []
     for codeobj in eq_code:
@@ -446,68 +482,61 @@ def _evaluate_equations(
             _raise_invalid_expression(detail=f"equation evaluation failed: {exc!r}")
         out_vals.append(val)
 
-    if _is_numpy_backend(xp):
-        return np.asarray(out_vals, dtype=np.float64)
-    return cast("Float64Array", cast("_BackendNamespace", xp).asarray(out_vals))
+    return cast("Float64Array", xp.asarray(out_vals))
 
 
-def _make_eval_fn(  # noqa: C901
+def _make_eval_fn(
     *,
     state_names: tuple[str, ...],
     aliases: Mapping[str, str],
     equations: tuple[str, ...],
-    xp: object,
 ) -> EvalFn:
+    """Build a namespace-polymorphic ``eval_fn(t, y, **params) -> dydt``.
+
+    The compiled function infers its array namespace from the input ``y``
+    via :meth:`y.__array_namespace__` at call time. No coercion is
+    performed: producers hand in arrays of the desired backend and dtype,
+    and outputs come back in that same namespace. This keeps the function
+    natively callable under ``jax.jit`` / ``jax.vmap`` (tracers carry
+    ``__array_namespace__``) without any wrapping for correctness.
+
+    Returns:
+        EvalFn: A callable ``(t, y, **params) -> dydt`` with the same
+            namespace as ``y``.
+    """
     n_state = len(state_names)
     name_to_idx = {s: i for i, s in enumerate(state_names)}
     alias_code = _collect_alias_code(aliases)
     eq_code = _collect_eq_code(equations)
 
-    def _sum_state(env: Mapping[str, object]) -> object:
-        values = [v for k, v in env.items() if k in name_to_idx]
-        if not values:
-            return cast("_BackendNamespace", xp).asarray(0.0)
-        if _is_numpy_backend(xp):
-            return np.float64(np.sum(np.asarray(values, dtype=np.float64)))
-        xp_ns = cast("_BackendNamespace", xp)
-        return xp_ns.sum(xp_ns.stack(values))
+    def eval_fn(t: object, y: object, **params: object) -> Float64Array:
+        xp = _namespace_of(y)
+        _check_numeric_dtype(xp, getattr(y, "dtype", None))
+        y_arr = _validate_state_vector(y, n_state=n_state)
 
-    def _sum_prefix(prefix: str, env: Mapping[str, object]) -> object:
-        values = [
-            v for k, v in env.items() if k.startswith(prefix) and k in name_to_idx
-        ]
-        if not values:
-            return cast("_BackendNamespace", xp).asarray(0.0)
-        if _is_numpy_backend(xp):
-            return np.float64(np.sum(np.asarray(values, dtype=np.float64)))
-        xp_ns = cast("_BackendNamespace", xp)
-        return xp_ns.sum(xp_ns.stack(values))
-
-    def _build_env(
-        t: object, y_arr: object, params: Mapping[str, object]
-    ) -> dict[str, object]:
-        t_val = (
-            np.float64(cast("ScalarLike", t))
-            if _is_numpy_backend(xp)
-            else cast("_BackendNamespace", xp).asarray(t)
-        )
+        t_val = xp.asarray(t)
         env: dict[str, object] = {"np": xp, "t": t_val}
         for s, i in name_to_idx.items():
             env[s] = cast("_Indexable", y_arr)[i]
         env.update(params)
-        env["sum_state"] = lambda: _sum_state(env)
-        env["sum_prefix"] = lambda prefix: _sum_prefix(str(prefix), env)
-        return env
 
-    def eval_fn(t: object, y: object, **params: object) -> Float64Array:
-        y_in: object
-        if _is_numpy_backend(xp):
-            y_in = np.asarray(y, dtype=np.float64)
-        else:
-            y_in = cast("_BackendNamespace", xp).asarray(y)
-        y_arr = _validate_state_vector(y_in, n_state=n_state)
+        def _sum_state() -> object:
+            values = [v for k, v in env.items() if k in name_to_idx]
+            if not values:
+                return xp.asarray(0.0)
+            return xp.sum(xp.stack(values))
 
-        env = _build_env(t, y_arr, params)
+        def _sum_prefix(prefix: object) -> object:
+            pfx = str(prefix)
+            values = [
+                v for k, v in env.items() if k.startswith(pfx) and k in name_to_idx
+            ]
+            if not values:
+                return xp.asarray(0.0)
+            return xp.sum(xp.stack(values))
+
+        env["sum_state"] = _sum_state
+        env["sum_prefix"] = _sum_prefix
 
         if alias_code:
             env.update(_resolve_aliases(alias_code, base_env=env))
@@ -523,7 +552,12 @@ def _make_eval_fn(  # noqa: C901
 
 
 def _interp_along_axis(
-    t: object, ts: object, grid: object, *, axis: int, xp: object
+    t: object,
+    ts: object,
+    grid: object,
+    *,
+    axis: int,
+    xp: Any,  # noqa: ANN401
 ) -> object:
     """Linearly interpolate ``grid`` along axis ``axis`` at scalar ``t``.
 
@@ -538,32 +572,32 @@ def _interp_along_axis(
         ts: 1-D monotonically non-decreasing array of grid times of length N.
         grid: Array whose ``axis``-th dimension indexes ``ts``.
         axis: Position of the time axis within ``grid``'s shape.
-        xp: Array backend namespace (numpy or jax.numpy).
+        xp: Array-API namespace, derived from the input ``y`` by the
+            caller (``y.__array_namespace__()``).
 
     Returns:
         Interpolated value with ``grid``'s shape minus the ``axis`` slot.
     """
-    backend = cast("Any", xp)
-    ts_arr = backend.asarray(ts)
-    grid_arr = backend.asarray(grid)
+    ts_arr = xp.asarray(ts)
+    grid_arr = xp.asarray(grid)
     if axis != 0:
-        grid_arr = backend.moveaxis(grid_arr, axis, 0)
+        grid_arr = xp.moveaxis(grid_arr, axis, 0)
     n = ts_arr.shape[0]
-    t_val = backend.asarray(t)
-    raw_idx = backend.searchsorted(ts_arr, t_val, side="right")
-    idx_right = backend.clip(raw_idx, 1, n - 1)
+    t_val = xp.asarray(t)
+    raw_idx = xp.searchsorted(ts_arr, t_val, side="right")
+    idx_right = xp.clip(raw_idx, 1, n - 1)
     idx_left = idx_right - 1
     t_left = ts_arr[idx_left]
     t_right = ts_arr[idx_right]
     span = t_right - t_left
-    raw_w = (t_val - t_left) / backend.where(
-        span == 0, backend.asarray(1.0, dtype=span.dtype), span
+    raw_w = (t_val - t_left) / xp.where(
+        span == 0, xp.asarray(1.0, dtype=span.dtype), span
     )
-    w = backend.clip(raw_w, 0.0, 1.0)
+    w = xp.clip(raw_w, 0.0, 1.0)
     g_left = grid_arr[idx_left]
     g_right = grid_arr[idx_right]
     if g_left.ndim > 0:
-        w = backend.reshape(w, (1,) * g_left.ndim)
+        w = xp.reshape(w, (1,) * g_left.ndim)
     return (1.0 - w) * g_left + w * g_right
 
 
@@ -573,7 +607,6 @@ def _wrap_eval_fn_for_time_varying(
     time_varying_params: tuple[tuple[str, tuple[str, ...]], ...],
     time_axis_name: str,
     axes_meta: tuple[Mapping[str, Any], ...],
-    xp: object,
 ) -> EvalFn:
     """Wrap ``eval_fn`` so each time-varying name is interpolated at runtime.
 
@@ -583,6 +616,11 @@ def _wrap_eval_fn_for_time_varying(
     position using the time axis's declared coordinates as the grid, and
     re-injects the reduced-shape result under ``name`` before delegating to
     ``eval_fn``.
+
+    The array namespace used for interpolation is derived from the input
+    ``y`` at call time, so the wrapped callable remains namespace-poly-
+    morphic and trace-pure (works directly under ``jax.jit`` / ``jax.vmap``
+    when called with JAX arrays).
 
     Args:
         eval_fn: The unwrapped evaluator returned by the vectorized or
@@ -594,17 +632,16 @@ def _wrap_eval_fn_for_time_varying(
         axes_meta: Normalized axes records (each a mapping with ``name``
             and ``coords``).  Used to look up the time-axis ``coords``
             array baked into the wrapper closure as the interpolation grid.
-        xp: Array backend namespace, threaded through to
-            :func:`_interp_along_axis`.
 
     Returns:
         A new `EvalFn` with the same shape contract as ``eval_fn``.
     """
     if not time_varying_params:
         return eval_fn
-    backend = cast("Any", xp)
+    # Bake the time-axis coords as plain numpy at compile time. ``xp.asarray``
+    # at eval time will adopt them into the input namespace as needed.
     ts_lookup = {
-        ax["name"]: backend.asarray(ax["coords"], dtype=backend.float64)
+        ax["name"]: np.asarray(ax["coords"], dtype=np.float64)
         for ax in axes_meta
         if ax.get("name") == time_axis_name
     }
@@ -622,6 +659,7 @@ def _wrap_eval_fn_for_time_varying(
     )
 
     def wrapped(t: object, y: object, **params: object) -> Float64Array:
+        xp = _namespace_of(y)
         for name, axis_pos in plan:
             if name not in params:
                 _raise_parameter_error(
@@ -637,20 +675,39 @@ def _wrap_eval_fn_for_time_varying(
     return wrapped
 
 
-def compile_rhs(rhs: NormalizedRhs, *, xp: object) -> CompiledRhs:
+def compile_rhs(rhs: NormalizedRhs, *, xp: object | None = None) -> CompiledRhs:
     """Compile a normalized RHS into a runnable evaluation function.
 
     Always attempts the vectorized eval path that operates on shaped buffers
     (one tensor expression per state template) and falls back automatically
     to the scalar path when the spec falls outside the supported subset.
 
+    The returned ``eval_fn`` is **namespace-polymorphic**: it infers its
+    array namespace from the input ``y`` at call time
+    (``y.__array_namespace__()``), and returns arrays in that same
+    namespace. Calling it with JAX arrays (or tracers) yields a JAX-native
+    computation suitable for ``jax.jit`` / ``jax.vmap`` without any
+    correctness wrapping.
+
     Args:
         rhs: Normalized RHS produced by `op_system.specs.normalize_rhs`.
-        xp: Array backend namespace.
+        xp: **Deprecated.** Formerly the compile-time array backend
+            namespace. Now ignored — the namespace is resolved per call
+            from the input ``y``. Will be removed in a future release.
 
     Returns:
         A `CompiledRhs` containing an `eval_fn(t, y, **params) -> dydt`.
     """
+    if xp is not None:
+        warnings.warn(
+            "compile_rhs(xp=...) is deprecated and ignored. The compiled "
+            "eval_fn now infers its array namespace from the input `y` at "
+            "call time via __array_namespace__(); pass JAX arrays for a "
+            "JAX-native call, NumPy arrays for a NumPy call. The `xp` "
+            "kwarg will be removed in a future release.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
     if rhs.kind not in {"expr", "transitions"}:
         _raise_unsupported_feature(
             feature=f"rhs.kind={rhs.kind}",
@@ -662,7 +719,7 @@ def compile_rhs(rhs: NormalizedRhs, *, xp: object) -> CompiledRhs:
     vec = importlib.import_module("op_system._vectorize")
     plan = vec.build_vector_plan(rhs)
     eval_fn: EvalFn | None = (
-        vec.make_vectorized_eval_fn(plan, xp=xp) if plan is not None else None
+        vec.make_vectorized_eval_fn(plan) if plan is not None else None
     )
 
     if eval_fn is None:
@@ -670,7 +727,6 @@ def compile_rhs(rhs: NormalizedRhs, *, xp: object) -> CompiledRhs:
             state_names=rhs.state_names,
             aliases=rhs.aliases,
             equations=rhs.equations,
-            xp=xp,
         )
 
     eval_fn = _wrap_eval_fn_for_time_varying(
@@ -678,7 +734,6 @@ def compile_rhs(rhs: NormalizedRhs, *, xp: object) -> CompiledRhs:
         time_varying_params=rhs.time_varying_params,
         time_axis_name=str(rhs.meta.get("time_axis", "time")),
         axes_meta=tuple(rhs.meta.get("axes") or ()),
-        xp=xp,
     )
 
     return CompiledRhs(

@@ -21,14 +21,13 @@ Design guarantees:
 
 from __future__ import annotations
 
-import importlib
+import warnings
 from importlib.metadata import version
 from typing import Final, Literal
 
-import numpy as np
-
 from op_system._identifer_string import IdentifierString
 from op_system._state_string import StateString
+from op_system._typing import Array
 
 from .compile import CompiledRhs, EvalFn, compile_rhs
 from .specs import (
@@ -55,19 +54,6 @@ EXPERIMENTAL_FEATURES: frozenset[str] = frozenset()  # noqa: RUF067
 # -----------------------------------------------------------------------------
 
 
-def _resolve_xp(backend: Literal["numpy", "jax"]) -> object:  # noqa: RUF067
-    if backend == "numpy":
-        return np
-    try:
-        return importlib.import_module("jax.numpy")
-    except ImportError as exc:
-        msg = (
-            "backend='jax' requires jax to be installed "
-            '(pip install "op_system[jax]")'
-        )
-        raise ImportError(msg) from exc
-
-
 def compile_spec(  # noqa: RUF067
     spec: dict[str, object],
     *,
@@ -79,25 +65,37 @@ def compile_spec(  # noqa: RUF067
 
     This is the recommended public entrypoint for most users and adapters.
 
+    The compiled ``eval_fn`` is **namespace-polymorphic**: it infers its
+    array namespace from the input ``y`` at call time
+    (``y.__array_namespace__()``), so a single compiled callable handles
+    NumPy, JAX (concrete and traced), and any other Array-API backend
+    natively. No compile-time backend selection is required.
+
     Args:
         spec: Raw RHS specification mapping (YAML/JSON friendly).
-        xp: Optional array backend namespace. If provided, takes precedence over
-            backend selection.
-        backend: Backend selector used when xp is not provided.
+        xp: **Deprecated.** Formerly the compile-time array backend
+            namespace. Now ignored — see ``compile_rhs`` for details.
+            Will be removed in a future release.
+        backend: **Deprecated.** Formerly selected the compile-time
+            backend (``"numpy"`` or ``"jax"``). Now ignored. Will be
+            removed in a future release.
 
     Returns:
         CompiledRhs: Runnable RHS callable container.
-
-    Raises:
-        ValueError: If both `xp` and a non-default backend are provided.
     """
-    if xp is not None and backend != DEFAULT_ARRAY_BACKEND:
-        msg = "Pass either xp or backend='jax', not both."
-        raise ValueError(msg)
+    if xp is not None or backend != DEFAULT_ARRAY_BACKEND:
+        warnings.warn(
+            "compile_spec(xp=..., backend=...) is deprecated and ignored. "
+            "The compiled eval_fn now infers its array namespace from the "
+            "input `y` at call time via __array_namespace__(); pass JAX "
+            "arrays for a JAX-native call, NumPy arrays for a NumPy call. "
+            "These kwargs will be removed in a future release.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
 
-    xp_ns = _resolve_xp(backend) if xp is None else xp
     rhs = normalize_rhs(spec)
-    return compile_rhs(rhs, xp=xp_ns)
+    return compile_rhs(rhs)
 
 
 # -----------------------------------------------------------------------------
@@ -108,6 +106,7 @@ __all__ = [
     "DEFAULT_ARRAY_BACKEND",
     "EXPERIMENTAL_FEATURES",
     "SUPPORTED_RHS_KINDS",
+    "Array",
     "CompiledRhs",
     "EvalFn",
     "IdentifierString",

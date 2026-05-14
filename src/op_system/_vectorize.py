@@ -35,9 +35,12 @@ import numpy as np
 
 from op_system.compile import (
     _SAFE_BUILTINS,
-    _is_numpy_backend,
+    _check_numeric_dtype,
+    _Indexable,
+    _namespace_of,
     _parse_expr,
     _validate_ast,
+    _validate_state_vector,
 )
 
 if TYPE_CHECKING:
@@ -1386,13 +1389,19 @@ def build_vector_plan(rhs: NormalizedRhs) -> _VectorPlan | None:  # noqa: C901, 
 # ---------------------------------------------------------------------------
 
 
-def make_vectorized_eval_fn(plan: _VectorPlan, *, xp: object) -> EvalFn:  # noqa: C901, PLR0915
-    """Return an ``eval_fn(t, y, **params)`` driven by ``plan``."""
+def make_vectorized_eval_fn(plan: _VectorPlan) -> EvalFn:  # noqa: C901, PLR0915
+    """Return a namespace-polymorphic ``eval_fn(t, y, **params)`` driven by ``plan``.
+
+    The compiled function infers its array namespace from the input ``y``
+    via :meth:`y.__array_namespace__` at call time, so a single eval_fn
+    handles NumPy and JAX (and any other Array-API backend) without
+    branching. Calling it with JAX arrays (or tracers) yields a JAX-native
+    computation.
+    """
     state_templates = plan.state_templates
     alias_codes = plan.alias_codes
     eq_groups = plan.eq_groups
     n_state = plan.n_state
-    is_numpy = _is_numpy_backend(xp)
 
     # Pre-compute param buffer assembly recipes: (base, expanded_names, shape)
     # — at eval time we stack the corresponding param values.
@@ -1406,20 +1415,13 @@ def make_vectorized_eval_fn(plan: _VectorPlan, *, xp: object) -> EvalFn:  # noqa
     # passed under the bare base name.
     extra_param_buffers = plan.extra_param_buffers
 
-    def eval_fn(t: object, y: object, **params: object) -> Float64Array:  # noqa: C901, PLR0912, PLR0914, PLR0915
-        if is_numpy:
-            y_in = np.asarray(y, dtype=np.float64)
-            t_val: object = np.float64(cast("Any", t))
-        else:
-            y_in = cast("Any", xp).asarray(y)
-            t_val = cast("Any", xp).asarray(t)
-        if y_in.shape != (n_state,):
-            msg = (
-                f"state has an invalid shape/value. expected (n_state={n_state},), "
-                f"got {y_in.shape}"
-            )
-            raise ValueError(msg)
+    def eval_fn(t: object, y: object, **params: object) -> Float64Array:  # noqa: C901, PLR0912, PLR0914
+        xp = _namespace_of(y)
+        _check_numeric_dtype(xp, getattr(y, "dtype", None))
+        y_arr = _validate_state_vector(y, n_state=n_state)
+        y_idx = cast("_Indexable", y_arr)
 
+        t_val: object = xp.asarray(t)
         env: dict[str, object] = {"np": xp, "t": t_val}
         env.update(params)
 
@@ -1429,22 +1431,10 @@ def make_vectorized_eval_fn(plan: _VectorPlan, *, xp: object) -> EvalFn:  # noqa
         for base, names, shape in param_recipes:
             if all(n in params for n in names):
                 vals = [params[n] for n in names]
-                if is_numpy:
-                    env[f"{base}_buf"] = np.asarray(vals, dtype=np.float64).reshape(
-                        shape
-                    )
-                else:
-                    xp_ns = cast("Any", xp)
-                    env[f"{base}_buf"] = xp_ns.reshape(xp_ns.asarray(vals), shape)
+                env[f"{base}_buf"] = xp.reshape(xp.asarray(vals), shape)
             elif base in params:
                 bare = params[base]
-                if is_numpy:
-                    env[f"{base}_buf"] = np.asarray(bare, dtype=np.float64).reshape(
-                        shape
-                    )
-                else:
-                    xp_ns = cast("Any", xp)
-                    env[f"{base}_buf"] = xp_ns.reshape(xp_ns.asarray(bare), shape)
+                env[f"{base}_buf"] = xp.reshape(xp.asarray(bare), shape)
             else:
                 missing = next(n for n in names if n not in params)
                 msg = (
@@ -1459,21 +1449,13 @@ def make_vectorized_eval_fn(plan: _VectorPlan, *, xp: object) -> EvalFn:  # noqa
                 msg = f"missing shaped param {base!r}: supply as a shape-{shape} array"
                 raise ValueError(msg)
             bare = params[base]
-            if is_numpy:
-                env[f"{base}_buf"] = np.asarray(bare, dtype=np.float64).reshape(shape)
-            else:
-                xp_ns = cast("Any", xp)
-                env[f"{base}_buf"] = xp_ns.reshape(xp_ns.asarray(bare), shape)
+            env[f"{base}_buf"] = xp.reshape(xp.asarray(bare), shape)
 
         # Build state buffers via reshape on contiguous slices.
         for tpl in state_templates:
             size = math.prod(tpl.shape)
-            slc = y_in[tpl.offset : tpl.offset + size]
-            env[f"{tpl.base}_buf"] = (
-                slc.reshape(tpl.shape)
-                if is_numpy
-                else cast("Any", xp).reshape(slc, tpl.shape)
-            )
+            slc = y_idx[tpl.offset : tpl.offset + size]
+            env[f"{tpl.base}_buf"] = xp.reshape(slc, tpl.shape)
 
         # Eval alias buffers in declaration order.
         for base, code, shape in alias_codes:
@@ -1485,10 +1467,7 @@ def make_vectorized_eval_fn(plan: _VectorPlan, *, xp: object) -> EvalFn:  # noqa
                 msg = f"alias {base!r} evaluation failed: {exc!r}"
                 raise ValueError(msg) from exc
             if shape:
-                if is_numpy:
-                    val = np.broadcast_to(val, shape)
-                else:
-                    val = cast("Any", xp).broadcast_to(val, shape)
+                val = xp.broadcast_to(val, shape)
             env[f"{base}_buf"] = val
 
         # Eval per-template equation buffers and concatenate.
@@ -1503,37 +1482,20 @@ def make_vectorized_eval_fn(plan: _VectorPlan, *, xp: object) -> EvalFn:  # noqa
                 except (NameError, ValueError, TypeError, ArithmeticError) as exc:
                     msg = f"equation {grp.base!r} evaluation failed: {exc!r}"
                     raise ValueError(msg) from exc
-                if is_numpy:
-                    arr = np.broadcast_to(
-                        np.asarray(val, dtype=np.float64), grp.vec_shape
-                    )
-                else:
-                    xp_ns = cast("Any", xp)
-                    arr = xp_ns.broadcast_to(xp_ns.asarray(val), grp.vec_shape)
+                arr = xp.broadcast_to(xp.asarray(val), grp.vec_shape)
                 bin_results.append(arr)
 
             if not grp.unroll_axes:
                 # Fully vectorized — single result already in template order.
                 whole = bin_results[0]
-            elif is_numpy:
-                stacked = np.stack(cast("Any", bin_results), axis=0).reshape(
-                    grp.unroll_shape + grp.vec_shape
-                )
-                whole = np.transpose(stacked, grp.assembly_perm)
             else:
-                xp_ns = cast("Any", xp)
-                stacked = xp_ns.reshape(
-                    xp_ns.stack(bin_results, axis=0),
+                stacked = xp.reshape(
+                    xp.stack(bin_results, axis=0),
                     grp.unroll_shape + grp.vec_shape,
                 )
-                whole = xp_ns.transpose(stacked, grp.assembly_perm)
-            if is_numpy:
-                pieces.append(np.asarray(whole).reshape(-1))
-            else:
-                pieces.append(cast("Any", xp).reshape(whole, (-1,)))
+                whole = xp.transpose(stacked, grp.assembly_perm)
+            pieces.append(xp.reshape(whole, (-1,)))
 
-        if is_numpy:
-            return cast("Float64Array", np.concatenate(cast("Any", pieces)))
-        return cast("Float64Array", cast("Any", xp).concatenate(pieces))
+        return cast("Float64Array", xp.concatenate(pieces))
 
     return eval_fn

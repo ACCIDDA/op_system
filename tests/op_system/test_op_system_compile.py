@@ -385,42 +385,70 @@ def test_compile_spec_owns_default_backend_policy() -> None:
 
 
 def test_compile_spec_rejects_conflicting_backend_and_xp() -> None:
-    """compile_spec rejects passing backend='jax' with explicit xp."""
+    """compile_spec emits a DeprecationWarning when xp/backend are passed.
+
+    The old "conflicting backend and xp" error is gone: namespace selection
+    is now per-call from the input ``y``, so both kwargs are accepted (and
+    ignored) under a single deprecation warning.
+    """
     spec: dict[str, object] = {
         "kind": "expr",
         "state": ["x"],
         "equations": {"x": "x"},
     }
-    with pytest.raises(ValueError, match=r"Pass either xp or backend='jax'"):
-        compile_spec(spec, xp=np, backend="jax")
+    with pytest.warns(DeprecationWarning, match="namespace from the input"):
+        compiled = compile_spec(spec, xp=np, backend="jax")
+    # Still produces a working compiled RHS.
+    out = compiled.eval_fn(0.0, np.array([2.0], dtype=np.float64))
+    assert np.isclose(float(out[0]), 2.0)
 
 
 def test_compile_spec_with_backend_jax_is_jittable() -> None:
-    """compile_spec supports backend='jax' as a public UX path."""
+    """compile_spec produces a JAX-jittable eval_fn when called with a JAX state.
+
+    The namespace is inferred from the input ``y`` via
+    ``__array_namespace__``, so no compile-time backend selection is
+    required (the deprecated ``backend`` kwarg is accepted and ignored).
+    """
     jax = pytest.importorskip("jax")
+    jnp = pytest.importorskip("jax.numpy")
 
     spec: dict[str, object] = {
         "kind": "expr",
         "state": ["x"],
         "equations": {"x": "beta * x"},
     }
-    compiled = compile_spec(spec, backend="jax")
+    with pytest.warns(DeprecationWarning, match="namespace from the input"):
+        compiled = compile_spec(spec, backend="jax")
 
-    y0 = np.array([2.0], dtype=np.float64)
+    y0 = jnp.asarray([2.0])
     out = jax.jit(lambda beta: compiled.eval_fn(0.0, y0, beta=beta))(1.5)
     assert np.allclose(np.asarray(out), np.asarray([3.0]))
 
 
 def test_compile_rhs_requires_explicit_backend_namespace() -> None:
-    """compile_rhs requires explicit xp so default policy is centralized."""
+    """compile_rhs no longer requires (or honors) an explicit ``xp``.
+
+    Backend selection is per-call from the input ``y`` via
+    ``__array_namespace__``. Passing ``xp`` is accepted under a
+    DeprecationWarning for one release; omitting it is the new default.
+    """
     spec: dict[str, object] = {
         "kind": "expr",
         "state": ["x"],
         "equations": {"x": "x"},
     }
     rhs = normalize_rhs(spec)
-    with pytest.raises(TypeError, match=r"required keyword-only argument: 'xp'"):
-        compile_rhs(rhs)  # type: ignore[call-arg]
+    # Default (no xp) works.
+    compiled = compile_rhs(rhs)
+    out = compiled.eval_fn(0.0, np.array([2.5], dtype=np.float64))
+    assert np.isclose(float(out[0]), 2.5)
+    # Passing xp emits a DeprecationWarning but still produces a usable
+    # CompiledRhs.
+    with pytest.warns(DeprecationWarning, match="namespace from the input"):
+        compiled_dep = compile_rhs(rhs, xp=np)
+    out2 = compiled_dep.eval_fn(0.0, np.array([4.0], dtype=np.float64))
+    assert np.isclose(float(out2[0]), 4.0)
 
 
 def test_compile_rhs_with_jax_backend_is_jittable() -> None:
