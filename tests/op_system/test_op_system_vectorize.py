@@ -76,9 +76,8 @@ def _eval_equal(spec: dict[str, object], **call_params: object) -> None:
         state_names=rhs.state_names,
         aliases=rhs.aliases,
         equations=rhs.equations,
-        xp=np,
     )
-    c_v = compile_rhs(rhs, xp=np)
+    c_v = compile_rhs(rhs)
     rng = np.random.RandomState(0)
     y = rng.rand(len(rhs.state_names))
     out_s = scalar_eval(0.0, y, **call_params)
