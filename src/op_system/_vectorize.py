@@ -939,7 +939,11 @@ def _collapse_full_buffer_sums(  # noqa: C901, PLR0915
                 )
             )
             if full_cover:
-                if all(w == 1.0 for _t, w in items):
+                # Exact equality with 1.0 is intentional: weights of exactly 1.0
+                # arise from bare buffer subscripts (no constant factor) or
+                # from explicit literal ``1.0`` in the source. Near-1.0 weights
+                # (e.g. trapezoidal endpoints) must take the weighted-sum path.
+                if all(w == 1.0 for _t, w in items):  # noqa: RUF069
                     collapsed.append((sign, _make_sum_call(name)))
                 else:
                     weight_map = dict(items)
@@ -972,7 +976,10 @@ def _collapse_full_buffer_sums(  # noqa: C901, PLR0915
                         ctx=ast.Load(),
                     )
                     leaf_expr: ast.expr
-                    if w == 1.0:
+                    # Same intent as above: only an exact 1.0 weight may be
+                    # dropped; any other value must be re-emitted as an
+                    # explicit ``Constant * Subscript`` factor.
+                    if w == 1.0:  # noqa: RUF069
                         leaf_expr = sub
                     else:
                         leaf_expr = ast.BinOp(
