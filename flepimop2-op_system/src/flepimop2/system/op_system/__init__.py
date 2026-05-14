@@ -27,7 +27,6 @@ pydantic BaseModel subclass is defined here, flepimop2 auto-generates a
 from __future__ import annotations
 
 import functools
-import importlib
 import sys
 from collections.abc import Mapping
 from types import MappingProxyType
@@ -36,8 +35,6 @@ from typing import (
     Any,
     Literal,
     NamedTuple,
-    SupportsFloat,
-    SupportsIndex,
     cast,
 )
 
@@ -59,7 +56,7 @@ from pydantic import ConfigDict, Field
 
 from op_system import CompiledRhs, compile_spec
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -84,20 +81,19 @@ class OpSystemSystem(ModuleModel, SystemABC):  # noqa: D101
 
     model_config = ConfigDict(extra="allow")
 
-    def model_post_init(self, context: Any) -> None:  # noqa: ANN401, PLR0914
-        """Compile `op_system` specification and prepare stepper and shape helpers."""
+    def model_post_init(self, context: Any) -> None:  # noqa: ANN401
+        """Compile `op_system` specification and prepare stepper and shape helpers.
+
+        The compiled ``eval_fn`` is **namespace-polymorphic**: it infers
+        its array namespace from the input ``state`` at call time via
+        ``state.__array_namespace__()``. Callers therefore pick the
+        backend (NumPy, JAX, ...) by passing arrays of that namespace;
+        the connector performs no backend coercion.
+        """
         del context
 
         spec_obj = self.spec
-        array_backend = self._resolve_array_backend(
-            self.option("array_backend", "numpy")
-        )
-        xp, state_coerce, time_coerce, output_coerce = self._build_backend_runtime(
-            array_backend
-        )
-        self._array_namespace = xp
-
-        compiled = compile_spec(spec_obj, xp=xp)
+        compiled = compile_spec(spec_obj)
         n_state = len(compiled.state_names)
 
         axes_meta = self._extract_axes_meta(compiled)
@@ -132,7 +128,6 @@ class OpSystemSystem(ModuleModel, SystemABC):  # noqa: D101
             "mixing_kernels": mixing_kernels,
             "operators": operators,
             "operator_axis": operator_axis,
-            "array_backend": array_backend,
         }
 
         def _stepper(
@@ -140,20 +135,16 @@ class OpSystemSystem(ModuleModel, SystemABC):  # noqa: D101
             state: Float64NDArray,
             **kwargs: Any,  # noqa: ANN401
         ) -> Float64NDArray:
-            state_arr = state_coerce(state)
-            if state_arr.ndim != 1 or state_arr.size != n_state:
+            shape = getattr(state, "shape", None)
+            if shape != (n_state,):
                 msg = (
                     "state must be a 1D array matching the spec state length; "
-                    f"expected ({n_state},), got {state_arr.shape}."
+                    f"expected ({n_state},), got {shape}."
                 )
                 raise ValueError(msg)
             params = dict(mixing_kernels)
             params.update(kwargs)
-            result = compiled.eval_fn(time_coerce(time), state_arr, **params)
-            output = output_coerce(result)
-            if TYPE_CHECKING:
-                return np.asarray(output, dtype=np.float64)
-            return output
+            return compiled.eval_fn(time, state, **params)
 
         self._stepper = _stepper
         self._compiled_rhs = compiled  # handy for debugging/adapters
@@ -358,67 +349,6 @@ class OpSystemSystem(ModuleModel, SystemABC):  # noqa: D101
             axis_order.append(name)
         return _AxesMeta(
             axis_order=tuple(axis_order), axis_sizes=axis_sizes, axis_coords=axis_coords
-        )
-
-    @staticmethod
-    def _resolve_array_backend(
-        backend_value: object,
-    ) -> Literal["numpy", "jax"]:
-        backend = str(backend_value)
-        if backend not in {"numpy", "jax"}:
-            msg = "options.array_backend must be one of {'numpy', 'jax'}"
-            raise ValueError(msg)
-        return cast("Literal['numpy', 'jax']", backend)
-
-    @staticmethod
-    def _get_array_namespace(backend: Literal["numpy", "jax"]) -> Any:  # noqa: ANN401
-        if backend == "numpy":
-            return np
-        try:
-            jnp = importlib.import_module("jax.numpy")
-        except ImportError as exc:
-            msg = "options.array_backend='jax' requires jax to be installed"
-            raise ImportError(msg) from exc
-        return jnp
-
-    @classmethod
-    def _build_backend_runtime(
-        cls, backend: Literal["numpy", "jax"]
-    ) -> tuple[
-        Any,
-        Callable[[object], Any],
-        Callable[[SupportsFloat | SupportsIndex | str | bytes | None], Any],
-        Callable[[object], Any],
-    ]:
-        xp = cls._get_array_namespace(backend)
-        if backend == "numpy":
-
-            def state_coerce(state: object) -> np.ndarray:
-                return np.asarray(state, dtype=np.float64)
-
-            def time_coerce(
-                time: SupportsFloat | SupportsIndex | str | bytes | None,
-            ) -> np.float64:
-                return np.float64(time)
-
-            def output_coerce(result: object) -> np.ndarray:
-                return np.asarray(result, dtype=np.float64)
-
-            return xp, state_coerce, time_coerce, output_coerce
-
-        def state_coerce_jax(state: object) -> Any:  # noqa: ANN401
-            return xp.asarray(state)
-
-        def passthrough(
-            value: SupportsFloat | SupportsIndex | str | bytes | None,
-        ) -> SupportsFloat | SupportsIndex | str | bytes | None:
-            return value
-
-        return (
-            xp,
-            state_coerce_jax,
-            passthrough,
-            cast("Callable[[object], Any]", passthrough),
         )
 
     @staticmethod
