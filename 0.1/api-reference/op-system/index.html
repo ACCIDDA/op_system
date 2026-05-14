@@ -602,6 +602,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#op_system.Array" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Array
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#op_system.CompiledRhs" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -872,6 +883,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#op_system.Array" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Array
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#op_system.CompiledRhs" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1131,6 +1153,64 @@ letter. Leading and trailing whitespace is stripped before validation.</p>
 
 
 
+<h3 id="op_system.Array" class="doc doc-heading">
+            <code>Array</code>
+
+
+<a href="#op_system.Array" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="typing.Protocol">Protocol</span></code></p>
+
+
+
+        <p>Structural Array-API protocol.</p>
+<p>Any object whose runtime type implements <code>shape</code>, <code>dtype</code>,
+<code>__array_namespace__</code> and <code>item</code> satisfies this protocol. NumPy</p>
+<blockquote>
+<p>= 2.0 ndarrays, JAX arrays (concrete and traced), and PyTorch tensors
+(via the array-api compat layer) all qualify.</p>
+</blockquote>
+<p>The namespace returned by <code>__array_namespace__</code> is the <em>only</em> gate
+op_system uses to dispatch operations: input → namespace → output in
+that same namespace. No conversion, no coercion, no compile-time
+backend selector.</p>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
 <h3 id="op_system.CompiledRhs" class="doc doc-heading">
               <code class="highlight language-python"><span class="n">CompiledRhs</span><span class="p">(</span><span class="n">state_names</span><span class="p">,</span> <span class="n">param_names</span><span class="p">,</span> <span class="n">eval_fn</span><span class="p">,</span> <span class="n">meta</span><span class="o">=</span><span class="p">(</span><span class="k">lambda</span><span class="p">:</span> <span class="n">MappingProxyType</span><span class="p">({}))())</span></code>
 
@@ -1238,23 +1318,23 @@ letter. Leading and trailing whitespace is stripped before validation.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/op_system/compile.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">170</span>
-<span class="normal">171</span>
-<span class="normal">172</span>
-<span class="normal">173</span>
-<span class="normal">174</span>
-<span class="normal">175</span>
-<span class="normal">176</span>
-<span class="normal">177</span>
-<span class="normal">178</span>
-<span class="normal">179</span>
-<span class="normal">180</span>
-<span class="normal">181</span>
-<span class="normal">182</span>
-<span class="normal">183</span>
-<span class="normal">184</span>
-<span class="normal">185</span>
-<span class="normal">186</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">bind</span><span class="p">(</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">205</span>
+<span class="normal">206</span>
+<span class="normal">207</span>
+<span class="normal">208</span>
+<span class="normal">209</span>
+<span class="normal">210</span>
+<span class="normal">211</span>
+<span class="normal">212</span>
+<span class="normal">213</span>
+<span class="normal">214</span>
+<span class="normal">215</span>
+<span class="normal">216</span>
+<span class="normal">217</span>
+<span class="normal">218</span>
+<span class="normal">219</span>
+<span class="normal">220</span>
+<span class="normal">221</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">bind</span><span class="p">(</span>
     <span class="bp">self</span><span class="p">,</span> <span class="n">params</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">object</span><span class="p">]</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Callable</span><span class="p">[[</span><span class="nb">object</span><span class="p">,</span> <span class="nb">object</span><span class="p">],</span> <span class="n">Float64Array</span><span class="p">]:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Bind parameter values and return a 2-arg RHS: rhs(t, y) -&gt; dydt.</span>
@@ -1550,7 +1630,7 @@ followed immediately by bracketed dimensions like <code>"R[age,vax]"</code>.</p>
 
 
 <h3 id="op_system.compile_rhs" class="doc doc-heading">
-            <code class="highlight language-python"><span class="n">compile_rhs</span><span class="p">(</span><span class="n">rhs</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">xp</span><span class="p">)</span></code>
+            <code class="highlight language-python"><span class="n">compile_rhs</span><span class="p">(</span><span class="n">rhs</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">xp</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
 
 <a href="#op_system.compile_rhs" class="headerlink" title="Permanent link">&para;</a></h3>
 
@@ -1561,6 +1641,12 @@ followed immediately by bracketed dimensions like <code>"R[age,vax]"</code>.</p>
 <p>Always attempts the vectorized eval path that operates on shaped buffers
 (one tensor expression per state template) and falls back automatically
 to the scalar path when the spec falls outside the supported subset.</p>
+<p>The returned <code>eval_fn</code> is <strong>namespace-polymorphic</strong>: it infers its
+array namespace from the input <code>y</code> at call time
+(<code>y.__array_namespace__()</code>), and returns arrays in that same
+namespace. Calling it with JAX arrays (or tracers) yields a JAX-native
+computation suitable for <code>jax.jit</code> / <code>jax.vmap</code> without any
+correctness wrapping.</p>
 
 
 <p><span class="doc-section-title">Parameters:</span></p>
@@ -1599,15 +1685,17 @@ to the scalar path when the spec falls outside the supported subset.</p>
                 <code>xp</code>
             </td>
             <td>
-                  <code><span title="object">object</span></code>
+                  <code><span title="object">object</span> | None</code>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Array backend namespace.</p>
+                <p><strong>Deprecated.</strong> Formerly the compile-time array backend
+namespace. Now ignored — the namespace is resolved per call
+from the input <code>y</code>. Will be removed in a future release.</p>
               </div>
             </td>
             <td>
-                <em>required</em>
+                  <code>None</code>
             </td>
           </tr>
       </tbody>
@@ -1643,45 +1731,7 @@ to the scalar path when the spec falls outside the supported subset.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/op_system/compile.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">640</span>
-<span class="normal">641</span>
-<span class="normal">642</span>
-<span class="normal">643</span>
-<span class="normal">644</span>
-<span class="normal">645</span>
-<span class="normal">646</span>
-<span class="normal">647</span>
-<span class="normal">648</span>
-<span class="normal">649</span>
-<span class="normal">650</span>
-<span class="normal">651</span>
-<span class="normal">652</span>
-<span class="normal">653</span>
-<span class="normal">654</span>
-<span class="normal">655</span>
-<span class="normal">656</span>
-<span class="normal">657</span>
-<span class="normal">658</span>
-<span class="normal">659</span>
-<span class="normal">660</span>
-<span class="normal">661</span>
-<span class="normal">662</span>
-<span class="normal">663</span>
-<span class="normal">664</span>
-<span class="normal">665</span>
-<span class="normal">666</span>
-<span class="normal">667</span>
-<span class="normal">668</span>
-<span class="normal">669</span>
-<span class="normal">670</span>
-<span class="normal">671</span>
-<span class="normal">672</span>
-<span class="normal">673</span>
-<span class="normal">674</span>
-<span class="normal">675</span>
-<span class="normal">676</span>
-<span class="normal">677</span>
-<span class="normal">678</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">678</span>
 <span class="normal">679</span>
 <span class="normal">680</span>
 <span class="normal">681</span>
@@ -1692,20 +1742,94 @@ to the scalar path when the spec falls outside the supported subset.</p>
 <span class="normal">686</span>
 <span class="normal">687</span>
 <span class="normal">688</span>
-<span class="normal">689</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">compile_rhs</span><span class="p">(</span><span class="n">rhs</span><span class="p">:</span> <span class="n">NormalizedRhs</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">xp</span><span class="p">:</span> <span class="nb">object</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">CompiledRhs</span><span class="p">:</span>
+<span class="normal">689</span>
+<span class="normal">690</span>
+<span class="normal">691</span>
+<span class="normal">692</span>
+<span class="normal">693</span>
+<span class="normal">694</span>
+<span class="normal">695</span>
+<span class="normal">696</span>
+<span class="normal">697</span>
+<span class="normal">698</span>
+<span class="normal">699</span>
+<span class="normal">700</span>
+<span class="normal">701</span>
+<span class="normal">702</span>
+<span class="normal">703</span>
+<span class="normal">704</span>
+<span class="normal">705</span>
+<span class="normal">706</span>
+<span class="normal">707</span>
+<span class="normal">708</span>
+<span class="normal">709</span>
+<span class="normal">710</span>
+<span class="normal">711</span>
+<span class="normal">712</span>
+<span class="normal">713</span>
+<span class="normal">714</span>
+<span class="normal">715</span>
+<span class="normal">716</span>
+<span class="normal">717</span>
+<span class="normal">718</span>
+<span class="normal">719</span>
+<span class="normal">720</span>
+<span class="normal">721</span>
+<span class="normal">722</span>
+<span class="normal">723</span>
+<span class="normal">724</span>
+<span class="normal">725</span>
+<span class="normal">726</span>
+<span class="normal">727</span>
+<span class="normal">728</span>
+<span class="normal">729</span>
+<span class="normal">730</span>
+<span class="normal">731</span>
+<span class="normal">732</span>
+<span class="normal">733</span>
+<span class="normal">734</span>
+<span class="normal">735</span>
+<span class="normal">736</span>
+<span class="normal">737</span>
+<span class="normal">738</span>
+<span class="normal">739</span>
+<span class="normal">740</span>
+<span class="normal">741</span>
+<span class="normal">742</span>
+<span class="normal">743</span>
+<span class="normal">744</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">compile_rhs</span><span class="p">(</span><span class="n">rhs</span><span class="p">:</span> <span class="n">NormalizedRhs</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">xp</span><span class="p">:</span> <span class="nb">object</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">CompiledRhs</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Compile a normalized RHS into a runnable evaluation function.</span>
 
 <span class="sd">    Always attempts the vectorized eval path that operates on shaped buffers</span>
 <span class="sd">    (one tensor expression per state template) and falls back automatically</span>
 <span class="sd">    to the scalar path when the spec falls outside the supported subset.</span>
 
+<span class="sd">    The returned ``eval_fn`` is **namespace-polymorphic**: it infers its</span>
+<span class="sd">    array namespace from the input ``y`` at call time</span>
+<span class="sd">    (``y.__array_namespace__()``), and returns arrays in that same</span>
+<span class="sd">    namespace. Calling it with JAX arrays (or tracers) yields a JAX-native</span>
+<span class="sd">    computation suitable for ``jax.jit`` / ``jax.vmap`` without any</span>
+<span class="sd">    correctness wrapping.</span>
+
 <span class="sd">    Args:</span>
 <span class="sd">        rhs: Normalized RHS produced by `op_system.specs.normalize_rhs`.</span>
-<span class="sd">        xp: Array backend namespace.</span>
+<span class="sd">        xp: **Deprecated.** Formerly the compile-time array backend</span>
+<span class="sd">            namespace. Now ignored — the namespace is resolved per call</span>
+<span class="sd">            from the input ``y``. Will be removed in a future release.</span>
 
 <span class="sd">    Returns:</span>
 <span class="sd">        A `CompiledRhs` containing an `eval_fn(t, y, **params) -&gt; dydt`.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">xp</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+            <span class="s2">&quot;compile_rhs(xp=...) is deprecated and ignored. The compiled &quot;</span>
+            <span class="s2">&quot;eval_fn now infers its array namespace from the input `y` at &quot;</span>
+            <span class="s2">&quot;call time via __array_namespace__(); pass JAX arrays for a &quot;</span>
+            <span class="s2">&quot;JAX-native call, NumPy arrays for a NumPy call. The `xp` &quot;</span>
+            <span class="s2">&quot;kwarg will be removed in a future release.&quot;</span><span class="p">,</span>
+            <span class="ne">DeprecationWarning</span><span class="p">,</span>
+            <span class="n">stacklevel</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+        <span class="p">)</span>
     <span class="k">if</span> <span class="n">rhs</span><span class="o">.</span><span class="n">kind</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">{</span><span class="s2">&quot;expr&quot;</span><span class="p">,</span> <span class="s2">&quot;transitions&quot;</span><span class="p">}:</span>
         <span class="n">_raise_unsupported_feature</span><span class="p">(</span>
             <span class="n">feature</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;rhs.kind=</span><span class="si">{</span><span class="n">rhs</span><span class="o">.</span><span class="n">kind</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
@@ -1717,7 +1841,7 @@ to the scalar path when the spec falls outside the supported subset.</p>
     <span class="n">vec</span> <span class="o">=</span> <span class="n">importlib</span><span class="o">.</span><span class="n">import_module</span><span class="p">(</span><span class="s2">&quot;op_system._vectorize&quot;</span><span class="p">)</span>
     <span class="n">plan</span> <span class="o">=</span> <span class="n">vec</span><span class="o">.</span><span class="n">build_vector_plan</span><span class="p">(</span><span class="n">rhs</span><span class="p">)</span>
     <span class="n">eval_fn</span><span class="p">:</span> <span class="n">EvalFn</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="p">(</span>
-        <span class="n">vec</span><span class="o">.</span><span class="n">make_vectorized_eval_fn</span><span class="p">(</span><span class="n">plan</span><span class="p">,</span> <span class="n">xp</span><span class="o">=</span><span class="n">xp</span><span class="p">)</span> <span class="k">if</span> <span class="n">plan</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span>
+        <span class="n">vec</span><span class="o">.</span><span class="n">make_vectorized_eval_fn</span><span class="p">(</span><span class="n">plan</span><span class="p">)</span> <span class="k">if</span> <span class="n">plan</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span>
     <span class="p">)</span>
 
     <span class="k">if</span> <span class="n">eval_fn</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
@@ -1725,7 +1849,6 @@ to the scalar path when the spec falls outside the supported subset.</p>
             <span class="n">state_names</span><span class="o">=</span><span class="n">rhs</span><span class="o">.</span><span class="n">state_names</span><span class="p">,</span>
             <span class="n">aliases</span><span class="o">=</span><span class="n">rhs</span><span class="o">.</span><span class="n">aliases</span><span class="p">,</span>
             <span class="n">equations</span><span class="o">=</span><span class="n">rhs</span><span class="o">.</span><span class="n">equations</span><span class="p">,</span>
-            <span class="n">xp</span><span class="o">=</span><span class="n">xp</span><span class="p">,</span>
         <span class="p">)</span>
 
     <span class="n">eval_fn</span> <span class="o">=</span> <span class="n">_wrap_eval_fn_for_time_varying</span><span class="p">(</span>
@@ -1733,7 +1856,6 @@ to the scalar path when the spec falls outside the supported subset.</p>
         <span class="n">time_varying_params</span><span class="o">=</span><span class="n">rhs</span><span class="o">.</span><span class="n">time_varying_params</span><span class="p">,</span>
         <span class="n">time_axis_name</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">rhs</span><span class="o">.</span><span class="n">meta</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;time_axis&quot;</span><span class="p">,</span> <span class="s2">&quot;time&quot;</span><span class="p">)),</span>
         <span class="n">axes_meta</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(</span><span class="n">rhs</span><span class="o">.</span><span class="n">meta</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;axes&quot;</span><span class="p">)</span> <span class="ow">or</span> <span class="p">()),</span>
-        <span class="n">xp</span><span class="o">=</span><span class="n">xp</span><span class="p">,</span>
     <span class="p">)</span>
 
     <span class="k">return</span> <span class="n">CompiledRhs</span><span class="p">(</span>
@@ -1761,6 +1883,11 @@ to the scalar path when the spec falls outside the supported subset.</p>
 
         <p>Validate, normalize, and compile a RHS specification in one call.</p>
 <p>This is the recommended public entrypoint for most users and adapters.</p>
+<p>The compiled <code>eval_fn</code> is <strong>namespace-polymorphic</strong>: it infers its
+array namespace from the input <code>y</code> at call time
+(<code>y.__array_namespace__()</code>), so a single compiled callable handles
+NumPy, JAX (concrete and traced), and any other Array-API backend
+natively. No compile-time backend selection is required.</p>
 
 
 <p><span class="doc-section-title">Parameters:</span></p>
@@ -1799,8 +1926,9 @@ to the scalar path when the spec falls outside the supported subset.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Optional array backend namespace. If provided, takes precedence over
-backend selection.</p>
+                <p><strong>Deprecated.</strong> Formerly the compile-time array backend
+namespace. Now ignored — see <code>compile_rhs</code> for details.
+Will be removed in a future release.</p>
               </div>
             </td>
             <td>
@@ -1816,7 +1944,9 @@ backend selection.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Backend selector used when xp is not provided.</p>
+                <p><strong>Deprecated.</strong> Formerly selected the compile-time
+backend (<code>"numpy"</code> or <code>"jax"</code>). Now ignored. Will be
+removed in a future release.</p>
               </div>
             </td>
             <td>
@@ -1854,61 +1984,50 @@ backend selection.</p>
     </table>
 
 
-<p><span class="doc-section-title">Raises:</span></p>
-    <table>
-      <thead>
-        <tr>
-          <th>Type</th>
-          <th>Description</th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-            <td>
-                  <code><span title="ValueError">ValueError</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>If both <code>xp</code> and a non-default backend are provided.</p>
-              </div>
-            </td>
-          </tr>
-      </tbody>
-    </table>
-
-
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/op_system/__init__.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"> 71</span>
-<span class="normal"> 72</span>
-<span class="normal"> 73</span>
-<span class="normal"> 74</span>
-<span class="normal"> 75</span>
-<span class="normal"> 76</span>
-<span class="normal"> 77</span>
-<span class="normal"> 78</span>
-<span class="normal"> 79</span>
-<span class="normal"> 80</span>
-<span class="normal"> 81</span>
-<span class="normal"> 82</span>
-<span class="normal"> 83</span>
-<span class="normal"> 84</span>
-<span class="normal"> 85</span>
-<span class="normal"> 86</span>
-<span class="normal"> 87</span>
-<span class="normal"> 88</span>
-<span class="normal"> 89</span>
-<span class="normal"> 90</span>
-<span class="normal"> 91</span>
-<span class="normal"> 92</span>
-<span class="normal"> 93</span>
-<span class="normal"> 94</span>
-<span class="normal"> 95</span>
-<span class="normal"> 96</span>
-<span class="normal"> 97</span>
-<span class="normal"> 98</span>
-<span class="normal"> 99</span>
-<span class="normal">100</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">compile_spec</span><span class="p">(</span>  <span class="c1"># noqa: RUF067</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">57</span>
+<span class="normal">58</span>
+<span class="normal">59</span>
+<span class="normal">60</span>
+<span class="normal">61</span>
+<span class="normal">62</span>
+<span class="normal">63</span>
+<span class="normal">64</span>
+<span class="normal">65</span>
+<span class="normal">66</span>
+<span class="normal">67</span>
+<span class="normal">68</span>
+<span class="normal">69</span>
+<span class="normal">70</span>
+<span class="normal">71</span>
+<span class="normal">72</span>
+<span class="normal">73</span>
+<span class="normal">74</span>
+<span class="normal">75</span>
+<span class="normal">76</span>
+<span class="normal">77</span>
+<span class="normal">78</span>
+<span class="normal">79</span>
+<span class="normal">80</span>
+<span class="normal">81</span>
+<span class="normal">82</span>
+<span class="normal">83</span>
+<span class="normal">84</span>
+<span class="normal">85</span>
+<span class="normal">86</span>
+<span class="normal">87</span>
+<span class="normal">88</span>
+<span class="normal">89</span>
+<span class="normal">90</span>
+<span class="normal">91</span>
+<span class="normal">92</span>
+<span class="normal">93</span>
+<span class="normal">94</span>
+<span class="normal">95</span>
+<span class="normal">96</span>
+<span class="normal">97</span>
+<span class="normal">98</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">compile_spec</span><span class="p">(</span>  <span class="c1"># noqa: RUF067</span>
     <span class="n">spec</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">object</span><span class="p">],</span>
     <span class="o">*</span><span class="p">,</span>
     <span class="n">xp</span><span class="p">:</span> <span class="nb">object</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -1919,25 +2038,37 @@ backend selection.</p>
 
 <span class="sd">    This is the recommended public entrypoint for most users and adapters.</span>
 
+<span class="sd">    The compiled ``eval_fn`` is **namespace-polymorphic**: it infers its</span>
+<span class="sd">    array namespace from the input ``y`` at call time</span>
+<span class="sd">    (``y.__array_namespace__()``), so a single compiled callable handles</span>
+<span class="sd">    NumPy, JAX (concrete and traced), and any other Array-API backend</span>
+<span class="sd">    natively. No compile-time backend selection is required.</span>
+
 <span class="sd">    Args:</span>
 <span class="sd">        spec: Raw RHS specification mapping (YAML/JSON friendly).</span>
-<span class="sd">        xp: Optional array backend namespace. If provided, takes precedence over</span>
-<span class="sd">            backend selection.</span>
-<span class="sd">        backend: Backend selector used when xp is not provided.</span>
+<span class="sd">        xp: **Deprecated.** Formerly the compile-time array backend</span>
+<span class="sd">            namespace. Now ignored — see ``compile_rhs`` for details.</span>
+<span class="sd">            Will be removed in a future release.</span>
+<span class="sd">        backend: **Deprecated.** Formerly selected the compile-time</span>
+<span class="sd">            backend (``&quot;numpy&quot;`` or ``&quot;jax&quot;``). Now ignored. Will be</span>
+<span class="sd">            removed in a future release.</span>
 
 <span class="sd">    Returns:</span>
 <span class="sd">        CompiledRhs: Runnable RHS callable container.</span>
-
-<span class="sd">    Raises:</span>
-<span class="sd">        ValueError: If both `xp` and a non-default backend are provided.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">if</span> <span class="n">xp</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">backend</span> <span class="o">!=</span> <span class="n">DEFAULT_ARRAY_BACKEND</span><span class="p">:</span>
-        <span class="n">msg</span> <span class="o">=</span> <span class="s2">&quot;Pass either xp or backend=&#39;jax&#39;, not both.&quot;</span>
-        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">xp</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">backend</span> <span class="o">!=</span> <span class="n">DEFAULT_ARRAY_BACKEND</span><span class="p">:</span>
+        <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+            <span class="s2">&quot;compile_spec(xp=..., backend=...) is deprecated and ignored. &quot;</span>
+            <span class="s2">&quot;The compiled eval_fn now infers its array namespace from the &quot;</span>
+            <span class="s2">&quot;input `y` at call time via __array_namespace__(); pass JAX &quot;</span>
+            <span class="s2">&quot;arrays for a JAX-native call, NumPy arrays for a NumPy call. &quot;</span>
+            <span class="s2">&quot;These kwargs will be removed in a future release.&quot;</span><span class="p">,</span>
+            <span class="ne">DeprecationWarning</span><span class="p">,</span>
+            <span class="n">stacklevel</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+        <span class="p">)</span>
 
-    <span class="n">xp_ns</span> <span class="o">=</span> <span class="n">_resolve_xp</span><span class="p">(</span><span class="n">backend</span><span class="p">)</span> <span class="k">if</span> <span class="n">xp</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">xp</span>
     <span class="n">rhs</span> <span class="o">=</span> <span class="n">normalize_rhs</span><span class="p">(</span><span class="n">spec</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">compile_rhs</span><span class="p">(</span><span class="n">rhs</span><span class="p">,</span> <span class="n">xp</span><span class="o">=</span><span class="n">xp_ns</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">compile_rhs</span><span class="p">(</span><span class="n">rhs</span><span class="p">)</span>
 </code></pre></div></td></tr></table></div>
             </details>
     </div>
