@@ -37,6 +37,9 @@ from typing import (
 import numpy as np
 from numpy.typing import NDArray
 
+from op_system._errors import InvalidExpressionError
+from op_system._symbols import parse_expression_string
+
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
     from types import CodeType
@@ -301,9 +304,10 @@ def _parse_expr(expr: str) -> ast.Expression:
         Parsed AST for the expression.
     """
     try:
-        return ast.parse(expr, mode="eval")
-    except SyntaxError as exc:  # pragma: no cover
-        _raise_invalid_expression(detail=f"invalid expression syntax: {exc.msg}")
+        parsed = parse_expression_string(expr).ast
+    except InvalidExpressionError as exc:
+        _raise_invalid_expression(detail=exc.detail)
+    return cast("ast.Expression", parsed)
 
 
 def _validate_call(func: ast.AST, *, expr: str) -> None:
