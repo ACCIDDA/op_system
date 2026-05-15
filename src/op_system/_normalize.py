@@ -1730,12 +1730,14 @@ def _select_apply_along_kernel(
     )
 
 
-def _substitute_apply_along_brackets(  # noqa: C901, PLR0915
+def _substitute_apply_along_brackets(  # noqa: C901, PLR0913, PLR0915
     expr: str,
     bound: Mapping[str, str],
     *,
     axis_order: Sequence[str] = (),
     shaped_params: Mapping[str, tuple[str, ...]] | None = None,
+    lhs_assignment: Mapping[str, str] | None = None,
+    axis_coords: Mapping[str, list[str]] | None = None,
 ) -> str:
     """Rewrite ``name[ax=c, ...]`` to ``name__ax_<c>__...`` for bound axes.
 
@@ -1754,6 +1756,18 @@ def _substitute_apply_along_brackets(  # noqa: C901, PLR0915
     direct expansion, e.g. ``X__age_..__vax_..__loc_..__imm_..`` rather than
     the binding-order accident ``X__imm_..__age_..__vax_..__loc_..``.
 
+    Same-axis-twice disambiguation
+    ------------------------------
+    For a shaped parameter declared on duplicate axes (e.g. a contact kernel
+    ``K[age, age]``), the natural reference inside an ``apply_along`` is
+    ``K[age, age=ap]`` where the **bare** ``age`` token is the *free outer*
+    axis (taken from the LHS template assignment of the equation being
+    expanded) and the ``age=ap`` token is the *bound inner* axis (assigned
+    by the surrounding ``apply_along``).  ``lhs_assignment`` carries the
+    LHS-free axis bindings so this case can be lowered to per-row
+    indexing/mangling rather than collapsing both positions onto the bound
+    coord (which would produce only the diagonal of ``K``).
+
     If ``shaped_params`` is provided and contains ``name`` with multiple axes
     (e.g., a contact kernel ``K[age, age]``), and all those axes are bound,
     the bracket assignments are converted to direct indexing instead of
@@ -1767,6 +1781,8 @@ def _substitute_apply_along_brackets(  # noqa: C901, PLR0915
     pat = re.compile(r"([A-Za-z_][A-Za-z0-9_]*)\[([^\[\]]*)\]")
     priority = {ax: i for i, ax in enumerate(axis_order)}
     shaped_params = shaped_params or {}
+    lhs_assignment = lhs_assignment or {}
+    axis_coords = axis_coords or {}
 
     def _split_suffix(name: str) -> tuple[str, list[tuple[str, str]]]:
         """Strip trailing ``__<axis>_<coord>`` tokens recognised by axis_order.
@@ -1823,10 +1839,22 @@ def _substitute_apply_along_brackets(  # noqa: C901, PLR0915
         unknown = [p for p in pairs if p[0] not in priority]
         return "".join(f"__{ax}_{_sanitize_fragment(c)}" for ax, c in known + unknown)
 
-    def _sub(match: re.Match[str]) -> str:  # noqa: C901
+    def _sub(match: re.Match[str]) -> str:  # noqa: C901, PLR0914
         name = match.group(1)
         body = match.group(2)
         entries = [e.strip() for e in body.split(",") if e.strip()]
+
+        # Same-axis-twice disambiguation: detect axes that appear in this
+        # bracket both as a bare token and as ``axis=coord``. The bare token
+        # then refers to the LHS-free axis (taken from ``lhs_assignment``);
+        # the ``axis=coord`` token refers to the bound apply_along axis.
+        bare_axes = {e for e in entries if "=" not in e}
+        pinned_axes = {e.split("=", 1)[0].strip() for e in entries if "=" in e}
+        same_axis_twice = bare_axes & pinned_axes
+
+        # Resolve each entry positionally to (axis_name, coord, source) where
+        # source is "bound", "lhs", or None (unresolved → kept in brackets).
+        resolved: list[tuple[str, str | None, str | None]] = []
         consumed: list[tuple[str, str]] = []
         remaining: list[str] = []
         for entry in entries:
@@ -1836,35 +1864,61 @@ def _substitute_apply_along_brackets(  # noqa: C901, PLR0915
                 coord = coord.strip()
                 if ax in bound and bound[ax] == coord:
                     consumed.append((ax, coord))
+                    resolved.append((ax, coord, "bound"))
                     continue
-            elif entry in bound:
-                # Handle bare axis names that are bound (e.g., "age" when age
-                # is in bound)
-                consumed.append((entry, bound[entry]))
+                resolved.append((ax, None, None))
+                remaining.append(entry)
                 continue
+            # Bare axis token.
+            if entry in same_axis_twice:
+                # Free outer axis — must be supplied by the LHS template
+                # assignment. If we don't have it (e.g., a non-templated
+                # equation), leave the token in the brackets for downstream
+                # template substitution.
+                if entry in lhs_assignment:
+                    coord = lhs_assignment[entry]
+                    consumed.append((entry, coord))
+                    resolved.append((entry, coord, "lhs"))
+                    continue
+                resolved.append((entry, None, None))
+                remaining.append(entry)
+                continue
+            if entry in bound:
+                # Plain bound axis (no same-axis-twice ambiguity).
+                consumed.append((entry, bound[entry]))
+                resolved.append((entry, bound[entry], "bound"))
+                continue
+            resolved.append((entry, None, None))
             remaining.append(entry)
+
         if not consumed:
             return match.group(0)
 
-        # Check if this is a multi-axis shaped parameter being indexed.
-        # E.g., K[age, age=ap] with shaped_params["K"] = ("age", "age")
+        # Multi-axis shaped parameter → direct indexing when every position
+        # is resolved. Use positional coords from ``resolved`` so that
+        # same-axis-twice references like ``K[age, age=ap]`` get distinct
+        # row/column indices instead of collapsing onto the bound coord.
         if name in shaped_params and len(shaped_params[name]) > 1:
             param_axes = shaped_params[name]
-            # Try to match each axis position to a bound coordinate
-            index_parts: list[str] = []
-            all_bound = True
-            for ax in param_axes:
-                if ax in bound:
-                    index_parts.append(bound[ax])
-                else:
-                    # Axis not bound in this apply_along; can't use indexing
-                    all_bound = False
-                    break
-            # If all axis positions are bound, use indexing instead of mangling
-            if all_bound and not remaining:
-                # Convert to indexing: K[c1, c2, ...] instead of K__age_<c1>
-                indices = ", ".join(index_parts)
-                return f"{name}[{indices}]"
+            if (
+                len(resolved) == len(param_axes)
+                and not remaining
+                and all(coord is not None for _, coord, _ in resolved)
+                and all(ax == param_axes[i] for i, (ax, _, _) in enumerate(resolved))
+                and all(ax in axis_coords for ax in param_axes)
+            ):
+                # Convert coord names to integer positions on each axis so
+                # the downstream compiler sees a literal subscript.
+                try:
+                    int_idx = [
+                        axis_coords[param_axes[i]].index(coord)  # type: ignore[arg-type]
+                        for i, (_, coord, _) in enumerate(resolved)
+                    ]
+                except ValueError:
+                    int_idx = None
+                if int_idx is not None:
+                    indices = ", ".join(str(i) for i in int_idx)
+                    return f"{name}[{indices}]"
 
         base, existing = _split_suffix(name)
         suffix = _emit_suffix(existing + consumed)
@@ -2062,6 +2116,8 @@ def _expand_apply_along(  # noqa: PLR0914
     *,
     axes: list[dict[str, Any]],
     shaped_params: Mapping[str, tuple[str, ...]] | None = None,
+    lhs_assignment: Mapping[str, str] | None = None,
+    axis_coords: Mapping[str, list[str]] | None = None,
 ) -> str:
     """Expand ``apply_along(...)`` calls directly to weighted sums.
 
@@ -2097,7 +2153,13 @@ def _expand_apply_along(  # noqa: PLR0914
         kernel = _select_apply_along_kernel(bindings, kernel_form, axes=axes)
         # Recursively expand any inner apply_along first so we work on a flat
         # inner expression for substitution.
-        inner = _expand_apply_along(inner, axes=axes, shaped_params=shaped_params)
+        inner = _expand_apply_along(
+            inner,
+            axes=axes,
+            shaped_params=shaped_params,
+            lhs_assignment=lhs_assignment,
+            axis_coords=axis_coords,
+        )
 
         axis_options = [
             _build_apply_along_axis_options(
@@ -2116,7 +2178,12 @@ def _expand_apply_along(  # noqa: PLR0914
                 replaced = re.sub(rf"\b{re.escape(var_name)}\b", coord, replaced)
                 bound[ax_name] = coord
             replaced = _substitute_apply_along_brackets(
-                replaced, bound, axis_order=axis_order, shaped_params=shaped_params
+                replaced,
+                bound,
+                axis_order=axis_order,
+                shaped_params=shaped_params,
+                lhs_assignment=lhs_assignment,
+                axis_coords=axis_coords,
             )
             if kernel == "integrate":
                 weight = "*".join(str(w) for _, w in combo)
@@ -2132,13 +2199,32 @@ def _expand_helpers(
     *,
     axes: list[dict[str, Any]],
     shaped_params: Mapping[str, tuple[str, ...]] | None = None,
+    lhs_assignment: Mapping[str, str] | None = None,
+    axis_coords: Mapping[str, list[str]] | None = None,
 ) -> str:
     """Expand helper calls (currently only ``apply_along``) before AST parsing.
+
+    ``lhs_assignment`` carries the LHS template assignment of the equation
+    being expanded (e.g. ``{"age": "a0"}`` for the row ``foi__age_a0`` of
+    ``foi[age]``). It is forwarded to :func:`_substitute_apply_along_brackets`
+    so that same-axis-twice references like ``K[age, age=ap]`` can resolve
+    the bare (free outer) axis position from the LHS row rather than
+    collapsing it onto the bound apply_along coord.
+
+    ``axis_coords`` maps each axis name to its coord list and is used to
+    rewrite multi-axis shaped-parameter references to literal integer
+    subscripts (``K[2, 0]``) when every position is resolved.
 
     Returns:
         Expression string with helper calls expanded.
     """
-    return _expand_apply_along(expr, axes=axes, shaped_params=shaped_params)
+    return _expand_apply_along(
+        expr,
+        axes=axes,
+        shaped_params=shaped_params,
+        lhs_assignment=lhs_assignment,
+        axis_coords=axis_coords,
+    )
 
 
 def _resolve_template_equation(  # noqa: PLR0913
@@ -2169,7 +2255,11 @@ def _resolve_template_equation(  # noqa: PLR0913
                     detail=(f"equations[{template_key!r}] must be a non-empty string")
                 )
             expr_s = _expand_helpers(
-                expr.strip(), axes=axes, shaped_params=shaped_params
+                expr.strip(),
+                axes=axes,
+                shaped_params=shaped_params,
+                lhs_assignment=assignment,
+                axis_coords=axis_lookup,
             )
             expr_s = _apply_template_substitutions(
                 expr_s,

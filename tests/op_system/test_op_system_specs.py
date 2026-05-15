@@ -297,6 +297,62 @@ def test_shaped_param_eval_end_to_end_scalar_backend() -> None:
     assert np.allclose(out, np.array([-1.0, -4.0, -20.0]))
 
 
+def test_same_axis_twice_apply_along_per_row_contraction() -> None:
+    """Regression for #107 — ``K[age, age=ap]`` inside an ``apply_along``.
+
+    The bare ``age`` is the LHS-free axis (one row of ``foi[age]``); the
+    ``age=ap`` is the bound apply_along coord. The expansion must produce
+    a per-row contraction over the off-diagonal entries of K, not collapse
+    both positions onto the bound coord (which prior to the fix produced
+    only the diagonal of K, identical for every row of foi).
+    """
+    spec = {
+        "kind": "expr",
+        "axes": [{"name": "age", "coords": ["a0", "a1", "a2"]}],
+        "state": ["I[age]", "foi[age]"],
+        "equations": {
+            "I[age]": "0.0",
+            "foi[age]": "apply_along(age=ap, K[age, age=ap] * I[age=ap])",
+        },
+    }
+    rhs = normalize_rhs(spec)
+    assert dict(rhs.shaped_params) == {"K": ("age", "age")}
+    foi_eqs = rhs.equations[3:6]
+    expected = [
+        "((K[0, 0] * I__age_a0) + (K[0, 1] * I__age_a1) + (K[0, 2] * I__age_a2))",
+        "((K[1, 0] * I__age_a0) + (K[1, 1] * I__age_a1) + (K[1, 2] * I__age_a2))",
+        "((K[2, 0] * I__age_a0) + (K[2, 1] * I__age_a1) + (K[2, 2] * I__age_a2))",
+    ]
+    assert list(foi_eqs) == expected
+
+
+def test_same_axis_twice_apply_along_eval_end_to_end() -> None:
+    """Regression for #107 — compile + eval the same-axis-twice contraction.
+
+    With ``K = [[1, 2, 3], [4, 5, 6], [7, 8, 9]]`` and ``I = [10, 20, 30]``,
+    the per-row contraction ``foi[i] = sum_j K[i, j] * I[j]`` should give
+    ``[140, 320, 500]``.
+    """
+    spec = {
+        "kind": "expr",
+        "axes": [{"name": "age", "coords": ["a0", "a1", "a2"]}],
+        "state": ["I[age]", "foi[age]"],
+        "equations": {
+            "I[age]": "0.0",
+            "foi[age]": "apply_along(age=ap, K[age, age=ap] * I[age=ap])",
+        },
+    }
+    rhs = normalize_rhs(spec)
+    assert "K" not in rhs.param_names
+    c = compile_rhs(rhs, xp=np)
+    k_mat = np.array([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0], [7.0, 8.0, 9.0]])
+    y = np.array([10.0, 20.0, 30.0, 0.0, 0.0, 0.0])
+    out = c.eval_fn(0.0, y, K=k_mat)
+    # First three derivatives are I[age] = 0; last three are foi[age].
+    assert np.allclose(out[:3], 0.0)
+    assert np.allclose(out[3:], np.array([140.0, 320.0, 500.0]))
+
+
 def test_alias_subscript_axis_token_does_not_leak_into_param_names() -> None:
     """Axis names that appear only as subscripts in aliases are not params.
 
