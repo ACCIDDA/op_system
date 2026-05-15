@@ -353,6 +353,46 @@ def test_same_axis_twice_apply_along_eval_end_to_end() -> None:
     assert np.allclose(out[3:], np.array([140.0, 320.0, 500.0]))
 
 
+def test_same_axis_twice_in_templated_alias_substituted_into_transition() -> None:
+    """Regression — same-axis-twice survives alias→transition substitution.
+
+    Mirrors `test_same_axis_twice_apply_along_per_row_contraction` but the
+    same-axis-twice contraction lives inside a *templated alias*
+    (``foi[age]``) that is referenced from a transition rate
+    (``foi[age] * theta[imm]``). Before the fix the alias's
+    ``apply_along`` was helper-expanded once *without* an LHS row binding,
+    which collapsed ``K[age, age=ap]`` onto the bound coord and leaked the
+    full Cartesian product of K cells (e.g. ``K__age_a0__age_a0``) into
+    ``param_names`` instead of preserving the per-row contraction.
+    """
+    spec = {
+        "kind": "transitions",
+        "axes": [
+            {"name": "age", "coords": ["a0", "a1", "a2"]},
+            {"name": "vax", "coords": ["u", "v"]},
+            {"name": "imm", "type": "ordinal", "coords": ["x0", "x1"]},
+        ],
+        "state": ["I[age, vax]", "X[age, vax, imm]", "E[age, vax]"],
+        "aliases": {
+            "foi[age]": (
+                "apply_along(age=ap, K[age, age=ap]"
+                " * apply_along(vax=v, I[age=ap, vax=v]))"
+            ),
+        },
+        "transitions": [
+            {
+                "from": "X[age, vax, imm]",
+                "to": "E[age, vax]",
+                "rate": "foi[age] * theta[imm]",
+            },
+        ],
+    }
+    rhs = normalize_transitions_rhs(spec)
+    assert dict(rhs.shaped_params) == {"K": ("age", "age"), "theta": ("imm",)}
+    leaked = [n for n in rhs.param_names if "K" in n or n.startswith("foi")]
+    assert leaked == [], leaked
+
+
 def test_alias_subscript_axis_token_does_not_leak_into_param_names() -> None:
     """Axis names that appear only as subscripts in aliases are not params.
 
