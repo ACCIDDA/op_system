@@ -881,42 +881,61 @@ def _distribute_const_over_add(tree: ast.Expression) -> ast.Expression:
             ]
             return _reassemble_addsub(new_terms)
 
-    def _is_addsub(n: ast.AST) -> bool:
-        return isinstance(n, ast.BinOp) and isinstance(n.op, (ast.Add, ast.Sub))
-
     transformer = _Distributor()
     body = tree.body
-    if _is_addsub(body):
-        # Iteratively flatten the (possibly enormous) outer chain and rewrite
-        # each leaf in isolation. Loop to a fixed point so distribution that
-        # produces new sub-chains gets refolded into the outer chain.
-        max_passes = 64  # safety bound; convergence is typically immediate
-        for _ in range(max_passes):
-            terms = _flatten_addsub(body)
-            new_terms: list[tuple[int, ast.expr]] = []
-            any_changed = False
-            for sign, leaf in terms:
-                # ``leaf`` is by construction not an Add/Sub root; depth is
-                # bounded by leaf complexity, so the recursive visit is safe.
-                rewritten = cast("ast.expr", transformer.visit(leaf))
-                if _is_addsub(rewritten):
-                    sub_terms = _flatten_addsub(rewritten)
-                    for ssign, sleaf in sub_terms:
-                        new_terms.append((sign * ssign, sleaf))
-                    any_changed = True
-                else:
-                    if rewritten is not leaf:
-                        any_changed = True
-                    new_terms.append((sign, rewritten))
-            body = _reassemble_addsub(new_terms)
-            if not any_changed:
-                break
+    if _is_addsub_binop(body):
+        body = _distribute_addsub_chain(body, transformer)
     else:
         # No top-level chain: the body itself is shallow enough to recurse.
         body = cast("ast.expr", transformer.visit(body))
     new_tree = ast.Expression(body=body)
     ast.fix_missing_locations(new_tree)
     return new_tree
+
+
+def _is_addsub_binop(n: ast.AST) -> bool:
+    """Return True iff ``n`` is an ``ast.BinOp`` with an Add/Sub operator."""
+    return isinstance(n, ast.BinOp) and isinstance(n.op, (ast.Add, ast.Sub))
+
+
+def _distribute_addsub_chain(
+    body: ast.expr, transformer: ast.NodeTransformer
+) -> ast.expr:
+    """Iteratively flatten an Add/Sub chain and rewrite each leaf in place.
+
+    Loops to a fixed point so that distribution which produces new sub-chains
+    (``c*(a+b) -> c*a + c*b``) is refolded into the outer chain. Each leaf is
+    visited via ``transformer`` independently; leaf depth is bounded by leaf
+    complexity (typically <=5), not by chain length, so the recursive visit
+    is safe even when the outer chain has thousands of terms.
+
+    Args:
+        body: A top-level Add/Sub binop to distribute over.
+        transformer: An ``ast.NodeTransformer`` (typically ``_Distributor``)
+            that rewrites a single leaf expression.
+
+    Returns:
+        A possibly-rewritten ``ast.expr`` semantically equal to ``body``.
+    """
+    max_passes = 64  # safety bound; convergence is typically immediate
+    for _ in range(max_passes):
+        terms = _flatten_addsub(body)
+        new_terms: list[tuple[int, ast.expr]] = []
+        any_changed = False
+        for sign, leaf in terms:
+            rewritten = cast("ast.expr", transformer.visit(leaf))
+            if _is_addsub_binop(rewritten):
+                for ssign, sleaf in _flatten_addsub(rewritten):
+                    new_terms.append((sign * ssign, sleaf))
+                any_changed = True
+            else:
+                if rewritten is not leaf:
+                    any_changed = True
+                new_terms.append((sign, rewritten))
+        body = _reassemble_addsub(new_terms)
+        if not any_changed:
+            break
+    return body
 
 
 def _collapse_full_buffer_sums(  # noqa: C901, PLR0915
@@ -1014,7 +1033,7 @@ def _collapse_full_buffer_sums(  # noqa: C901, PLR0915
                 ws = [w for _t, w in items]
                 if all(w == 1.0 for w in ws):  # noqa: RUF069
                     collapsed.append((sign, _make_sum_call(name)))
-                elif all(w == ws[0] for w in ws):  # noqa: RUF069
+                elif all(w == ws[0] for w in ws):
                     collapsed.append((
                         sign,
                         ast.BinOp(
@@ -1261,7 +1280,7 @@ def _vectorize_template_equations(  # noqa: C901, PLR0912, PLR0913, PLR0914, PLR
 # ---------------------------------------------------------------------------
 
 
-def build_vector_plan(rhs: NormalizedRhs) -> _VectorPlan | None:  # noqa: C901, PLR0911, PLR0912, PLR0914, PLR0915
+def build_vector_plan(rhs: NormalizedRhs) -> _VectorPlan | None:
     """Try to build a vectorized plan for ``rhs``.
 
     Returns:
@@ -1306,7 +1325,13 @@ def build_vector_plan(rhs: NormalizedRhs) -> _VectorPlan | None:  # noqa: C901, 
 def _build_vector_plan_inner(  # noqa: C901, PLR0911, PLR0912, PLR0914, PLR0915
     rhs: NormalizedRhs,
 ) -> _VectorPlan | None:
-    """Vectorized-plan construction body (see ``build_vector_plan``)."""
+    """Vectorized-plan construction body (see ``build_vector_plan``).
+
+    Returns:
+        A ``_VectorPlan`` describing the vectorized layout, or ``None`` to
+        signal that the spec is unsupported and the caller should fall back
+        to the scalar engine.
+    """
     if not rhs.state_templates:
         return None
     # Require all states to be wildcard templates (have axes).

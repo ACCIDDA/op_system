@@ -569,6 +569,5 @@ def test_long_add_chain_does_not_raise_recursionerror() -> None:
         if instr.opname.startswith("LOAD_") and instr.argval == "S_buf"
     )
     assert s_buf_loads == 1, (
-        f"long chain should still collapse to a single S_buf load, "
-        f"got {s_buf_loads}"
+        f"long chain should still collapse to a single S_buf load, got {s_buf_loads}"
     )
