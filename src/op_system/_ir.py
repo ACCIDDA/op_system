@@ -98,6 +98,22 @@ _CMP_OP_NAMES: dict[type[ast.cmpop], str] = {
     ast.GtE: ">=",
 }
 
+_BINARY_OPS: frozenset[str] = frozenset({
+    "+",
+    "-",
+    "*",
+    "/",
+    "%",
+    "==",
+    "!=",
+    "<",
+    "<=",
+    ">",
+    ">=",
+    "and",
+    "or",
+})
+
 
 def _invalid(*, detail: str) -> NoReturn:
     raise InvalidExpressionError(detail=detail)
@@ -310,6 +326,75 @@ def parse_expr_to_ir(expr: str, *, lower_helpers: bool = False) -> Expr:
     return ir
 
 
+def _unparse_axis_index(idx: AxisIndex) -> str:
+    if idx.placeholder is not None:
+        return f"${idx.placeholder}"
+    if idx.coord is not None:
+        return repr(idx.coord)
+    return idx.axis
+
+
+def _unparse_call_args(args: tuple[Expr, ...]) -> str:
+    parts: list[str] = []
+    for arg in args:
+        if isinstance(arg, Apply) and arg.op == "kwarg":
+            key_node, value_node = arg.args
+            if not isinstance(key_node, Literal) or not isinstance(
+                key_node.value, str
+            ):
+                _invalid(detail="malformed kwarg node in IR unparser")
+            parts.append(f"{key_node.value}={unparse_ir(value_node)}")
+        else:
+            parts.append(unparse_ir(arg))
+    return ", ".join(parts)
+
+
+def unparse_ir(expr: Expr) -> str:  # noqa: C901, PLR0911
+    """Render a typed IR expression back to its Python source string.
+
+    Args:
+        expr: Typed IR expression.
+
+    Returns:
+        Python expression source string equivalent to ``expr``.
+    """
+    if isinstance(expr, Literal):
+        return repr(expr.value)
+
+    if isinstance(expr, Sym):
+        return expr.name
+
+    if isinstance(expr, Subscript):
+        idx_str = ", ".join(_unparse_axis_index(i) for i in expr.indices)
+        return f"{expr.name}[{idx_str}]"
+
+    if isinstance(expr, Apply):
+        if expr.op == "neg" and len(expr.args) == 1:
+            return f"-({unparse_ir(expr.args[0])})"
+        if expr.op == "pos" and len(expr.args) == 1:
+            return f"+({unparse_ir(expr.args[0])})"
+        if expr.op == "pow" and len(expr.args) == 2:
+            left, right = expr.args
+            return f"({unparse_ir(left)}) ** ({unparse_ir(right)})"
+        if expr.op == "ifelse" and len(expr.args) == 3:
+            test, body, orelse = expr.args
+            return (
+                f"({unparse_ir(body)}) if ({unparse_ir(test)})"
+                f" else ({unparse_ir(orelse)})"
+            )
+        if expr.op in _BINARY_OPS and len(expr.args) >= 2:
+            sep = f" {expr.op} "
+            return "(" + sep.join(unparse_ir(a) for a in expr.args) + ")"
+        return f"{expr.op}({_unparse_call_args(expr.args)})"
+
+    if isinstance(expr, Reduce):
+        binding_str = ", ".join(f"{k}={v}" for k, v in expr.bindings)
+        suffix = f", {binding_str}" if binding_str else ""
+        return f"{expr.kind}({unparse_ir(expr.body)}{suffix})"
+
+    _invalid(detail=f"unsupported IR node in unparser: {type(expr).__name__}")
+
+
 __all__ = [
     "Apply",
     "AxisIndex",
@@ -321,4 +406,5 @@ __all__ = [
     "lower_helper_calls",
     "parse_expr_to_ir",
     "to_ir",
+    "unparse_ir",
 ]
