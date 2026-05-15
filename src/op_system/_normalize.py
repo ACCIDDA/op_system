@@ -745,7 +745,7 @@ _SHAPED_PARAM_BUILTIN_NAMES: frozenset[str] = frozenset({
 })
 
 
-def _scan_shaped_param_refs(
+def _scan_shaped_param_refs(  # noqa: C901, PLR0912
     expressions: Iterable[str],
     *,
     name_blocklist: set[str],
@@ -755,10 +755,14 @@ def _scan_shaped_param_refs(
 
     A shaped parameter reference is a token of the form ``name[ax1,ax2,...]``
     where ``name`` is not in ``name_blocklist`` (states, aliases, recognized
-    built-ins) and every bracket entry is a bare axis name (no pinned coords)
-    registered in ``axis_lookup``.  Each such ``name`` is recorded as shaped
-    over the tuple of axes appearing in its first occurrence; subsequent
-    occurrences must use the same axes in the same order.
+    built-ins) and every bracket entry is either:
+    - A bare axis name (e.g., ``age``) registered in ``axis_lookup``
+    - An axis binding (e.g., ``age=ap``) where the axis name is registered
+
+    Each such ``name`` is recorded as shaped over the tuple of axes appearing
+    in its first occurrence; subsequent occurrences must use the same axes in
+    the same order. Duplicate axes are allowed (e.g., ``K[age, age]`` for a
+    contact kernel).
 
     Returns:
         Mapping from base name to its registered axes tuple.
@@ -776,11 +780,28 @@ def _scan_shaped_param_refs(
                 continue
             inner = match.group(2)
             parts = [p.strip() for p in inner.split(",")]
-            if not parts or any(not p or "=" in p for p in parts):
+            if not parts:
                 continue
-            if any(p not in axis_lookup for p in parts):
+            # For each part, extract the axis name (before "=" if present)
+            axes: list[str] = []
+            valid = True
+            for p in parts:
+                if not p:
+                    valid = False
+                    break
+                # Handle both bare axes (e.g., "age") and bindings (e.g., "age=ap")
+                if "=" in p:
+                    ax_name, _, _ = p.partition("=")
+                    ax_name = ax_name.strip()
+                else:
+                    ax_name = p
+                if ax_name not in axis_lookup:
+                    valid = False
+                    break
+                axes.append(ax_name)
+            if not valid:
                 continue
-            axes_tuple = tuple(parts)
+            axes_tuple = tuple(axes)
             if base in result:
                 if result[base] != axes_tuple:
                     raise InvalidRhsSpecError(
@@ -1073,7 +1094,7 @@ def _expand_alias_templates(
             raise InvalidRhsSpecError(
                 detail=f"aliases[{raw_name!r}] must be a non-empty string"
             )
-        expr_s = _expand_helpers(expr_s, axes=axes)
+        expr_s = _expand_helpers(expr_s, axes=axes, shaped_params=shaped_params)
 
         if canonical_name in alias_template_map:
             for expanded_name, assignment in alias_template_map[canonical_name]:
@@ -1385,7 +1406,9 @@ def _render_transition_combo(
         assignment,
         axis_lookup=endpoints.axis_lookup,
     )
-    tr_out["rate"] = _expand_helpers(rate_sub, axes=endpoints.axes)
+    tr_out["rate"] = _expand_helpers(
+        rate_sub, axes=endpoints.axes, shaped_params=endpoints.shaped_params
+    )
     if endpoints.name_s:
         tr_out["name"] = _apply_template_substitutions(
             endpoints.name_s,
@@ -1707,11 +1730,12 @@ def _select_apply_along_kernel(
     )
 
 
-def _substitute_apply_along_brackets(  # noqa: C901
+def _substitute_apply_along_brackets(  # noqa: C901, PLR0915
     expr: str,
     bound: Mapping[str, str],
     *,
     axis_order: Sequence[str] = (),
+    shaped_params: Mapping[str, tuple[str, ...]] | None = None,
 ) -> str:
     """Rewrite ``name[ax=c, ...]`` to ``name__ax_<c>__...`` for bound axes.
 
@@ -1730,12 +1754,19 @@ def _substitute_apply_along_brackets(  # noqa: C901
     direct expansion, e.g. ``X__age_..__vax_..__loc_..__imm_..`` rather than
     the binding-order accident ``X__imm_..__age_..__vax_..__loc_..``.
 
+    If ``shaped_params`` is provided and contains ``name`` with multiple axes
+    (e.g., a contact kernel ``K[age, age]``), and all those axes are bound,
+    the bracket assignments are converted to direct indexing instead of
+    name mangling. For example, ``K[age, age=ap]`` with bound ``age=c1`` is
+    converted to ``K[c1, ap]`` rather than ``K__age_<c1>[age=ap]``.
+
     Returns:
         Expression string with bound bracket assignments folded into
-        ``__axis_coord`` suffixes.
+        ``__axis_coord`` suffixes or indexing operations.
     """
     pat = re.compile(r"([A-Za-z_][A-Za-z0-9_]*)\[([^\[\]]*)\]")
     priority = {ax: i for i, ax in enumerate(axis_order)}
+    shaped_params = shaped_params or {}
 
     def _split_suffix(name: str) -> tuple[str, list[tuple[str, str]]]:
         """Strip trailing ``__<axis>_<coord>`` tokens recognised by axis_order.
@@ -1792,7 +1823,7 @@ def _substitute_apply_along_brackets(  # noqa: C901
         unknown = [p for p in pairs if p[0] not in priority]
         return "".join(f"__{ax}_{_sanitize_fragment(c)}" for ax, c in known + unknown)
 
-    def _sub(match: re.Match[str]) -> str:
+    def _sub(match: re.Match[str]) -> str:  # noqa: C901
         name = match.group(1)
         body = match.group(2)
         entries = [e.strip() for e in body.split(",") if e.strip()]
@@ -1806,9 +1837,35 @@ def _substitute_apply_along_brackets(  # noqa: C901
                 if ax in bound and bound[ax] == coord:
                     consumed.append((ax, coord))
                     continue
+            elif entry in bound:
+                # Handle bare axis names that are bound (e.g., "age" when age
+                # is in bound)
+                consumed.append((entry, bound[entry]))
+                continue
             remaining.append(entry)
         if not consumed:
             return match.group(0)
+
+        # Check if this is a multi-axis shaped parameter being indexed.
+        # E.g., K[age, age=ap] with shaped_params["K"] = ("age", "age")
+        if name in shaped_params and len(shaped_params[name]) > 1:
+            param_axes = shaped_params[name]
+            # Try to match each axis position to a bound coordinate
+            index_parts: list[str] = []
+            all_bound = True
+            for ax in param_axes:
+                if ax in bound:
+                    index_parts.append(bound[ax])
+                else:
+                    # Axis not bound in this apply_along; can't use indexing
+                    all_bound = False
+                    break
+            # If all axis positions are bound, use indexing instead of mangling
+            if all_bound and not remaining:
+                # Convert to indexing: K[c1, c2, ...] instead of K__age_<c1>
+                indices = ", ".join(index_parts)
+                return f"{name}[{indices}]"
+
         base, existing = _split_suffix(name)
         suffix = _emit_suffix(existing + consumed)
         if remaining:
@@ -2000,7 +2057,12 @@ def _ordinal_subrange_coords(
     return coords[lo_idx : hi_idx + 1]
 
 
-def _expand_apply_along(expr: str, *, axes: list[dict[str, Any]]) -> str:  # noqa: PLR0914
+def _expand_apply_along(  # noqa: PLR0914
+    expr: str,
+    *,
+    axes: list[dict[str, Any]],
+    shaped_params: Mapping[str, tuple[str, ...]] | None = None,
+) -> str:
     """Expand ``apply_along(...)`` calls directly to weighted sums.
 
     The ``apply_along`` primitive contracts an expression along one or more
@@ -2019,6 +2081,7 @@ def _expand_apply_along(expr: str, *, axes: list[dict[str, Any]]) -> str:  # noq
     Returns:
         Expression string with ``apply_along`` calls fully expanded.
     """
+    shaped_params = shaped_params or {}
     axis_lookup = {str(ax.get("name")): ax for ax in axes if ax.get("name")}
     axis_order = tuple(str(ax["name"]) for ax in axes if ax.get("name"))
     out = expr
@@ -2034,7 +2097,7 @@ def _expand_apply_along(expr: str, *, axes: list[dict[str, Any]]) -> str:  # noq
         kernel = _select_apply_along_kernel(bindings, kernel_form, axes=axes)
         # Recursively expand any inner apply_along first so we work on a flat
         # inner expression for substitution.
-        inner = _expand_apply_along(inner, axes=axes)
+        inner = _expand_apply_along(inner, axes=axes, shaped_params=shaped_params)
 
         axis_options = [
             _build_apply_along_axis_options(
@@ -2053,7 +2116,7 @@ def _expand_apply_along(expr: str, *, axes: list[dict[str, Any]]) -> str:  # noq
                 replaced = re.sub(rf"\b{re.escape(var_name)}\b", coord, replaced)
                 bound[ax_name] = coord
             replaced = _substitute_apply_along_brackets(
-                replaced, bound, axis_order=axis_order
+                replaced, bound, axis_order=axis_order, shaped_params=shaped_params
             )
             if kernel == "integrate":
                 weight = "*".join(str(w) for _, w in combo)
@@ -2064,13 +2127,18 @@ def _expand_apply_along(expr: str, *, axes: list[dict[str, Any]]) -> str:  # noq
         out = out[:start] + f"({replacement})" + out[end:]
 
 
-def _expand_helpers(expr: str, *, axes: list[dict[str, Any]]) -> str:
+def _expand_helpers(
+    expr: str,
+    *,
+    axes: list[dict[str, Any]],
+    shaped_params: Mapping[str, tuple[str, ...]] | None = None,
+) -> str:
     """Expand helper calls (currently only ``apply_along``) before AST parsing.
 
     Returns:
         Expression string with helper calls expanded.
     """
-    return _expand_apply_along(expr, axes=axes)
+    return _expand_apply_along(expr, axes=axes, shaped_params=shaped_params)
 
 
 def _resolve_template_equation(  # noqa: PLR0913
@@ -2100,7 +2168,9 @@ def _resolve_template_equation(  # noqa: PLR0913
                 raise InvalidRhsSpecError(
                     detail=(f"equations[{template_key!r}] must be a non-empty string")
                 )
-            expr_s = _expand_helpers(expr.strip(), axes=axes)
+            expr_s = _expand_helpers(
+                expr.strip(), axes=axes, shaped_params=shaped_params
+            )
             expr_s = _apply_template_substitutions(
                 expr_s,
                 assignment=assignment,
@@ -2141,7 +2211,9 @@ def _gather_equations(  # noqa: PLR0913
                 raise InvalidRhsSpecError(
                     detail=f"equations[{name!r}] must be a non-empty string"
                 )
-            expr_s = _expand_helpers(expr.strip(), axes=axes)
+            expr_s = _expand_helpers(
+                expr.strip(), axes=axes, shaped_params=shaped_params
+            )
             tree = _parse_expr(expr_s)
             all_syms |= _collect_names(tree)
             eqs.append(expr_s)
