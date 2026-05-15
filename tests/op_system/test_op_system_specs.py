@@ -393,6 +393,82 @@ def test_same_axis_twice_in_templated_alias_substituted_into_transition() -> Non
     assert leaked == [], leaked
 
 
+def test_lhs_template_axis_in_state_subscript_with_bound_apply_along() -> None:
+    """Regression for #113 — bare LHS-template axis mixed with bound coords.
+
+    A templated alias body (e.g. ``foi[age, loc]``) may reference state
+    cells whose subscript mixes a bare LHS-template placeholder (``loc``,
+    threaded from the alias row assignment) with ``=``-bound apply_along
+    coords (``age=ap``, ``vax=v``, ``imm=k``):
+
+        foi[age, loc]: "apply_along(vax=v,
+                          apply_along(imm=k, X[loc, age=ap, vax=v, imm=k]))"
+
+    Before the fix, ``_substitute_apply_along_brackets`` consumed only the
+    ``=``-bound entries and left ``loc`` as a trailing ``[loc]``
+    placeholder, producing an intermediate like
+    ``X__age_a0__vax_u__imm_x0[loc]``. Downstream string substitution then
+    appended ``__loc_AK`` in binding order, yielding
+    ``X__age_a0__vax_u__imm_x0__loc_AK`` — a name that does not match the
+    canonical state-template encoding ``X__age_a0__vax_u__loc_AK__imm_x0``
+    and therefore looks like a missing parameter to the simulator.
+
+    Expected: bare LHS-template axes are consumed from the row assignment
+    alongside the bound coords, and the final cell name is emitted in
+    canonical ``axis_order`` (matching the declared state template).
+    """
+    spec = {
+        "kind": "transitions",
+        "axes": [
+            {"name": "age", "coords": ["a0", "a1"]},
+            {"name": "vax", "coords": ["u", "v"]},
+            {"name": "loc", "coords": ["AK", "AL"]},
+            {"name": "imm", "type": "ordinal", "coords": ["x0", "x1"]},
+        ],
+        "state": [
+            "I[age, vax, loc]",
+            "X[age, vax, loc, imm]",
+            "E[age, vax, loc]",
+        ],
+        "aliases": {
+            "foi[age, loc]": (
+                "apply_along(age=ap, apply_along(vax=v,"
+                " I[loc, age=ap, vax=v]"
+                " + apply_along(imm=k, X[loc, age=ap, vax=v, imm=k])))"
+            ),
+        },
+        "transitions": [
+            {
+                "from": "X[age, vax, loc, imm]",
+                "to": "E[age, vax, loc]",
+                "rate": "foi[age, loc] * theta[imm]",
+            },
+        ],
+    }
+    rhs = normalize_transitions_rhs(spec)
+    state_set = set(rhs.state_names)
+    body = rhs.aliases["foi__age_a0__loc_AK"]
+    # Every X__/I__ reference inside the alias body must resolve to an
+    # existing canonical state cell (i.e. axis_order is preserved).
+    found_state_refs = [
+        m
+        for m in re.findall(r"[A-Za-z_][A-Za-z0-9_]*__[A-Za-z0-9_]+", body)
+        if m.split("__", 1)[0] in {"I", "X"}
+    ]
+    assert found_state_refs, "expected state references in alias body"
+    missing = [m for m in found_state_refs if m not in state_set]
+    assert missing == [], (
+        f"alias body references non-canonical cells: {missing[:3]}"
+    )
+    # No spurious params from the alias-body collapse path.
+    leaked = [
+        n
+        for n in rhs.param_names
+        if n.startswith("X__") or n.startswith("I__") or n.startswith("foi")
+    ]
+    assert leaked == [], leaked
+
+
 def test_alias_subscript_axis_token_does_not_leak_into_param_names() -> None:
     """Axis names that appear only as subscripts in aliases are not params.
 
