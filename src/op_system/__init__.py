@@ -31,6 +31,7 @@ from op_system._typing import Array
 
 from .compile import CompiledRhs, EvalFn, compile_rhs
 from .specs import (
+    ExpressionString,
     NormalizedRhs,
     normalize_expr_rhs,
     normalize_rhs,
@@ -109,6 +110,7 @@ __all__ = [
     "Array",
     "CompiledRhs",
     "EvalFn",
+    "ExpressionString",
     "IdentifierString",
     "NormalizedRhs",
     "StateString",
