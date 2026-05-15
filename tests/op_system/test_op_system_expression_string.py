@@ -7,7 +7,7 @@ import ast
 import pytest
 
 from op_system._errors import InvalidExpressionError
-from op_system._ir import Apply, Subscript
+from op_system._ir import Apply, Reduce, Subscript
 from op_system._symbols import (
     ExpressionString,
     _collect_names,
@@ -69,3 +69,13 @@ def test_expression_string_as_ir_subscript() -> None:
     ir = expr.as_ir()
     assert isinstance(ir, Subscript)
     assert ir.name == "K"
+
+
+def test_expression_string_as_lowered_ir_helpers() -> None:
+    """ExpressionString can project directly to helper-lowered IR."""
+    expr = ExpressionString("apply_along(I[age], age=ap)")
+
+    ir = expr.as_lowered_ir()
+    assert isinstance(ir, Reduce)
+    assert ir.kind == "apply_along"
+    assert ir.bindings == (("age", "ap"),)
