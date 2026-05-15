@@ -7,8 +7,13 @@ from __future__ import annotations
 
 import ast
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 from op_system._errors import InvalidExpressionError
+from op_system._ir import parse_expr_to_ir
+
+if TYPE_CHECKING:
+    from op_system._ir import Expr
 
 
 @dataclass(frozen=True, slots=True)
@@ -34,6 +39,14 @@ class ExpressionString:
 
         object.__setattr__(self, "ast", parsed)
         object.__setattr__(self, "names", frozenset(found_names))
+
+    def as_ir(self) -> Expr:
+        """Return the typed IR representation for this expression.
+
+        Returns:
+            Parsed typed IR tree.
+        """
+        return parse_expr_to_ir(self.source)
 
 
 def parse_expression_string(expr: str) -> ExpressionString:

@@ -7,6 +7,7 @@ import ast
 import pytest
 
 from op_system._errors import InvalidExpressionError
+from op_system._ir import Apply, Subscript
 from op_system._symbols import (
     ExpressionString,
     _collect_names,
@@ -50,3 +51,21 @@ def test_expression_string_is_exported_from_specs() -> None:
     expr = ExpressionStringFromSpecs("r0 * I")
 
     assert expr.names == frozenset({"r0", "I"})
+
+
+def test_expression_string_as_ir_arithmetic() -> None:
+    """ExpressionString can project to the typed IR representation."""
+    expr = ExpressionString("beta * I")
+
+    ir = expr.as_ir()
+    assert isinstance(ir, Apply)
+    assert ir.op == "*"
+
+
+def test_expression_string_as_ir_subscript() -> None:
+    """IR projection preserves subscript structure for indexed expressions."""
+    expr = ExpressionString("K[age, ap]")
+
+    ir = expr.as_ir()
+    assert isinstance(ir, Subscript)
+    assert ir.name == "K"
