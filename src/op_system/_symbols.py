@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from op_system._errors import InvalidExpressionError
-from op_system._ir import parse_expr_to_ir
+from op_system._ir import to_ir
 
 if TYPE_CHECKING:
     from op_system._ir import Expr
@@ -46,7 +46,7 @@ class ExpressionString:
         Returns:
             Parsed typed IR tree.
         """
-        return parse_expr_to_ir(self.source)
+        return to_ir(self.ast)
 
 
 def parse_expression_string(expr: str) -> ExpressionString:
