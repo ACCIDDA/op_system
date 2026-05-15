@@ -726,11 +726,19 @@ def _make_weighted_sum_call(
     weights_in_index_order: list[float],
     shape: tuple[int, ...],
 ) -> ast.expr:
-    """Build ``np.sum(np.asarray([...], dtype=np.float64).reshape(shape) * buf)``.
+    """Build ``np.sum(np.asarray([...]).reshape(shape) * buf)``.
 
     ``weights_in_index_order`` is the flat list of per-cell weights in C-order
     matching ``np.ndindex(*shape)``. For 1-D buffers the ``reshape`` is
     omitted.
+
+    The generated ``np.asarray`` call deliberately omits an explicit
+    ``dtype=`` so that the weights adopt the calling backend's native float
+    dtype: ``float64`` for plain numpy and the configured default for
+    ``jax.numpy`` (which is ``float32`` unless ``jax_enable_x64`` is set).
+    Forcing ``np.float64`` here previously triggered a noisy
+    ``Explicitly requested dtype float64 ... will be truncated to dtype
+    float32`` warning at every JIT trace under JAX float32 mode.
 
     Returns:
         The constructed ``ast.expr`` for the fused weighted reduction.
@@ -746,16 +754,7 @@ def _make_weighted_sum_call(
             ctx=ast.Load(),
         ),
         args=[weights_list],
-        keywords=[
-            ast.keyword(
-                arg="dtype",
-                value=ast.Attribute(
-                    value=ast.Name(id="np", ctx=ast.Load()),
-                    attr="float64",
-                    ctx=ast.Load(),
-                ),
-            ),
-        ],
+        keywords=[],
     )
     if len(shape) > 1:
         asarray = ast.Call(
