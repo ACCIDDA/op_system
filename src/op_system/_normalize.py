@@ -1902,6 +1902,20 @@ def _substitute_apply_along_brackets(  # noqa: C901, PLR0913, PLR0915
                 consumed.append((entry, bound[entry]))
                 resolved.append((entry, bound[entry], "bound"))
                 continue
+            if entry in lhs_assignment:
+                # Bare LHS-template axis appearing in a state/param subscript
+                # alongside ``=``-bound apply_along coords (e.g. the ``loc``
+                # in ``X[loc, age=ap, vax=v, imm=k]`` inside a
+                # ``foi[age, loc]`` alias body). Consume it from the row
+                # assignment so the cell name is emitted in canonical
+                # ``axis_order`` rather than left as a trailing
+                # ``[loc]`` placeholder that downstream string substitution
+                # would re-append in binding order, breaking the canonical
+                # state-cell encoding.
+                coord = lhs_assignment[entry]
+                consumed.append((entry, coord))
+                resolved.append((entry, coord, "lhs"))
+                continue
             resolved.append((entry, None, None))
             remaining.append(entry)
 

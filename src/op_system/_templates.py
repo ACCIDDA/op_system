@@ -453,7 +453,9 @@ def _apply_template_substitutions(
     def _inline_replacer(match: re.Match[str]) -> str:
         inner_base = match.group(1)
         inner = match.group(2)
-        phs = [p.strip() for p in inner.split(",") if p.strip() and "=" not in p]
+        raw_parts = [p.strip() for p in inner.split(",") if p.strip()]
+        phs = [p for p in raw_parts if "=" not in p]
+        bound_parts = [p for p in raw_parts if "=" in p]
         if not phs or any(ph not in assignment for ph in phs):
             return match.group(0)
         if inner_base in shaped:
@@ -468,6 +470,22 @@ def _apply_template_substitutions(
             except (KeyError, ValueError):
                 return match.group(0)
             return f"{inner_base}[{', '.join(str(i) for i in idxs)}]"
+        if bound_parts:
+            # Mixed mode: bare LHS-template placeholders alongside =-bound
+            # apply_along coords (e.g. ``X[loc, age=ap, vax=v, imm=k]`` inside
+            # a ``foi[age, loc]`` alias body). Collapsing to a per-cell name
+            # would discard the bound entries and break downstream
+            # vectorization. Instead, rewrite each bare placeholder as an
+            # ``axis=coord`` binding from the row assignment and preserve the
+            # already-bound parts verbatim, producing a literal-cell selector
+            # the regular apply_along/vectorize path resolves correctly.
+            new_parts: list[str] = []
+            for part in raw_parts:
+                if "=" in part:
+                    new_parts.append(part)
+                else:
+                    new_parts.append(f"{part}={assignment[part]}")
+            return f"{inner_base}[{', '.join(new_parts)}]"
         return _render_template_name(inner_base, phs, assignment)
 
     return _INLINE_TEMPLATE_RE.sub(_inline_replacer, expr_out)
