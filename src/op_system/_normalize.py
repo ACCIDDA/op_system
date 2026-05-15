@@ -1094,12 +1094,24 @@ def _expand_alias_templates(
             raise InvalidRhsSpecError(
                 detail=f"aliases[{raw_name!r}] must be a non-empty string"
             )
-        expr_s = _expand_helpers(expr_s, axes=axes, shaped_params=shaped_params)
 
         if canonical_name in alias_template_map:
+            # Defer ``_expand_helpers`` until the per-row LHS assignment is
+            # known so that same-axis-twice references like
+            # ``K[age, age=ap]`` inside a templated alias (e.g. ``foi[age]``)
+            # resolve the bare LHS-free position from the row assignment
+            # rather than collapsing onto the bound ``apply_along`` coord.
+            # Mirrors the equations path in ``_resolve_template_equation``.
             for expanded_name, assignment in alias_template_map[canonical_name]:
-                substituted = _apply_template_substitutions(
+                expanded_expr = _expand_helpers(
                     expr_s,
+                    axes=axes,
+                    shaped_params=shaped_params,
+                    lhs_assignment=assignment,
+                    axis_coords=axis_lookup,
+                )
+                substituted = _apply_template_substitutions(
+                    expanded_expr,
                     assignment=assignment,
                     template_map=combined_template_map,
                     shaped_params=shaped_params,
@@ -1107,7 +1119,9 @@ def _expand_alias_templates(
                 )
                 aliases_out[expanded_name] = substituted
         else:
-            aliases_out[raw_name] = expr_s
+            aliases_out[raw_name] = _expand_helpers(
+                expr_s, axes=axes, shaped_params=shaped_params
+            )
 
     return aliases_out, alias_template_map
 
