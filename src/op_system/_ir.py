@@ -73,6 +73,12 @@ class Reduce:
 
 Expr = Literal | Sym | Subscript | Apply | Reduce
 
+_HELPER_REDUCE_OPS: frozenset[str] = frozenset({
+    "apply_along",
+    "sum_over",
+    "integrate_over",
+})
+
 
 _BIN_OP_NAMES: dict[type[ast.operator], str] = {
     ast.Add: "+",
@@ -95,6 +101,70 @@ _CMP_OP_NAMES: dict[type[ast.cmpop], str] = {
 
 def _invalid(*, detail: str) -> NoReturn:
     raise InvalidExpressionError(detail=detail)
+
+
+def _kwarg_name(arg: Expr) -> str:
+    if isinstance(arg, Literal) and isinstance(arg.value, str):
+        return arg.value
+    _invalid(detail="kwarg marker must use a string key")
+
+
+def _kwarg_value_as_binding(value: Expr, *, key: str) -> str:
+    if isinstance(value, Sym):
+        return value.name
+    if isinstance(value, Literal):
+        return str(value.value)
+    _invalid(detail=f"helper binding {key!r} must be a symbol or literal")
+
+
+def _lower_single_helper(node: Apply) -> Expr:
+    if node.op not in _HELPER_REDUCE_OPS:
+        return node
+
+    kw_nodes: list[Apply] = []
+    positional: list[Expr] = []
+    for arg in node.args:
+        if isinstance(arg, Apply) and arg.op == "kwarg":
+            kw_nodes.append(arg)
+        else:
+            positional.append(arg)
+
+    if len(positional) != 1:
+        _invalid(detail=f"{node.op} helper requires exactly one body expression")
+
+    bindings: list[tuple[str, str]] = []
+    for kw_node in kw_nodes:
+        if len(kw_node.args) != 2:
+            _invalid(detail="kwarg marker must contain (key, value)")
+        key = _kwarg_name(kw_node.args[0])
+        val = _kwarg_value_as_binding(kw_node.args[1], key=key)
+        bindings.append((key, val))
+
+    return Reduce(kind=node.op, bindings=tuple(bindings), body=positional[0])
+
+
+def lower_helper_calls(expr: Expr) -> Expr:
+    """Lower helper-call ``Apply`` nodes into structured ``Reduce`` nodes.
+
+    This is a no-runtime-impact scaffolding pass used by Option 1 migration.
+    It rewrites helper calls in typed IR only; compile/normalize still consume
+    string expressions today.
+
+    Returns:
+        Expression IR with helper calls lowered to ``Reduce`` nodes.
+    """
+    if isinstance(expr, Apply):
+        lowered_args = tuple(lower_helper_calls(arg) for arg in expr.args)
+        return _lower_single_helper(Apply(op=expr.op, args=lowered_args))
+
+    if isinstance(expr, Reduce):
+        return Reduce(
+            kind=expr.kind,
+            bindings=expr.bindings,
+            body=lower_helper_calls(expr.body),
+        )
+
+    return expr
 
 
 def _call_name(func: ast.AST) -> str:
@@ -193,9 +263,19 @@ def to_ir(node: ast.AST) -> Expr:  # noqa: C901, PLR0911, PLR0912
         )
 
     if isinstance(node, ast.Call):
+        call_args: list[Expr] = [to_ir(arg) for arg in node.args]
+        for kw in node.keywords:
+            if kw.arg is None:
+                _invalid(detail="kwargs unpacking is not supported in IR parser")
+            call_args.append(
+                Apply(
+                    op="kwarg",
+                    args=(Literal(value=kw.arg), to_ir(kw.value)),
+                )
+            )
         return Apply(
             op=_call_name(node.func),
-            args=tuple(to_ir(arg) for arg in node.args),
+            args=tuple(call_args),
         )
 
     if isinstance(node, ast.Subscript):
@@ -209,11 +289,12 @@ def to_ir(node: ast.AST) -> Expr:  # noqa: C901, PLR0911, PLR0912
     _invalid(detail=f"unsupported AST node in IR parser: {type(node).__name__}")
 
 
-def parse_expr_to_ir(expr: str) -> Expr:
+def parse_expr_to_ir(expr: str, *, lower_helpers: bool = False) -> Expr:
     """Parse an expression string and convert it to typed IR.
 
     Args:
         expr: Expression source string.
+        lower_helpers: When ``True``, lower helper-call nodes to ``Reduce``.
 
     Returns:
         Parsed IR tree.
@@ -223,7 +304,10 @@ def parse_expr_to_ir(expr: str) -> Expr:
         tree = ast.parse(expr, mode="eval")
     except SyntaxError as exc:
         _invalid(detail=f"invalid expression syntax: {exc.msg}")
-    return to_ir(tree)
+    ir = to_ir(tree)
+    if lower_helpers:
+        return lower_helper_calls(ir)
+    return ir
 
 
 __all__ = [
@@ -234,6 +318,7 @@ __all__ = [
     "Reduce",
     "Subscript",
     "Sym",
+    "lower_helper_calls",
     "parse_expr_to_ir",
     "to_ir",
 ]

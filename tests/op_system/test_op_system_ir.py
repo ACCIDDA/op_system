@@ -5,7 +5,16 @@ from __future__ import annotations
 import pytest
 
 from op_system._errors import InvalidExpressionError
-from op_system._ir import Apply, AxisIndex, Literal, Subscript, Sym, parse_expr_to_ir
+from op_system._ir import (
+    Apply,
+    AxisIndex,
+    Literal,
+    Reduce,
+    Subscript,
+    Sym,
+    lower_helper_calls,
+    parse_expr_to_ir,
+)
 
 
 def test_parse_expr_to_ir_arithmetic_tree_shape() -> None:
@@ -52,3 +61,34 @@ def test_parse_expr_to_ir_rejects_unsupported_nodes() -> None:
     """Unsupported AST constructs raise ``InvalidExpressionError``."""
     with pytest.raises(InvalidExpressionError, match="unsupported"):
         parse_expr_to_ir("(lambda x: x)(1)")
+
+
+def test_parse_expr_to_ir_captures_call_kwargs_as_ir_nodes() -> None:
+    """Call kwargs are preserved in IR for later lowering passes."""
+    ir = parse_expr_to_ir("apply_along(I[age], age=ap)")
+
+    assert isinstance(ir, Apply)
+    assert ir.op == "apply_along"
+    assert len(ir.args) == 2
+    assert isinstance(ir.args[0], Subscript)
+    assert isinstance(ir.args[1], Apply)
+    assert ir.args[1].op == "kwarg"
+
+
+def test_helper_lowering_rewrites_apply_along_to_reduce() -> None:
+    """Helper lowering converts apply_along call into a Reduce node."""
+    ir = parse_expr_to_ir("apply_along(I[age], age=ap)", lower_helpers=True)
+
+    assert isinstance(ir, Reduce)
+    assert ir.kind == "apply_along"
+    assert ir.bindings == (("age", "ap"),)
+    assert isinstance(ir.body, Subscript)
+
+
+def test_lower_helper_calls_preserves_non_helper_apply() -> None:
+    """Lowering leaves non-helper Apply nodes unchanged."""
+    ir = parse_expr_to_ir("np.maximum(x, 0.0)")
+    lowered = lower_helper_calls(ir)
+
+    assert isinstance(lowered, Apply)
+    assert lowered.op == "np.maximum"
