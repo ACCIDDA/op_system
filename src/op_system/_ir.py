@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, NoReturn
 from ._errors import InvalidExpressionError
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator, Mapping
+    from collections.abc import Callable, Iterator, Mapping, Sequence
 
 
 @dataclass(frozen=True, slots=True)
@@ -672,6 +672,87 @@ def substitute(expr: Expr, mapping: Mapping[str, Expr]) -> Expr:
     _invalid(detail=f"unsupported IR node in substitute: {type(expr).__name__}")
 
 
+def _map_children(expr: Expr, fn: Callable[[Expr], Expr]) -> Expr:
+    if isinstance(expr, Apply):
+        new_args = tuple(fn(arg) for arg in expr.args)
+        if new_args == expr.args:
+            return expr
+        return Apply(op=expr.op, args=new_args)
+    if isinstance(expr, Reduce):
+        new_body = fn(expr.body)
+        if new_body == expr.body:
+            return expr
+        return Reduce(kind=expr.kind, bindings=expr.bindings, body=new_body)
+    return expr
+
+
+def _is_cse_candidate(expr: Expr) -> bool:
+    return isinstance(expr, (Apply, Reduce))
+
+
+def _expr_cost(expr: Expr) -> int:
+    if isinstance(expr, Apply):
+        return 1 + sum(_expr_cost(arg) for arg in expr.args)
+    if isinstance(expr, Reduce):
+        return 1 + _expr_cost(expr.body)
+    return 1
+
+
+def _postorder(expr: Expr, out: dict[Expr, int]) -> None:
+    if isinstance(expr, Apply):
+        for arg in expr.args:
+            _postorder(arg, out)
+    elif isinstance(expr, Reduce):
+        _postorder(expr.body, out)
+    out[expr] = out.get(expr, 0) + 1
+
+
+def extract_common_subexpressions(
+    exprs: Sequence[Expr],
+    *,
+    prefix: str = "_cse",
+    min_cost: int = 2,
+) -> tuple[tuple[tuple[str, Expr], ...], tuple[Expr, ...]]:
+    """Extract repeated IR subtrees into deterministic symbol bindings.
+
+    This is a pure planning pass for the #112 IR migration. It does not
+    perform code generation; callers receive a list of temporary bindings and
+    rewritten root expressions that reference those temporaries. Bindings are
+    emitted in child-before-parent order so later bindings may depend on
+    earlier temporary names.
+
+    Args:
+        exprs: Root IR expressions to analyze together.
+        prefix: Prefix used for generated temporary symbol names.
+        min_cost: Minimum subtree cost eligible for extraction.
+
+    Returns:
+        ``(bindings, rewritten_exprs)`` where ``bindings`` is a tuple of
+        ``(name, expr)`` pairs and ``rewritten_exprs`` is positionally aligned
+        with ``exprs``.
+    """
+    counts: dict[Expr, int] = {}
+    for expr in exprs:
+        _postorder(expr, counts)
+
+    selected = tuple(
+        expr
+        for expr, count in counts.items()
+        if count > 1 and _is_cse_candidate(expr) and _expr_cost(expr) >= min_cost
+    )
+    names = {expr: f"{prefix}{i}" for i, expr in enumerate(selected)}
+
+    def replace(expr: Expr) -> Expr:
+        name = names.get(expr)
+        if name is not None:
+            return Sym(name=name)
+        return _map_children(expr, replace)
+
+    bindings = tuple((names[expr], _map_children(expr, replace)) for expr in selected)
+    rewritten = tuple(replace(expr) for expr in exprs)
+    return bindings, rewritten
+
+
 def axis_kinds(expr: Expr, *, axis_names: frozenset[str]) -> tuple[AxisKind, ...]:
     """Classify every ``AxisIndex`` position in walk order.
 
@@ -749,7 +830,9 @@ __all__ = [
     "Sym",
     "axis_kinds",
     "classify_axis_index",
+    "extract_common_subexpressions",
     "free_symbols",
+    "ir_to_ast_expr",
     "iter_subscripts",
     "lower_helper_calls",
     "parse_expr_to_ir",

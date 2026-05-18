@@ -26,7 +26,7 @@ import numpy as np
 import pytest
 
 from op_system import compile_spec
-from op_system.compile import CompiledRhs, compile_rhs
+from op_system.compile import CompiledRhs, _collect_eq_code, compile_rhs
 from op_system.specs import NormalizedRhs, normalize_rhs
 
 
@@ -315,6 +315,30 @@ def test_scalar_compile_uses_normalized_ir_when_available() -> None:
     compiled = compile_rhs(rhs, xp=np)
     out = compiled.eval_fn(np.float64(0.0), np.array([2.0], dtype=np.float64))
     assert np.allclose(out, np.array([5.0]))
+
+
+def test_scalar_compile_extracts_equation_ir_cse() -> None:
+    """Repeated equation IR subtrees should compile as scalar temporaries."""
+    rhs = normalize_rhs({
+        "kind": "expr",
+        "state": ["x", "y"],
+        "equations": {
+            "x": "(a + b) * (a + b)",
+            "y": "(a + b) + 1",
+        },
+    })
+
+    cse_code, _ = _collect_eq_code(rhs.equations, rhs.equations_ir)
+    assert tuple(name for name, _ in cse_code) == ("__op_system_cse_0",)
+
+    compiled = compile_rhs(rhs, xp=np)
+    out = compiled.eval_fn(
+        np.float64(0.0),
+        np.array([0.0, 0.0], dtype=np.float64),
+        a=2.0,
+        b=3.0,
+    )
+    assert np.allclose(out, np.array([25.0, 6.0]))
 
 
 def test_transitions_rhs_compiles_and_evaluates() -> None:

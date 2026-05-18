@@ -12,6 +12,7 @@ from op_system._ir import (
     Reduce,
     Subscript,
     Sym,
+    extract_common_subexpressions,
     lower_helper_calls,
     parse_expr_to_ir,
 )
@@ -92,3 +93,40 @@ def test_lower_helper_calls_preserves_non_helper_apply() -> None:
 
     assert isinstance(lowered, Apply)
     assert lowered.op == "np.maximum"
+
+
+def test_extract_common_subexpressions_reuses_repeated_apply() -> None:
+    """Repeated non-leaf subexpressions become generated symbol bindings."""
+    bindings, rewritten = extract_common_subexpressions((
+        parse_expr_to_ir("(a + b) * (a + b)"),
+        parse_expr_to_ir("c + (a + b)"),
+    ))
+
+    assert bindings == (("_cse0", parse_expr_to_ir("a + b")),)
+    assert rewritten == (
+        parse_expr_to_ir("_cse0 * _cse0"),
+        parse_expr_to_ir("c + _cse0"),
+    )
+
+
+def test_extract_common_subexpressions_orders_children_before_parents() -> None:
+    """Nested CSE bindings should be emitted child-before-parent."""
+    repeated = "(a + b) * (a + b)"
+    bindings, rewritten = extract_common_subexpressions((
+        parse_expr_to_ir(f"({repeated}) + ({repeated})"),
+    ))
+
+    assert bindings == (
+        ("_cse0", parse_expr_to_ir("a + b")),
+        ("_cse1", parse_expr_to_ir("_cse0 * _cse0")),
+    )
+    assert rewritten == (parse_expr_to_ir("_cse1 + _cse1"),)
+
+
+def test_extract_common_subexpressions_ignores_repeated_leaves() -> None:
+    """Bare symbol repetition alone should not introduce temporaries."""
+    expr = parse_expr_to_ir("a + a")
+    bindings, rewritten = extract_common_subexpressions((expr,))
+
+    assert bindings == ()
+    assert rewritten == (expr,)

@@ -38,7 +38,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 from op_system._errors import InvalidExpressionError
-from op_system._ir import Expr, ir_to_ast_expr
+from op_system._ir import Expr, extract_common_subexpressions, ir_to_ast_expr
 from op_system._symbols import parse_expression_string
 
 if TYPE_CHECKING:
@@ -407,7 +407,7 @@ def _collect_alias_code(
 def _collect_eq_code(
     equations: tuple[str, ...],
     equations_ir: tuple[Expr | None, ...] | None = None,
-) -> list[CodeType]:
+) -> tuple[tuple[tuple[str, CodeType], ...], list[CodeType]]:
     """Compile equation expressions into code objects.
 
     Args:
@@ -416,15 +416,44 @@ def _collect_eq_code(
             aligned with ``equations``.
 
     Returns:
-        List of compiled code objects.
+        CSE binding code objects plus equation code objects.
     """
-    ir_tuple = (
-        equations_ir if equations_ir and len(equations_ir) == len(equations) else ()
-    )
-    return [
-        _compile_expr(expr, ir_tuple[i] if ir_tuple else None)
-        for i, expr in enumerate(equations)
-    ]
+    if (
+        equations_ir
+        and len(equations_ir) == len(equations)
+        and all(expr is not None for expr in equations_ir)
+    ):
+        concrete_ir = tuple(expr for expr in equations_ir if expr is not None)
+        bindings, rewritten = extract_common_subexpressions(
+            concrete_ir,
+            prefix="__op_system_cse_",
+        )
+        cse_code = tuple((name, _compile_expr(name, expr)) for name, expr in bindings)
+        eq_code = [  # noqa: FURB140
+            _compile_expr(expr_s, expr_ir)
+            for expr_s, expr_ir in zip(equations, rewritten, strict=True)
+        ]
+        return cse_code, eq_code
+    return (), [_compile_expr(expr) for expr in equations]
+
+
+def _evaluate_cse_bindings(
+    cse_code: tuple[tuple[str, CodeType], ...],
+    *,
+    env: dict[str, object],
+) -> None:
+    """Evaluate CSE temporaries into ``env`` before equation evaluation."""
+    for name, codeobj in cse_code:
+        try:
+            env[name] = eval(  # noqa: S307
+                codeobj,
+                {"__builtins__": _SAFE_BUILTINS},
+                env,
+            )
+        except NameError as exc:
+            _raise_parameter_error(detail=f"unknown symbol in CSE binding: {exc!s}")
+        except (ValueError, TypeError, ArithmeticError) as exc:
+            _raise_invalid_expression(detail=f"CSE binding evaluation failed: {exc!r}")
 
 
 def _resolve_aliases(
@@ -538,7 +567,7 @@ def _make_eval_fn(
     n_state = len(state_names)
     name_to_idx = {s: i for i, s in enumerate(state_names)}
     alias_code = _collect_alias_code(aliases, aliases_ir)
-    eq_code = _collect_eq_code(equations, equations_ir)
+    cse_code, eq_code = _collect_eq_code(equations, equations_ir)
 
     def eval_fn(t: object, y: object, **params: object) -> Float64Array:
         xp = _namespace_of(y)
@@ -571,6 +600,8 @@ def _make_eval_fn(
 
         if alias_code:
             env.update(_resolve_aliases(alias_code, base_env=env))
+        if cse_code:
+            _evaluate_cse_bindings(cse_code, env=env)
 
         return _evaluate_equations(eq_code=eq_code, env=env, xp=xp)
 
