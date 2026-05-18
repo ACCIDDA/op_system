@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from op_system._ir import (
     Apply,
     AxisIndex,
@@ -14,6 +16,7 @@ from op_system._ir import (
 from op_system._ir_templates import (
     expand_inline_templates,
     expand_over_axes,
+    inline_aliases,
     placeholder_axes,
 )
 from op_system._templates import _apply_template_substitutions
@@ -241,3 +244,62 @@ def test_expand_over_axes_matches_string_path_with_shaped_param() -> None:
             axis_lookup=AXIS_LOOKUP,
         )
         assert ir_expr == parse_expr_to_ir(string_expr)
+
+
+def test_inline_aliases_basic_substitution() -> None:
+    """A single alias reference is replaced with its body."""
+    expr = parse_expr_to_ir("rho * S")
+    aliases = {"rho": parse_expr_to_ir("beta * I")}
+    out = inline_aliases(expr, aliases)
+    assert out == parse_expr_to_ir("(beta * I) * S")
+
+
+def test_inline_aliases_chained_references() -> None:
+    """Aliases referencing other aliases fully expand to leaves."""
+    aliases = {
+        "rho": parse_expr_to_ir("beta * gamma"),
+        "force": parse_expr_to_ir("rho * I"),
+    }
+    out = inline_aliases(parse_expr_to_ir("force * S"), aliases)
+    assert out == parse_expr_to_ir("((beta * gamma) * I) * S")
+
+
+def test_inline_aliases_returns_input_when_no_aliases() -> None:
+    """An empty alias map returns the original expression unchanged."""
+    expr = parse_expr_to_ir("a + b")
+    assert inline_aliases(expr, {}) is expr
+
+
+def test_inline_aliases_leaves_unrelated_symbols() -> None:
+    """Symbols not in the alias map are preserved."""
+    expr = parse_expr_to_ir("alpha + rho")
+    out = inline_aliases(expr, {"rho": Literal(value=0.5)})
+    assert out == Apply(op="+", args=(Sym(name="alpha"), Literal(value=0.5)))
+
+
+def test_inline_aliases_rejects_self_cycle() -> None:
+    """A self-referential alias raises immediately."""
+    aliases = {"rho": parse_expr_to_ir("rho + 1")}
+    with pytest.raises(ValueError, match="alias cycle"):
+        inline_aliases(parse_expr_to_ir("rho"), aliases)
+
+
+def test_inline_aliases_rejects_mutual_cycle() -> None:
+    """Mutually recursive aliases raise."""
+    aliases = {
+        "a": parse_expr_to_ir("b + 1"),
+        "b": parse_expr_to_ir("a * 2"),
+    }
+    with pytest.raises(ValueError, match="alias cycle"):
+        inline_aliases(parse_expr_to_ir("a"), aliases)
+
+
+def test_inline_aliases_respects_reduce_binding_shadowing() -> None:
+    """An alias name shadowed by a Reduce binding is not substituted."""
+    body = Apply(op="*", args=(Sym(name="rho"), Sym(name="S")))
+    expr = Reduce(kind="sum_over", bindings=(("age", "rho"),), body=body)
+    aliases = {"rho": Literal(value=0.5)}
+    out = inline_aliases(expr, aliases)
+    # The Reduce shadows "rho" -> body's "rho" stays a Sym.
+    assert isinstance(out, Reduce)
+    assert out.body == body

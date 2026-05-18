@@ -24,7 +24,17 @@ from __future__ import annotations
 from itertools import product
 from typing import TYPE_CHECKING
 
-from ._ir import Apply, AxisIndex, Expr, Literal, Reduce, Subscript, Sym
+from ._ir import (
+    Apply,
+    AxisIndex,
+    Expr,
+    Literal,
+    Reduce,
+    Subscript,
+    Sym,
+    free_symbols,
+    substitute,
+)
 from ._templates import _render_template_name
 
 if TYPE_CHECKING:
@@ -177,7 +187,16 @@ def expand_inline_templates(
     raise TypeError(msg)
 
 
-__all__ = ["expand_inline_templates", "expand_over_axes", "placeholder_axes"]
+__all__ = [
+    "expand_inline_templates",
+    "expand_over_axes",
+    "inline_aliases",
+    "placeholder_axes",
+]
+
+_CYCLE_WHITE = 0
+_CYCLE_GREY = 1
+_CYCLE_BLACK = 2
 
 
 def _collect_subscript_axes(
@@ -287,3 +306,90 @@ def expand_over_axes(
             ),
         ))
     return out
+
+
+def _detect_alias_cycle(aliases: Mapping[str, Expr]) -> list[str] | None:
+    """Return a cycle of alias names if one exists, else ``None``.
+
+    Builds a name -> referenced-alias-names graph (only edges into the
+    alias namespace itself count) and DFS-checks for a back edge.
+    """
+    keys = set(aliases)
+    graph: dict[str, frozenset[str]] = {
+        name: frozenset(free_symbols(body) & keys) for name, body in aliases.items()
+    }
+
+    color: dict[str, int] = dict.fromkeys(graph, _CYCLE_WHITE)
+    stack: list[str] = []
+
+    def visit(node: str) -> list[str] | None:
+        color[node] = _CYCLE_GREY
+        stack.append(node)
+        for nxt in graph[node]:
+            if color[nxt] == _CYCLE_GREY:
+                i = stack.index(nxt)
+                return [*stack[i:], nxt]
+            if color[nxt] == _CYCLE_WHITE:
+                found = visit(nxt)
+                if found is not None:
+                    return found
+        color[node] = _CYCLE_BLACK
+        stack.pop()
+        return None
+
+    for n in graph:
+        if color[n] == _CYCLE_WHITE:
+            cyc = visit(n)
+            if cyc is not None:
+                return cyc
+    return None
+
+
+def inline_aliases(
+    expr: Expr,
+    aliases: Mapping[str, Expr],
+    *,
+    max_depth: int = 64,
+) -> Expr:
+    """Fixed-point inline ``Sym`` references that match ``aliases`` keys.
+
+    Repeatedly applies :func:`op_system._ir.substitute` until no free
+    symbols in the result are in ``aliases``, or ``max_depth`` is reached.
+
+    Aliases may reference one another transitively; this function expands
+    chains in one pass per iteration. Self-referential or mutually
+    recursive aliases are rejected up front via a cycle check.
+
+    Args:
+        expr: Root IR expression to inline into.
+        aliases: Mapping from alias name (a ``Sym`` name) to its IR body.
+            Keys are expected to be fully expanded alias names (after
+            template expansion), and bodies are expected to be IR.
+        max_depth: Safety bound on the number of substitution rounds.
+
+    Returns:
+        A new IR expression with all alias references resolved.
+
+    Raises:
+        ValueError: If the alias graph contains a cycle, or if expansion
+            does not converge within ``max_depth`` iterations.
+    """
+    if not aliases:
+        return expr
+
+    cycle = _detect_alias_cycle(aliases)
+    if cycle is not None:
+        msg = f"alias cycle detected: {' -> '.join(cycle)}"
+        raise ValueError(msg)
+
+    keys = set(aliases)
+    current = expr
+    for _ in range(max_depth):
+        live = free_symbols(current) & keys
+        if not live:
+            return current
+        mapping = {name: aliases[name] for name in live}
+        current = substitute(current, mapping)
+
+    msg = f"alias inlining did not converge within {max_depth} iterations"
+    raise ValueError(msg)
