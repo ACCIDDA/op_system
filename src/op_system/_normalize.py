@@ -36,7 +36,7 @@ from op_system._helpers import (
     _ensure_str_list,
     _sorted_unique,
 )
-from op_system._ir import Apply, AxisIndex, Expr, Reduce, Subscript, parse_expr_to_ir
+from op_system._ir import Expr, parse_expr_to_ir
 from op_system._ir_templates import _detect_alias_cycle, inline_aliases
 from op_system._symbols import _collect_names, _parse_expr
 from op_system._templates import (
@@ -774,7 +774,8 @@ def _scan_shaped_param_refs(  # noqa: C901, PLR0912
     where ``name`` is not in ``name_blocklist`` (states, aliases, recognized
     built-ins) and every bracket entry is either:
     - A bare axis name (e.g., ``age``) registered in ``axis_lookup``
-    - An axis binding (e.g., ``age=ap``) where the axis name is registered
+    - An axis binding (e.g., ``age:ap`` or legacy ``age=ap``) where the
+      axis name is registered
 
     Each such ``name`` is recorded as shaped over the tuple of axes appearing
     in its first occurrence; subsequent occurrences must use the same axes in
@@ -806,8 +807,13 @@ def _scan_shaped_param_refs(  # noqa: C901, PLR0912
                 if not p:
                     valid = False
                     break
-                # Handle both bare axes (e.g., "age") and bindings (e.g., "age=ap")
-                if "=" in p:
+                # Handle bare axes (e.g., "age"), legacy bindings
+                # (``age=ap``), and the canonical slice-form bindings
+                # (``age:ap``).
+                if ":" in p:
+                    ax_name, _, _ = p.partition(":")
+                    ax_name = ax_name.strip()
+                elif "=" in p:
                     ax_name, _, _ = p.partition("=")
                     ax_name = ax_name.strip()
                 else:
@@ -1116,7 +1122,7 @@ def _expand_alias_templates(  # noqa: PLR0913
         if canonical_name in alias_template_map:
             # Defer ``_expand_helpers`` until the per-row LHS assignment is
             # known so that same-axis-twice references like
-            # ``K[age, age=ap]`` inside a templated alias (e.g. ``foi[age]``)
+            # ``K[age, age:ap]`` inside a templated alias (e.g. ``foi[age]``)
             # resolve the bare LHS-free position from the row assignment
             # rather than collapsing onto the bound ``apply_along`` coord.
             # Mirrors the equations path in ``_resolve_template_equation``.
@@ -1146,151 +1152,6 @@ def _expand_alias_templates(  # noqa: PLR0913
             )
 
     return aliases_out, alias_template_map
-
-
-# ``[axis=binding]`` subscript notation is used in pre-expansion spec strings
-# (e.g. ``I[pop=j]`` inside an ``apply_along(pop=j, ...)`` body) and is not
-# valid Python syntax, so ``parse_expr_to_ir`` cannot consume it directly.
-# When building helper-bearing (``Reduce``-node) IR for downstream consumers,
-# we rewrite each such bracket slot to a single marker identifier of the
-# form ``__op_bv__<axis>__<binding>__`` so the IR parser sees a bare name,
-# then post-process the resulting IR to restore ``AxisIndex(axis, coord)``.
-_BOUND_SUBSCRIPT_BRACKET_RE = re.compile(r"\[([^\[\]]*)\]")
-_BOUND_AX_MARKER_RE = re.compile(
-    r"^__op_bv__([A-Za-z_][A-Za-z0-9_]*)__([A-Za-z_][A-Za-z0-9_]*)__$"
-)
-
-
-def _preprocess_bound_subscripts(expr_s: str) -> str:
-    """Rewrite ``name[axis=binding, ...]`` slots to marker identifiers.
-
-    Only bracket slots that look like a simple ``axis=binding`` pair are
-    rewritten; list-literal contents (``in [c1, c2]`` filters, etc.) are
-    left alone. Nested brackets are not supported by this single-pass
-    regex and will simply be left unchanged — callers should treat the
-    second-pass IR build as best-effort.
-
-    Returns:
-        The input string with each ``axis=binding`` subscript slot
-        replaced by a single marker identifier.
-    """
-
-    def _repl(match: re.Match[str]) -> str:
-        inner = match.group(1)
-        parts = [p.strip() for p in inner.split(",")]
-        new_parts: list[str] = []
-        for p in parts:
-            if "=" in p and " in " not in p:
-                axis, binding = (s.strip() for s in p.split("=", 1))
-                if axis.isidentifier() and binding.isidentifier():
-                    new_parts.append(f"__op_bv__{axis}__{binding}__")
-                    continue
-            new_parts.append(p)
-        return "[" + ", ".join(new_parts) + "]"
-
-    return _BOUND_SUBSCRIPT_BRACKET_RE.sub(_repl, expr_s)
-
-
-_HELPER_CALL_NAMES: tuple[str, ...] = ("apply_along", "sum_over", "integrate_over")
-
-
-def _reorder_helper_call_args(expr_s: str) -> str:
-    """Move keyword arguments after positional arguments in helper calls.
-
-    Real-spec strings allow ``apply_along(pop=j, body)`` (kwargs before
-    positionals), which is rejected by Python's parser. The IR consumes a
-    canonical form with positionals first, so this helper rewrites each
-    occurrence by structurally splitting args and re-emitting them in
-    ``positional, *kwargs`` order. Nested helper calls are handled by
-    iterating until convergence.
-
-    Returns:
-        The input string with each helper call's argument list reordered
-        so that positional arguments precede keyword arguments.
-    """
-    for name in _HELPER_CALL_NAMES:
-        while True:
-            span = _find_call_span(expr_s, name)
-            if span is None:
-                break
-            start, end = span
-            inner = expr_s[start + len(name) + 1 : end - 1]
-            parts = _split_top_level_commas(inner)
-            positionals: list[str] = []
-            kwargs: list[str] = []
-            for p in parts:
-                ps = p.strip()
-                if not ps:
-                    continue
-                # An "=" at the top level marks a kwarg; bracket/paren contents
-                # were already skipped by ``_split_top_level_commas`` for
-                # commas, but ``=`` inside brackets is still possible.
-                if _is_top_level_kwarg(ps):
-                    kwargs.append(ps)
-                else:
-                    positionals.append(ps)
-            reordered = ", ".join(positionals + kwargs)
-            # Sentinel-rewrite the leading ``name(`` so the outer loop's next
-            # ``_find_call_span`` skips this already-processed occurrence;
-            # restore the name after the loop.
-            sentinel = f"__op_done__{name}__"
-            expr_s = expr_s[:start] + f"{sentinel}(" + reordered + ")" + expr_s[end:]
-        expr_s = expr_s.replace(f"__op_done__{name}__", name)
-    return expr_s
-
-
-def _is_top_level_kwarg(arg: str) -> bool:
-    """Return True if ``arg`` is a ``key=value`` pair at top bracket depth."""
-    depth = 0
-    for i, c in enumerate(arg):
-        if c in "([":
-            depth += 1
-        elif c in ")]":
-            depth -= 1
-        elif c == "=" and depth == 0:
-            next_eq = i + 1 < len(arg) and arg[i + 1] == "="
-            cmp_eq = i > 0 and arg[i - 1] in "<>!="
-            return not (next_eq or cmp_eq)
-    return False
-
-
-def _fixup_bound_axis_indices(expr: Expr) -> Expr:  # noqa: PLR0911
-    """Rewrite marker ``AxisIndex`` nodes produced by the preprocessor.
-
-    Walks ``expr`` recursively and replaces any ``AxisIndex`` whose ``axis``
-    matches the ``__op_bv__<axis>__<binding>__`` marker pattern with
-    ``AxisIndex(axis=<axis>, coord=<binding>)``. Other IR nodes are returned
-    unchanged when no descendant needed rewriting.
-
-    Returns:
-        A new IR expression with marker subscript indices restored to
-        ``AxisIndex(axis, coord)`` form, or ``expr`` itself if nothing
-        needed rewriting.
-    """
-    if isinstance(expr, Subscript):
-        new_indices: list[AxisIndex] = []
-        changed = False
-        for idx in expr.indices:
-            m = _BOUND_AX_MARKER_RE.match(idx.axis)
-            if m is not None:
-                new_indices.append(AxisIndex(axis=m.group(1), coord=m.group(2)))
-                changed = True
-            else:
-                new_indices.append(idx)
-        if changed:
-            return Subscript(name=expr.name, indices=tuple(new_indices))
-        return expr
-    if isinstance(expr, Apply):
-        new_args = tuple(_fixup_bound_axis_indices(a) for a in expr.args)
-        if any(na is not oa for na, oa in zip(new_args, expr.args, strict=True)):
-            return Apply(op=expr.op, args=new_args)
-        return expr
-    if isinstance(expr, Reduce):
-        new_body = _fixup_bound_axis_indices(expr.body)
-        if new_body is not expr.body:
-            return Reduce(kind=expr.kind, bindings=expr.bindings, body=new_body)
-        return expr
-    return expr
 
 
 def _build_aliases_ir(
@@ -1327,15 +1188,11 @@ def _build_aliases_ir(
             sys.setrecursionlimit(needed)
         parsed: dict[str, Expr] = {}
         for name, body in aliases.items():
-            if lower_helpers:
-                src = _preprocess_bound_subscripts(_reorder_helper_call_args(body))
-            else:
-                src = body
             try:
-                expr = parse_expr_to_ir(src, lower_helpers=lower_helpers)
+                expr = parse_expr_to_ir(body, lower_helpers=lower_helpers)
             except (ValueError, RecursionError):
                 continue
-            parsed[name] = _fixup_bound_axis_indices(expr) if lower_helpers else expr
+            parsed[name] = expr
         # Validate the alias graph once and share a free_symbols memo across
         # all per-alias inline_aliases calls: alias bodies are reused by
         # identity, so id-keyed caching turns the inner traversal cost from
@@ -1364,7 +1221,7 @@ def _build_aliases_ir(
             sys.setrecursionlimit(old_limit)
 
 
-def _build_equations_ir(  # noqa: C901
+def _build_equations_ir(
     equations: tuple[str, ...],
     aliases_ir: Mapping[str, Expr] | None = None,
     *,
@@ -1407,17 +1264,11 @@ def _build_equations_ir(  # noqa: C901
                 cycle_validated = False
         out: list[Expr | None] = []
         for eq in equations:
-            if lower_helpers:
-                src = _preprocess_bound_subscripts(_reorder_helper_call_args(eq))
-            else:
-                src = eq
             try:
-                expr = parse_expr_to_ir(src, lower_helpers=lower_helpers)
+                expr = parse_expr_to_ir(eq, lower_helpers=lower_helpers)
             except (ValueError, RecursionError):
                 out.append(None)
                 continue
-            if lower_helpers:
-                expr = _fixup_bound_axis_indices(expr)
             if aliases_ir is None:
                 out.append(expr)
                 continue
@@ -2086,9 +1937,9 @@ def _substitute_apply_along_brackets(  # noqa: C901, PLR0913, PLR0915
     ------------------------------
     For a shaped parameter declared on duplicate axes (e.g. a contact kernel
     ``K[age, age]``), the natural reference inside an ``apply_along`` is
-    ``K[age, age=ap]`` where the **bare** ``age`` token is the *free outer*
+    ``K[age, age:ap]`` where the **bare** ``age`` token is the *free outer*
     axis (taken from the LHS template assignment of the equation being
-    expanded) and the ``age=ap`` token is the *bound inner* axis (assigned
+    expanded) and the ``age:ap`` token is the *bound inner* axis (assigned
     by the surrounding ``apply_along``).  ``lhs_assignment`` carries the
     LHS-free axis bindings so this case can be lowered to per-row
     indexing/mangling rather than collapsing both positions onto the bound
@@ -2097,8 +1948,8 @@ def _substitute_apply_along_brackets(  # noqa: C901, PLR0913, PLR0915
     If ``shaped_params`` is provided and contains ``name`` with multiple axes
     (e.g., a contact kernel ``K[age, age]``), and all those axes are bound,
     the bracket assignments are converted to direct indexing instead of
-    name mangling. For example, ``K[age, age=ap]`` with bound ``age=c1`` is
-    converted to ``K[c1, ap]`` rather than ``K__age_<c1>[age=ap]``.
+    name mangling. For example, ``K[age, age:ap]`` with bound ``age=c1`` is
+    converted to ``K[c1, ap]`` rather than ``K__age_<c1>[age:ap]``.
 
     Returns:
         Expression string with bound bracket assignments folded into
@@ -2170,12 +2021,28 @@ def _substitute_apply_along_brackets(  # noqa: C901, PLR0913, PLR0915
         body = match.group(2)
         entries = [e.strip() for e in body.split(",") if e.strip()]
 
+        def _entry_parts(e: str) -> tuple[str, str | None]:
+            """Return (axis, coord) for one bracket entry.
+
+            Accepts both the canonical slice form ``axis:coord`` (valid
+            Python) and the legacy ``axis=coord`` form used by some
+            substitution outputs. Returns ``coord=None`` for bare
+            wildcard tokens.
+            """
+            for sep in (":", "="):
+                if sep in e:
+                    ax, _, c = e.partition(sep)
+                    return ax.strip(), c.strip()
+            return e, None
+
+        parsed_entries = [_entry_parts(e) for e in entries]
+
         # Same-axis-twice disambiguation: detect axes that appear in this
-        # bracket both as a bare token and as ``axis=coord``. The bare token
+        # bracket both as a bare token and as ``axis:coord``. The bare token
         # then refers to the LHS-free axis (taken from ``lhs_assignment``);
-        # the ``axis=coord`` token refers to the bound apply_along axis.
-        bare_axes = {e for e in entries if "=" not in e}
-        pinned_axes = {e.split("=", 1)[0].strip() for e in entries if "=" in e}
+        # the ``axis:coord`` token refers to the bound apply_along axis.
+        bare_axes = {ax for ax, c in parsed_entries if c is None}
+        pinned_axes = {ax for ax, c in parsed_entries if c is not None}
         same_axis_twice = bare_axes & pinned_axes
 
         # Resolve each entry positionally to (axis_name, coord, source) where
@@ -2183,11 +2050,8 @@ def _substitute_apply_along_brackets(  # noqa: C901, PLR0913, PLR0915
         resolved: list[tuple[str, str | None, str | None]] = []
         consumed: list[tuple[str, str]] = []
         remaining: list[str] = []
-        for entry in entries:
-            if "=" in entry:
-                ax, _, coord = entry.partition("=")
-                ax = ax.strip()
-                coord = coord.strip()
+        for entry, (ax, coord) in zip(entries, parsed_entries, strict=True):
+            if coord is not None:
                 if ax in bound and bound[ax] == coord:
                     consumed.append((ax, coord))
                     resolved.append((ax, coord, "bound"))
@@ -2202,9 +2066,9 @@ def _substitute_apply_along_brackets(  # noqa: C901, PLR0913, PLR0915
                 # equation), leave the token in the brackets for downstream
                 # template substitution.
                 if entry in lhs_assignment:
-                    coord = lhs_assignment[entry]
-                    consumed.append((entry, coord))
-                    resolved.append((entry, coord, "lhs"))
+                    lhs_coord = lhs_assignment[entry]
+                    consumed.append((entry, lhs_coord))
+                    resolved.append((entry, lhs_coord, "lhs"))
                     continue
                 resolved.append((entry, None, None))
                 remaining.append(entry)
@@ -2222,7 +2086,7 @@ def _substitute_apply_along_brackets(  # noqa: C901, PLR0913, PLR0915
 
         # Multi-axis shaped parameter → direct indexing when every position
         # is resolved. Use positional coords from ``resolved`` so that
-        # same-axis-twice references like ``K[age, age=ap]`` get distinct
+        # same-axis-twice references like ``K[age, age:ap]`` get distinct
         # row/column indices instead of collapsing onto the bound coord.
         if name in shaped_params and len(shaped_params[name]) > 1:
             param_axes = shaped_params[name]
@@ -2534,7 +2398,7 @@ def _expand_helpers(  # noqa: PLR0913
     ``lhs_assignment`` carries the LHS template assignment of the equation
     being expanded (e.g. ``{"age": "a0"}`` for the row ``foi__age_a0`` of
     ``foi[age]``). It is forwarded to :func:`_substitute_apply_along_brackets`
-    so that same-axis-twice references like ``K[age, age=ap]`` can resolve
+    so that same-axis-twice references like ``K[age, age:ap]`` can resolve
     the bare (free outer) axis position from the LHS row rather than
     collapsing it onto the bound apply_along coord.
 

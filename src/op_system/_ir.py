@@ -219,10 +219,26 @@ def _axis_index_from_expr(node: ast.expr) -> AxisIndex:
     _invalid(detail=f"unsupported subscript index node: {type(node).__name__}")
 
 
+def _bound_axis_index_from_slice(node: ast.Slice) -> AxisIndex:
+    if node.step is not None:
+        _invalid(detail="bound-axis subscript axis:binding must not have a step")
+    if node.lower is None or node.upper is None:
+        _invalid(detail="bound-axis subscript requires axis:binding with both names")
+    if not isinstance(node.lower, ast.Name) or not isinstance(node.upper, ast.Name):
+        _invalid(detail="bound-axis subscript axis:binding requires bare identifiers")
+    return AxisIndex(axis=node.lower.id, coord=node.upper.id)
+
+
+def _parse_subscript_index_element(node: ast.expr) -> AxisIndex:
+    if isinstance(node, ast.Slice):
+        return _bound_axis_index_from_slice(node)
+    return _axis_index_from_expr(node)
+
+
 def _parse_subscript_indices(slc: ast.expr) -> tuple[AxisIndex, ...]:
     if isinstance(slc, ast.Tuple):
-        return tuple(_axis_index_from_expr(elt) for elt in slc.elts)
-    return (_axis_index_from_expr(slc),)
+        return tuple(_parse_subscript_index_element(elt) for elt in slc.elts)
+    return (_parse_subscript_index_element(slc),)
 
 
 def to_ir(node: ast.AST) -> Expr:  # noqa: C901, PLR0911, PLR0912

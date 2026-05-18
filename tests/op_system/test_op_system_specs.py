@@ -148,8 +148,8 @@ def test_expr_template_expansion_and_apply_along() -> None:
         "axes": [{"name": "pop", "coords": ["p1", "p2"]}],
         "state": ["S[pop]", "I[pop]"],
         "equations": {
-            "S[pop]": "-beta * S[pop] * apply_along(pop=j, I[pop=j])",
-            "I[pop]": "beta * S[pop] * apply_along(pop=j, I[pop=j]) - gamma * I[pop]",
+            "S[pop]": "-beta * S[pop] * apply_along(I[pop:j], pop=j)",
+            "I[pop]": "beta * S[pop] * apply_along(I[pop:j], pop=j) - gamma * I[pop]",
         },
     }
 
@@ -313,7 +313,7 @@ def test_same_axis_twice_apply_along_per_row_contraction() -> None:
         "state": ["I[age]", "foi[age]"],
         "equations": {
             "I[age]": "0.0",
-            "foi[age]": "apply_along(age=ap, K[age, age=ap] * I[age=ap])",
+            "foi[age]": "apply_along(K[age, age:ap] * I[age:ap], age=ap)",
         },
     }
     rhs = normalize_rhs(spec)
@@ -340,7 +340,7 @@ def test_same_axis_twice_apply_along_eval_end_to_end() -> None:
         "state": ["I[age]", "foi[age]"],
         "equations": {
             "I[age]": "0.0",
-            "foi[age]": "apply_along(age=ap, K[age, age=ap] * I[age=ap])",
+            "foi[age]": "apply_along(K[age, age:ap] * I[age:ap], age=ap)",
         },
     }
     rhs = normalize_rhs(spec)
@@ -377,7 +377,7 @@ def test_same_axis_twice_in_templated_alias_substituted_into_transition() -> Non
         "aliases": {
             "foi[age]": (
                 "apply_along(age=ap, K[age, age=ap]"
-                " * apply_along(vax=v, I[age=ap, vax=v]))"
+                " * apply_along(I[age:ap, vax:v], vax=v))"
             ),
         },
         "transitions": [
@@ -637,7 +637,7 @@ def test_apply_along_kernel_sum_rejects_continuous_axis() -> None:
             }
         ],
         "state": ["S[age]"],
-        "equations": {"S[age]": "-apply_along(age=i, S[age=i], kernel=sum)"},
+        "equations": {"S[age]": "-apply_along(S[age:i], age=i, kernel=sum)"},
     }
     with pytest.raises(ValueError, match=r"requires categorical or ordinal axes"):
         normalize_expr_rhs(spec)
@@ -657,7 +657,7 @@ def test_apply_along_integrate_expands_with_continuous_deltas() -> None:
         "state": ["u[x]", "v"],
         "equations": {
             "u[x]": "0.0",
-            "v": "apply_along(x=i, u[x=i])",
+            "v": "apply_along(u[x:i], x=i)",
         },
     }
 
@@ -685,7 +685,7 @@ def test_apply_along_kernel_integrate_rejects_categorical_axis() -> None:
             }
         ],
         "state": ["x[g]"],
-        "equations": {"x[g]": "apply_along(g=i, x[g=i], kernel=integrate)"},
+        "equations": {"x[g]": "apply_along(x[g:i], g=i, kernel=integrate)"},
     }
 
     with pytest.raises(ValueError, match=r"requires continuous axes"):
@@ -2148,8 +2148,8 @@ def test_equations_ir_reduce_is_positionally_aligned() -> None:
         "axes": [{"name": "pop", "coords": ["p1", "p2"]}],
         "state": ["S[pop]", "I[pop]"],
         "equations": {
-            "S[pop]": "-beta * S[pop] * apply_along(pop=j, I[pop=j])",
-            "I[pop]": ("beta * S[pop] * apply_along(pop=j, I[pop=j]) - gamma * I[pop]"),
+            "S[pop]": "-beta * S[pop] * apply_along(I[pop:j], pop=j)",
+            "I[pop]": ("beta * S[pop] * apply_along(I[pop:j], pop=j) - gamma * I[pop]"),
         },
     }
     out = normalize_expr_rhs(spec)
@@ -2163,8 +2163,8 @@ def test_equations_ir_reduce_contains_reduce_nodes_for_apply_along() -> None:
         "axes": [{"name": "pop", "coords": ["p1", "p2"]}],
         "state": ["S[pop]", "I[pop]"],
         "equations": {
-            "S[pop]": "-beta * S[pop] * apply_along(pop=j, I[pop=j])",
-            "I[pop]": ("beta * S[pop] * apply_along(pop=j, I[pop=j]) - gamma * I[pop]"),
+            "S[pop]": "-beta * S[pop] * apply_along(I[pop:j], pop=j)",
+            "I[pop]": ("beta * S[pop] * apply_along(I[pop:j], pop=j) - gamma * I[pop]"),
         },
     }
     out = normalize_expr_rhs(spec)
@@ -2183,7 +2183,7 @@ def test_aliases_ir_reduce_contains_reduce_for_aliased_apply_along() -> None:
         "kind": "expr",
         "axes": [{"name": "pop", "coords": ["p1", "p2"]}],
         "state": ["S[pop]", "I[pop]"],
-        "aliases": {"I_total": "apply_along(pop=j, I[pop=j])"},
+        "aliases": {"I_total": "apply_along(I[pop:j], pop=j)"},
         "equations": {
             "S[pop]": "-beta * S[pop] * I_total",
             "I[pop]": "beta * S[pop] * I_total - gamma * I[pop]",

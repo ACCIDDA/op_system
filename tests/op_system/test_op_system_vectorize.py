@@ -391,7 +391,7 @@ def _continuum_integrate_spec() -> dict[str, object]:
             # Integrate S over age, sum over loc → scalar.
             "S_total": (
                 "apply_along(age=a, "
-                "apply_along(loc=l, S[age=a, loc=l], kernel=sum), "
+                "apply_along(S[age:a, loc:l], loc=l, kernel=sum), "
                 "kernel=integrate)"
             ),
         },
@@ -487,7 +487,7 @@ def _network_outer_const_spec() -> dict[str, object]:
         "aliases": {
             "S_scaled": (
                 "0.25 * apply_along(age=a, "
-                "apply_along(loc=l, S[age=a, loc=l], kernel=sum), "
+                "apply_along(S[age:a, loc:l], loc=l, kernel=sum), "
                 "kernel=sum)"
             ),
         },
@@ -576,7 +576,7 @@ def _huge_chain_spec(n_loc: int) -> dict[str, object]:
         "state": ["S[loc]", "I[loc]"],
         "params": ["beta", "gamma"],
         "aliases": {
-            "S_scaled": "0.25 * apply_along(loc=l, S[loc=l], kernel=sum)",
+            "S_scaled": "0.25 * apply_along(S[loc:l], loc=l, kernel=sum)",
         },
         "equations": {
             "S[loc]": "-beta * S[loc] * S_scaled",
@@ -651,7 +651,7 @@ def test_ir_fast_path_preserves_numerical_parity_with_scalar() -> None:
 
 
 def _apply_along_categorical_spec() -> dict[str, object]:
-    """SIR over (pop,) with an ``apply_along(pop=j, I[pop=j])`` reduction.
+    """SIR over (pop,) with an ``apply_along(I[pop:j], pop=j)`` reduction.
 
     Used to exercise Stage 1b: the reduce-bearing IR carries a
     ``Reduce(kind='apply_along', ...)`` node that lowers directly to
@@ -667,8 +667,8 @@ def _apply_along_categorical_spec() -> dict[str, object]:
         "state": ["S[pop]", "I[pop]", "R[pop]"],
         "params": ["beta", "gamma"],
         "equations": {
-            "S[pop]": "-beta * S[pop] * apply_along(pop=j, I[pop=j])",
-            "I[pop]": ("beta * S[pop] * apply_along(pop=j, I[pop=j]) - gamma * I[pop]"),
+            "S[pop]": "-beta * S[pop] * apply_along(I[pop:j], pop=j)",
+            "I[pop]": ("beta * S[pop] * apply_along(I[pop:j], pop=j) - gamma * I[pop]"),
             "R[pop]": "gamma * I[pop]",
         },
     }
