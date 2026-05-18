@@ -438,3 +438,149 @@ def test_lower_uniform_apply_along_unchanged_when_weights_absent() -> None:
     s_buf = np.array([1.0, 2.0, 3.0])
     got = _eval(node, {"S_buf": s_buf, "np": np})
     assert got == pytest.approx(6.0)
+
+
+def test_lower_apply_along_with_categorical_filter() -> None:
+    """A categorical filter restricts the sum to the listed coords."""
+    body = Subscript(
+        name="pop",
+        indices=(AxisIndex(axis="vax", kind=AxisKind.FREE),),
+    )
+    expr = Reduce(
+        kind="apply_along",
+        bindings=(("vax", "j"),),
+        body=body,
+        filters=(("vax", ("v", "w")),),
+    )
+    node = lower_to_vector_ast(
+        expr,
+        target_axes=(),
+        buffer_axes={"pop": ("vax",)},
+        axis_names=frozenset({"vax"}),
+        reducible_axes=frozenset({"vax"}),
+        axis_coords={"vax": ("u", "v", "w")},
+    )
+    pop_buf = np.array([1.0, 2.0, 4.0])
+    got = _eval(node, {"pop_buf": pop_buf, "np": np})
+    # Sum only over indices [1, 2] -> 2.0 + 4.0
+    assert got == pytest.approx(6.0)
+
+
+def test_lower_apply_along_filter_requires_axis_coords() -> None:
+    """Lowering refuses filters when ``axis_coords`` is missing."""
+    body = Subscript(
+        name="pop",
+        indices=(AxisIndex(axis="vax", kind=AxisKind.FREE),),
+    )
+    expr = Reduce(
+        kind="apply_along",
+        bindings=(("vax", "j"),),
+        body=body,
+        filters=(("vax", ("v", "w")),),
+    )
+    with pytest.raises(UnsupportedIRLoweringError, match="axis_coords"):
+        lower_to_vector_ast(
+            expr,
+            target_axes=(),
+            buffer_axes={"pop": ("vax",)},
+            axis_names=frozenset({"vax"}),
+            reducible_axes=frozenset({"vax"}),
+        )
+
+
+def test_lower_apply_along_filter_rejects_unknown_coord() -> None:
+    """A filter coord that is not declared on the axis is rejected."""
+    body = Subscript(
+        name="pop",
+        indices=(AxisIndex(axis="vax", kind=AxisKind.FREE),),
+    )
+    expr = Reduce(
+        kind="apply_along",
+        bindings=(("vax", "j"),),
+        body=body,
+        filters=(("vax", ("v", "z")),),
+    )
+    with pytest.raises(UnsupportedIRLoweringError, match="not declared"):
+        lower_to_vector_ast(
+            expr,
+            target_axes=(),
+            buffer_axes={"pop": ("vax",)},
+            axis_names=frozenset({"vax"}),
+            reducible_axes=frozenset({"vax"}),
+            axis_coords={"vax": ("u", "v", "w")},
+        )
+
+
+def test_lower_apply_along_kernel_integrate_requires_weights() -> None:
+    """``kernel='integrate'`` forces weighted sum even on reducible axes."""
+    body = Subscript(
+        name="S",
+        indices=(AxisIndex(axis="age", kind=AxisKind.FREE),),
+    )
+    expr = Reduce(
+        kind="apply_along",
+        bindings=(("age", "a"),),
+        body=body,
+        kernel="integrate",
+    )
+    with pytest.raises(UnsupportedIRLoweringError, match="integration weights"):
+        lower_to_vector_ast(
+            expr,
+            target_axes=(),
+            buffer_axes={"S": ("age",)},
+            axis_names=frozenset({"age"}),
+            reducible_axes=frozenset({"age"}),
+        )
+
+
+def test_lower_apply_along_kernel_sum_skips_weights_on_continuous_axis() -> None:
+    """``kernel='sum'`` forces uniform reduction even when weights exist."""
+    body = Subscript(
+        name="f",
+        indices=(AxisIndex(axis="x", kind=AxisKind.FREE),),
+    )
+    expr = Reduce(
+        kind="apply_along",
+        bindings=(("x", "i"),),
+        body=body,
+        kernel="sum",
+    )
+    node = lower_to_vector_ast(
+        expr,
+        target_axes=(),
+        buffer_axes={"f": ("x",)},
+        axis_names=frozenset({"x"}),
+        reducible_axes=frozenset(),  # x is non-reducible
+        axis_weights={"x": (1.0, 2.0, 3.0)},  # would normally be used
+    )
+    f_buf = np.array([10.0, 20.0, 30.0])
+    got = _eval(node, {"f_buf": f_buf, "np": np})
+    # Uniform sum: 10 + 20 + 30 = 60 (NOT 1*10 + 2*20 + 3*30 = 140)
+    assert got == pytest.approx(60.0)
+
+
+def test_lower_apply_along_categorical_filter_with_continuous_weighted_axis() -> None:
+    """Filter on a continuous axis subsets weights as well as body."""
+    body = Subscript(
+        name="f",
+        indices=(AxisIndex(axis="x", kind=AxisKind.FREE),),
+    )
+    expr = Reduce(
+        kind="integrate_over",
+        bindings=(("x", "i"),),
+        body=body,
+        filters=(("x", ("a", "c")),),
+    )
+    node = lower_to_vector_ast(
+        expr,
+        target_axes=(),
+        buffer_axes={"f": ("x",)},
+        axis_names=frozenset({"x"}),
+        reducible_axes=frozenset(),
+        axis_weights={"x": (1.0, 2.0, 3.0)},
+        axis_coords={"x": ("a", "b", "c")},
+    )
+    f_buf = np.array([10.0, 20.0, 30.0])
+    got = _eval(node, {"f_buf": f_buf, "np": np})
+    # Take indices [0, 2]; weights become (1.0, 3.0); sum = 1*10 + 3*30 = 100
+    assert got == pytest.approx(100.0)

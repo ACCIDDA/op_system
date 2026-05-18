@@ -201,9 +201,7 @@ def test_lower_helper_recognizes_categorical_filter() -> None:
 
 def test_lower_helper_recognizes_continuous_range_filter() -> None:
     """Numeric coord lists are preserved as string filter coords."""
-    ir = parse_expr_to_ir(
-        "apply_along(u[x:i], x=i in [1.0, 4.0])", lower_helpers=True
-    )
+    ir = parse_expr_to_ir("apply_along(u[x:i], x=i in [1.0, 4.0])", lower_helpers=True)
 
     assert isinstance(ir, Reduce)
     assert ir.bindings == (("x", "i"),)
@@ -225,9 +223,7 @@ def test_lower_helper_recognizes_kernel_kwarg() -> None:
 def test_lower_helper_rejects_unknown_kernel() -> None:
     """``kernel=`` only accepts ``sum`` or ``integrate``."""
     with pytest.raises(InvalidExpressionError):
-        parse_expr_to_ir(
-            "apply_along(u[x:i], x=i, kernel=median)", lower_helpers=True
-        )
+        parse_expr_to_ir("apply_along(u[x:i], x=i, kernel=median)", lower_helpers=True)
 
 
 def test_lower_helper_combines_binding_and_filter_across_axes() -> None:

@@ -166,16 +166,17 @@ def _extract_filter_from_value(value: Expr) -> tuple[str, tuple[str, ...]] | Non
     ``Literal`` (numeric / string coords for continuous filters). All
     other shapes return ``None`` so the caller falls back to plain
     binding interpretation.
+
+    Returns:
+        ``(var_name, coord_strs)`` when the value matches the ``var in
+        [...]`` filter shape, otherwise ``None``.
     """
     if not (isinstance(value, Apply) and value.op == "in" and len(value.args) == 2):
         return None
     var_node, list_node = value.args
     if not isinstance(var_node, Sym):
         return None
-    if not (
-        isinstance(list_node, Apply)
-        and list_node.op == "list"
-    ):
+    if not (isinstance(list_node, Apply) and list_node.op == "list"):
         return None
     coords: list[str] = []
     for elt in list_node.args:
@@ -188,7 +189,7 @@ def _extract_filter_from_value(value: Expr) -> tuple[str, tuple[str, ...]] | Non
     return var_node.name, tuple(coords)
 
 
-def _lower_single_helper(node: Apply) -> Expr:
+def _lower_single_helper(node: Apply) -> Expr:  # noqa: C901, PLR0912
     if node.op not in _HELPER_REDUCE_OPS:
         return node
 
@@ -220,9 +221,7 @@ def _lower_single_helper(node: Apply) -> Expr:
             elif isinstance(value, Literal):
                 kernel_name = str(value.value)
             else:
-                _invalid(
-                    detail=f"{node.op} kernel= must be 'sum' or 'integrate'"
-                )
+                _invalid(detail=f"{node.op} kernel= must be 'sum' or 'integrate'")
             if kernel_name not in _APPLY_ALONG_KERNELS_IR:
                 _invalid(
                     detail=(

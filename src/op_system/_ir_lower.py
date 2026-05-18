@@ -219,7 +219,7 @@ def _transpose(node: ast.expr, perm: tuple[int, ...]) -> ast.expr:
 # ---------------------------------------------------------------------------
 
 
-def lower_to_vector_ast(
+def lower_to_vector_ast(  # noqa: PLR0913
     expr: Expr,
     *,
     target_axes: tuple[str, ...],
@@ -227,6 +227,7 @@ def lower_to_vector_ast(
     axis_names: frozenset[str],
     reducible_axes: frozenset[str] = frozenset(),
     axis_weights: Mapping[str, tuple[float, ...]] | None = None,
+    axis_coords: Mapping[str, tuple[str, ...]] | None = None,
 ) -> ast.expr:
     """Lower an IR expression to a vector-shape AST.
 
@@ -253,6 +254,10 @@ def lower_to_vector_ast(
             for any bound axis not in ``reducible_axes``. When supplied,
             the reduction emits ``np.sum(weights * body, axis=...)``
             instead of a plain ``np.sum``.
+        axis_coords: Optional mapping from axis name to its declared
+            coord labels (as strings). Required when a :class:`Reduce`
+            carries non-empty ``filters`` so coord labels can be
+            resolved to integer indices for ``np.take`` slicing.
 
     Returns:
         An ``ast.expr`` suitable for ``compile(ast.Expression(body=...))``
@@ -291,6 +296,7 @@ def lower_to_vector_ast(
             axis_names=axis_names,
             reducible_axes=reducible_axes,
             axis_weights=axis_weights,
+            axis_coords=axis_coords,
         )
 
     return _lower_reduce(
@@ -300,16 +306,19 @@ def lower_to_vector_ast(
         axis_names=axis_names,
         reducible_axes=reducible_axes,
         axis_weights=axis_weights,
+        axis_coords=axis_coords,
     )
 
 
-_REDUCE_SUM_KINDS: frozenset[str] = frozenset(
-    {"apply_along", "sum_over", "integrate_over"}
-)
+_REDUCE_SUM_KINDS: frozenset[str] = frozenset({
+    "apply_along",
+    "sum_over",
+    "integrate_over",
+})
 _REDUCE_UNIFORM_KINDS: frozenset[str] = frozenset({"apply_along", "sum_over"})
 
 
-def _lower_reduce(
+def _lower_reduce(  # noqa: C901, PLR0912, PLR0913, PLR0914, PLR0915
     expr: Reduce,
     *,
     target_axes: tuple[str, ...],
@@ -317,6 +326,7 @@ def _lower_reduce(
     axis_names: frozenset[str],
     reducible_axes: frozenset[str],
     axis_weights: Mapping[str, tuple[float, ...]] | None = None,
+    axis_coords: Mapping[str, tuple[str, ...]] | None = None,
 ) -> ast.expr:
     """Lower a :class:`Reduce` node to ``np.sum(body, axis=...)``.
 
@@ -345,7 +355,18 @@ def _lower_reduce(
         )
         raise UnsupportedIRLoweringError(msg)
 
+    if expr.kernel is not None and expr.kernel not in {"sum", "integrate"}:
+        msg = (
+            f"Reduce kernel {expr.kernel!r} is not recognized; v1 lowering "
+            "supports kernel='sum' or kernel='integrate'"
+        )
+        raise UnsupportedIRLoweringError(msg)
+
     weights_map: Mapping[str, tuple[float, ...]] = axis_weights or {}
+    coords_map: Mapping[str, tuple[str, ...]] = axis_coords or {}
+    filter_map: dict[str, tuple[str, ...]] = dict(expr.filters)
+    force_integrate = expr.kind == "integrate_over" or expr.kernel == "integrate"
+    force_sum = expr.kernel == "sum"
     bound_axes: list[str] = []
     weighted_axes: list[str] = []
     rebind: dict[str, str] = {}
@@ -353,12 +374,12 @@ def _lower_reduce(
         if axis in bound_axes:
             msg = f"Reduce has duplicate axis binding {axis!r}"
             raise UnsupportedIRLoweringError(msg)
-        if expr.kind == "integrate_over" or axis not in reducible_axes:
+        if force_integrate or (not force_sum and axis not in reducible_axes):
             if axis not in weights_map:
                 msg = (
-                    f"Reduce binding {axis}={binding} (kind {expr.kind!r}) "
-                    f"requires integration weights for axis {axis!r}, but "
-                    "none were provided"
+                    f"Reduce binding {axis}={binding} (kind {expr.kind!r}, "
+                    f"kernel {expr.kernel!r}) requires integration weights "
+                    f"for axis {axis!r}, but none were provided"
                 )
                 raise UnsupportedIRLoweringError(msg)
             weighted_axes.append(axis)
@@ -377,13 +398,60 @@ def _lower_reduce(
         axis_names=axis_names,
         reducible_axes=reducible_axes,
         axis_weights=axis_weights,
+        axis_coords=axis_coords,
     )
 
+    # Resolve per-axis filter coord lists to integer indices. v1 lowering
+    # supports the categorical/ordinal-subset case where every filter coord
+    # is an exact label in the axis's declared coords. Continuous-range
+    # filters (numeric ``[lo, hi]`` re-grid) and ordinal label-range
+    # filters fall back to the legacy string-expansion path.
+    filter_indices: dict[str, tuple[int, ...]] = {}
+    for ax, coords in filter_map.items():
+        if ax not in bound_axes:
+            msg = f"Reduce filter for axis {ax!r} has no matching binding"
+            raise UnsupportedIRLoweringError(msg)
+        if ax not in coords_map:
+            msg = (
+                f"Reduce filter for axis {ax!r} requires axis_coords, but "
+                "none were provided"
+            )
+            raise UnsupportedIRLoweringError(msg)
+        declared = coords_map[ax]
+        try:
+            indices = tuple(declared.index(c) for c in coords)
+        except ValueError:
+            msg = (
+                f"Reduce filter {ax}={list(coords)} contains coord(s) not "
+                f"declared on axis {ax!r}; v1 lowering only supports exact "
+                "subsets of the declared coords"
+            )
+            raise UnsupportedIRLoweringError(msg) from None
+        filter_indices[ax] = indices
+
+    for ax, indices in filter_indices.items():
+        pos = extended_target.index(ax)
+        body_ast = ast.Call(
+            func=ast.Attribute(value=_name("np"), attr="take", ctx=ast.Load()),
+            args=[
+                body_ast,
+                ast.List(
+                    elts=[ast.Constant(value=i) for i in indices],
+                    ctx=ast.Load(),
+                ),
+            ],
+            keywords=[ast.keyword(arg="axis", value=ast.Constant(value=pos))],
+        )
+
     for ax in weighted_axes:
+        weights = weights_map[ax]
+        if ax in filter_indices:
+            # Sub-select weights to match the filtered slice.
+            weights = tuple(weights[i] for i in filter_indices[ax])
         body_ast = ast.BinOp(
             left=_weight_constant_for_axis(
                 ax,
-                weights=weights_map[ax],
+                weights=weights,
                 extended_target=extended_target,
             ),
             op=ast.Mult(),
@@ -415,6 +483,10 @@ def _weight_constant_for_axis(
 
     Returns a constant 1-D weights vector reshaped to broadcast along the
     position of ``axis`` within ``extended_target``.
+
+    Returns:
+        An AST expression that evaluates to the broadcast-shaped weights
+        constant.
     """
     pos = extended_target.index(axis)
     arr: ast.expr = ast.Call(
@@ -481,12 +553,18 @@ def _rebind_subscript_indices(  # noqa: PLR0911
         inner_rebind = {k: v for k, v in rebind.items() if k not in inner_bindings}
         new_body = _rebind_subscript_indices(expr.body, rebind=inner_rebind)
         if new_body is not expr.body:
-            return Reduce(kind=expr.kind, bindings=expr.bindings, body=new_body)
+            return Reduce(
+                kind=expr.kind,
+                bindings=expr.bindings,
+                body=new_body,
+                filters=expr.filters,
+                kernel=expr.kernel,
+            )
         return expr
     return expr
 
 
-def _lower_apply(
+def _lower_apply(  # noqa: PLR0913
     expr: Apply,
     *,
     target_axes: tuple[str, ...],
@@ -494,6 +572,7 @@ def _lower_apply(
     axis_names: frozenset[str],
     reducible_axes: frozenset[str] = frozenset(),
     axis_weights: Mapping[str, tuple[float, ...]] | None = None,
+    axis_coords: Mapping[str, tuple[str, ...]] | None = None,
 ) -> ast.expr:
     def lower(child: Expr) -> ast.expr:
         return lower_to_vector_ast(
@@ -503,6 +582,7 @@ def _lower_apply(
             axis_names=axis_names,
             reducible_axes=reducible_axes,
             axis_weights=axis_weights,
+            axis_coords=axis_coords,
         )
 
     if expr.op == "neg" and len(expr.args) == 1:
