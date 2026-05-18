@@ -228,8 +228,8 @@ def test_templates_and_apply_along_compile_and_eval() -> None:
         "axes": [{"name": "pop", "coords": ["p1", "p2"]}],
         "state": ["S[pop]", "I[pop]"],
         "equations": {
-            "S[pop]": "-beta * S[pop] * apply_along(pop=j, I[pop=j])",
-            "I[pop]": "beta * S[pop] * apply_along(pop=j, I[pop=j]) - gamma * I[pop]",
+            "S[pop]": "-beta * S[pop] * apply_along(I[pop:j], pop=j)",
+            "I[pop]": "beta * S[pop] * apply_along(I[pop:j], pop=j) - gamma * I[pop]",
         },
     }
     rhs = normalize_rhs(spec)

@@ -1,6 +1,6 @@
 """Unit tests for the ``apply_along`` expression primitive.
 
-``apply_along(axis1=var1, ..., inner_expr, [kernel=sum|integrate])``
+``apply_along(..., inner_expr, [kernel=sum|integrate], axis1=var1)``
 expands directly to weighted sums over the declared axes (categorical
 axes use uniform weights of 1; continuous axes use trapezoidal weights
 derived from the axis ``deltas``).  These tests cover:
@@ -27,8 +27,8 @@ def test_apply_along_single_axis_categorical_expands_to_sum() -> None:
         "axes": [{"name": "pop", "coords": ["p1", "p2"]}],
         "state": ["S[pop]", "I[pop]"],
         "equations": {
-            "S[pop]": "-beta * S[pop] * apply_along(pop=j, I[pop=j])",
-            "I[pop]": "beta * S[pop] * apply_along(pop=j, I[pop=j]) - gamma * I[pop]",
+            "S[pop]": "-beta * S[pop] * apply_along(I[pop:j], pop=j)",
+            "I[pop]": "beta * S[pop] * apply_along(I[pop:j], pop=j) - gamma * I[pop]",
         },
     }
     out = normalize_expr_rhs(spec)
@@ -48,7 +48,7 @@ def test_apply_along_multi_axis_categorical_expands_outer_product() -> None:
         "state": ["I[age, vax]", "N"],
         "equations": {
             "I[age, vax]": "0.0",
-            "N": "apply_along(age=a, vax=b, I[age=a, vax=b])",
+            "N": "apply_along(I[age:a, vax:b], age=a, vax=b)",
         },
     }
     out = normalize_expr_rhs(spec)
@@ -69,7 +69,7 @@ def test_apply_along_multi_axis_continuous_uses_trapezoidal_weights() -> None:
         "state": ["u[x, y]", "v"],
         "equations": {
             "u[x, y]": "0.0",
-            "v": "apply_along(x=i, y=j, u[x=i, y=j])",
+            "v": "apply_along(u[x:i, y:j], x=i, y=j)",
         },
     }
     out = normalize_expr_rhs(spec)
@@ -90,7 +90,7 @@ def test_apply_along_explicit_kernel_sum() -> None:
         "state": ["x[g]", "tot"],
         "equations": {
             "x[g]": "0.0",
-            "tot": "apply_along(g=i, x[g=i], kernel=sum)",
+            "tot": "apply_along(x[g:i], g=i, kernel=sum)",
         },
     }
     out = normalize_expr_rhs(spec)
@@ -107,7 +107,7 @@ def test_apply_along_explicit_kernel_integrate_on_categorical_axis_errors() -> N
         "state": ["x[g]", "tot"],
         "equations": {
             "x[g]": "0.0",
-            "tot": "apply_along(g=i, x[g=i], kernel=integrate)",
+            "tot": "apply_along(x[g:i], g=i, kernel=integrate)",
         },
     }
     with pytest.raises(ValueError, match=r"requires continuous axes"):
@@ -122,7 +122,7 @@ def test_apply_along_explicit_kernel_sum_on_continuous_axis_errors() -> None:
         "state": ["u[x]", "tot"],
         "equations": {
             "u[x]": "0.0",
-            "tot": "apply_along(x=i, u[x=i], kernel=sum)",
+            "tot": "apply_along(u[x:i], x=i, kernel=sum)",
         },
     }
     with pytest.raises(ValueError, match=r"requires categorical or ordinal axes"):
@@ -140,7 +140,7 @@ def test_apply_along_mixed_axis_types_without_kernel_errors() -> None:
         "state": ["u[g, x]", "tot"],
         "equations": {
             "u[g, x]": "0.0",
-            "tot": "apply_along(g=i, x=j, u[g=i, x=j])",
+            "tot": "apply_along(u[g:i, x:j], g=i, x=j)",
         },
     }
     with pytest.raises(ValueError, match=r"cannot infer kernel"):
@@ -165,7 +165,7 @@ def test_apply_along_requires_exactly_one_inner_expression() -> None:
         "kind": "expr",
         "axes": [{"name": "g", "coords": ["a", "b"]}],
         "state": ["x[g]"],
-        "equations": {"x[g]": "apply_along(g=i, x[g=i], x[g=i])"},
+        "equations": {"x[g]": "apply_along(x[g:i], x[g:i], g=i)"},
     }
     with pytest.raises(ValueError, match=r"exactly one inner expression"):
         normalize_expr_rhs(spec)
@@ -177,7 +177,7 @@ def test_apply_along_unknown_kernel_errors() -> None:
         "kind": "expr",
         "axes": [{"name": "g", "coords": ["a", "b"]}],
         "state": ["x[g]"],
-        "equations": {"x[g]": "apply_along(g=i, x[g=i], kernel=median)"},
+        "equations": {"x[g]": "apply_along(x[g:i], g=i, kernel=median)"},
     }
     with pytest.raises(ValueError, match=r"kernel must be one of"):
         normalize_expr_rhs(spec)
@@ -189,7 +189,7 @@ def test_apply_along_axis_binding_must_be_identifier() -> None:
         "kind": "expr",
         "axes": [{"name": "g", "coords": ["a", "b"]}],
         "state": ["x[g]"],
-        "equations": {"x[g]": "apply_along(g=1+2, x[g=i])"},
+        "equations": {"x[g]": "apply_along(x[g:i], g=1+2)"},
     }
     with pytest.raises(ValueError, match=r"must bind to an identifier"):
         normalize_expr_rhs(spec)
@@ -202,8 +202,8 @@ def test_apply_along_inside_arithmetic_expression() -> None:
         "axes": [{"name": "pop", "coords": ["p1", "p2"]}],
         "state": ["S[pop]", "I[pop]"],
         "equations": {
-            "S[pop]": "-beta * S[pop] * apply_along(pop=j, I[pop=j])",
-            "I[pop]": "beta * S[pop] * apply_along(pop=j, I[pop=j]) - gamma * I[pop]",
+            "S[pop]": "-beta * S[pop] * apply_along(I[pop:j], pop=j)",
+            "I[pop]": "beta * S[pop] * apply_along(I[pop:j], pop=j) - gamma * I[pop]",
         },
     }
     out = normalize_expr_rhs(spec)
@@ -227,7 +227,7 @@ def test_apply_along_nested_inside_apply_along() -> None:
         "state": ["I[age, vax]", "N"],
         "equations": {
             "I[age, vax]": "0.0",
-            "N": "apply_along(age=a, apply_along(vax=b, I[age=a, vax=b]))",
+            "N": "apply_along(apply_along(I[age:a, vax:b], vax=b), age=a)",
         },
     }
     out = normalize_expr_rhs(spec)
@@ -256,7 +256,7 @@ def test_apply_along_nested_three_axes_canonical_order() -> None:
             "N": (
                 "apply_along(age=a, "
                 "apply_along(vax=b, "
-                "apply_along(imm=k, X[age=a, vax=b, imm=k])))"
+                "apply_along(X[age:a, vax:b, imm:k], imm=k)))"
             ),
         },
     }
@@ -276,7 +276,7 @@ def test_apply_along_categorical_filter_subsets_coords() -> None:
         "state": ["pop[vax]", "covered"],
         "equations": {
             "pop[vax]": "0.0",
-            "covered": "apply_along(vax=j in [v, w], pop[vax=j])",
+            "covered": "apply_along(pop[vax:j], vax=j in [v, w])",
         },
     }
     out = normalize_expr_rhs(spec)
@@ -296,7 +296,7 @@ def test_apply_along_continuous_filter_recomputes_trapezoidal_deltas() -> None:
         "state": ["u[x]", "v"],
         "equations": {
             "u[x]": "0.0",
-            "v": "apply_along(x=i in [1.0, 4.0], u[x=i])",
+            "v": "apply_along(u[x:i], x=i in [1.0, 4.0])",
         },
     }
     out = normalize_expr_rhs(spec)
@@ -320,7 +320,7 @@ def test_apply_along_continuous_filter_requires_two_endpoints() -> None:
         "state": ["u[x]", "v"],
         "equations": {
             "u[x]": "0.0",
-            "v": "apply_along(x=i in [0.0, 1.0, 3.0], u[x=i])",
+            "v": "apply_along(u[x:i], x=i in [0.0, 1.0, 3.0])",
         },
     }
     with pytest.raises(Exception, match="2-element"):
@@ -337,7 +337,7 @@ def test_apply_along_continuous_filter_empty_subinterval_errors() -> None:
         "state": ["u[x]", "v"],
         "equations": {
             "u[x]": "0.0",
-            "v": "apply_along(x=i in [1.5, 2.5], u[x=i])",
+            "v": "apply_along(u[x:i], x=i in [1.5, 2.5])",
         },
     }
     with pytest.raises(Exception, match="selects no axis coords"):
@@ -352,7 +352,7 @@ def test_apply_along_filter_unknown_coord_errors() -> None:
         "state": ["pop[vax]", "covered"],
         "equations": {
             "pop[vax]": "0.0",
-            "covered": "apply_along(vax=j in [v, x], pop[vax=j])",
+            "covered": "apply_along(pop[vax:j], vax=j in [v, x])",
         },
     }
     with pytest.raises(Exception, match="unknown coords"):
@@ -370,7 +370,7 @@ def test_apply_along_filter_mixed_with_full_axis_in_multi_binding() -> None:
         "state": ["I[age, vax]", "N"],
         "equations": {
             "I[age, vax]": "0.0",
-            "N": "apply_along(age=a, vax=b in [v, w], I[age=a, vax=b])",
+            "N": "apply_along(I[age:a, vax:b], age=a, vax=b in [v, w])",
         },
     }
     out = normalize_expr_rhs(spec)
@@ -391,7 +391,7 @@ def test_apply_along_ordinal_axis_full_expansion_uses_uniform_weights() -> None:
         "state": ["pop[imm]", "total"],
         "equations": {
             "pop[imm]": "0.0",
-            "total": "apply_along(imm=k, pop[imm=k])",
+            "total": "apply_along(pop[imm:k], imm=k)",
         },
     }
     out = normalize_expr_rhs(spec)
@@ -414,7 +414,7 @@ def test_apply_along_ordinal_filter_inclusive_index_range() -> None:
         "state": ["pop[imm]", "covered"],
         "equations": {
             "pop[imm]": "0.0",
-            "covered": "apply_along(imm=k in [X1, X3], pop[imm=k])",
+            "covered": "apply_along(pop[imm:k], imm=k in [X1, X3])",
         },
     }
     out = normalize_expr_rhs(spec)
@@ -435,7 +435,7 @@ def test_apply_along_ordinal_filter_requires_two_endpoints() -> None:
         "state": ["pop[imm]", "covered"],
         "equations": {
             "pop[imm]": "0.0",
-            "covered": "apply_along(imm=k in [X0, X1, X2], pop[imm=k])",
+            "covered": "apply_along(pop[imm:k], imm=k in [X0, X1, X2])",
         },
     }
     with pytest.raises(Exception, match="2-element"):
@@ -452,7 +452,7 @@ def test_apply_along_ordinal_filter_unknown_endpoint_errors() -> None:
         "state": ["pop[imm]", "covered"],
         "equations": {
             "pop[imm]": "0.0",
-            "covered": "apply_along(imm=k in [X1, X9], pop[imm=k])",
+            "covered": "apply_along(pop[imm:k], imm=k in [X1, X9])",
         },
     }
     with pytest.raises(Exception, match="unknown coords"):
@@ -469,7 +469,7 @@ def test_apply_along_ordinal_filter_reversed_endpoints_errors() -> None:
         "state": ["pop[imm]", "covered"],
         "equations": {
             "pop[imm]": "0.0",
-            "covered": "apply_along(imm=k in [X3, X1], pop[imm=k])",
+            "covered": "apply_along(pop[imm:k], imm=k in [X3, X1])",
         },
     }
     with pytest.raises(Exception, match="index"):
