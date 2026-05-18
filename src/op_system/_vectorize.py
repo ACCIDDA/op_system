@@ -586,6 +586,7 @@ def _try_ir_fast_path(
     target_axes: tuple[str, ...],
     name_to_template: Mapping[str, _BufferTemplate],
     axis_index: Mapping[str, Mapping[str, int]],
+    reducible_axes: frozenset[str] = frozenset(),
 ) -> ast.Expression | None:
     """Attempt to lower per-cell IR straight to a vector AST.
 
@@ -621,6 +622,7 @@ def _try_ir_fast_path(
             target_axes=target_axes,
             buffer_axes=buffer_axes,
             axis_names=frozenset(axis_index.keys()),
+            reducible_axes=reducible_axes,
         )
     except UnsupportedIRLoweringError:
         return None
@@ -633,11 +635,13 @@ def _rewrite_cell_to_vector(  # noqa: PLR0913
     *,
     expr: str,
     expr_ir: Expr | None = None,
+    expr_ir_reduce: Expr | None = None,
     target_axes: tuple[str, ...],
     cell_coords: Mapping[str, str],
     name_to_template: Mapping[str, _BufferTemplate],
     name_to_coords: Mapping[str, Mapping[str, str]],
     axis_index: Mapping[str, Mapping[str, int]],
+    reducible_axes: frozenset[str] = frozenset(),
     shaped_param_axes: Mapping[str, tuple[str, ...]] | None = None,
 ) -> ast.Expression:
     """Rewrite a per-cell expression string into a shaped buffer expression.
@@ -653,12 +657,27 @@ def _rewrite_cell_to_vector(  # noqa: PLR0913
     )
     ast.fix_missing_locations(tree)
     _validate_ast(tree, expr=expr)
+    # Prefer reduce-bearing IR (preserves helper structure as Reduce nodes)
+    # so the typed lowering can emit ``np.sum`` directly. On any v1-scope
+    # violation fall back to the post-expansion raw IR fast path, then to
+    # the legacy per-cell name rewriter.
+    if expr_ir_reduce is not None:
+        fast = _try_ir_fast_path(
+            expr_ir_reduce,
+            target_axes=target_axes,
+            name_to_template=name_to_template,
+            axis_index=axis_index,
+            reducible_axes=reducible_axes,
+        )
+        if fast is not None:
+            return fast
     if expr_ir is not None:
         fast = _try_ir_fast_path(
             expr_ir,
             target_axes=target_axes,
             name_to_template=name_to_template,
             axis_index=axis_index,
+            reducible_axes=reducible_axes,
         )
         if fast is not None:
             return fast
@@ -1200,9 +1219,11 @@ def _vectorize_template_equations(  # noqa: C901, PLR0912, PLR0913, PLR0914, PLR
     template: _BufferTemplate,
     equations: tuple[str, ...],
     equations_ir: tuple[Expr | None, ...] | None = None,
+    equations_ir_reduce: tuple[Expr | None, ...] | None = None,
     name_to_template: Mapping[str, _BufferTemplate],
     name_to_coords: Mapping[str, Mapping[str, str]],
     axis_index: Mapping[str, Mapping[str, int]],
+    reducible_axes: frozenset[str] = frozenset(),
     shaped_param_axes: Mapping[str, tuple[str, ...]] | None = None,
 ) -> (
     tuple[
@@ -1237,6 +1258,12 @@ def _vectorize_template_equations(  # noqa: C901, PLR0912, PLR0913, PLR0914, PLR
     cell_irs = (
         equations_ir[template.offset : template.offset + size]
         if equations_ir is not None and len(equations_ir) == len(equations)
+        else ()
+    )
+    cell_irs_reduce = (
+        equations_ir_reduce[template.offset : template.offset + size]
+        if equations_ir_reduce is not None
+        and len(equations_ir_reduce) == len(equations)
         else ()
     )
     n_axes = len(template.axes)
@@ -1298,11 +1325,15 @@ def _vectorize_template_equations(  # noqa: C901, PLR0912, PLR0913, PLR0914, PLR
                 first_tree = _rewrite_cell_to_vector(
                     expr=cell_exprs[first_idx],
                     expr_ir=cell_irs[first_idx] if cell_irs else None,
+                    expr_ir_reduce=(
+                        cell_irs_reduce[first_idx] if cell_irs_reduce else None
+                    ),
                     target_axes=vec_axes,
                     cell_coords=template.coord_assignments[first_idx],
                     name_to_template=name_to_template,
                     name_to_coords=name_to_coords,
                     axis_index=axis_index,
+                    reducible_axes=reducible_axes,
                     shaped_param_axes=shaped_param_axes,
                 )
             except (ValueError, RuntimeError):
@@ -1313,11 +1344,15 @@ def _vectorize_template_equations(  # noqa: C901, PLR0912, PLR0913, PLR0914, PLR
                     last_tree = _rewrite_cell_to_vector(
                         expr=cell_exprs[last_idx],
                         expr_ir=cell_irs[last_idx] if cell_irs else None,
+                        expr_ir_reduce=(
+                            cell_irs_reduce[last_idx] if cell_irs_reduce else None
+                        ),
                         target_axes=vec_axes,
                         cell_coords=template.coord_assignments[last_idx],
                         name_to_template=name_to_template,
                         name_to_coords=name_to_coords,
                         axis_index=axis_index,
+                        reducible_axes=reducible_axes,
                         shaped_param_axes=shaped_param_axes,
                     )
                 except (ValueError, RuntimeError):
@@ -1420,6 +1455,7 @@ def _build_vector_plan_inner(  # noqa: C901, PLR0911, PLR0912, PLR0914, PLR0915
         return None
 
     axes_pairs: list[tuple[str, list[str]]] = []
+    reducible_axes_set: set[str] = set()
     for ax in axes_meta:
         if not isinstance(ax, Mapping):
             return None
@@ -1434,7 +1470,11 @@ def _build_vector_plan_inner(  # noqa: C901, PLR0911, PLR0912, PLR0914, PLR0915
         # raw values would key ``axis_index`` by ``float`` while lookups use
         # ``str(float)``, causing ``KeyError`` in ``_build_access_ast``.
         axes_pairs.append((ax["name"], [str(c) for c in coords]))
+        ax_type = str(ax.get("type", "categorical")).strip().lower()
+        if ax_type in {"categorical", "ordinal"}:
+            reducible_axes_set.add(ax["name"])
     axis_index = {ax: {c: i for i, c in enumerate(coords)} for ax, coords in axes_pairs}
+    reducible_axes = frozenset(reducible_axes_set)
 
     state_buffers: list[_BufferTemplate] = []
     name_to_template: dict[str, _BufferTemplate] = {}
@@ -1516,22 +1556,28 @@ def _build_vector_plan_inner(  # noqa: C901, PLR0911, PLR0912, PLR0914, PLR0915
                 tree = _rewrite_cell_to_vector(
                     expr=rhs.aliases[buf.expanded_names[0]],
                     expr_ir=rhs.aliases_ir.get(buf.expanded_names[0]),
+                    expr_ir_reduce=rhs.aliases_ir_reduce.get(buf.expanded_names[0]),
                     target_axes=buf.axes,
                     cell_coords=buf.coord_assignments[0],
                     name_to_template=name_to_template,
                     name_to_coords=name_to_coords,
                     axis_index=axis_index,
+                    reducible_axes=reducible_axes,
                     shaped_param_axes=shaped_param_axes,
                 )
                 if len(buf.expanded_names) > 1:
                     last_tree = _rewrite_cell_to_vector(
                         expr=rhs.aliases[buf.expanded_names[-1]],
                         expr_ir=rhs.aliases_ir.get(buf.expanded_names[-1]),
+                        expr_ir_reduce=rhs.aliases_ir_reduce.get(
+                            buf.expanded_names[-1]
+                        ),
                         target_axes=buf.axes,
                         cell_coords=buf.coord_assignments[-1],
                         name_to_template=name_to_template,
                         name_to_coords=name_to_coords,
                         axis_index=axis_index,
+                        reducible_axes=reducible_axes,
                         shaped_param_axes=shaped_param_axes,
                     )
                     if ast.dump(tree) != ast.dump(last_tree):
@@ -1542,11 +1588,13 @@ def _build_vector_plan_inner(  # noqa: C901, PLR0911, PLR0912, PLR0914, PLR0915
                 tree = _rewrite_cell_to_vector(
                     expr=rhs.aliases[buf.expanded_names[0]],
                     expr_ir=rhs.aliases_ir.get(buf.expanded_names[0]),
+                    expr_ir_reduce=rhs.aliases_ir_reduce.get(buf.expanded_names[0]),
                     target_axes=(),
                     cell_coords={},
                     name_to_template=name_to_template,
                     name_to_coords=name_to_coords,
                     axis_index=axis_index,
+                    reducible_axes=reducible_axes,
                     shaped_param_axes=shaped_param_axes,
                 )
             tree = _distribute_const_over_add(tree)
@@ -1563,9 +1611,11 @@ def _build_vector_plan_inner(  # noqa: C901, PLR0911, PLR0912, PLR0914, PLR0915
             template=buf,
             equations=rhs.equations,
             equations_ir=rhs.equations_ir_raw,
+            equations_ir_reduce=rhs.equations_ir_reduce,
             name_to_template=name_to_template,
             name_to_coords=name_to_coords,
             axis_index=axis_index,
+            reducible_axes=reducible_axes,
             shaped_param_axes=shaped_param_axes,
         )
         if result is None:

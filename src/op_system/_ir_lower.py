@@ -225,6 +225,7 @@ def lower_to_vector_ast(
     target_axes: tuple[str, ...],
     buffer_axes: Mapping[str, tuple[str, ...]],
     axis_names: frozenset[str],
+    reducible_axes: frozenset[str] = frozenset(),
 ) -> ast.expr:
     """Lower an IR expression to a vector-shape AST.
 
@@ -241,6 +242,10 @@ def lower_to_vector_ast(
             mapping are treated as scalar (``ast.Name``) leaves.
         axis_names: Registered axis identifier set; passed through to
             :func:`lower_subscript_to_buffer` for index classification.
+        reducible_axes: Axes that may be summed over inside a
+            :class:`Reduce` node. Typically the set of categorical/ordinal
+            axes (uniform-weight kernel). Empty by default — when empty,
+            any :class:`Reduce` raises :class:`UnsupportedIRLoweringError`.
 
     Returns:
         An ``ast.expr`` suitable for ``compile(ast.Expression(body=...))``
@@ -277,17 +282,140 @@ def lower_to_vector_ast(
             target_axes=target_axes,
             buffer_axes=buffer_axes,
             axis_names=axis_names,
+            reducible_axes=reducible_axes,
         )
 
-    if isinstance(expr, Reduce):
+    return _lower_reduce(
+        expr,
+        target_axes=target_axes,
+        buffer_axes=buffer_axes,
+        axis_names=axis_names,
+        reducible_axes=reducible_axes,
+    )
+
+
+_REDUCE_SUM_KINDS: frozenset[str] = frozenset({"apply_along", "sum_over"})
+
+
+def _lower_reduce(
+    expr: Reduce,
+    *,
+    target_axes: tuple[str, ...],
+    buffer_axes: Mapping[str, tuple[str, ...]],
+    axis_names: frozenset[str],
+    reducible_axes: frozenset[str],
+) -> ast.expr:
+    """Lower a :class:`Reduce` node to ``np.sum(body, axis=...)``.
+
+    Restricted to uniform-weight kernels (``apply_along`` / ``sum_over``)
+    over axes that appear in ``reducible_axes`` — i.e. categorical or
+    ordinal axes where the reduction collapses to a plain sum. The
+    ``integrate_over`` kind and any continuous-axis binding raise
+    :class:`UnsupportedIRLoweringError` so callers fall back to the
+    legacy string-expansion path.
+
+    Returns:
+        An ``ast.expr`` invoking ``np.sum`` on the lowered body, with the
+        bound axes collapsed.
+
+    Raises:
+        UnsupportedIRLoweringError: If ``expr.kind`` is not a uniform-sum
+            kind, if any bound axis is not in ``reducible_axes``, or if
+            the body itself violates the v1 lowering subset.
+    """
+    if expr.kind not in _REDUCE_SUM_KINDS:
         msg = (
-            f"Reduce({expr.kind!r}) nodes are not supported by v1 "
-            "lowering; expand helpers before invoking the lowering"
+            f"Reduce kind {expr.kind!r} requires shaped weights; v1 "
+            "lowering supports only uniform-weight reductions "
+            f"({sorted(_REDUCE_SUM_KINDS)})"
         )
         raise UnsupportedIRLoweringError(msg)
 
-    msg = f"unsupported IR node for v1 lowering: {type(expr).__name__}"
-    raise UnsupportedIRLoweringError(msg)
+    bound_axes: list[str] = []
+    rebind: dict[str, str] = {}
+    for axis, binding in expr.bindings:
+        if axis not in reducible_axes:
+            msg = (
+                f"Reduce binding {axis}={binding} targets a non-reducible "
+                "axis (likely continuous) — v1 lowering supports "
+                "uniform-weight categorical reductions only"
+            )
+            raise UnsupportedIRLoweringError(msg)
+        if axis in bound_axes:
+            msg = f"Reduce has duplicate axis binding {axis!r}"
+            raise UnsupportedIRLoweringError(msg)
+        bound_axes.append(axis)
+        rebind[binding] = axis
+
+    rebound_body = _rebind_subscript_indices(expr.body, rebind=rebind)
+
+    extended_target = target_axes + tuple(
+        ax for ax in bound_axes if ax not in target_axes
+    )
+    body_ast = lower_to_vector_ast(
+        rebound_body,
+        target_axes=extended_target,
+        buffer_axes=buffer_axes,
+        axis_names=axis_names,
+        reducible_axes=reducible_axes,
+    )
+
+    reduce_positions = tuple(extended_target.index(ax) for ax in bound_axes)
+    if len(reduce_positions) == 1:
+        axis_arg: ast.expr = ast.Constant(value=reduce_positions[0])
+    else:
+        axis_arg = ast.Tuple(
+            elts=[ast.Constant(value=p) for p in reduce_positions],
+            ctx=ast.Load(),
+        )
+    return ast.Call(
+        func=ast.Attribute(value=_name("np"), attr="sum", ctx=ast.Load()),
+        args=[body_ast],
+        keywords=[ast.keyword(arg="axis", value=axis_arg)],
+    )
+
+
+def _rebind_subscript_indices(  # noqa: PLR0911
+    expr: Expr, *, rebind: Mapping[str, str]
+) -> Expr:
+    """Rewrite Subscript ``AxisIndex(axis, coord=binding)`` slots to FREE.
+
+    Walks ``expr`` recursively; for every ``Subscript``, any index whose
+    ``coord`` matches a key of ``rebind`` (the per-binding coord name
+    chosen by the Reduce) is rewritten to a FREE wildcard on its declared
+    axis. Indices not matching are returned unchanged.
+
+    Returns:
+        A new IR expression with matching Subscript indices rewritten to
+        FREE, or ``expr`` itself when no rewrites apply.
+    """
+    if isinstance(expr, Subscript):
+        new_indices: list[AxisIndex] = []
+        changed = False
+        for idx in expr.indices:
+            if idx.coord and idx.coord in rebind and rebind[idx.coord] == idx.axis:
+                new_indices.append(AxisIndex(axis=idx.axis, kind=AxisKind.FREE))
+                changed = True
+            else:
+                new_indices.append(idx)
+        if changed:
+            return Subscript(name=expr.name, indices=tuple(new_indices))
+        return expr
+    if isinstance(expr, Apply):
+        new_args = tuple(_rebind_subscript_indices(a, rebind=rebind) for a in expr.args)
+        if any(na is not oa for na, oa in zip(new_args, expr.args, strict=True)):
+            return Apply(op=expr.op, args=new_args)
+        return expr
+    if isinstance(expr, Reduce):
+        # Inner Reduce shadows its own bindings: drop shadowed keys from
+        # the outer rebind map before recursing into the inner body.
+        inner_bindings = {b for _, b in expr.bindings}
+        inner_rebind = {k: v for k, v in rebind.items() if k not in inner_bindings}
+        new_body = _rebind_subscript_indices(expr.body, rebind=inner_rebind)
+        if new_body is not expr.body:
+            return Reduce(kind=expr.kind, bindings=expr.bindings, body=new_body)
+        return expr
+    return expr
 
 
 def _lower_apply(
@@ -296,6 +424,7 @@ def _lower_apply(
     target_axes: tuple[str, ...],
     buffer_axes: Mapping[str, tuple[str, ...]],
     axis_names: frozenset[str],
+    reducible_axes: frozenset[str] = frozenset(),
 ) -> ast.expr:
     def lower(child: Expr) -> ast.expr:
         return lower_to_vector_ast(
@@ -303,6 +432,7 @@ def _lower_apply(
             target_axes=target_axes,
             buffer_axes=buffer_axes,
             axis_names=axis_names,
+            reducible_axes=reducible_axes,
         )
 
     if expr.op == "neg" and len(expr.args) == 1:
