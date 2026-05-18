@@ -339,9 +339,7 @@ def _unparse_call_args(args: tuple[Expr, ...]) -> str:
     for arg in args:
         if isinstance(arg, Apply) and arg.op == "kwarg":
             key_node, value_node = arg.args
-            if not isinstance(key_node, Literal) or not isinstance(
-                key_node.value, str
-            ):
+            if not isinstance(key_node, Literal) or not isinstance(key_node.value, str):
                 _invalid(detail="malformed kwarg node in IR unparser")
             parts.append(f"{key_node.value}={unparse_ir(value_node)}")
         else:
