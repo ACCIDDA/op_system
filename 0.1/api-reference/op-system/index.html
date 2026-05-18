@@ -2419,42 +2419,7 @@ removed in a future release.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/op_system/_normalize.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">2923</span>
-<span class="normal">2924</span>
-<span class="normal">2925</span>
-<span class="normal">2926</span>
-<span class="normal">2927</span>
-<span class="normal">2928</span>
-<span class="normal">2929</span>
-<span class="normal">2930</span>
-<span class="normal">2931</span>
-<span class="normal">2932</span>
-<span class="normal">2933</span>
-<span class="normal">2934</span>
-<span class="normal">2935</span>
-<span class="normal">2936</span>
-<span class="normal">2937</span>
-<span class="normal">2938</span>
-<span class="normal">2939</span>
-<span class="normal">2940</span>
-<span class="normal">2941</span>
-<span class="normal">2942</span>
-<span class="normal">2943</span>
-<span class="normal">2944</span>
-<span class="normal">2945</span>
-<span class="normal">2946</span>
-<span class="normal">2947</span>
-<span class="normal">2948</span>
-<span class="normal">2949</span>
-<span class="normal">2950</span>
-<span class="normal">2951</span>
-<span class="normal">2952</span>
-<span class="normal">2953</span>
-<span class="normal">2954</span>
-<span class="normal">2955</span>
-<span class="normal">2956</span>
-<span class="normal">2957</span>
-<span class="normal">2958</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">2958</span>
 <span class="normal">2959</span>
 <span class="normal">2960</span>
 <span class="normal">2961</span>
@@ -2591,7 +2556,42 @@ removed in a future release.</p>
 <span class="normal">3092</span>
 <span class="normal">3093</span>
 <span class="normal">3094</span>
-<span class="normal">3095</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">normalize_expr_rhs</span><span class="p">(</span><span class="n">spec</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">NormalizedRhs</span><span class="p">:</span>  <span class="c1"># noqa: C901, PLR0914, PLR0915</span>
+<span class="normal">3095</span>
+<span class="normal">3096</span>
+<span class="normal">3097</span>
+<span class="normal">3098</span>
+<span class="normal">3099</span>
+<span class="normal">3100</span>
+<span class="normal">3101</span>
+<span class="normal">3102</span>
+<span class="normal">3103</span>
+<span class="normal">3104</span>
+<span class="normal">3105</span>
+<span class="normal">3106</span>
+<span class="normal">3107</span>
+<span class="normal">3108</span>
+<span class="normal">3109</span>
+<span class="normal">3110</span>
+<span class="normal">3111</span>
+<span class="normal">3112</span>
+<span class="normal">3113</span>
+<span class="normal">3114</span>
+<span class="normal">3115</span>
+<span class="normal">3116</span>
+<span class="normal">3117</span>
+<span class="normal">3118</span>
+<span class="normal">3119</span>
+<span class="normal">3120</span>
+<span class="normal">3121</span>
+<span class="normal">3122</span>
+<span class="normal">3123</span>
+<span class="normal">3124</span>
+<span class="normal">3125</span>
+<span class="normal">3126</span>
+<span class="normal">3127</span>
+<span class="normal">3128</span>
+<span class="normal">3129</span>
+<span class="normal">3130</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">normalize_expr_rhs</span><span class="p">(</span><span class="n">spec</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">NormalizedRhs</span><span class="p">:</span>  <span class="c1"># noqa: C901, PLR0914, PLR0915</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Normalize an expression-based RHS specification.</span>
 
 <span class="sd">    Args:</span>
@@ -2877,35 +2877,35 @@ removed in a future release.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/op_system/_normalize.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">2892</span>
-<span class="normal">2893</span>
-<span class="normal">2894</span>
-<span class="normal">2895</span>
-<span class="normal">2896</span>
-<span class="normal">2897</span>
-<span class="normal">2898</span>
-<span class="normal">2899</span>
-<span class="normal">2900</span>
-<span class="normal">2901</span>
-<span class="normal">2902</span>
-<span class="normal">2903</span>
-<span class="normal">2904</span>
-<span class="normal">2905</span>
-<span class="normal">2906</span>
-<span class="normal">2907</span>
-<span class="normal">2908</span>
-<span class="normal">2909</span>
-<span class="normal">2910</span>
-<span class="normal">2911</span>
-<span class="normal">2912</span>
-<span class="normal">2913</span>
-<span class="normal">2914</span>
-<span class="normal">2915</span>
-<span class="normal">2916</span>
-<span class="normal">2917</span>
-<span class="normal">2918</span>
-<span class="normal">2919</span>
-<span class="normal">2920</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">normalize_rhs</span><span class="p">(</span><span class="n">spec</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">NormalizedRhs</span><span class="p">:</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">2927</span>
+<span class="normal">2928</span>
+<span class="normal">2929</span>
+<span class="normal">2930</span>
+<span class="normal">2931</span>
+<span class="normal">2932</span>
+<span class="normal">2933</span>
+<span class="normal">2934</span>
+<span class="normal">2935</span>
+<span class="normal">2936</span>
+<span class="normal">2937</span>
+<span class="normal">2938</span>
+<span class="normal">2939</span>
+<span class="normal">2940</span>
+<span class="normal">2941</span>
+<span class="normal">2942</span>
+<span class="normal">2943</span>
+<span class="normal">2944</span>
+<span class="normal">2945</span>
+<span class="normal">2946</span>
+<span class="normal">2947</span>
+<span class="normal">2948</span>
+<span class="normal">2949</span>
+<span class="normal">2950</span>
+<span class="normal">2951</span>
+<span class="normal">2952</span>
+<span class="normal">2953</span>
+<span class="normal">2954</span>
+<span class="normal">2955</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">normalize_rhs</span><span class="p">(</span><span class="n">spec</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">NormalizedRhs</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Normalize a RHS specification dict into a backend-facing representation.</span>
 
 <span class="sd">    Args:</span>
@@ -3006,42 +3006,7 @@ removed in a future release.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/op_system/_normalize.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">3156</span>
-<span class="normal">3157</span>
-<span class="normal">3158</span>
-<span class="normal">3159</span>
-<span class="normal">3160</span>
-<span class="normal">3161</span>
-<span class="normal">3162</span>
-<span class="normal">3163</span>
-<span class="normal">3164</span>
-<span class="normal">3165</span>
-<span class="normal">3166</span>
-<span class="normal">3167</span>
-<span class="normal">3168</span>
-<span class="normal">3169</span>
-<span class="normal">3170</span>
-<span class="normal">3171</span>
-<span class="normal">3172</span>
-<span class="normal">3173</span>
-<span class="normal">3174</span>
-<span class="normal">3175</span>
-<span class="normal">3176</span>
-<span class="normal">3177</span>
-<span class="normal">3178</span>
-<span class="normal">3179</span>
-<span class="normal">3180</span>
-<span class="normal">3181</span>
-<span class="normal">3182</span>
-<span class="normal">3183</span>
-<span class="normal">3184</span>
-<span class="normal">3185</span>
-<span class="normal">3186</span>
-<span class="normal">3187</span>
-<span class="normal">3188</span>
-<span class="normal">3189</span>
-<span class="normal">3190</span>
-<span class="normal">3191</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">3191</span>
 <span class="normal">3192</span>
 <span class="normal">3193</span>
 <span class="normal">3194</span>
@@ -3212,7 +3177,42 @@ removed in a future release.</p>
 <span class="normal">3359</span>
 <span class="normal">3360</span>
 <span class="normal">3361</span>
-<span class="normal">3362</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">normalize_transitions_rhs</span><span class="p">(</span>  <span class="c1"># noqa: C901, PLR0912, PLR0914, PLR0915</span>
+<span class="normal">3362</span>
+<span class="normal">3363</span>
+<span class="normal">3364</span>
+<span class="normal">3365</span>
+<span class="normal">3366</span>
+<span class="normal">3367</span>
+<span class="normal">3368</span>
+<span class="normal">3369</span>
+<span class="normal">3370</span>
+<span class="normal">3371</span>
+<span class="normal">3372</span>
+<span class="normal">3373</span>
+<span class="normal">3374</span>
+<span class="normal">3375</span>
+<span class="normal">3376</span>
+<span class="normal">3377</span>
+<span class="normal">3378</span>
+<span class="normal">3379</span>
+<span class="normal">3380</span>
+<span class="normal">3381</span>
+<span class="normal">3382</span>
+<span class="normal">3383</span>
+<span class="normal">3384</span>
+<span class="normal">3385</span>
+<span class="normal">3386</span>
+<span class="normal">3387</span>
+<span class="normal">3388</span>
+<span class="normal">3389</span>
+<span class="normal">3390</span>
+<span class="normal">3391</span>
+<span class="normal">3392</span>
+<span class="normal">3393</span>
+<span class="normal">3394</span>
+<span class="normal">3395</span>
+<span class="normal">3396</span>
+<span class="normal">3397</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">normalize_transitions_rhs</span><span class="p">(</span>  <span class="c1"># noqa: C901, PLR0912, PLR0914, PLR0915</span>
     <span class="n">spec</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">NormalizedRhs</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Normalize a transition-based RHS specification (diagram/hazard semantics).</span>
