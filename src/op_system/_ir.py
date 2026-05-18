@@ -605,7 +605,10 @@ def walk(expr: Expr) -> Iterator[Expr]:
         yield from walk(expr.body)
 
 
-def free_symbols(expr: Expr) -> frozenset[str]:
+def free_symbols(
+    expr: Expr,
+    memo: dict[int, frozenset[str]] | None = None,
+) -> frozenset[str]:
     """Return the set of ``Sym`` names referenced under ``expr``.
 
     ``Reduce`` bindings shadow outer symbols of the same name: a bound name
@@ -613,27 +616,45 @@ def free_symbols(expr: Expr) -> frozenset[str]:
 
     Args:
         expr: Root IR expression.
+        memo: Optional identity-keyed cache (``id(node) -> frozenset``) used
+            to share subtree results across calls on shared (frozen) IR.
+            Callers that invoke ``free_symbols`` many times over the same
+            substructure (e.g. inlining one alias body into many equations)
+            should pass a single memo dict to avoid O(alias_size) per call.
 
     Returns:
         Frozen set of identifier strings that occur as free :class:`Sym`
         references.
     """
+    if memo is None:
+        memo = {}
+    key = id(expr)
+    cached = memo.get(key)
+    if cached is not None:
+        return cached
     if isinstance(expr, Sym):
-        return frozenset({expr.name})
-    if isinstance(expr, (Literal, Subscript)):
-        return frozenset()
-    if isinstance(expr, Apply):
-        out: set[str] = set()
+        out: frozenset[str] = frozenset({expr.name})
+    elif isinstance(expr, (Literal, Subscript)):
+        out = frozenset()
+    elif isinstance(expr, Apply):
+        acc: set[str] = set()
         for arg in expr.args:
-            out |= free_symbols(arg)
-        return frozenset(out)
-    if isinstance(expr, Reduce):
+            acc |= free_symbols(arg, memo)
+        out = frozenset(acc)
+    elif isinstance(expr, Reduce):
         bound = {bind for _, bind in expr.bindings}
-        return frozenset(free_symbols(expr.body) - bound)
-    _invalid(detail=f"unsupported IR node in free_symbols: {type(expr).__name__}")
+        out = frozenset(free_symbols(expr.body, memo) - bound)
+    else:
+        _invalid(detail=f"unsupported IR node in free_symbols: {type(expr).__name__}")
+    memo[key] = out
+    return out
 
 
-def substitute(expr: Expr, mapping: Mapping[str, Expr]) -> Expr:
+def substitute(
+    expr: Expr,
+    mapping: Mapping[str, Expr],
+    memo: dict[int, frozenset[str]] | None = None,
+) -> Expr:
     """Replace named ``Sym`` leaves with their mapped IR expression.
 
     The substitution is capture-avoiding with respect to ``Reduce`` bindings:
@@ -643,11 +664,18 @@ def substitute(expr: Expr, mapping: Mapping[str, Expr]) -> Expr:
     Args:
         expr: Root IR expression.
         mapping: Substitution table from symbol name to replacement IR.
+        memo: Optional identity-keyed cache shared with :func:`free_symbols`.
+            When provided, subtrees with no free symbols intersecting
+            ``mapping`` keys are returned unchanged in O(1), avoiding a full
+            re-walk of large alias bodies that were just inlined.
 
     Returns:
         A new IR expression with substitutions applied; structurally equal
         to ``expr`` when no replacements occur.
     """
+    keys = mapping.keys()
+    if memo is not None and not (free_symbols(expr, memo) & keys):
+        return expr
     if isinstance(expr, Sym):
         return mapping.get(expr.name, expr)
     if isinstance(expr, (Literal, Subscript)):
@@ -655,7 +683,7 @@ def substitute(expr: Expr, mapping: Mapping[str, Expr]) -> Expr:
     if isinstance(expr, Apply):
         return Apply(
             op=expr.op,
-            args=tuple(substitute(arg, mapping) for arg in expr.args),
+            args=tuple(substitute(arg, mapping, memo) for arg in expr.args),
         )
     if isinstance(expr, Reduce):
         bound = {bind for _, bind in expr.bindings}
@@ -667,7 +695,7 @@ def substitute(expr: Expr, mapping: Mapping[str, Expr]) -> Expr:
         return Reduce(
             kind=expr.kind,
             bindings=expr.bindings,
-            body=substitute(expr.body, inner),
+            body=substitute(expr.body, inner, memo),
         )
     _invalid(detail=f"unsupported IR node in substitute: {type(expr).__name__}")
 
