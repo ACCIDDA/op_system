@@ -1136,6 +1136,7 @@ def _vectorize_template_equations(  # noqa: C901, PLR0912, PLR0913, PLR0914, PLR
     *,
     template: _BufferTemplate,
     equations: tuple[str, ...],
+    equations_ir: tuple[Expr | None, ...] | None = None,
     name_to_template: Mapping[str, _BufferTemplate],
     name_to_coords: Mapping[str, Mapping[str, str]],
     axis_index: Mapping[str, Mapping[str, int]],
@@ -1170,6 +1171,11 @@ def _vectorize_template_equations(  # noqa: C901, PLR0912, PLR0913, PLR0914, PLR
     cell_exprs = equations[template.offset : template.offset + size]
     if len(cell_exprs) != size or size == 0:
         return None
+    cell_irs = (
+        equations_ir[template.offset : template.offset + size]
+        if equations_ir is not None and len(equations_ir) == len(equations)
+        else ()
+    )
     n_axes = len(template.axes)
 
     # Enumerate candidate unroll-axis index subsets, smallest first.
@@ -1228,6 +1234,7 @@ def _vectorize_template_equations(  # noqa: C901, PLR0912, PLR0913, PLR0914, PLR
             try:
                 first_tree = _rewrite_cell_to_vector(
                     expr=cell_exprs[first_idx],
+                    expr_ir=cell_irs[first_idx] if cell_irs else None,
                     target_axes=vec_axes,
                     cell_coords=template.coord_assignments[first_idx],
                     name_to_template=name_to_template,
@@ -1242,6 +1249,7 @@ def _vectorize_template_equations(  # noqa: C901, PLR0912, PLR0913, PLR0914, PLR
                 try:
                     last_tree = _rewrite_cell_to_vector(
                         expr=cell_exprs[last_idx],
+                        expr_ir=cell_irs[last_idx] if cell_irs else None,
                         target_axes=vec_axes,
                         cell_coords=template.coord_assignments[last_idx],
                         name_to_template=name_to_template,
@@ -1491,6 +1499,7 @@ def _build_vector_plan_inner(  # noqa: C901, PLR0911, PLR0912, PLR0914, PLR0915
         result = _vectorize_template_equations(
             template=buf,
             equations=rhs.equations,
+            equations_ir=rhs.equations_ir_raw,
             name_to_template=name_to_template,
             name_to_coords=name_to_coords,
             axis_index=axis_index,

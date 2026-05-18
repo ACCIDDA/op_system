@@ -131,6 +131,35 @@ def test_vectorizer_uses_aliases_ir_for_alias_code() -> None:
     assert "I_buf" in alias_codes["I_total"].co_names
 
 
+def test_vectorizer_uses_equations_ir_for_alias_free_equations() -> None:
+    """Alias-free equation vectorization should consume ``equations_ir``."""
+    rhs = normalize_rhs(_sir_templated_param_spec())
+    rhs = replace(
+        rhs,
+        equations=tuple("not valid python !!!" for _ in rhs.equations),
+    )
+
+    plan = build_vector_plan(rhs)
+    assert plan is not None
+    assert len(plan.eq_groups) == 2
+    assert all(group.codes for group in plan.eq_groups)
+
+
+def test_vectorizer_uses_raw_equations_ir_with_alias_buffers() -> None:
+    """Equation vectorization should use raw IR while preserving aliases."""
+    rhs = normalize_rhs(_sir_two_axis_spec())
+    rhs = replace(
+        rhs,
+        equations=tuple("not valid python !!!" for _ in rhs.equations),
+    )
+
+    plan = build_vector_plan(rhs)
+    assert plan is not None
+    alias_codes = {base: code for base, code, _shape in plan.alias_codes}
+    assert "I_total" in alias_codes
+    assert all(group.codes for group in plan.eq_groups)
+
+
 def test_full_vectorization_when_no_structural_variation() -> None:
     """Fully-vectorize when all cells of a template are structurally identical.
 

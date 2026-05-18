@@ -42,7 +42,7 @@ from op_system._ir import Expr, extract_common_subexpressions, ir_to_ast_expr
 from op_system._symbols import parse_expression_string
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Mapping
+    from collections.abc import Callable, Iterable, Mapping
     from types import CodeType
 
     from .specs import NormalizedRhs
@@ -407,6 +407,7 @@ def _collect_alias_code(
 def _collect_eq_code(
     equations: tuple[str, ...],
     equations_ir: tuple[Expr | None, ...] | None = None,
+    reserved_names: Iterable[str] = (),
 ) -> tuple[tuple[tuple[str, CodeType], ...], list[CodeType]]:
     """Compile equation expressions into code objects.
 
@@ -414,6 +415,7 @@ def _collect_eq_code(
         equations: Tuple of equation expression strings.
         equations_ir: Optional tuple of typed IR expressions, positionally
             aligned with ``equations``.
+        reserved_names: Runtime names that generated CSE temporaries must avoid.
 
     Returns:
         CSE binding code objects plus equation code objects.
@@ -427,6 +429,7 @@ def _collect_eq_code(
         bindings, rewritten = extract_common_subexpressions(
             concrete_ir,
             prefix="__op_system_cse_",
+            reserved_names=reserved_names,
         )
         cse_code = tuple((name, _compile_expr(name, expr)) for name, expr in bindings)
         eq_code = [  # noqa: FURB140
@@ -567,7 +570,12 @@ def _make_eval_fn(
     n_state = len(state_names)
     name_to_idx = {s: i for i, s in enumerate(state_names)}
     alias_code = _collect_alias_code(aliases, aliases_ir)
-    cse_code, eq_code = _collect_eq_code(equations, equations_ir)
+    reserved_names = {*state_names, *aliases, "np", "t", "sum_state", "sum_prefix"}
+    cse_code, eq_code = _collect_eq_code(
+        equations,
+        equations_ir,
+        reserved_names=reserved_names,
+    )
 
     def eval_fn(t: object, y: object, **params: object) -> Float64Array:
         xp = _namespace_of(y)

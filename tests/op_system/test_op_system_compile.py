@@ -328,8 +328,12 @@ def test_scalar_compile_extracts_equation_ir_cse() -> None:
         },
     })
 
-    cse_code, _ = _collect_eq_code(rhs.equations, rhs.equations_ir)
-    assert tuple(name for name, _ in cse_code) == ("__op_system_cse_0",)
+    cse_code, _ = _collect_eq_code(
+        rhs.equations,
+        rhs.equations_ir,
+        reserved_names={"__op_system_cse_0"},
+    )
+    assert tuple(name for name, _ in cse_code) == ("__op_system_cse_1",)
 
     compiled = compile_rhs(rhs, xp=np)
     out = compiled.eval_fn(

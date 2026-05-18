@@ -2092,11 +2092,17 @@ def test_equations_ir_aligned_with_equations_expr_kind() -> None:
     }
     out = normalize_expr_rhs(spec)
     assert len(out.equations_ir) == len(out.equations)
+    assert len(out.equations_ir_raw) == len(out.equations)
     assert all(expr is not None for expr in out.equations_ir)
     # Aliases inlined: ``N`` should not appear in any equation IR.
     for expr in out.equations_ir:
         assert expr is not None
         assert "N" not in free_symbols(expr)
+    # Raw equation IR is available for consumers that still want alias-buffer
+    # references rather than inlined alias bodies.
+    assert any(
+        expr is not None and "N" in free_symbols(expr) for expr in out.equations_ir_raw
+    )
 
 
 def test_equations_ir_present_for_transitions_kind() -> None:
@@ -2112,6 +2118,7 @@ def test_equations_ir_present_for_transitions_kind() -> None:
     }
     out = normalize_transitions_rhs(spec)
     assert len(out.equations_ir) == len(out.equations)
+    assert len(out.equations_ir_raw) == len(out.equations)
     assert all(expr is not None for expr in out.equations_ir)
     for expr in out.equations_ir:
         assert expr is not None

@@ -125,6 +125,7 @@ class NormalizedRhs:
     time_varying_params: tuple[tuple[str, tuple[str, ...]], ...] = ()
     aliases_ir: Mapping[str, Expr] = field(default_factory=dict)
     equations_ir: tuple[Expr | None, ...] = ()
+    equations_ir_raw: tuple[Expr | None, ...] = ()
 
 
 # ---------------------------------------------------------------------------
@@ -1171,9 +1172,9 @@ def _build_aliases_ir(aliases: Mapping[str, str]) -> dict[str, Expr]:
 
 def _build_equations_ir(
     equations: tuple[str, ...],
-    aliases_ir: Mapping[str, Expr],
+    aliases_ir: Mapping[str, Expr] | None = None,
 ) -> tuple[Expr | None, ...]:
-    """Parse each equation RHS to IR, inlining alias references.
+    """Parse each equation RHS to IR, optionally inlining alias references.
 
     Best-effort: entries that fail to parse or inline are returned as ``None``
     so positional alignment with ``equations`` is preserved. Mirrors the
@@ -1195,6 +1196,9 @@ def _build_equations_ir(
                 expr = parse_expr_to_ir(eq)
             except (ValueError, RecursionError):
                 out.append(None)
+                continue
+            if aliases_ir is None:
+                out.append(expr)
                 continue
             try:
                 out.append(inline_aliases(expr, aliases_ir))
@@ -3087,6 +3091,7 @@ def normalize_expr_rhs(spec: Mapping[str, Any]) -> NormalizedRhs:  # noqa: C901,
         time_varying_params=tuple(sorted(time_varying_full.items())),
         aliases_ir=aliases_ir_map,
         equations_ir=_build_equations_ir(eqs_tuple, aliases_ir_map),
+        equations_ir_raw=_build_equations_ir(eqs_tuple),
     )
 
 
@@ -3353,4 +3358,5 @@ def normalize_transitions_rhs(  # noqa: C901, PLR0912, PLR0914, PLR0915
         time_varying_params=tuple(sorted(time_varying_full.items())),
         aliases_ir=aliases_ir_map,
         equations_ir=_build_equations_ir(eqs_tuple, aliases_ir_map),
+        equations_ir_raw=_build_equations_ir(eqs_tuple),
     )

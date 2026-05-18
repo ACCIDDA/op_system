@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, NoReturn
 from ._errors import InvalidExpressionError
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Iterator, Mapping, Sequence
+    from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 
 
 @dataclass(frozen=True, slots=True)
@@ -712,6 +712,7 @@ def extract_common_subexpressions(
     *,
     prefix: str = "_cse",
     min_cost: int = 2,
+    reserved_names: Iterable[str] = (),
 ) -> tuple[tuple[tuple[str, Expr], ...], tuple[Expr, ...]]:
     """Extract repeated IR subtrees into deterministic symbol bindings.
 
@@ -725,6 +726,7 @@ def extract_common_subexpressions(
         exprs: Root IR expressions to analyze together.
         prefix: Prefix used for generated temporary symbol names.
         min_cost: Minimum subtree cost eligible for extraction.
+        reserved_names: Names that generated temporaries must not use.
 
     Returns:
         ``(bindings, rewritten_exprs)`` where ``bindings`` is a tuple of
@@ -740,7 +742,17 @@ def extract_common_subexpressions(
         for expr, count in counts.items()
         if count > 1 and _is_cse_candidate(expr) and _expr_cost(expr) >= min_cost
     )
-    names = {expr: f"{prefix}{i}" for i, expr in enumerate(selected)}
+    reserved = set(reserved_names)
+    names: dict[Expr, str] = {}
+    next_index = 0
+    for expr in selected:
+        while True:
+            candidate = f"{prefix}{next_index}"
+            next_index += 1
+            if candidate not in reserved:
+                break
+        names[expr] = candidate
+        reserved.add(candidate)
 
     def replace(expr: Expr) -> Expr:
         name = names.get(expr)
