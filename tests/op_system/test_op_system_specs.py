@@ -18,7 +18,7 @@ import pytest
 from op_system import compile_rhs
 from op_system._constraints import _ConstraintRule, _normalize_constraints
 from op_system._errors import InvalidRhsSpecError
-from op_system._ir import Apply, free_symbols, parse_expr_to_ir
+from op_system._ir import Apply, Reduce, free_symbols, parse_expr_to_ir, walk
 from op_system.specs import (
     NormalizedRhs,
     StateTemplate,
@@ -2134,3 +2134,95 @@ def test_equations_ir_round_trip_matches_parse_expr_to_ir() -> None:
     }
     out = normalize_expr_rhs(spec)
     assert out.equations_ir[0] == parse_expr_to_ir("a + b")
+
+
+# ---------------------------------------------------------------------------
+# Helper-bearing IR fields (aliases_ir_reduce / equations_ir_reduce)
+# ---------------------------------------------------------------------------
+
+
+def test_equations_ir_reduce_is_positionally_aligned() -> None:
+    """``equations_ir_reduce`` aligns with ``equations`` when populated."""
+    spec = {
+        "kind": "expr",
+        "axes": [{"name": "pop", "coords": ["p1", "p2"]}],
+        "state": ["S[pop]", "I[pop]"],
+        "equations": {
+            "S[pop]": "-beta * S[pop] * apply_along(pop=j, I[pop=j])",
+            "I[pop]": ("beta * S[pop] * apply_along(pop=j, I[pop=j]) - gamma * I[pop]"),
+        },
+    }
+    out = normalize_expr_rhs(spec)
+    assert len(out.equations_ir_reduce) == len(out.equations)
+
+
+def test_equations_ir_reduce_contains_reduce_nodes_for_apply_along() -> None:
+    """Pre-expansion IR exposes ``Reduce`` nodes for ``apply_along`` calls."""
+    spec = {
+        "kind": "expr",
+        "axes": [{"name": "pop", "coords": ["p1", "p2"]}],
+        "state": ["S[pop]", "I[pop]"],
+        "equations": {
+            "S[pop]": "-beta * S[pop] * apply_along(pop=j, I[pop=j])",
+            "I[pop]": ("beta * S[pop] * apply_along(pop=j, I[pop=j]) - gamma * I[pop]"),
+        },
+    }
+    out = normalize_expr_rhs(spec)
+    expr = out.equations_ir_reduce[0]
+    assert expr is not None
+    reduces = [n for n in walk(expr) if isinstance(n, Reduce)]
+    assert len(reduces) == 1
+    r = reduces[0]
+    assert r.kind == "apply_along"
+    assert r.bindings == (("pop", "j"),)
+
+
+def test_aliases_ir_reduce_contains_reduce_for_aliased_apply_along() -> None:
+    """Aliases whose body is an ``apply_along`` produce ``Reduce`` IR."""
+    spec = {
+        "kind": "expr",
+        "axes": [{"name": "pop", "coords": ["p1", "p2"]}],
+        "state": ["S[pop]", "I[pop]"],
+        "aliases": {"I_total": "apply_along(pop=j, I[pop=j])"},
+        "equations": {
+            "S[pop]": "-beta * S[pop] * I_total",
+            "I[pop]": "beta * S[pop] * I_total - gamma * I[pop]",
+        },
+    }
+    out = normalize_expr_rhs(spec)
+    assert "I_total" in out.aliases_ir_reduce
+    body = out.aliases_ir_reduce["I_total"]
+    reduces = [n for n in walk(body) if isinstance(n, Reduce)]
+    assert len(reduces) == 1
+    assert reduces[0].kind == "apply_along"
+
+
+def test_equations_ir_reduce_empty_for_transitions_kind() -> None:
+    """``transitions`` kind leaves the reduce-bearing IR fields empty."""
+    spec = {
+        "kind": "transitions",
+        "state": ["S", "I", "R"],
+        "aliases": {"N": "S + I + R"},
+        "transitions": [
+            {"from": "S", "to": "I", "rate": "beta * I / N"},
+            {"from": "I", "to": "R", "rate": "gamma"},
+        ],
+    }
+    out = normalize_transitions_rhs(spec)
+    assert out.aliases_ir_reduce == {}
+    assert out.equations_ir_reduce == ()
+
+
+def test_equations_ir_reduce_matches_equations_ir_when_no_helpers() -> None:
+    """Without helpers, reduce-IR parses to the same tree as standard IR."""
+    spec = {
+        "kind": "expr",
+        "state": ["S", "I"],
+        "equations": {"S": "-beta * S * I", "I": "beta * S * I - gamma * I"},
+    }
+    out = normalize_expr_rhs(spec)
+    assert len(out.equations_ir_reduce) == len(out.equations_ir)
+    for ir_reduce, ir_raw in zip(
+        out.equations_ir_reduce, out.equations_ir_raw, strict=True
+    ):
+        assert ir_reduce == ir_raw

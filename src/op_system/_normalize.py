@@ -36,7 +36,7 @@ from op_system._helpers import (
     _ensure_str_list,
     _sorted_unique,
 )
-from op_system._ir import Expr, parse_expr_to_ir
+from op_system._ir import Apply, AxisIndex, Expr, Reduce, Subscript, parse_expr_to_ir
 from op_system._ir_templates import _detect_alias_cycle, inline_aliases
 from op_system._symbols import _collect_names, _parse_expr
 from op_system._templates import (
@@ -126,6 +126,17 @@ class NormalizedRhs:
     aliases_ir: Mapping[str, Expr] = field(default_factory=dict)
     equations_ir: tuple[Expr | None, ...] = ()
     equations_ir_raw: tuple[Expr | None, ...] = ()
+    # Helper-bearing IR variants: aliases/equations parsed from their
+    # *pre-expansion* string form (i.e. before ``_expand_helpers`` lowers
+    # ``apply_along`` / ``sum_over`` / ``integrate_over`` to per-cell
+    # sums) with ``parse_expr_to_ir(lower_helpers=True)``. Carries
+    # ``Reduce`` nodes; intended for downstream IR-fast-path consumers.
+    # Best-effort, parallel to ``aliases_ir`` / ``equations_ir`` — entries
+    # that fail to parse or inline are omitted (aliases) or stored as
+    # ``None`` (equations). Empty for ``kind == "transitions"`` (rates are
+    # not yet plumbed through this surface).
+    aliases_ir_reduce: Mapping[str, Expr] = field(default_factory=dict)
+    equations_ir_reduce: tuple[Expr | None, ...] = ()
 
 
 # ---------------------------------------------------------------------------
@@ -1069,13 +1080,14 @@ def _expand_state_templates(
     return expanded, template_map
 
 
-def _expand_alias_templates(
+def _expand_alias_templates(  # noqa: PLR0913
     aliases_raw: Mapping[str, str],
     *,
     axes: list[dict[str, Any]],
     template_map_seed: Mapping[str, list[tuple[str, dict[str, str]]]],
     shaped_params: Mapping[str, tuple[str, ...]] | None = None,
     axis_lookup: Mapping[str, list[str]] | None = None,
+    passthrough_helpers: bool = False,
 ) -> tuple[dict[str, str], dict[str, list[tuple[str, dict[str, str]]]]]:
     """Expand templated alias names and substitute inline placeholders.
 
@@ -1115,6 +1127,7 @@ def _expand_alias_templates(
                     shaped_params=shaped_params,
                     lhs_assignment=assignment,
                     axis_coords=axis_lookup,
+                    passthrough=passthrough_helpers,
                 )
                 substituted = _apply_template_substitutions(
                     expanded_expr,
@@ -1126,13 +1139,165 @@ def _expand_alias_templates(
                 aliases_out[expanded_name] = substituted
         else:
             aliases_out[raw_name] = _expand_helpers(
-                expr_s, axes=axes, shaped_params=shaped_params
+                expr_s,
+                axes=axes,
+                shaped_params=shaped_params,
+                passthrough=passthrough_helpers,
             )
 
     return aliases_out, alias_template_map
 
 
-def _build_aliases_ir(aliases: Mapping[str, str]) -> dict[str, Expr]:
+# ``[axis=binding]`` subscript notation is used in pre-expansion spec strings
+# (e.g. ``I[pop=j]`` inside an ``apply_along(pop=j, ...)`` body) and is not
+# valid Python syntax, so ``parse_expr_to_ir`` cannot consume it directly.
+# When building helper-bearing (``Reduce``-node) IR for downstream consumers,
+# we rewrite each such bracket slot to a single marker identifier of the
+# form ``__op_bv__<axis>__<binding>__`` so the IR parser sees a bare name,
+# then post-process the resulting IR to restore ``AxisIndex(axis, coord)``.
+_BOUND_SUBSCRIPT_BRACKET_RE = re.compile(r"\[([^\[\]]*)\]")
+_BOUND_AX_MARKER_RE = re.compile(
+    r"^__op_bv__([A-Za-z_][A-Za-z0-9_]*)__([A-Za-z_][A-Za-z0-9_]*)__$"
+)
+
+
+def _preprocess_bound_subscripts(expr_s: str) -> str:
+    """Rewrite ``name[axis=binding, ...]`` slots to marker identifiers.
+
+    Only bracket slots that look like a simple ``axis=binding`` pair are
+    rewritten; list-literal contents (``in [c1, c2]`` filters, etc.) are
+    left alone. Nested brackets are not supported by this single-pass
+    regex and will simply be left unchanged — callers should treat the
+    second-pass IR build as best-effort.
+
+    Returns:
+        The input string with each ``axis=binding`` subscript slot
+        replaced by a single marker identifier.
+    """
+
+    def _repl(match: re.Match[str]) -> str:
+        inner = match.group(1)
+        parts = [p.strip() for p in inner.split(",")]
+        new_parts: list[str] = []
+        for p in parts:
+            if "=" in p and " in " not in p:
+                axis, binding = (s.strip() for s in p.split("=", 1))
+                if axis.isidentifier() and binding.isidentifier():
+                    new_parts.append(f"__op_bv__{axis}__{binding}__")
+                    continue
+            new_parts.append(p)
+        return "[" + ", ".join(new_parts) + "]"
+
+    return _BOUND_SUBSCRIPT_BRACKET_RE.sub(_repl, expr_s)
+
+
+_HELPER_CALL_NAMES: tuple[str, ...] = ("apply_along", "sum_over", "integrate_over")
+
+
+def _reorder_helper_call_args(expr_s: str) -> str:
+    """Move keyword arguments after positional arguments in helper calls.
+
+    Real-spec strings allow ``apply_along(pop=j, body)`` (kwargs before
+    positionals), which is rejected by Python's parser. The IR consumes a
+    canonical form with positionals first, so this helper rewrites each
+    occurrence by structurally splitting args and re-emitting them in
+    ``positional, *kwargs`` order. Nested helper calls are handled by
+    iterating until convergence.
+
+    Returns:
+        The input string with each helper call's argument list reordered
+        so that positional arguments precede keyword arguments.
+    """
+    for name in _HELPER_CALL_NAMES:
+        while True:
+            span = _find_call_span(expr_s, name)
+            if span is None:
+                break
+            start, end = span
+            inner = expr_s[start + len(name) + 1 : end - 1]
+            parts = _split_top_level_commas(inner)
+            positionals: list[str] = []
+            kwargs: list[str] = []
+            for p in parts:
+                ps = p.strip()
+                if not ps:
+                    continue
+                # An "=" at the top level marks a kwarg; bracket/paren contents
+                # were already skipped by ``_split_top_level_commas`` for
+                # commas, but ``=`` inside brackets is still possible.
+                if _is_top_level_kwarg(ps):
+                    kwargs.append(ps)
+                else:
+                    positionals.append(ps)
+            reordered = ", ".join(positionals + kwargs)
+            # Sentinel-rewrite the leading ``name(`` so the outer loop's next
+            # ``_find_call_span`` skips this already-processed occurrence;
+            # restore the name after the loop.
+            sentinel = f"__op_done__{name}__"
+            expr_s = expr_s[:start] + f"{sentinel}(" + reordered + ")" + expr_s[end:]
+        expr_s = expr_s.replace(f"__op_done__{name}__", name)
+    return expr_s
+
+
+def _is_top_level_kwarg(arg: str) -> bool:
+    """Return True if ``arg`` is a ``key=value`` pair at top bracket depth."""
+    depth = 0
+    for i, c in enumerate(arg):
+        if c in "([":
+            depth += 1
+        elif c in ")]":
+            depth -= 1
+        elif c == "=" and depth == 0:
+            next_eq = i + 1 < len(arg) and arg[i + 1] == "="
+            cmp_eq = i > 0 and arg[i - 1] in "<>!="
+            return not (next_eq or cmp_eq)
+    return False
+
+
+def _fixup_bound_axis_indices(expr: Expr) -> Expr:  # noqa: PLR0911
+    """Rewrite marker ``AxisIndex`` nodes produced by the preprocessor.
+
+    Walks ``expr`` recursively and replaces any ``AxisIndex`` whose ``axis``
+    matches the ``__op_bv__<axis>__<binding>__`` marker pattern with
+    ``AxisIndex(axis=<axis>, coord=<binding>)``. Other IR nodes are returned
+    unchanged when no descendant needed rewriting.
+
+    Returns:
+        A new IR expression with marker subscript indices restored to
+        ``AxisIndex(axis, coord)`` form, or ``expr`` itself if nothing
+        needed rewriting.
+    """
+    if isinstance(expr, Subscript):
+        new_indices: list[AxisIndex] = []
+        changed = False
+        for idx in expr.indices:
+            m = _BOUND_AX_MARKER_RE.match(idx.axis)
+            if m is not None:
+                new_indices.append(AxisIndex(axis=m.group(1), coord=m.group(2)))
+                changed = True
+            else:
+                new_indices.append(idx)
+        if changed:
+            return Subscript(name=expr.name, indices=tuple(new_indices))
+        return expr
+    if isinstance(expr, Apply):
+        new_args = tuple(_fixup_bound_axis_indices(a) for a in expr.args)
+        if any(na is not oa for na, oa in zip(new_args, expr.args, strict=True)):
+            return Apply(op=expr.op, args=new_args)
+        return expr
+    if isinstance(expr, Reduce):
+        new_body = _fixup_bound_axis_indices(expr.body)
+        if new_body is not expr.body:
+            return Reduce(kind=expr.kind, bindings=expr.bindings, body=new_body)
+        return expr
+    return expr
+
+
+def _build_aliases_ir(
+    aliases: Mapping[str, str],
+    *,
+    lower_helpers: bool = False,
+) -> dict[str, Expr]:
     """Parse each alias body to IR and inline alias-to-alias references.
 
     Best-effort: when parsing or inlining fails (cyclic aliases, AST recursion
@@ -1140,6 +1305,14 @@ def _build_aliases_ir(aliases: Mapping[str, str]) -> dict[str, Expr]:
     omitted rather than aborting normalization. Existing string-based consumers
     rely on lazy cycle detection at evaluation time, so this preserves
     backward-compatible behaviour while still exposing IR where available.
+
+    Args:
+        aliases: Mapping from alias name to body string.
+        lower_helpers: When ``True``, parse with ``lower_helpers=True`` so
+            helper-call ``Apply`` nodes (``apply_along``, ``sum_over``,
+            ``integrate_over``) become :class:`Reduce` nodes. Use with a
+            pre-expansion ``aliases`` mapping to expose structured
+            reduction IR to downstream consumers.
 
     Returns:
         Mapping from alias name to its (fully inlined) IR expression. Entries
@@ -1154,10 +1327,15 @@ def _build_aliases_ir(aliases: Mapping[str, str]) -> dict[str, Expr]:
             sys.setrecursionlimit(needed)
         parsed: dict[str, Expr] = {}
         for name, body in aliases.items():
+            if lower_helpers:
+                src = _preprocess_bound_subscripts(_reorder_helper_call_args(body))
+            else:
+                src = body
             try:
-                parsed[name] = parse_expr_to_ir(body)
+                expr = parse_expr_to_ir(src, lower_helpers=lower_helpers)
             except (ValueError, RecursionError):
                 continue
+            parsed[name] = _fixup_bound_axis_indices(expr) if lower_helpers else expr
         # Validate the alias graph once and share a free_symbols memo across
         # all per-alias inline_aliases calls: alias bodies are reused by
         # identity, so id-keyed caching turns the inner traversal cost from
@@ -1186,9 +1364,11 @@ def _build_aliases_ir(aliases: Mapping[str, str]) -> dict[str, Expr]:
             sys.setrecursionlimit(old_limit)
 
 
-def _build_equations_ir(
+def _build_equations_ir(  # noqa: C901
     equations: tuple[str, ...],
     aliases_ir: Mapping[str, Expr] | None = None,
+    *,
+    lower_helpers: bool = False,
 ) -> tuple[Expr | None, ...]:
     """Parse each equation RHS to IR, optionally inlining alias references.
 
@@ -1196,6 +1376,13 @@ def _build_equations_ir(
     so positional alignment with ``equations`` is preserved. Mirrors the
     fallback policy of :func:`_build_aliases_ir` to keep this slice purely
     additive — existing string-based consumers remain authoritative.
+
+    Args:
+        equations: Tuple of equation RHS strings.
+        aliases_ir: Optional alias IR map to inline references against.
+        lower_helpers: When ``True``, parse with ``lower_helpers=True`` so
+            helper-call ``Apply`` nodes become :class:`Reduce` nodes. Use
+            with pre-expansion equation strings.
 
     Returns:
         Tuple of IR expressions (or ``None`` for failed entries) aligned
@@ -1220,11 +1407,17 @@ def _build_equations_ir(
                 cycle_validated = False
         out: list[Expr | None] = []
         for eq in equations:
+            if lower_helpers:
+                src = _preprocess_bound_subscripts(_reorder_helper_call_args(eq))
+            else:
+                src = eq
             try:
-                expr = parse_expr_to_ir(eq)
+                expr = parse_expr_to_ir(src, lower_helpers=lower_helpers)
             except (ValueError, RecursionError):
                 out.append(None)
                 continue
+            if lower_helpers:
+                expr = _fixup_bound_axis_indices(expr)
             if aliases_ir is None:
                 out.append(expr)
                 continue
@@ -2327,13 +2520,14 @@ def _expand_apply_along(  # noqa: PLR0914
         out = out[:start] + f"({replacement})" + out[end:]
 
 
-def _expand_helpers(
+def _expand_helpers(  # noqa: PLR0913
     expr: str,
     *,
     axes: list[dict[str, Any]],
     shaped_params: Mapping[str, tuple[str, ...]] | None = None,
     lhs_assignment: Mapping[str, str] | None = None,
     axis_coords: Mapping[str, list[str]] | None = None,
+    passthrough: bool = False,
 ) -> str:
     """Expand helper calls (currently only ``apply_along``) before AST parsing.
 
@@ -2348,9 +2542,16 @@ def _expand_helpers(
     rewrite multi-axis shaped-parameter references to literal integer
     subscripts (``K[2, 0]``) when every position is resolved.
 
+    When ``passthrough`` is true, helpers are *not* expanded — the input
+    is returned unchanged. Used by the second-pass IR build to capture
+    pre-expansion strings for ``parse_expr_to_ir(lower_helpers=True)``.
+
     Returns:
-        Expression string with helper calls expanded.
+        Expression string with helper calls expanded (or the input
+        unchanged when ``passthrough`` is true).
     """
+    if passthrough:
+        return expr
     return _expand_apply_along(
         expr,
         axes=axes,
@@ -2369,6 +2570,7 @@ def _resolve_template_equation(  # noqa: PLR0913
     all_syms: set[str],
     shaped_params: Mapping[str, tuple[str, ...]] | None = None,
     axis_lookup: Mapping[str, list[str]] | None = None,
+    passthrough_helpers: bool = False,
 ) -> str | None:
     """Resolve an equation for a templated state name.
 
@@ -2393,6 +2595,7 @@ def _resolve_template_equation(  # noqa: PLR0913
                 shaped_params=shaped_params,
                 lhs_assignment=assignment,
                 axis_coords=axis_lookup,
+                passthrough=passthrough_helpers,
             )
             expr_s = _apply_template_substitutions(
                 expr_s,
@@ -2401,8 +2604,9 @@ def _resolve_template_equation(  # noqa: PLR0913
                 shaped_params=shaped_params,
                 axis_lookup=axis_lookup,
             )
-            tree = _parse_expr(expr_s)
-            all_syms |= _collect_names(tree)
+            if not passthrough_helpers:
+                tree = _parse_expr(expr_s)
+                all_syms |= _collect_names(tree)
             return expr_s
     return None
 
@@ -2416,6 +2620,7 @@ def _gather_equations(  # noqa: PLR0913
     template_map: Mapping[str, list[tuple[str, dict[str, str]]]] | None = None,
     shaped_params: Mapping[str, tuple[str, ...]] | None = None,
     axis_lookup: Mapping[str, list[str]] | None = None,
+    passthrough_helpers: bool = False,
 ) -> list[str]:
     """Gather and expand one equation string per state variable.
 
@@ -2435,10 +2640,14 @@ def _gather_equations(  # noqa: PLR0913
                     detail=f"equations[{name!r}] must be a non-empty string"
                 )
             expr_s = _expand_helpers(
-                expr.strip(), axes=axes, shaped_params=shaped_params
+                expr.strip(),
+                axes=axes,
+                shaped_params=shaped_params,
+                passthrough=passthrough_helpers,
             )
-            tree = _parse_expr(expr_s)
-            all_syms |= _collect_names(tree)
+            if not passthrough_helpers:
+                tree = _parse_expr(expr_s)
+                all_syms |= _collect_names(tree)
             eqs.append(expr_s)
             continue
 
@@ -2450,6 +2659,7 @@ def _gather_equations(  # noqa: PLR0913
             all_syms=all_syms,
             shaped_params=shaped_params,
             axis_lookup=axis_lookup,
+            passthrough_helpers=passthrough_helpers,
         )
         if expr_res is None:
             raise InvalidRhsSpecError(detail=f"Missing equation for state {name!r}")
@@ -3098,6 +3308,39 @@ def normalize_expr_rhs(spec: Mapping[str, Any]) -> NormalizedRhs:  # noqa: C901,
     template_base_set = {parse_selector(k)[0] for k in template_map_all}
     eqs_tuple = tuple(eqs)
     aliases_ir_map = _build_aliases_ir(aliases)
+
+    # Second pass: capture pre-expansion (helper-bearing) strings so we can
+    # build IR with ``Reduce`` nodes for downstream IR-fast-path consumers.
+    # Best-effort: failures leave the reduce-bearing fields empty.
+    aliases_ir_reduce_map: Mapping[str, Expr] = {}
+    equations_ir_reduce: tuple[Expr | None, ...] = ()
+    try:
+        aliases_pre, _alias_template_map_pre = _expand_alias_templates(
+            meta_parts[0],
+            axes=axes_meta,
+            template_map_seed=state_template_map,
+            shaped_params=shaped_params,
+            axis_lookup=axis_lookup_dict,
+            passthrough_helpers=True,
+        )
+        eqs_pre = _gather_equations(
+            state_expanded,
+            equations_map,
+            set(),  # throwaway: don't pollute all_syms with helper names
+            axes=axes_meta,
+            template_map=template_map_all,
+            shaped_params=shaped_params,
+            axis_lookup=axis_lookup_dict,
+            passthrough_helpers=True,
+        )
+        aliases_ir_reduce_map = _build_aliases_ir(aliases_pre, lower_helpers=True)
+        equations_ir_reduce = _build_equations_ir(
+            tuple(eqs_pre), aliases_ir_reduce_map, lower_helpers=True
+        )
+    except (ValueError, RecursionError, InvalidRhsSpecError):
+        aliases_ir_reduce_map = {}
+        equations_ir_reduce = ()
+
     return NormalizedRhs(
         kind="expr",
         state_names=tuple(state_expanded),
@@ -3127,6 +3370,8 @@ def normalize_expr_rhs(spec: Mapping[str, Any]) -> NormalizedRhs:  # noqa: C901,
         aliases_ir=aliases_ir_map,
         equations_ir=_build_equations_ir(eqs_tuple, aliases_ir_map),
         equations_ir_raw=_build_equations_ir(eqs_tuple),
+        aliases_ir_reduce=aliases_ir_reduce_map,
+        equations_ir_reduce=equations_ir_reduce,
     )
 
 
