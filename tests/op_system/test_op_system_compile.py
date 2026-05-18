@@ -20,6 +20,7 @@ Note:
 from __future__ import annotations
 
 import re
+from dataclasses import replace
 
 import numpy as np
 import pytest
@@ -295,6 +296,25 @@ def test_alias_cycle_is_rejected() -> None:
     compiled = compile_rhs(rhs, xp=np)
     with pytest.raises(ValueError, match=r"could not resolve alias dependencies"):
         compiled.eval_fn(np.float64(0.0), np.array([1.0], dtype=np.float64))
+
+
+def test_scalar_compile_uses_normalized_ir_when_available() -> None:
+    """Scalar fallback should compile from IR instead of reparsing strings."""
+    rhs = normalize_rhs({
+        "kind": "expr",
+        "state": ["x"],
+        "aliases": {"double": "x * 2"},
+        "equations": {"x": "double + 1"},
+    })
+    rhs = replace(
+        rhs,
+        aliases={"double": "not valid python !!!"},
+        equations=("also not valid python !!!",),
+    )
+
+    compiled = compile_rhs(rhs, xp=np)
+    out = compiled.eval_fn(np.float64(0.0), np.array([2.0], dtype=np.float64))
+    assert np.allclose(out, np.array([5.0]))
 
 
 def test_transitions_rhs_compiles_and_evaluates() -> None:

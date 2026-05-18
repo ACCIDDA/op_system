@@ -38,6 +38,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 from op_system._errors import InvalidExpressionError
+from op_system._ir import Expr, ir_to_ast_expr
 from op_system._symbols import parse_expression_string
 
 if TYPE_CHECKING:
@@ -359,16 +360,22 @@ def _validate_ast(tree: ast.AST, *, expr: str) -> None:
             _validate_call(node.func, expr=expr)
 
 
-def _compile_expr(expr: str) -> CodeType:
+def _compile_expr(expr: str, expr_ir: Expr | None = None) -> CodeType:
     """Parse, validate, and compile an expression into a code object.
 
     Args:
         expr: Expression string.
+        expr_ir: Optional typed IR expression to compile directly.
 
     Returns:
         Compiled code object.
     """
-    tree = _parse_expr(expr)
+    tree = (
+        ast.Expression(body=ir_to_ast_expr(expr_ir))
+        if expr_ir is not None
+        else _parse_expr(expr)
+    )
+    ast.fix_missing_locations(tree)
     _validate_ast(tree, expr=expr)
     try:
         return compile(tree, filename="<op_system>", mode="eval")
@@ -378,28 +385,46 @@ def _compile_expr(expr: str) -> CodeType:
         )
 
 
-def _collect_alias_code(aliases: Mapping[str, str]) -> dict[str, CodeType]:
+def _collect_alias_code(
+    aliases: Mapping[str, str],
+    aliases_ir: Mapping[str, Expr] | None = None,
+) -> dict[str, CodeType]:
     """Compile alias expressions into code objects.
 
     Args:
         aliases: Mapping from alias name to expression string.
+        aliases_ir: Optional mapping from alias name to typed IR.
 
     Returns:
         Dictionary mapping alias name to compiled code object.
     """
-    return {name: _compile_expr(expr) for name, expr in aliases.items()}
+    ir_map = aliases_ir or {}
+    return {
+        name: _compile_expr(expr, ir_map.get(name)) for name, expr in aliases.items()
+    }
 
 
-def _collect_eq_code(equations: tuple[str, ...]) -> list[CodeType]:
+def _collect_eq_code(
+    equations: tuple[str, ...],
+    equations_ir: tuple[Expr | None, ...] | None = None,
+) -> list[CodeType]:
     """Compile equation expressions into code objects.
 
     Args:
         equations: Tuple of equation expression strings.
+        equations_ir: Optional tuple of typed IR expressions, positionally
+            aligned with ``equations``.
 
     Returns:
         List of compiled code objects.
     """
-    return [_compile_expr(expr) for expr in equations]
+    ir_tuple = (
+        equations_ir if equations_ir and len(equations_ir) == len(equations) else ()
+    )
+    return [
+        _compile_expr(expr, ir_tuple[i] if ir_tuple else None)
+        for i, expr in enumerate(equations)
+    ]
 
 
 def _resolve_aliases(
@@ -494,6 +519,8 @@ def _make_eval_fn(
     state_names: tuple[str, ...],
     aliases: Mapping[str, str],
     equations: tuple[str, ...],
+    aliases_ir: Mapping[str, Expr] | None = None,
+    equations_ir: tuple[Expr | None, ...] | None = None,
 ) -> EvalFn:
     """Build a namespace-polymorphic ``eval_fn(t, y, **params) -> dydt``.
 
@@ -510,8 +537,8 @@ def _make_eval_fn(
     """
     n_state = len(state_names)
     name_to_idx = {s: i for i, s in enumerate(state_names)}
-    alias_code = _collect_alias_code(aliases)
-    eq_code = _collect_eq_code(equations)
+    alias_code = _collect_alias_code(aliases, aliases_ir)
+    eq_code = _collect_eq_code(equations, equations_ir)
 
     def eval_fn(t: object, y: object, **params: object) -> Float64Array:
         xp = _namespace_of(y)
@@ -731,6 +758,8 @@ def compile_rhs(rhs: NormalizedRhs, *, xp: object | None = None) -> CompiledRhs:
             state_names=rhs.state_names,
             aliases=rhs.aliases,
             equations=rhs.equations,
+            aliases_ir=rhs.aliases_ir,
+            equations_ir=rhs.equations_ir,
         )
 
     eval_fn = _wrap_eval_fn_for_time_varying(

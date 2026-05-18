@@ -334,6 +334,132 @@ def parse_expr_to_ir(expr: str, *, lower_helpers: bool = False) -> Expr:
     return ir
 
 
+def _literal_coord_value(coord: str) -> int | float | str:
+    try:
+        return int(coord)
+    except ValueError:
+        try:
+            return float(coord)
+        except ValueError:
+            return coord
+
+
+def _axis_index_to_ast(idx: AxisIndex) -> ast.expr:
+    if idx.coord is not None:
+        return ast.Constant(value=_literal_coord_value(idx.coord))
+    return ast.Name(id=idx.placeholder or idx.axis, ctx=ast.Load())
+
+
+def _call_func_ast(name: str) -> ast.expr:
+    parts = name.split(".")
+    node: ast.expr = ast.Name(id=parts[0], ctx=ast.Load())
+    for part in parts[1:]:
+        node = ast.Attribute(value=node, attr=part, ctx=ast.Load())
+    return node
+
+
+def _binary_ast(op: str) -> ast.operator:
+    if op == "+":
+        return ast.Add()
+    if op == "-":
+        return ast.Sub()
+    if op == "*":
+        return ast.Mult()
+    if op == "/":
+        return ast.Div()
+    if op == "%":
+        return ast.Mod()
+    if op == "pow":
+        return ast.Pow()
+    _invalid(detail=f"unsupported binary IR op: {op}")
+
+
+def _compare_ast(op: str) -> ast.cmpop:
+    if op == "==":
+        return ast.Eq()
+    if op == "!=":
+        return ast.NotEq()
+    if op == "<":
+        return ast.Lt()
+    if op == "<=":
+        return ast.LtE()
+    if op == ">":
+        return ast.Gt()
+    if op == ">=":
+        return ast.GtE()
+    _invalid(detail=f"unsupported comparison IR op: {op}")
+
+
+def ir_to_ast_expr(expr: Expr) -> ast.expr:  # noqa: C901, PLR0911, PLR0912
+    """Convert typed IR back to a Python AST expression node.
+
+    Args:
+        expr: Typed IR expression.
+
+    Returns:
+        Equivalent Python ``ast.expr`` node, suitable for validation,
+        rewriting, and compilation by the existing runtime paths.
+    """
+    if isinstance(expr, Literal):
+        return ast.Constant(value=expr.value)
+    if isinstance(expr, Sym):
+        return ast.Name(id=expr.name, ctx=ast.Load())
+    if isinstance(expr, Subscript):
+        parts = [_axis_index_to_ast(idx) for idx in expr.indices]
+        slc: ast.expr = (
+            parts[0] if len(parts) == 1 else ast.Tuple(parts, ctx=ast.Load())
+        )
+        return ast.Subscript(
+            value=ast.Name(id=expr.name, ctx=ast.Load()),
+            slice=slc,
+            ctx=ast.Load(),
+        )
+    if isinstance(expr, Reduce):
+        _invalid(detail="structured Reduce nodes cannot be converted to Python AST yet")
+    if isinstance(expr, Apply):
+        if expr.op == "neg" and len(expr.args) == 1:
+            return ast.UnaryOp(op=ast.USub(), operand=ir_to_ast_expr(expr.args[0]))
+        if expr.op == "pos" and len(expr.args) == 1:
+            return ast.UnaryOp(op=ast.UAdd(), operand=ir_to_ast_expr(expr.args[0]))
+        if expr.op in {"+", "-", "*", "/", "%", "pow"} and len(expr.args) == 2:
+            return ast.BinOp(
+                left=ir_to_ast_expr(expr.args[0]),
+                op=_binary_ast(expr.op),
+                right=ir_to_ast_expr(expr.args[1]),
+            )
+        if expr.op in {"==", "!=", "<", "<=", ">", ">="} and len(expr.args) == 2:
+            return ast.Compare(
+                left=ir_to_ast_expr(expr.args[0]),
+                ops=[_compare_ast(expr.op)],
+                comparators=[ir_to_ast_expr(expr.args[1])],
+            )
+        if expr.op in {"and", "or"}:
+            bool_op: ast.boolop = ast.And() if expr.op == "and" else ast.Or()
+            return ast.BoolOp(op=bool_op, values=[ir_to_ast_expr(a) for a in expr.args])
+        if expr.op == "ifelse" and len(expr.args) == 3:
+            return ast.IfExp(
+                test=ir_to_ast_expr(expr.args[0]),
+                body=ir_to_ast_expr(expr.args[1]),
+                orelse=ir_to_ast_expr(expr.args[2]),
+            )
+        call_args: list[ast.expr] = []
+        keywords: list[ast.keyword] = []
+        for arg in expr.args:
+            if isinstance(arg, Apply) and arg.op == "kwarg" and len(arg.args) == 2:
+                key_node = arg.args[0]
+                if not isinstance(key_node, Literal) or not isinstance(
+                    key_node.value, str
+                ):
+                    _invalid(detail="malformed kwarg IR node")
+                keywords.append(
+                    ast.keyword(arg=key_node.value, value=ir_to_ast_expr(arg.args[1]))
+                )
+            else:
+                call_args.append(ir_to_ast_expr(arg))
+        return ast.Call(func=_call_func_ast(expr.op), args=call_args, keywords=keywords)
+    _invalid(detail=f"unsupported IR node for AST conversion: {type(expr).__name__}")
+
+
 def _unparse_axis_index(idx: AxisIndex) -> str:
     if idx.placeholder is not None:
         return f"${idx.placeholder}"

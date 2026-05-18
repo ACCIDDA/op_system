@@ -34,6 +34,7 @@ from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
 
+from op_system._ir import Expr, ir_to_ast_expr
 from op_system.compile import (
     _SAFE_BUILTINS,
     _check_numeric_dtype,
@@ -577,6 +578,7 @@ class _NameRewriter(ast.NodeTransformer):
 def _rewrite_cell_to_vector(  # noqa: PLR0913
     *,
     expr: str,
+    expr_ir: Expr | None = None,
     target_axes: tuple[str, ...],
     cell_coords: Mapping[str, str],
     name_to_template: Mapping[str, _BufferTemplate],
@@ -590,7 +592,12 @@ def _rewrite_cell_to_vector(  # noqa: PLR0913
         An ``ast.Expression`` whose body evaluates to an array shaped per
         ``target_axes`` (or a scalar when ``target_axes`` is empty).
     """
-    tree = _parse_expr(expr)
+    tree = (
+        ast.Expression(body=ir_to_ast_expr(expr_ir))
+        if expr_ir is not None
+        else _parse_expr(expr)
+    )
+    ast.fix_missing_locations(tree)
     _validate_ast(tree, expr=expr)
     rewriter = _NameRewriter(
         target_axes=target_axes,
@@ -1437,6 +1444,7 @@ def _build_vector_plan_inner(  # noqa: C901, PLR0911, PLR0912, PLR0914, PLR0915
             if buf.axes:
                 tree = _rewrite_cell_to_vector(
                     expr=rhs.aliases[buf.expanded_names[0]],
+                    expr_ir=rhs.aliases_ir.get(buf.expanded_names[0]),
                     target_axes=buf.axes,
                     cell_coords=buf.coord_assignments[0],
                     name_to_template=name_to_template,
@@ -1447,6 +1455,7 @@ def _build_vector_plan_inner(  # noqa: C901, PLR0911, PLR0912, PLR0914, PLR0915
                 if len(buf.expanded_names) > 1:
                     last_tree = _rewrite_cell_to_vector(
                         expr=rhs.aliases[buf.expanded_names[-1]],
+                        expr_ir=rhs.aliases_ir.get(buf.expanded_names[-1]),
                         target_axes=buf.axes,
                         cell_coords=buf.coord_assignments[-1],
                         name_to_template=name_to_template,
@@ -1461,6 +1470,7 @@ def _build_vector_plan_inner(  # noqa: C901, PLR0911, PLR0912, PLR0914, PLR0915
                 # templated state cells become buffer-index accesses.
                 tree = _rewrite_cell_to_vector(
                     expr=rhs.aliases[buf.expanded_names[0]],
+                    expr_ir=rhs.aliases_ir.get(buf.expanded_names[0]),
                     target_axes=(),
                     cell_coords={},
                     name_to_template=name_to_template,
