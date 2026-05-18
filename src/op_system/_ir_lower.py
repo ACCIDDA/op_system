@@ -104,6 +104,7 @@ def lower_subscript_to_buffer(  # noqa: C901
     src_axes: tuple[str, ...],
     target_axes: tuple[str, ...],
     axis_names: frozenset[str],
+    axis_alias: Mapping[str, str] | None = None,
 ) -> ast.expr:
     """Lower a wildcard IR :class:`Subscript` to a buffer-access AST.
 
@@ -122,6 +123,11 @@ def lower_subscript_to_buffer(  # noqa: C901
         target_axes: Axis order of the cell layout the result must
             broadcast against.
         axis_names: Registered axis identifiers; used to classify indices.
+        axis_alias: Optional mapping from synthetic axis labels (e.g.
+            ``age#ap`` emitted by :func:`_lower_reduce` for same-axis-twice
+            bindings) back to their real axis name. Used to match
+            subscript labels against ``src_axes`` while preserving the
+            synthetic label for ``target_axes`` alignment.
 
     Returns:
         An ``ast.expr`` accessing ``<sub.name>_buf`` with the necessary
@@ -132,6 +138,7 @@ def lower_subscript_to_buffer(  # noqa: C901
             set doesn't match ``src_axes``, or ``src_axes`` is not a
             subset of ``target_axes``.
     """
+    alias = axis_alias or {}
     if len(sub.indices) != len(src_axes):
         msg = (
             f"subscript {sub.name!r} has {len(sub.indices)} indices but "
@@ -140,6 +147,7 @@ def lower_subscript_to_buffer(  # noqa: C901
         raise UnsupportedIRLoweringError(msg)
 
     sub_axes: list[str] = []
+    real_sub_axes: list[str] = []
     for idx in sub.indices:
         kind = idx.kind or classify_axis_index(idx, axis_names=axis_names)
         if kind is not AxisKind.FREE:
@@ -150,18 +158,19 @@ def lower_subscript_to_buffer(  # noqa: C901
             )
             raise UnsupportedIRLoweringError(msg)
         sub_axes.append(idx.axis)
+        real_sub_axes.append(alias.get(idx.axis, idx.axis))
 
-    if set(sub_axes) != set(src_axes):
+    if set(real_sub_axes) != set(src_axes):
         msg = (
             f"subscript {sub.name!r} axes {tuple(sub_axes)} do not match "
             f"buffer axes {tuple(src_axes)} as a set"
         )
         raise UnsupportedIRLoweringError(msg)
 
-    if not set(src_axes).issubset(target_axes):
+    if not set(sub_axes).issubset(target_axes):
         msg = (
-            f"buffer axes {tuple(src_axes)} not a subset of target axes "
-            f"{tuple(target_axes)}"
+            f"buffer axes {tuple(src_axes)} (labels {tuple(sub_axes)}) not "
+            f"a subset of target axes {tuple(target_axes)}"
         )
         raise UnsupportedIRLoweringError(msg)
 
@@ -169,9 +178,10 @@ def lower_subscript_to_buffer(  # noqa: C901
 
     # Reorder buffer (stored in src_axes order) to sub_axes order if the
     # user wrote them out of declaration order (e.g. ``S[vax, age]``
-    # against ``src_axes=(age, vax)``).
-    if tuple(sub_axes) != tuple(src_axes):
-        perm = tuple(src_axes.index(a) for a in sub_axes)
+    # against ``src_axes=(age, vax)``). Use the real-axis view for the
+    # match; the resulting buffer carries labels in ``sub_axes`` order.
+    if tuple(real_sub_axes) != tuple(src_axes):
+        perm = tuple(src_axes.index(a) for a in real_sub_axes)
         buf = _transpose(buf, perm)
 
     # If sub_axes already cover target_axes in matching order, no further
@@ -214,6 +224,131 @@ def _transpose(node: ast.expr, perm: tuple[int, ...]) -> ast.expr:
     )
 
 
+def _lower_shaped_param_subscript(  # noqa: C901
+    sub: Subscript,
+    *,
+    src_axes: tuple[str, ...],
+    target_axes: tuple[str, ...],
+    axis_names: frozenset[str],
+    axis_alias: Mapping[str, str] | None = None,
+) -> ast.expr:
+    """Lower a shaped-parameter :class:`Subscript` to a buffer-access AST.
+
+    Unlike :func:`lower_subscript_to_buffer` (which matches subscript
+    axes against the source by *set* — permitting user-reordered indices
+    like ``S[vax, age]`` against ``src_axes=(age, vax)``), this helper
+    matches positionally: ``sub.indices[i]`` corresponds to source
+    position ``i``. Positional matching is required for shaped params
+    that legally repeat an axis name (e.g. a contact kernel
+    ``K[age, age]``) where set-based reordering would be ambiguous.
+
+    The index ``axis`` field acts as the *broadcast label* for the
+    corresponding position: when a binding has been relabeled to a
+    synthetic axis name (e.g. ``age#ap`` for an apply_along loop
+    variable on a same-axis-twice ``K``), the synthetic label appears in
+    the index, and the resulting buffer broadcasts to a target layout
+    that carries both the original and synthetic axes as distinct
+    positions.
+
+    Args:
+        sub: IR subscript to lower. Every index must be FREE on a label
+            present in ``target_axes`` (literal coords / placeholders
+            are not supported).
+        src_axes: Declared axis order of the source buffer. Length must
+            equal ``len(sub.indices)``.
+        target_axes: Axis order of the cell layout the result must
+            broadcast against.
+        axis_names: Registered axis identifiers (including synthetic
+            labels emitted by :func:`_lower_reduce`); used to classify
+            indices.
+        axis_alias: Optional mapping from synthetic axis labels back to
+            real axis names. Used to validate positional consistency
+            between ``sub.indices[i].axis`` (after alias resolution)
+            and ``src_axes[i]``.
+
+    Returns:
+        An ``ast.expr`` accessing ``<sub.name>_buf`` aligned to
+        ``target_axes`` via transpose / size-1 insertions.
+
+    Raises:
+        UnsupportedIRLoweringError: If any index is non-FREE, the
+            position count disagrees, a sub_axes label is not in
+            ``target_axes``, or the labels are not distinct (positional
+            mode cannot disambiguate duplicate labels at the broadcast
+            stage).
+    """
+    if len(sub.indices) != len(src_axes):
+        msg = (
+            f"shaped-param subscript {sub.name!r} has {len(sub.indices)} "
+            f"indices but buffer has {len(src_axes)} axes"
+        )
+        raise UnsupportedIRLoweringError(msg)
+
+    sub_axes: list[str] = []
+    alias = axis_alias or {}
+    for pos, idx in enumerate(sub.indices):
+        kind = idx.kind or classify_axis_index(idx, axis_names=axis_names)
+        if kind is not AxisKind.FREE:
+            msg = (
+                f"shaped-param subscript {sub.name!r} has non-FREE index "
+                f"({kind.value}) — v1 lowering supports only wildcard "
+                "axis references"
+            )
+            raise UnsupportedIRLoweringError(msg)
+        sub_axes.append(idx.axis)
+        real = alias.get(idx.axis, idx.axis)
+        if real != src_axes[pos]:
+            msg = (
+                f"shaped-param subscript {sub.name!r} index {pos} label "
+                f"{idx.axis!r} (real {real!r}) does not match buffer "
+                f"axis {src_axes[pos]!r} at that position"
+            )
+            raise UnsupportedIRLoweringError(msg)
+
+    if len(set(sub_axes)) != len(sub_axes):
+        msg = (
+            f"shaped-param subscript {sub.name!r} has duplicate index "
+            f"labels {tuple(sub_axes)}; positional broadcast requires "
+            "distinct labels (use synthetic labels for bound positions)"
+        )
+        raise UnsupportedIRLoweringError(msg)
+
+    if not set(sub_axes).issubset(target_axes):
+        msg = (
+            f"shaped-param subscript {sub.name!r} labels {tuple(sub_axes)} "
+            f"not a subset of target axes {tuple(target_axes)}"
+        )
+        raise UnsupportedIRLoweringError(msg)
+
+    buf: ast.expr = _name(f"{sub.name}_buf")
+
+    # Positional: source position i carries label sub_axes[i]. Align to
+    # target_axes by transposing kept axes into target order and
+    # inserting size-1 placeholders for absent target axes.
+    if tuple(sub_axes) == tuple(target_axes):
+        return buf
+
+    target_kept = tuple(a for a in target_axes if a in sub_axes)
+    if tuple(sub_axes) != target_kept:
+        perm = tuple(sub_axes.index(a) for a in target_kept)
+        buf = _transpose(buf, perm)
+
+    if tuple(target_kept) == tuple(target_axes):
+        return buf
+
+    elts: list[ast.expr] = []
+    for ax in target_axes:
+        if ax in target_kept:
+            elts.append(ast.Slice(lower=None, upper=None, step=None))
+        else:
+            elts.append(ast.Constant(value=None))
+    return ast.Subscript(
+        value=buf,
+        slice=ast.Tuple(elts=elts, ctx=ast.Load()),
+        ctx=ast.Load(),
+    )
+
+
 # ---------------------------------------------------------------------------
 # Full expression lowering
 # ---------------------------------------------------------------------------
@@ -229,6 +364,8 @@ def lower_to_vector_ast(  # noqa: PLR0913
     axis_weights: Mapping[str, tuple[float, ...]] | None = None,
     axis_coords: Mapping[str, tuple[str, ...]] | None = None,
     axis_types: Mapping[str, str] | None = None,
+    shaped_param_axes: Mapping[str, tuple[str, ...]] | None = None,
+    axis_alias: Mapping[str, str] | None = None,
 ) -> ast.expr:
     """Lower an IR expression to a vector-shape AST.
 
@@ -266,6 +403,22 @@ def lower_to_vector_ast(  # noqa: PLR0913
             inclusive ``[lo_label, hi_label]`` index range, continuous →
             closed ``[lo, hi]`` numeric sub-interval (with trapezoidal
             weight recomputation for the integrate kernel).
+        shaped_param_axes: Optional mapping from shaped-parameter name
+            to the parameter's declared axis order. When provided,
+            :class:`Subscript` references whose name is not in
+            ``buffer_axes`` but is in ``shaped_param_axes`` are lowered
+            via :func:`_lower_shaped_param_subscript` (positional
+            broadcast) rather than rejected. This enables IR lowering
+            for shaped-parameter references such as a contact kernel
+            ``K[age, vax]`` — and, in combination with synthetic
+            bound-axis labels emitted by :class:`Reduce`, the
+            same-axis-twice case ``K[age, age:ap]``.
+        axis_alias: Optional mapping from synthetic axis labels emitted
+            by :func:`_lower_reduce` (e.g. ``age#ap``) back to their
+            real axis name. Threaded into :func:`lower_subscript_to_buffer`
+            and :func:`_lower_shaped_param_subscript` so labeled
+            indices still match the real buffer axes while preserving
+            the synthetic label for ``target_axes`` broadcast alignment.
 
     Returns:
         An ``ast.expr`` suitable for ``compile(ast.Expression(body=...))``
@@ -283,18 +436,28 @@ def lower_to_vector_ast(  # noqa: PLR0913
 
     if isinstance(expr, Subscript):
         src_axes = buffer_axes.get(expr.name)
-        if src_axes is None:
-            msg = (
-                f"subscript {expr.name!r} is not a registered templated "
-                "buffer — v1 lowering cannot resolve it"
+        if src_axes is not None:
+            return lower_subscript_to_buffer(
+                expr,
+                src_axes=src_axes,
+                target_axes=target_axes,
+                axis_names=axis_names,
+                axis_alias=axis_alias,
             )
-            raise UnsupportedIRLoweringError(msg)
-        return lower_subscript_to_buffer(
-            expr,
-            src_axes=src_axes,
-            target_axes=target_axes,
-            axis_names=axis_names,
+        shaped_axes = (shaped_param_axes or {}).get(expr.name)
+        if shaped_axes is not None:
+            return _lower_shaped_param_subscript(
+                expr,
+                src_axes=shaped_axes,
+                target_axes=target_axes,
+                axis_names=axis_names,
+                axis_alias=axis_alias,
+            )
+        msg = (
+            f"subscript {expr.name!r} is not a registered templated "
+            "buffer or shaped parameter — v1 lowering cannot resolve it"
         )
+        raise UnsupportedIRLoweringError(msg)
 
     if isinstance(expr, Apply):
         return _lower_apply(
@@ -306,6 +469,8 @@ def lower_to_vector_ast(  # noqa: PLR0913
             axis_weights=axis_weights,
             axis_coords=axis_coords,
             axis_types=axis_types,
+            shaped_param_axes=shaped_param_axes,
+            axis_alias=axis_alias,
         )
 
     return _lower_reduce(
@@ -317,6 +482,8 @@ def lower_to_vector_ast(  # noqa: PLR0913
         axis_weights=axis_weights,
         axis_coords=axis_coords,
         axis_types=axis_types,
+        shaped_param_axes=shaped_param_axes,
+        axis_alias=axis_alias,
     )
 
 
@@ -464,6 +631,8 @@ def _lower_reduce(  # noqa: C901, PLR0912, PLR0913, PLR0914, PLR0915
     axis_weights: Mapping[str, tuple[float, ...]] | None = None,
     axis_coords: Mapping[str, tuple[str, ...]] | None = None,
     axis_types: Mapping[str, str] | None = None,
+    shaped_param_axes: Mapping[str, tuple[str, ...]] | None = None,
+    axis_alias: Mapping[str, str] | None = None,
 ) -> ast.expr:
     """Lower a :class:`Reduce` node to ``np.sum(body, axis=...)``.
 
@@ -474,6 +643,14 @@ def _lower_reduce(  # noqa: C901, PLR0912, PLR0913, PLR0914, PLR0915
     ``np.sum(weights * body, axis=...)`` with per-axis weight constants
     baked into the AST as ``np.array([...])`` factors broadcast into
     position.
+
+    Same-axis-twice (e.g. a shaped contact kernel ``K[age, age:ap]``
+    inside ``apply_along(..., age=ap)`` whose target also carries
+    ``age``) is supported by relabeling the bound position to a
+    synthetic axis name ``f"{axis}#{binding}"``: the synthetic label is
+    appended to ``extended_target`` as a distinct broadcast position,
+    while ``axis_weights`` / ``axis_coords`` / ``axis_types`` lookups
+    continue to resolve via the original axis name.
 
     Returns:
         An ``ast.expr`` invoking ``np.sum`` on the (possibly
@@ -505,13 +682,36 @@ def _lower_reduce(  # noqa: C901, PLR0912, PLR0913, PLR0914, PLR0915
     filter_map: dict[str, tuple[str, ...]] = dict(expr.filters)
     force_integrate = expr.kind == "integrate_over" or expr.kernel == "integrate"
     force_sum = expr.kernel == "sum"
-    bound_axes: list[str] = []
-    weighted_axes: list[str] = []
-    rebind: dict[str, str] = {}
+
+    # Decide per-binding whether the bound position needs a synthetic
+    # axis label. A synthetic label is required when any body
+    # :class:`Subscript` references the bound axis with both a FREE
+    # index and a coord=binding index (e.g. ``K[age, age:ap]`` where
+    # ``age`` is the outer-free position and ``age:ap`` is the bound
+    # inner position on a duplicate-axis shaped parameter). When
+    # synthesized, **every** Subscript index with ``coord=binding`` on
+    # the axis is relabeled to the synthetic label — the bound
+    # iteration's broadcast position is the synthetic slot, not the
+    # real axis position.
+    bound_axes_seen: set[str] = set()
+    binding_label: dict[str, str] = {}  # var -> label (synthetic or real)
+    axis_relabel: dict[str, str] = {}  # real axis -> synthetic label
+    label_real_axis: dict[str, str] = {}  # label -> real axis (incl. real->real)
+    weighted_labels: list[str] = []
+    bound_labels: list[str] = []
     for axis, binding in expr.bindings:
-        if axis in bound_axes:
+        if axis in bound_axes_seen:
             msg = f"Reduce has duplicate axis binding {axis!r}"
             raise UnsupportedIRLoweringError(msg)
+        bound_axes_seen.add(axis)
+        needs_synthetic = _binding_collides_with_free_index(
+            expr.body, axis=axis, binding_var=binding
+        )
+        label = f"{axis}#{binding}" if needs_synthetic else axis
+        if needs_synthetic:
+            axis_relabel[axis] = label
+        binding_label[binding] = label
+        label_real_axis[label] = axis
         if force_integrate or (not force_sum and axis not in reducible_axes):
             if axis not in weights_map:
                 msg = (
@@ -520,24 +720,37 @@ def _lower_reduce(  # noqa: C901, PLR0912, PLR0913, PLR0914, PLR0915
                     f"for axis {axis!r}, but none were provided"
                 )
                 raise UnsupportedIRLoweringError(msg)
-            weighted_axes.append(axis)
-        bound_axes.append(axis)
-        rebind[binding] = axis
+            weighted_labels.append(label)
+        bound_labels.append(label)
 
-    rebound_body = _rebind_subscript_indices(expr.body, rebind=rebind)
+    rebound_body = _rebind_subscript_indices(
+        expr.body,
+        rebind={binding: axis for axis, binding in expr.bindings},
+        axis_relabel=axis_relabel,
+    )
 
     extended_target = target_axes + tuple(
-        ax for ax in bound_axes if ax not in target_axes
+        lbl for lbl in bound_labels if lbl not in target_axes
     )
+    body_axis_names = axis_names | frozenset(axis_relabel.values())
+    # Merge synthetic-label aliases with any inherited from an outer
+    # Reduce so deeply-nested same-axis-twice cases still resolve their
+    # buffer matches via real axis names.
+    child_axis_alias: dict[str, str] = dict(axis_alias or {})
+    child_axis_alias.update({
+        label: real_axis for real_axis, label in axis_relabel.items()
+    })
     body_ast = lower_to_vector_ast(
         rebound_body,
         target_axes=extended_target,
         buffer_axes=buffer_axes,
-        axis_names=axis_names,
+        axis_names=body_axis_names,
         reducible_axes=reducible_axes,
         axis_weights=axis_weights,
         axis_coords=axis_coords,
         axis_types=axis_types,
+        shaped_param_axes=shaped_param_axes,
+        axis_alias=child_axis_alias,
     )
 
     # Resolve per-axis filter coord lists to integer indices. The
@@ -556,8 +769,11 @@ def _lower_reduce(  # noqa: C901, PLR0912, PLR0913, PLR0914, PLR0915
     #   the original axis weights).
     filter_indices: dict[str, tuple[int, ...]] = {}
     filter_subinterval_weights: dict[str, tuple[float, ...]] = {}
+    real_bound_axes = set(label_real_axis.values())
+    real_weighted_axes = {label_real_axis[lbl] for lbl in weighted_labels}
+    real_to_label = {label_real_axis[lbl]: lbl for lbl in bound_labels}
     for ax, coords in filter_map.items():
-        if ax not in bound_axes:
+        if ax not in real_bound_axes:
             msg = f"Reduce filter for axis {ax!r} has no matching binding"
             raise UnsupportedIRLoweringError(msg)
         if ax not in coords_map:
@@ -575,7 +791,7 @@ def _lower_reduce(  # noqa: C901, PLR0912, PLR0913, PLR0914, PLR0915
                 ax,
                 declared,
                 coords,
-                recompute_trapezoidal=ax in weighted_axes,
+                recompute_trapezoidal=ax in real_weighted_axes,
             )
             if sub_weights is not None:
                 filter_subinterval_weights[ax] = sub_weights
@@ -592,7 +808,7 @@ def _lower_reduce(  # noqa: C901, PLR0912, PLR0913, PLR0914, PLR0915
         filter_indices[ax] = indices
 
     for ax, indices in filter_indices.items():
-        pos = extended_target.index(ax)
+        pos = extended_target.index(real_to_label[ax])
         body_ast = ast.Call(
             func=ast.Attribute(value=_name("np"), attr="take", ctx=ast.Load()),
             args=[
@@ -605,7 +821,8 @@ def _lower_reduce(  # noqa: C901, PLR0912, PLR0913, PLR0914, PLR0915
             keywords=[ast.keyword(arg="axis", value=ast.Constant(value=pos))],
         )
 
-    for ax in weighted_axes:
+    for lbl in weighted_labels:
+        ax = label_real_axis[lbl]
         weights = weights_map[ax]
         if ax in filter_subinterval_weights:
             # Continuous-axis sub-interval integration uses freshly
@@ -618,7 +835,7 @@ def _lower_reduce(  # noqa: C901, PLR0912, PLR0913, PLR0914, PLR0915
             weights = tuple(weights[i] for i in filter_indices[ax])
         body_ast = ast.BinOp(
             left=_weight_constant_for_axis(
-                ax,
+                lbl,
                 weights=weights,
                 extended_target=extended_target,
             ),
@@ -626,7 +843,7 @@ def _lower_reduce(  # noqa: C901, PLR0912, PLR0913, PLR0914, PLR0915
             right=body_ast,
         )
 
-    reduce_positions = tuple(extended_target.index(ax) for ax in bound_axes)
+    reduce_positions = tuple(extended_target.index(lbl) for lbl in bound_labels)
     if len(reduce_positions) == 1:
         axis_arg: ast.expr = ast.Constant(value=reduce_positions[0])
     else:
@@ -683,8 +900,46 @@ def _weight_constant_for_axis(
     )
 
 
+def _binding_collides_with_free_index(
+    expr: Expr, *, axis: str, binding_var: str
+) -> bool:
+    """Return ``True`` if Subscript has FREE + coord=var both on ``axis``.
+
+    This identifies the same-axis-twice case where the binding's coord
+    occupies one position of a duplicate-axis shaped param (e.g.
+    ``K[age, age:ap]``) while another position on the same axis is
+    free-broadcast. In that case :func:`_lower_reduce` must synthesize
+    a distinct axis label for the bound position so the broadcast
+    pipeline can carry the two slots as separate dimensions.
+    """
+    if isinstance(expr, Subscript):
+        has_free = any(idx.axis == axis and idx.coord is None for idx in expr.indices)
+        has_bound = any(
+            idx.axis == axis and idx.coord == binding_var for idx in expr.indices
+        )
+        return has_free and has_bound
+    if isinstance(expr, Apply):
+        return any(
+            _binding_collides_with_free_index(a, axis=axis, binding_var=binding_var)
+            for a in expr.args
+        )
+    if isinstance(expr, Reduce):
+        # An inner Reduce shadows its own bindings but not the outer
+        # axis/var pair we're searching for unless one of its bindings
+        # rebinds the same variable name.
+        if any(b == binding_var for _, b in expr.bindings):
+            return False
+        return _binding_collides_with_free_index(
+            expr.body, axis=axis, binding_var=binding_var
+        )
+    return False
+
+
 def _rebind_subscript_indices(  # noqa: PLR0911
-    expr: Expr, *, rebind: Mapping[str, str]
+    expr: Expr,
+    *,
+    rebind: Mapping[str, str],
+    axis_relabel: Mapping[str, str] | None = None,
 ) -> Expr:
     """Rewrite Subscript ``AxisIndex(axis, coord=binding)`` slots to FREE.
 
@@ -693,16 +948,26 @@ def _rebind_subscript_indices(  # noqa: PLR0911
     chosen by the Reduce) is rewritten to a FREE wildcard on its declared
     axis. Indices not matching are returned unchanged.
 
+    When ``axis_relabel`` is provided, the axis name written into the
+    FREE index is taken from ``axis_relabel.get(original_axis,
+    original_axis)``. This is used by :func:`_lower_reduce` to give
+    same-axis-twice bound positions a distinct synthetic axis label
+    (e.g. ``age#ap``) so the broadcast-by-label pipeline can
+    disambiguate the outer-free and inner-bound positions of a
+    duplicate-axis shaped param such as ``K[age, age:ap]``.
+
     Returns:
         A new IR expression with matching Subscript indices rewritten to
         FREE, or ``expr`` itself when no rewrites apply.
     """
+    relabel = axis_relabel or {}
     if isinstance(expr, Subscript):
         new_indices: list[AxisIndex] = []
         changed = False
         for idx in expr.indices:
             if idx.coord and idx.coord in rebind and rebind[idx.coord] == idx.axis:
-                new_indices.append(AxisIndex(axis=idx.axis, kind=AxisKind.FREE))
+                new_axis = relabel.get(idx.axis, idx.axis)
+                new_indices.append(AxisIndex(axis=new_axis, kind=AxisKind.FREE))
                 changed = True
             else:
                 new_indices.append(idx)
@@ -710,7 +975,10 @@ def _rebind_subscript_indices(  # noqa: PLR0911
             return Subscript(name=expr.name, indices=tuple(new_indices))
         return expr
     if isinstance(expr, Apply):
-        new_args = tuple(_rebind_subscript_indices(a, rebind=rebind) for a in expr.args)
+        new_args = tuple(
+            _rebind_subscript_indices(a, rebind=rebind, axis_relabel=relabel)
+            for a in expr.args
+        )
         if any(na is not oa for na, oa in zip(new_args, expr.args, strict=True)):
             return Apply(op=expr.op, args=new_args)
         return expr
@@ -719,7 +987,9 @@ def _rebind_subscript_indices(  # noqa: PLR0911
         # the outer rebind map before recursing into the inner body.
         inner_bindings = {b for _, b in expr.bindings}
         inner_rebind = {k: v for k, v in rebind.items() if k not in inner_bindings}
-        new_body = _rebind_subscript_indices(expr.body, rebind=inner_rebind)
+        new_body = _rebind_subscript_indices(
+            expr.body, rebind=inner_rebind, axis_relabel=relabel
+        )
         if new_body is not expr.body:
             return Reduce(
                 kind=expr.kind,
@@ -742,6 +1012,8 @@ def _lower_apply(  # noqa: PLR0913
     axis_weights: Mapping[str, tuple[float, ...]] | None = None,
     axis_coords: Mapping[str, tuple[str, ...]] | None = None,
     axis_types: Mapping[str, str] | None = None,
+    shaped_param_axes: Mapping[str, tuple[str, ...]] | None = None,
+    axis_alias: Mapping[str, str] | None = None,
 ) -> ast.expr:
     def lower(child: Expr) -> ast.expr:
         return lower_to_vector_ast(
@@ -753,6 +1025,8 @@ def _lower_apply(  # noqa: PLR0913
             axis_weights=axis_weights,
             axis_coords=axis_coords,
             axis_types=axis_types,
+            shaped_param_axes=shaped_param_axes,
+            axis_alias=axis_alias,
         )
 
     if expr.op == "neg" and len(expr.args) == 1:

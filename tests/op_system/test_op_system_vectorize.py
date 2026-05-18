@@ -711,3 +711,69 @@ def test_reduce_ir_fast_path_emits_np_sum_for_apply_along() -> None:
 def test_reduce_ir_fast_path_numerical_parity() -> None:
     """Reduce-lowered apply_along eval matches the scalar reference."""
     _eval_equal(_apply_along_categorical_spec(), beta=0.3, gamma=0.1)
+
+
+def _same_axis_twice_apply_along_spec() -> dict[str, object]:
+    """SIR-like spec with a same-axis-twice contact kernel reduction.
+
+    The S-equation contains ``apply_along(K[age, age:ap] * I[age:ap],
+    age=ap)`` — a same-axis-twice contraction representing
+    ``sum_{ap} K[age, ap] * I[ap]`` (an age-structured force-of-infection
+    matvec). Stage 1c lowers this via the IR fast path by synthesizing a
+    ``age#ap`` axis label for the bound iteration so ``K_buf``
+    broadcasts as ``(N_age, N_age#ap)`` while ``I_buf`` broadcasts as
+    ``(1, N_age#ap)``.
+
+    Returns:
+        A spec dict suitable for ``normalize_rhs``.
+    """
+    return {
+        "kind": "expr",
+        "axes": [{"name": "age", "coords": ["a1", "a2", "a3"]}],
+        "state": ["S[age]", "I[age]", "R[age]"],
+        "params": [
+            "beta",
+            "gamma",
+            {"name": "K", "axes": ["age", "age"]},
+        ],
+        "equations": {
+            "S[age]": (
+                "-beta * S[age] * apply_along(K[age, age:ap] * I[age:ap], age=ap)"
+            ),
+            "I[age]": (
+                "beta * S[age] * apply_along(K[age, age:ap] * I[age:ap], age=ap)"
+                " - gamma * I[age]"
+            ),
+            "R[age]": "gamma * I[age]",
+        },
+    }
+
+
+def test_same_axis_twice_apply_along_ir_fast_path() -> None:
+    """Same-axis-twice apply_along lowers via the IR fast path (Stage 1c).
+
+    The compiled S-equation code must reference ``K_buf``, ``I_buf``,
+    and ``sum`` directly — proving the lowering does NOT fall back to
+    the string-expanded ``K__age_a1__age_a1 * I__age_a1 + ...`` form.
+    """
+    rhs = normalize_rhs(_same_axis_twice_apply_along_spec())
+    assert rhs.equations_ir_reduce
+    plan = build_vector_plan(rhs)
+    assert plan is not None
+    s_group = next(g for g in plan.eq_groups if g.base == "S")
+    code = s_group.codes[0]
+    names = set(code.co_names)
+    assert not any("__" in n for n in names), (
+        f"per-cell names leaked into reduce-lowered code: "
+        f"{sorted(n for n in names if '__' in n)}"
+    )
+    assert "K_buf" in names, f"expected K_buf in {sorted(names)}"
+    assert "I_buf" in names, f"expected I_buf in {sorted(names)}"
+    assert "sum" in names, f"expected np.sum in {sorted(names)}"
+
+
+def test_same_axis_twice_apply_along_numerical_parity() -> None:
+    """Same-axis-twice apply_along eval matches the scalar reference."""
+    spec = _same_axis_twice_apply_along_spec()
+    k_mat = np.array([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0], [7.0, 8.0, 9.0]])
+    _eval_equal(spec, beta=0.3, gamma=0.1, K=k_mat)

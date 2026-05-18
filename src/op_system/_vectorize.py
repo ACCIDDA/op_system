@@ -590,6 +590,7 @@ def _try_ir_fast_path(  # noqa: PLR0913
     axis_weights: Mapping[str, tuple[float, ...]] | None = None,
     axis_coords: Mapping[str, tuple[str, ...]] | None = None,
     axis_types: Mapping[str, str] | None = None,
+    shaped_param_axes: Mapping[str, tuple[str, ...]] | None = None,
 ) -> ast.Expression | None:
     """Attempt to lower per-cell IR straight to a vector AST.
 
@@ -629,6 +630,7 @@ def _try_ir_fast_path(  # noqa: PLR0913
             axis_weights=axis_weights,
             axis_coords=axis_coords,
             axis_types=axis_types,
+            shaped_param_axes=shaped_param_axes,
         )
     except UnsupportedIRLoweringError:
         return None
@@ -680,6 +682,7 @@ def _rewrite_cell_to_vector(  # noqa: PLR0913
             axis_weights=axis_weights,
             axis_coords=axis_coords,
             axis_types=axis_types,
+            shaped_param_axes=shaped_param_axes,
         )
         if fast is not None:
             return fast
@@ -693,6 +696,7 @@ def _rewrite_cell_to_vector(  # noqa: PLR0913
             axis_weights=axis_weights,
             axis_coords=axis_coords,
             axis_types=axis_types,
+            shaped_param_axes=shaped_param_axes,
         )
         if fast is not None:
             return fast
