@@ -8,6 +8,7 @@ expressions into typed IR nodes without changing compile/normalize behavior.
 from __future__ import annotations
 
 import ast
+import re
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import TYPE_CHECKING, NoReturn
@@ -579,11 +580,45 @@ def ir_to_ast_expr(expr: Expr) -> ast.expr:  # noqa: C901, PLR0911, PLR0912
     _invalid(detail=f"unsupported IR node for AST conversion: {type(expr).__name__}")
 
 
+_IDENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+
+def _render_coord(coord: object) -> str:  # noqa: PLR0911
+    """Render an ``AxisIndex.coord`` value for source-text unparsing.
+
+    Integer-like coords render as bare integers, identifier-like coords render
+    bare, and anything else falls back to ``repr``.
+
+    Args:
+        coord: Coordinate value held on an :class:`AxisIndex` node.
+
+    Returns:
+        Source-text rendering of ``coord`` suitable for embedding in a
+        subscript or bound-axis expression.
+    """
+    if isinstance(coord, bool):
+        return repr(coord)
+    if isinstance(coord, int):
+        return str(coord)
+    if isinstance(coord, float):
+        return repr(coord)
+    if isinstance(coord, str):
+        if coord.lstrip("-").isdigit():
+            return coord
+        if _IDENT_RE.match(coord):
+            return coord
+        return repr(coord)
+    return repr(coord)
+
+
 def _unparse_axis_index(idx: AxisIndex) -> str:
     if idx.placeholder is not None:
         return f"${idx.placeholder}"
     if idx.coord is not None:
-        return repr(idx.coord)
+        rendered = _render_coord(idx.coord)
+        if idx.axis and idx.axis != idx.coord:
+            return f"{idx.axis}:{rendered}"
+        return rendered
     return idx.axis
 
 
