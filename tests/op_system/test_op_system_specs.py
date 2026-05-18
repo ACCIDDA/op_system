@@ -2071,3 +2071,59 @@ def test_aliases_ir_present_for_transitions_kind() -> None:
     }
     out = normalize_transitions_rhs(spec)
     assert "N" in out.aliases_ir
+
+
+# ---------------------------------------------------------------------------
+# equations_ir field (typed IR exposed alongside string equations)
+# ---------------------------------------------------------------------------
+
+
+def test_equations_ir_aligned_with_equations_expr_kind() -> None:
+    """``equations_ir`` should be positionally aligned with ``equations``."""
+    spec = {
+        "kind": "expr",
+        "state": ["S", "I", "R"],
+        "aliases": {"N": "S + I + R"},
+        "equations": {
+            "S": "-beta * S * I / N",
+            "I": "beta * S * I / N - gamma * I",
+            "R": "gamma * I",
+        },
+    }
+    out = normalize_expr_rhs(spec)
+    assert len(out.equations_ir) == len(out.equations)
+    assert all(expr is not None for expr in out.equations_ir)
+    # Aliases inlined: ``N`` should not appear in any equation IR.
+    for expr in out.equations_ir:
+        assert expr is not None
+        assert "N" not in free_symbols(expr)
+
+
+def test_equations_ir_present_for_transitions_kind() -> None:
+    """``transitions`` kind should also populate ``equations_ir`` with IR."""
+    spec = {
+        "kind": "transitions",
+        "state": ["S", "I", "R"],
+        "aliases": {"N": "S + I + R"},
+        "transitions": [
+            {"from": "S", "to": "I", "rate": "beta * I / N"},
+            {"from": "I", "to": "R", "rate": "gamma"},
+        ],
+    }
+    out = normalize_transitions_rhs(spec)
+    assert len(out.equations_ir) == len(out.equations)
+    assert all(expr is not None for expr in out.equations_ir)
+    for expr in out.equations_ir:
+        assert expr is not None
+        assert "N" not in free_symbols(expr)
+
+
+def test_equations_ir_round_trip_matches_parse_expr_to_ir() -> None:
+    """For simple equations, ``equations_ir`` entries equal direct IR parse."""
+    spec = {
+        "kind": "expr",
+        "state": ["x"],
+        "equations": {"x": "a + b"},
+    }
+    out = normalize_expr_rhs(spec)
+    assert out.equations_ir[0] == parse_expr_to_ir("a + b")

@@ -124,6 +124,7 @@ class NormalizedRhs:
     shaped_params: tuple[tuple[str, tuple[str, ...]], ...] = ()
     time_varying_params: tuple[tuple[str, tuple[str, ...]], ...] = ()
     aliases_ir: Mapping[str, Expr] = field(default_factory=dict)
+    equations_ir: tuple[Expr | None, ...] = ()
 
 
 # ---------------------------------------------------------------------------
@@ -1163,6 +1164,43 @@ def _build_aliases_ir(aliases: Mapping[str, str]) -> dict[str, Expr]:
             except (ValueError, RecursionError):
                 inlined[name] = expr
         return inlined
+    finally:
+        if needed > old_limit:
+            sys.setrecursionlimit(old_limit)
+
+
+def _build_equations_ir(
+    equations: tuple[str, ...],
+    aliases_ir: Mapping[str, Expr],
+) -> tuple[Expr | None, ...]:
+    """Parse each equation RHS to IR, inlining alias references.
+
+    Best-effort: entries that fail to parse or inline are returned as ``None``
+    so positional alignment with ``equations`` is preserved. Mirrors the
+    fallback policy of :func:`_build_aliases_ir` to keep this slice purely
+    additive — existing string-based consumers remain authoritative.
+
+    Returns:
+        Tuple of IR expressions (or ``None`` for failed entries) aligned
+        positionally with ``equations``.
+    """
+    old_limit = sys.getrecursionlimit()
+    needed = max(old_limit, 10_000)
+    try:
+        if needed > old_limit:
+            sys.setrecursionlimit(needed)
+        out: list[Expr | None] = []
+        for eq in equations:
+            try:
+                expr = parse_expr_to_ir(eq)
+            except (ValueError, RecursionError):
+                out.append(None)
+                continue
+            try:
+                out.append(inline_aliases(expr, aliases_ir))
+            except (ValueError, RecursionError):
+                out.append(expr)
+        return tuple(out)
     finally:
         if needed > old_limit:
             sys.setrecursionlimit(old_limit)
@@ -2878,7 +2916,7 @@ def normalize_rhs(spec: Mapping[str, Any] | None) -> NormalizedRhs:
     return normalize_expr_rhs(spec)  # unreachable; satisfies return type checker
 
 
-def normalize_expr_rhs(spec: Mapping[str, Any]) -> NormalizedRhs:  # noqa: C901, PLR0914
+def normalize_expr_rhs(spec: Mapping[str, Any]) -> NormalizedRhs:  # noqa: C901, PLR0914, PLR0915
     """Normalize an expression-based RHS specification.
 
     Args:
@@ -3019,10 +3057,12 @@ def normalize_expr_rhs(spec: Mapping[str, Any]) -> NormalizedRhs:  # noqa: C901,
     time_varying_set = set(time_varying_full)
     axis_name_set = set(axis_lookup_dict)
     template_base_set = {parse_selector(k)[0] for k in template_map_all}
+    eqs_tuple = tuple(eqs)
+    aliases_ir_map = _build_aliases_ir(aliases)
     return NormalizedRhs(
         kind="expr",
         state_names=tuple(state_expanded),
-        equations=tuple(eqs),
+        equations=eqs_tuple,
         aliases=aliases,
         param_names=_sorted_unique(
             sym
@@ -3045,7 +3085,8 @@ def normalize_expr_rhs(spec: Mapping[str, Any]) -> NormalizedRhs:  # noqa: C901,
         ),
         shaped_params=tuple(sorted(shaped_params.items())),
         time_varying_params=tuple(sorted(time_varying_full.items())),
-        aliases_ir=_build_aliases_ir(aliases),
+        aliases_ir=aliases_ir_map,
+        equations_ir=_build_equations_ir(eqs_tuple, aliases_ir_map),
     )
 
 
@@ -3282,10 +3323,12 @@ def normalize_transitions_rhs(  # noqa: C901, PLR0912, PLR0914, PLR0915
     time_varying_set = set(time_varying_full)
     axis_name_set = set(axis_lookup_dict)
     template_base_set = {parse_selector(k)[0] for k in template_map_all}
+    eqs_tuple = tuple(_build_transition_equations(state_expanded, d_terms))
+    aliases_ir_map = _build_aliases_ir(aliases)
     return NormalizedRhs(
         kind="transitions",
         state_names=tuple(state_expanded),
-        equations=tuple(_build_transition_equations(state_expanded, d_terms)),
+        equations=eqs_tuple,
         aliases=aliases,
         param_names=_sorted_unique(
             sym
@@ -3308,5 +3351,6 @@ def normalize_transitions_rhs(  # noqa: C901, PLR0912, PLR0914, PLR0915
         ),
         shaped_params=tuple(sorted(shaped_params.items())),
         time_varying_params=tuple(sorted(time_varying_full.items())),
-        aliases_ir=_build_aliases_ir(aliases),
+        aliases_ir=aliases_ir_map,
+        equations_ir=_build_equations_ir(eqs_tuple, aliases_ir_map),
     )
