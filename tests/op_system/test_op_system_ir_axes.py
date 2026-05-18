@@ -39,9 +39,7 @@ def test_classify_placeholder() -> None:
 def test_classify_unknown_symbol_is_coord_symbol() -> None:
     """An unknown identifier used as a subscript classifies as COORD_SYMBOL."""
     idx = AxisIndex(axis="ap")
-    assert (
-        classify_axis_index(idx, axis_names=AXES) == AxisKind.COORD_SYMBOL
-    )
+    assert classify_axis_index(idx, axis_names=AXES) == AxisKind.COORD_SYMBOL
 
 
 def test_iter_subscripts_walks_apply_and_reduce() -> None:

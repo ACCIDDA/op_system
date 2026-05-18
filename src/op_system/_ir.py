@@ -39,11 +39,15 @@ class AxisIndex:
     For the initial parse-only phase, ``axis`` stores the token text for
     name-style indices (e.g. ``age`` in ``K[age, ap]``). Literal indices
     (e.g. ``K[0]`` or ``K['x']``) are represented by ``coord``.
+
+    The optional ``kind`` field is populated by :func:`resolve_axis_kinds`
+    once an axis registry is known. Parser output leaves ``kind`` unset.
     """
 
     axis: str
     coord: str | None = None
     placeholder: str | None = None
+    kind: AxisKind | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -416,9 +420,7 @@ class AxisKind(StrEnum):
     COORD_SYMBOL = "coord_symbol"
 
 
-def classify_axis_index(
-    idx: AxisIndex, *, axis_names: frozenset[str]
-) -> AxisKind:
+def classify_axis_index(idx: AxisIndex, *, axis_names: frozenset[str]) -> AxisKind:
     """Classify a single ``AxisIndex`` against a registry of known axes.
 
     Args:
@@ -544,9 +546,7 @@ def substitute(expr: Expr, mapping: Mapping[str, Expr]) -> Expr:
     _invalid(detail=f"unsupported IR node in substitute: {type(expr).__name__}")
 
 
-def axis_kinds(
-    expr: Expr, *, axis_names: frozenset[str]
-) -> tuple[AxisKind, ...]:
+def axis_kinds(expr: Expr, *, axis_names: frozenset[str]) -> tuple[AxisKind, ...]:
     """Classify every ``AxisIndex`` position in walk order.
 
     Args:
@@ -564,6 +564,54 @@ def axis_kinds(
     )
 
 
+def _resolve_index(idx: AxisIndex, *, axis_names: frozenset[str]) -> AxisIndex:
+    kind = classify_axis_index(idx, axis_names=axis_names)
+    if idx.kind is kind:
+        return idx
+    return AxisIndex(
+        axis=idx.axis, coord=idx.coord, placeholder=idx.placeholder, kind=kind
+    )
+
+
+def resolve_axis_kinds(expr: Expr, *, axis_names: frozenset[str]) -> Expr:  # noqa: PLR0911
+    """Return a copy of ``expr`` with every ``AxisIndex.kind`` populated.
+
+    Walks the IR tree and rewrites each :class:`AxisIndex` so its ``kind``
+    field reflects classification against ``axis_names``. Nodes that already
+    carry the correct kind are reused, so a resolved tree is idempotent.
+
+    Args:
+        expr: Root IR expression (typically straight from the parser).
+        axis_names: Set of registered axis identifier strings.
+
+    Returns:
+        Structurally equivalent IR with ``AxisIndex.kind`` set on every
+        subscript position.
+    """
+    if isinstance(expr, (Literal, Sym)):
+        return expr
+    if isinstance(expr, Subscript):
+        new_indices = tuple(
+            _resolve_index(i, axis_names=axis_names) for i in expr.indices
+        )
+        if new_indices == expr.indices:
+            return expr
+        return Subscript(name=expr.name, indices=new_indices)
+    if isinstance(expr, Apply):
+        new_args = tuple(
+            resolve_axis_kinds(arg, axis_names=axis_names) for arg in expr.args
+        )
+        if new_args == expr.args:
+            return expr
+        return Apply(op=expr.op, args=new_args)
+    if isinstance(expr, Reduce):
+        new_body = resolve_axis_kinds(expr.body, axis_names=axis_names)
+        if new_body is expr.body:
+            return expr
+        return Reduce(kind=expr.kind, bindings=expr.bindings, body=new_body)
+    _invalid(detail=f"unsupported IR node in resolve_axis_kinds: {type(expr).__name__}")
+
+
 __all__ = [
     "Apply",
     "AxisIndex",
@@ -579,6 +627,7 @@ __all__ = [
     "iter_subscripts",
     "lower_helper_calls",
     "parse_expr_to_ir",
+    "resolve_axis_kinds",
     "substitute",
     "to_ir",
     "unparse_ir",

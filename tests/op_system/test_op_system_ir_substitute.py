@@ -71,9 +71,7 @@ def test_substitute_recurses_into_apply_and_reduce_body() -> None:
     expr = Reduce(kind="sum_over", bindings=(("age", "age"),), body=body)
     out = substitute(expr, {"beta": Literal(value=0.5)})
     assert isinstance(out, Reduce)
-    assert out.body == Apply(
-        op="*", args=(Sym(name="x"), Literal(value=0.5))
-    )
+    assert out.body == Apply(op="*", args=(Sym(name="x"), Literal(value=0.5)))
 
 
 def test_substitute_does_not_capture_bound_names() -> None:
@@ -87,9 +85,7 @@ def test_substitute_does_not_capture_bound_names() -> None:
     )
 
     assert isinstance(out, Reduce)
-    assert out.body == Apply(
-        op="*", args=(Sym(name="ap"), Literal(value=0.5))
-    )
+    assert out.body == Apply(op="*", args=(Sym(name="ap"), Literal(value=0.5)))
 
 
 def test_substitute_is_identity_when_no_match() -> None:
