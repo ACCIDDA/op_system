@@ -35,6 +35,11 @@ from typing import TYPE_CHECKING, Any, cast
 import numpy as np
 
 from op_system._ir import Expr, ir_to_ast_expr
+from op_system._ir_lower import (
+    UnsupportedIRLoweringError,
+    lift_cell_ir_to_template,
+    lower_to_vector_ast,
+)
 from op_system.compile import (
     _SAFE_BUILTINS,
     _check_numeric_dtype,
@@ -575,6 +580,55 @@ class _NameRewriter(ast.NodeTransformer):
         )
 
 
+def _try_ir_fast_path(
+    expr_ir: Expr,
+    *,
+    target_axes: tuple[str, ...],
+    name_to_template: Mapping[str, _BufferTemplate],
+    axis_index: Mapping[str, Mapping[str, int]],
+) -> ast.Expression | None:
+    """Attempt to lower per-cell IR straight to a vector AST.
+
+    Lifts ``expr_ir`` (per-cell scalar names) to template-form IR via
+    :func:`lift_cell_ir_to_template`, then runs the typed lowering in
+    :func:`lower_to_vector_ast`. On any v1-scope violation (raises
+    :class:`UnsupportedIRLoweringError`) returns ``None`` so the caller
+    falls back to the legacy :class:`_NameRewriter` path.
+
+    The fast path bypasses per-cell name expansion entirely: it produces
+    the same shaped buffer expression for every cell of a template, which
+    makes the downstream "first cell == last cell" structural check
+    trivially pass and lets the vectorizer emit a single compiled code
+    object for the whole template.
+
+    Returns:
+        A complete ``ast.Expression`` whose body broadcasts to
+        ``target_axes``, or ``None`` if the IR falls outside the v1
+        lowering subset.
+    """
+    cell_to_template: dict[str, tuple[str, tuple[str, ...]]] = {}
+    buffer_axes: dict[str, tuple[str, ...]] = {}
+    for cell_name, tpl in name_to_template.items():
+        cell_to_template[cell_name] = (tpl.base, tpl.axes)
+        if tpl.axes:
+            buffer_axes[tpl.base] = tpl.axes
+    if not buffer_axes:
+        return None
+    try:
+        lifted = lift_cell_ir_to_template(expr_ir, cell_to_template=cell_to_template)
+        body = lower_to_vector_ast(
+            lifted,
+            target_axes=target_axes,
+            buffer_axes=buffer_axes,
+            axis_names=frozenset(axis_index.keys()),
+        )
+    except UnsupportedIRLoweringError:
+        return None
+    tree = ast.Expression(body=body)
+    ast.fix_missing_locations(tree)
+    return tree
+
+
 def _rewrite_cell_to_vector(  # noqa: PLR0913
     *,
     expr: str,
@@ -599,6 +653,15 @@ def _rewrite_cell_to_vector(  # noqa: PLR0913
     )
     ast.fix_missing_locations(tree)
     _validate_ast(tree, expr=expr)
+    if expr_ir is not None:
+        fast = _try_ir_fast_path(
+            expr_ir,
+            target_axes=target_axes,
+            name_to_template=name_to_template,
+            axis_index=axis_index,
+        )
+        if fast is not None:
+            return fast
     rewriter = _NameRewriter(
         target_axes=target_axes,
         cell_coords=cell_coords,

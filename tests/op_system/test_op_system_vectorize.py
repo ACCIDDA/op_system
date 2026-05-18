@@ -613,3 +613,38 @@ def test_long_add_chain_does_not_raise_recursionerror() -> None:
     assert s_buf_loads == 1, (
         f"long chain should still collapse to a single S_buf load, got {s_buf_loads}"
     )
+
+
+# ---------------------------------------------------------------------------
+# IR-based vectorization fast path (issue #112)
+# ---------------------------------------------------------------------------
+
+
+def test_ir_fast_path_emits_no_per_cell_names_on_clean_templated_spec() -> None:
+    """Equations lowered via the IR fast path reference only buffer names.
+
+    On a templated spec whose equations contain no string-expanded axis
+    reductions (no ``apply_along``, ``sum_over``, etc.), the IR-based
+    lowering in ``_rewrite_cell_to_vector`` should produce code objects
+    that reference only ``<base>_buf`` / scalar-param names — never the
+    per-cell expanded names like ``S__age_y__loc_a`` that the legacy
+    ``_NameRewriter`` path produces as intermediates.
+    """
+    rhs = normalize_rhs(_sir_two_axis_spec())
+    plan = build_vector_plan(rhs)
+    assert plan is not None
+    for grp in plan.eq_groups:
+        for code in grp.codes:
+            for name in code.co_names:
+                assert "__" not in name, (
+                    f"per-cell name {name!r} leaked into vectorized "
+                    f"code for template {grp.base!r}"
+                )
+
+
+def test_ir_fast_path_preserves_numerical_parity_with_scalar() -> None:
+    """The IR fast path produces numerically identical output to scalar eval."""
+    # Same equivalence check as test_vectorized_matches_scalar_two_axis_sir,
+    # but kept distinct so a regression that disables the fast path is
+    # caught by the structural test above without masking the parity check.
+    _eval_equal(_sir_two_axis_spec(), beta=0.3, gamma=0.1)

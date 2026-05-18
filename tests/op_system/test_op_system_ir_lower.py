@@ -10,6 +10,7 @@ import numpy as np
 import pytest
 
 from op_system._ir import (
+    Apply,
     AxisIndex,
     AxisKind,
     Literal,
@@ -21,6 +22,7 @@ from op_system._ir import (
 )
 from op_system._ir_lower import (
     UnsupportedIRLoweringError,
+    lift_cell_ir_to_template,
     lower_subscript_to_buffer,
     lower_to_vector_ast,
 )
@@ -275,3 +277,81 @@ def test_lower_subscript_resolves_axis_kinds_when_unset() -> None:
     )
     s_buf = np.arange(6).reshape(3, 2)
     assert np.array_equal(_eval(node, {"S_buf": s_buf, "np": np}), s_buf)
+
+
+# ---------------------------------------------------------------------------
+# lift_cell_ir_to_template
+# ---------------------------------------------------------------------------
+
+
+def test_lift_replaces_templated_cell_syms_with_free_subscripts() -> None:
+    """Per-cell ``Sym`` leaves lift to FREE-axis ``Subscript`` nodes."""
+    ir = parse_expr_to_ir("beta * S__age_y__loc_a")
+    lifted = lift_cell_ir_to_template(
+        ir,
+        cell_to_template={
+            "S__age_y__loc_a": ("S", ("age", "loc")),
+            "S__age_y__loc_b": ("S", ("age", "loc")),
+            "S__age_o__loc_a": ("S", ("age", "loc")),
+            "S__age_o__loc_b": ("S", ("age", "loc")),
+        },
+    )
+    assert isinstance(lifted, Apply)
+    assert lifted.op == "*"
+    sub = lifted.args[1]
+    assert isinstance(sub, Subscript)
+    assert sub.name == "S"
+    assert tuple(idx.axis for idx in sub.indices) == ("age", "loc")
+    assert all(idx.kind == AxisKind.FREE for idx in sub.indices)
+
+
+def test_lift_leaves_scalar_params_alone() -> None:
+    """Symbols absent from the cell map (scalar params) survive intact."""
+    ir = parse_expr_to_ir("beta + gamma * 2")
+    lifted = lift_cell_ir_to_template(ir, cell_to_template={})
+    assert lifted == ir
+
+
+def test_lift_rewrites_scalar_aliases_to_buf_syms() -> None:
+    """Empty-axes mapping rewrites the symbol to its ``<base>_buf`` form."""
+    ir = parse_expr_to_ir("I_total * 0.5")
+    lifted = lift_cell_ir_to_template(ir, cell_to_template={"I_total": ("I_total", ())})
+    assert isinstance(lifted, Apply)
+    assert lifted.op == "*"
+    assert lifted.args[0] == Sym(name="I_total_buf")
+
+
+def test_lift_refuses_when_multiple_cells_of_same_base_cooccur() -> None:
+    """String-expanded axis reductions must be rejected, not silently merged."""
+    # Mimics ``apply_along(pop=j, I[pop=j])`` after string expansion to
+    # ``I__pop_p1 + I__pop_p2`` — collapsing both to ``I[pop]`` would
+    # broadcast instead of reduce.
+    ir = parse_expr_to_ir("I__pop_p1 + I__pop_p2")
+    with pytest.raises(UnsupportedIRLoweringError, match="multiple"):
+        lift_cell_ir_to_template(
+            ir,
+            cell_to_template={
+                "I__pop_p1": ("I", ("pop",)),
+                "I__pop_p2": ("I", ("pop",)),
+            },
+        )
+
+
+def test_lift_then_lower_round_trip_evaluates_to_buffer_product() -> None:
+    """Lift + lower of ``S * I`` produces a shaped element-wise product."""
+    ir = parse_expr_to_ir("S__age_0__vax_0 * I__age_0__vax_0")
+    cell_to_template = {
+        "S__age_0__vax_0": ("S", ("age", "vax")),
+        "I__age_0__vax_0": ("I", ("age", "vax")),
+    }
+    lifted = lift_cell_ir_to_template(ir, cell_to_template=cell_to_template)
+    node = lower_to_vector_ast(
+        lifted,
+        target_axes=("age", "vax"),
+        buffer_axes={"S": ("age", "vax"), "I": ("age", "vax")},
+        axis_names=frozenset({"age", "vax"}),
+    )
+    s_buf = np.array([[1.0, 2.0], [3.0, 4.0]])
+    i_buf = np.array([[5.0, 6.0], [7.0, 8.0]])
+    out = _eval(node, {"S_buf": s_buf, "I_buf": i_buf, "np": np})
+    assert np.array_equal(out, s_buf * i_buf)
