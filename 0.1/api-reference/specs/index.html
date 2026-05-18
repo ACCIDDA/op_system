@@ -1182,7 +1182,7 @@ for backward compatibility.</p>
 
 
 <h3 id="op_system.specs.NormalizedRhs" class="doc doc-heading">
-              <code class="highlight language-python"><span class="n">NormalizedRhs</span><span class="p">(</span><span class="n">kind</span><span class="p">,</span> <span class="n">state_names</span><span class="p">,</span> <span class="n">equations</span><span class="p">,</span> <span class="n">aliases</span><span class="p">,</span> <span class="n">param_names</span><span class="p">,</span> <span class="n">all_symbols</span><span class="p">,</span> <span class="n">meta</span><span class="p">,</span> <span class="n">state_templates</span><span class="o">=</span><span class="p">(),</span> <span class="n">shaped_params</span><span class="o">=</span><span class="p">(),</span> <span class="n">time_varying_params</span><span class="o">=</span><span class="p">(),</span> <span class="n">aliases_ir</span><span class="o">=</span><span class="nb">dict</span><span class="p">(),</span> <span class="n">equations_ir</span><span class="o">=</span><span class="p">(),</span> <span class="n">equations_ir_raw</span><span class="o">=</span><span class="p">())</span></code>
+              <code class="highlight language-python"><span class="n">NormalizedRhs</span><span class="p">(</span><span class="n">kind</span><span class="p">,</span> <span class="n">state_names</span><span class="p">,</span> <span class="n">equations</span><span class="p">,</span> <span class="n">aliases</span><span class="p">,</span> <span class="n">param_names</span><span class="p">,</span> <span class="n">all_symbols</span><span class="p">,</span> <span class="n">meta</span><span class="p">,</span> <span class="n">state_templates</span><span class="o">=</span><span class="p">(),</span> <span class="n">shaped_params</span><span class="o">=</span><span class="p">(),</span> <span class="n">time_varying_params</span><span class="o">=</span><span class="p">(),</span> <span class="n">aliases_ir</span><span class="o">=</span><span class="nb">dict</span><span class="p">(),</span> <span class="n">equations_ir</span><span class="o">=</span><span class="p">(),</span> <span class="n">equations_ir_raw</span><span class="o">=</span><span class="p">(),</span> <span class="n">aliases_ir_reduce</span><span class="o">=</span><span class="nb">dict</span><span class="p">(),</span> <span class="n">equations_ir_reduce</span><span class="o">=</span><span class="p">())</span></code>
 
   <span class="doc doc-labels">
       <small class="doc doc-label doc-label-dataclass"><code>dataclass</code></small>
@@ -1523,7 +1523,7 @@ slice starts in the flat state vector).</p>
       <tbody>
           <tr class="doc-section-item">
             <td>
-                  <code><a class="autorefs autorefs-internal" title="NormalizedRhs(kind, state_names, equations, aliases, param_names, all_symbols, meta, state_templates=(), shaped_params=(), time_varying_params=(), aliases_ir=dict(), equations_ir=(), equations_ir_raw=())
+                  <code><a class="autorefs autorefs-internal" title="NormalizedRhs(kind, state_names, equations, aliases, param_names, all_symbols, meta, state_templates=(), shaped_params=(), time_varying_params=(), aliases_ir=dict(), equations_ir=(), equations_ir_raw=(), aliases_ir_reduce=dict(), equations_ir_reduce=())
 
   
       dataclass
@@ -1564,594 +1564,30 @@ slice starts in the flat state vector).</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/op_system/_normalize.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">2958</span>
-<span class="normal">2959</span>
-<span class="normal">2960</span>
-<span class="normal">2961</span>
-<span class="normal">2962</span>
-<span class="normal">2963</span>
-<span class="normal">2964</span>
-<span class="normal">2965</span>
-<span class="normal">2966</span>
-<span class="normal">2967</span>
-<span class="normal">2968</span>
-<span class="normal">2969</span>
-<span class="normal">2970</span>
-<span class="normal">2971</span>
-<span class="normal">2972</span>
-<span class="normal">2973</span>
-<span class="normal">2974</span>
-<span class="normal">2975</span>
-<span class="normal">2976</span>
-<span class="normal">2977</span>
-<span class="normal">2978</span>
-<span class="normal">2979</span>
-<span class="normal">2980</span>
-<span class="normal">2981</span>
-<span class="normal">2982</span>
-<span class="normal">2983</span>
-<span class="normal">2984</span>
-<span class="normal">2985</span>
-<span class="normal">2986</span>
-<span class="normal">2987</span>
-<span class="normal">2988</span>
-<span class="normal">2989</span>
-<span class="normal">2990</span>
-<span class="normal">2991</span>
-<span class="normal">2992</span>
-<span class="normal">2993</span>
-<span class="normal">2994</span>
-<span class="normal">2995</span>
-<span class="normal">2996</span>
-<span class="normal">2997</span>
-<span class="normal">2998</span>
-<span class="normal">2999</span>
-<span class="normal">3000</span>
-<span class="normal">3001</span>
-<span class="normal">3002</span>
-<span class="normal">3003</span>
-<span class="normal">3004</span>
-<span class="normal">3005</span>
-<span class="normal">3006</span>
-<span class="normal">3007</span>
-<span class="normal">3008</span>
-<span class="normal">3009</span>
-<span class="normal">3010</span>
-<span class="normal">3011</span>
-<span class="normal">3012</span>
-<span class="normal">3013</span>
-<span class="normal">3014</span>
-<span class="normal">3015</span>
-<span class="normal">3016</span>
-<span class="normal">3017</span>
-<span class="normal">3018</span>
-<span class="normal">3019</span>
-<span class="normal">3020</span>
-<span class="normal">3021</span>
-<span class="normal">3022</span>
-<span class="normal">3023</span>
-<span class="normal">3024</span>
-<span class="normal">3025</span>
-<span class="normal">3026</span>
-<span class="normal">3027</span>
-<span class="normal">3028</span>
-<span class="normal">3029</span>
-<span class="normal">3030</span>
-<span class="normal">3031</span>
-<span class="normal">3032</span>
-<span class="normal">3033</span>
-<span class="normal">3034</span>
-<span class="normal">3035</span>
-<span class="normal">3036</span>
-<span class="normal">3037</span>
-<span class="normal">3038</span>
-<span class="normal">3039</span>
-<span class="normal">3040</span>
-<span class="normal">3041</span>
-<span class="normal">3042</span>
-<span class="normal">3043</span>
-<span class="normal">3044</span>
-<span class="normal">3045</span>
-<span class="normal">3046</span>
-<span class="normal">3047</span>
-<span class="normal">3048</span>
-<span class="normal">3049</span>
-<span class="normal">3050</span>
-<span class="normal">3051</span>
-<span class="normal">3052</span>
-<span class="normal">3053</span>
-<span class="normal">3054</span>
-<span class="normal">3055</span>
-<span class="normal">3056</span>
-<span class="normal">3057</span>
-<span class="normal">3058</span>
-<span class="normal">3059</span>
-<span class="normal">3060</span>
-<span class="normal">3061</span>
-<span class="normal">3062</span>
-<span class="normal">3063</span>
-<span class="normal">3064</span>
-<span class="normal">3065</span>
-<span class="normal">3066</span>
-<span class="normal">3067</span>
-<span class="normal">3068</span>
-<span class="normal">3069</span>
-<span class="normal">3070</span>
-<span class="normal">3071</span>
-<span class="normal">3072</span>
-<span class="normal">3073</span>
-<span class="normal">3074</span>
-<span class="normal">3075</span>
-<span class="normal">3076</span>
-<span class="normal">3077</span>
-<span class="normal">3078</span>
-<span class="normal">3079</span>
-<span class="normal">3080</span>
-<span class="normal">3081</span>
-<span class="normal">3082</span>
-<span class="normal">3083</span>
-<span class="normal">3084</span>
-<span class="normal">3085</span>
-<span class="normal">3086</span>
-<span class="normal">3087</span>
-<span class="normal">3088</span>
-<span class="normal">3089</span>
-<span class="normal">3090</span>
-<span class="normal">3091</span>
-<span class="normal">3092</span>
-<span class="normal">3093</span>
-<span class="normal">3094</span>
-<span class="normal">3095</span>
-<span class="normal">3096</span>
-<span class="normal">3097</span>
-<span class="normal">3098</span>
-<span class="normal">3099</span>
-<span class="normal">3100</span>
-<span class="normal">3101</span>
-<span class="normal">3102</span>
-<span class="normal">3103</span>
-<span class="normal">3104</span>
-<span class="normal">3105</span>
-<span class="normal">3106</span>
-<span class="normal">3107</span>
-<span class="normal">3108</span>
-<span class="normal">3109</span>
-<span class="normal">3110</span>
-<span class="normal">3111</span>
-<span class="normal">3112</span>
-<span class="normal">3113</span>
-<span class="normal">3114</span>
-<span class="normal">3115</span>
-<span class="normal">3116</span>
-<span class="normal">3117</span>
-<span class="normal">3118</span>
-<span class="normal">3119</span>
-<span class="normal">3120</span>
-<span class="normal">3121</span>
-<span class="normal">3122</span>
-<span class="normal">3123</span>
-<span class="normal">3124</span>
-<span class="normal">3125</span>
-<span class="normal">3126</span>
-<span class="normal">3127</span>
-<span class="normal">3128</span>
-<span class="normal">3129</span>
-<span class="normal">3130</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">normalize_expr_rhs</span><span class="p">(</span><span class="n">spec</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">NormalizedRhs</span><span class="p">:</span>  <span class="c1"># noqa: C901, PLR0914, PLR0915</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Normalize an expression-based RHS specification.</span>
-
-<span class="sd">    Args:</span>
-<span class="sd">        spec: Raw RHS specification mapping.</span>
-
-<span class="sd">    Returns:</span>
-<span class="sd">        Backend-facing normalized RHS representation.</span>
-
-<span class="sd">    Raises:</span>
-<span class="sd">        InvalidRhsSpecError: If validation fails.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="n">state_raw</span> <span class="o">=</span> <span class="n">_ensure_str_list</span><span class="p">(</span><span class="n">spec</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;state&quot;</span><span class="p">),</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;state&quot;</span><span class="p">)</span>
-    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">state_raw</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="n">state_raw</span><span class="p">)):</span>
-        <span class="k">raise</span> <span class="n">InvalidRhsSpecError</span><span class="p">(</span><span class="n">detail</span><span class="o">=</span><span class="s2">&quot;state contains duplicate names&quot;</span><span class="p">)</span>
-
-    <span class="n">equations_map</span> <span class="o">=</span> <span class="n">spec</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;equations&quot;</span><span class="p">)</span>
-    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">equations_map</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
-        <span class="k">raise</span> <span class="n">InvalidRhsSpecError</span><span class="p">(</span><span class="n">detail</span><span class="o">=</span><span class="s2">&quot;equations must be a mapping of state-&gt;expr&quot;</span><span class="p">)</span>
-
-    <span class="n">equations_map</span> <span class="o">=</span> <span class="p">{</span><span class="n">_normalize_bracket_key</span><span class="p">(</span><span class="n">k</span><span class="p">):</span> <span class="n">v</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">equations_map</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span>
-
-    <span class="n">axes_meta</span> <span class="o">=</span> <span class="n">_normalize_axes</span><span class="p">(</span><span class="n">spec</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;axes&quot;</span><span class="p">))</span>
-    <span class="n">meta_parts</span> <span class="o">=</span> <span class="n">_normalize_common_meta</span><span class="p">(</span>
-        <span class="n">spec</span><span class="p">,</span>
-        <span class="n">axis_names</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;subgroup&quot;</span><span class="p">}</span> <span class="o">|</span> <span class="p">{</span><span class="n">ax</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">]</span> <span class="k">for</span> <span class="n">ax</span> <span class="ow">in</span> <span class="n">axes_meta</span><span class="p">},</span>
-        <span class="n">state_set</span><span class="o">=</span><span class="nb">set</span><span class="p">(</span><span class="n">state_raw</span><span class="p">),</span>
-        <span class="n">operator_state_set</span><span class="o">=</span><span class="nb">set</span><span class="p">(</span><span class="n">state_raw</span><span class="p">),</span>
-        <span class="n">axes</span><span class="o">=</span><span class="n">axes_meta</span><span class="p">,</span>
-    <span class="p">)</span>
-
-    <span class="n">meta</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
-        <span class="s2">&quot;axes&quot;</span><span class="p">:</span> <span class="n">axes_meta</span><span class="p">,</span>
-        <span class="s2">&quot;state_axes&quot;</span><span class="p">:</span> <span class="n">meta_parts</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span>
-        <span class="s2">&quot;kernels&quot;</span><span class="p">:</span> <span class="n">meta_parts</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span>
-        <span class="s2">&quot;operators&quot;</span><span class="p">:</span> <span class="n">meta_parts</span><span class="p">[</span><span class="mi">3</span><span class="p">],</span>
-    <span class="p">}</span>
-    <span class="k">for</span> <span class="n">reserved_key</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;sources&quot;</span><span class="p">,</span> <span class="s2">&quot;couplings&quot;</span><span class="p">,</span> <span class="s2">&quot;constraints&quot;</span><span class="p">):</span>
-        <span class="k">if</span> <span class="n">reserved_key</span> <span class="ow">in</span> <span class="n">spec</span><span class="p">:</span>
-            <span class="n">meta</span><span class="p">[</span><span class="n">reserved_key</span><span class="p">]</span> <span class="o">=</span> <span class="n">spec</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">reserved_key</span><span class="p">)</span>
-
-    <span class="n">state_expanded</span><span class="p">,</span> <span class="n">state_template_map</span> <span class="o">=</span> <span class="n">_expand_state_templates</span><span class="p">(</span>
-        <span class="n">state_raw</span><span class="p">,</span> <span class="n">axes</span><span class="o">=</span><span class="n">axes_meta</span>
-    <span class="p">)</span>
-    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">state_expanded</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="n">state_expanded</span><span class="p">)):</span>
-        <span class="k">raise</span> <span class="n">InvalidRhsSpecError</span><span class="p">(</span><span class="n">detail</span><span class="o">=</span><span class="s2">&quot;expanded state contains duplicates&quot;</span><span class="p">)</span>
-
-    <span class="c1"># Pre-scan raw aliases + equations for shaped-parameter references before</span>
-    <span class="c1"># alias/template expansion mangles bracketed bases into per-coord names.</span>
-    <span class="n">axis_lookup_dict</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="n">build_axis_lookup</span><span class="p">(</span><span class="n">axes_meta</span><span class="p">)</span>
-    <span class="n">aliases_raw_map</span> <span class="o">=</span> <span class="n">meta_parts</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="ow">or</span> <span class="p">{}</span>
-    <span class="n">name_blocklist</span> <span class="o">=</span> <span class="p">(</span>
-        <span class="p">{</span><span class="n">parse_selector</span><span class="p">(</span><span class="n">s</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span> <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">state_raw</span><span class="p">}</span>
-        <span class="o">|</span> <span class="nb">set</span><span class="p">(</span><span class="n">state_expanded</span><span class="p">)</span>
-        <span class="o">|</span> <span class="p">{</span><span class="n">parse_selector</span><span class="p">(</span><span class="n">_normalize_bracket_key</span><span class="p">(</span><span class="n">k</span><span class="p">))[</span><span class="mi">0</span><span class="p">]</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">aliases_raw_map</span><span class="p">}</span>
-        <span class="o">|</span> <span class="nb">set</span><span class="p">(</span><span class="n">aliases_raw_map</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
-    <span class="p">)</span>
-    <span class="n">raw_expressions</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span>
-        <span class="n">v</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">aliases_raw_map</span><span class="o">.</span><span class="n">values</span><span class="p">()</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span>
-    <span class="p">]</span>
-    <span class="n">raw_expressions</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">v</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">equations_map</span><span class="o">.</span><span class="n">values</span><span class="p">()</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="nb">str</span><span class="p">))</span>
-    <span class="n">shaped_params</span> <span class="o">=</span> <span class="n">_scan_shaped_param_refs</span><span class="p">(</span>
-        <span class="n">raw_expressions</span><span class="p">,</span>
-        <span class="n">name_blocklist</span><span class="o">=</span><span class="n">name_blocklist</span><span class="p">,</span>
-        <span class="n">axis_lookup</span><span class="o">=</span><span class="n">axis_lookup_dict</span><span class="p">,</span>
-    <span class="p">)</span>
-    <span class="n">_reject_legacy_time_varying_field</span><span class="p">(</span><span class="n">spec</span><span class="p">)</span>
-    <span class="n">time_axis_name</span> <span class="o">=</span> <span class="n">_resolve_time_axis_name</span><span class="p">(</span><span class="n">spec</span><span class="p">)</span>
-    <span class="n">shaped_params</span><span class="p">,</span> <span class="n">time_varying_full</span> <span class="o">=</span> <span class="n">_partition_time_varying_shaped</span><span class="p">(</span>
-        <span class="n">shaped_params</span><span class="p">,</span>
-        <span class="n">time_axis_name</span><span class="o">=</span><span class="n">time_axis_name</span><span class="p">,</span>
-        <span class="n">axis_lookup</span><span class="o">=</span><span class="n">axis_lookup_dict</span><span class="p">,</span>
-    <span class="p">)</span>
-    <span class="k">if</span> <span class="n">time_varying_full</span><span class="p">:</span>
-        <span class="n">_strip_time_axis_in_mapping</span><span class="p">(</span>
-            <span class="n">equations_map</span><span class="p">,</span>
-            <span class="n">tv_full_axes</span><span class="o">=</span><span class="n">time_varying_full</span><span class="p">,</span>
-            <span class="n">time_axis_name</span><span class="o">=</span><span class="n">time_axis_name</span><span class="p">,</span>
-        <span class="p">)</span>
-        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">meta_parts</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="nb">dict</span><span class="p">):</span>
-            <span class="n">_strip_time_axis_in_mapping</span><span class="p">(</span>
-                <span class="n">meta_parts</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
-                <span class="n">tv_full_axes</span><span class="o">=</span><span class="n">time_varying_full</span><span class="p">,</span>
-                <span class="n">time_axis_name</span><span class="o">=</span><span class="n">time_axis_name</span><span class="p">,</span>
-            <span class="p">)</span>
-
-    <span class="n">aliases</span><span class="p">,</span> <span class="n">alias_template_map</span> <span class="o">=</span> <span class="n">_expand_alias_templates</span><span class="p">(</span>
-        <span class="n">meta_parts</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
-        <span class="n">axes</span><span class="o">=</span><span class="n">axes_meta</span><span class="p">,</span>
-        <span class="n">template_map_seed</span><span class="o">=</span><span class="n">state_template_map</span><span class="p">,</span>
-        <span class="n">shaped_params</span><span class="o">=</span><span class="n">shaped_params</span><span class="p">,</span>
-        <span class="n">axis_lookup</span><span class="o">=</span><span class="n">axis_lookup_dict</span><span class="p">,</span>
-    <span class="p">)</span>
-    <span class="n">template_map_all</span> <span class="o">=</span> <span class="p">{</span><span class="o">**</span><span class="n">state_template_map</span><span class="p">,</span> <span class="o">**</span><span class="n">alias_template_map</span><span class="p">}</span>
-
-    <span class="n">chain_block</span> <span class="o">=</span> <span class="n">spec</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;chain&quot;</span><span class="p">)</span>
-    <span class="k">if</span> <span class="n">chain_block</span><span class="p">:</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">chain_block</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
-            <span class="k">raise</span> <span class="n">InvalidRhsSpecError</span><span class="p">(</span><span class="n">detail</span><span class="o">=</span><span class="s2">&quot;chain must be a list if provided&quot;</span><span class="p">)</span>
-        <span class="n">_apply_expr_chains</span><span class="p">(</span>
-            <span class="n">chains</span><span class="o">=</span><span class="n">chain_block</span><span class="p">,</span>
-            <span class="n">state_expanded</span><span class="o">=</span><span class="n">state_expanded</span><span class="p">,</span>
-            <span class="n">equations_map</span><span class="o">=</span><span class="n">equations_map</span><span class="p">,</span>
-        <span class="p">)</span>
-
-    <span class="n">unknown_keys</span> <span class="o">=</span> <span class="p">[</span>
-        <span class="n">k</span>
-        <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">equations_map</span>
-        <span class="k">if</span> <span class="n">k</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">state_expanded</span> <span class="ow">and</span> <span class="n">k</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">template_map_all</span>
-    <span class="p">]</span>
-    <span class="k">if</span> <span class="n">unknown_keys</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="n">InvalidRhsSpecError</span><span class="p">(</span>
-            <span class="n">detail</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;unknown equation key(s): </span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="n">unknown_keys</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
-        <span class="p">)</span>
-
-    <span class="n">all_syms</span> <span class="o">=</span> <span class="n">_collect_alias_symbols</span><span class="p">(</span><span class="n">aliases</span><span class="p">,</span> <span class="n">axes</span><span class="o">=</span><span class="n">axes_meta</span><span class="p">)</span>
-    <span class="n">eqs</span> <span class="o">=</span> <span class="n">_gather_equations</span><span class="p">(</span>
-        <span class="n">state_expanded</span><span class="p">,</span>
-        <span class="n">equations_map</span><span class="p">,</span>
-        <span class="n">all_syms</span><span class="p">,</span>
-        <span class="n">axes</span><span class="o">=</span><span class="n">axes_meta</span><span class="p">,</span>
-        <span class="n">template_map</span><span class="o">=</span><span class="n">template_map_all</span><span class="p">,</span>
-        <span class="n">shaped_params</span><span class="o">=</span><span class="n">shaped_params</span><span class="p">,</span>
-        <span class="n">axis_lookup</span><span class="o">=</span><span class="n">axis_lookup_dict</span><span class="p">,</span>
-    <span class="p">)</span>
-
-    <span class="n">_maybe_attach_initial_state</span><span class="p">(</span>
-        <span class="n">meta</span><span class="p">,</span>
-        <span class="n">spec</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;initial_state&quot;</span><span class="p">),</span>
-        <span class="n">axes</span><span class="o">=</span><span class="n">axes_meta</span><span class="p">,</span>
-        <span class="n">template_map</span><span class="o">=</span><span class="n">template_map_all</span><span class="p">,</span>
-    <span class="p">)</span>
-
-    <span class="n">meta</span><span class="p">[</span><span class="s2">&quot;shaped_params&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="nb">sorted</span><span class="p">(</span><span class="n">shaped_params</span><span class="o">.</span><span class="n">items</span><span class="p">()))</span>
-    <span class="n">meta</span><span class="p">[</span><span class="s2">&quot;time_axis&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">time_axis_name</span>
-    <span class="n">meta</span><span class="p">[</span><span class="s2">&quot;time_varying_params&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="nb">sorted</span><span class="p">(</span><span class="n">time_varying_full</span><span class="o">.</span><span class="n">items</span><span class="p">()))</span>
-
-    <span class="n">shaped_set</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">shaped_params</span><span class="p">)</span>
-    <span class="n">time_varying_set</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">time_varying_full</span><span class="p">)</span>
-    <span class="n">axis_name_set</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">axis_lookup_dict</span><span class="p">)</span>
-    <span class="n">template_base_set</span> <span class="o">=</span> <span class="p">{</span><span class="n">parse_selector</span><span class="p">(</span><span class="n">k</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">template_map_all</span><span class="p">}</span>
-    <span class="n">eqs_tuple</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">eqs</span><span class="p">)</span>
-    <span class="n">aliases_ir_map</span> <span class="o">=</span> <span class="n">_build_aliases_ir</span><span class="p">(</span><span class="n">aliases</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">NormalizedRhs</span><span class="p">(</span>
-        <span class="n">kind</span><span class="o">=</span><span class="s2">&quot;expr&quot;</span><span class="p">,</span>
-        <span class="n">state_names</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(</span><span class="n">state_expanded</span><span class="p">),</span>
-        <span class="n">equations</span><span class="o">=</span><span class="n">eqs_tuple</span><span class="p">,</span>
-        <span class="n">aliases</span><span class="o">=</span><span class="n">aliases</span><span class="p">,</span>
-        <span class="n">param_names</span><span class="o">=</span><span class="n">_sorted_unique</span><span class="p">(</span>
-            <span class="n">sym</span>
-            <span class="k">for</span> <span class="n">sym</span> <span class="ow">in</span> <span class="n">all_syms</span>
-            <span class="k">if</span> <span class="n">sym</span> <span class="ow">not</span> <span class="ow">in</span> <span class="nb">set</span><span class="p">(</span><span class="n">state_expanded</span><span class="p">)</span>
-            <span class="ow">and</span> <span class="n">sym</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">aliases</span>
-            <span class="ow">and</span> <span class="n">sym</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">shaped_set</span>
-            <span class="ow">and</span> <span class="n">sym</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">time_varying_set</span>
-            <span class="ow">and</span> <span class="n">sym</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">axis_name_set</span>
-            <span class="ow">and</span> <span class="n">sym</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">template_base_set</span>
-            <span class="ow">and</span> <span class="n">sym</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">_SHAPED_PARAM_BUILTIN_NAMES</span>
-        <span class="p">),</span>
-        <span class="n">all_symbols</span><span class="o">=</span><span class="nb">frozenset</span><span class="p">(</span><span class="n">all_syms</span> <span class="o">|</span> <span class="nb">set</span><span class="p">(</span><span class="n">aliases</span><span class="o">.</span><span class="n">keys</span><span class="p">())),</span>
-        <span class="n">meta</span><span class="o">=</span><span class="n">meta</span><span class="p">,</span>
-        <span class="n">state_templates</span><span class="o">=</span><span class="n">_build_state_templates</span><span class="p">(</span>
-            <span class="n">state_raw</span><span class="p">,</span>
-            <span class="n">axes</span><span class="o">=</span><span class="n">axes_meta</span><span class="p">,</span>
-            <span class="n">state_template_map</span><span class="o">=</span><span class="n">state_template_map</span><span class="p">,</span>
-            <span class="n">state_expanded</span><span class="o">=</span><span class="n">state_expanded</span><span class="p">,</span>
-        <span class="p">),</span>
-        <span class="n">shaped_params</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(</span><span class="nb">sorted</span><span class="p">(</span><span class="n">shaped_params</span><span class="o">.</span><span class="n">items</span><span class="p">())),</span>
-        <span class="n">time_varying_params</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(</span><span class="nb">sorted</span><span class="p">(</span><span class="n">time_varying_full</span><span class="o">.</span><span class="n">items</span><span class="p">())),</span>
-        <span class="n">aliases_ir</span><span class="o">=</span><span class="n">aliases_ir_map</span><span class="p">,</span>
-        <span class="n">equations_ir</span><span class="o">=</span><span class="n">_build_equations_ir</span><span class="p">(</span><span class="n">eqs_tuple</span><span class="p">,</span> <span class="n">aliases_ir_map</span><span class="p">),</span>
-        <span class="n">equations_ir_raw</span><span class="o">=</span><span class="n">_build_equations_ir</span><span class="p">(</span><span class="n">eqs_tuple</span><span class="p">),</span>
-    <span class="p">)</span>
-</code></pre></div></td></tr></table></div>
-            </details>
-    </div>
-
-</div>
-
-<div class="doc doc-object doc-function">
-
-
-<h3 id="op_system.specs.normalize_rhs" class="doc doc-heading">
-            <code class="highlight language-python"><span class="n">normalize_rhs</span><span class="p">(</span><span class="n">spec</span><span class="p">)</span></code>
-
-<a href="#op_system.specs.normalize_rhs" class="headerlink" title="Permanent link">&para;</a></h3>
-
-
-    <div class="doc doc-contents ">
-
-        <p>Normalize a RHS specification dict into a backend-facing representation.</p>
-
-
-<p><span class="doc-section-title">Parameters:</span></p>
-    <table>
-      <thead>
-        <tr>
-          <th>Name</th>
-          <th>Type</th>
-          <th>Description</th>
-          <th>Default</th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-            <td>
-                <code>spec</code>
-            </td>
-            <td>
-                  <code><span title="collections.abc.Mapping">Mapping</span>[<span title="str">str</span>, <span title="typing.Any">Any</span>] | None</code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Raw RHS specification mapping.</p>
-              </div>
-            </td>
-            <td>
-                <em>required</em>
-            </td>
-          </tr>
-      </tbody>
-    </table>
-
-
-    <p><span class="doc-section-title">Returns:</span></p>
-    <table>
-      <thead>
-        <tr>
-          <th>Type</th>
-          <th>Description</th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-            <td>
-                  <code><a class="autorefs autorefs-internal" title="NormalizedRhs(kind, state_names, equations, aliases, param_names, all_symbols, meta, state_templates=(), shaped_params=(), time_varying_params=(), aliases_ir=dict(), equations_ir=(), equations_ir_raw=())
-
-  
-      dataclass
-   (op_system._normalize.NormalizedRhs)" href="#op_system.specs.NormalizedRhs">NormalizedRhs</a></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Backend-facing normalized RHS representation.</p>
-              </div>
-            </td>
-          </tr>
-      </tbody>
-    </table>
-
-
-<p><span class="doc-section-title">Raises:</span></p>
-    <table>
-      <thead>
-        <tr>
-          <th>Type</th>
-          <th>Description</th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-            <td>
-                  <code><span title="op_system._errors.InvalidRhsSpecError">InvalidRhsSpecError</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>If validation fails.</p>
-              </div>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td>
-                  <code><span title="op_system._errors.UnsupportedFeatureError">UnsupportedFeatureError</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>If validation fails.</p>
-              </div>
-            </td>
-          </tr>
-      </tbody>
-    </table>
-
-
-            <details class="mkdocstrings-source">
-              <summary>Source code in <code>src/op_system/_normalize.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">2927</span>
-<span class="normal">2928</span>
-<span class="normal">2929</span>
-<span class="normal">2930</span>
-<span class="normal">2931</span>
-<span class="normal">2932</span>
-<span class="normal">2933</span>
-<span class="normal">2934</span>
-<span class="normal">2935</span>
-<span class="normal">2936</span>
-<span class="normal">2937</span>
-<span class="normal">2938</span>
-<span class="normal">2939</span>
-<span class="normal">2940</span>
-<span class="normal">2941</span>
-<span class="normal">2942</span>
-<span class="normal">2943</span>
-<span class="normal">2944</span>
-<span class="normal">2945</span>
-<span class="normal">2946</span>
-<span class="normal">2947</span>
-<span class="normal">2948</span>
-<span class="normal">2949</span>
-<span class="normal">2950</span>
-<span class="normal">2951</span>
-<span class="normal">2952</span>
-<span class="normal">2953</span>
-<span class="normal">2954</span>
-<span class="normal">2955</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">normalize_rhs</span><span class="p">(</span><span class="n">spec</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">NormalizedRhs</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Normalize a RHS specification dict into a backend-facing representation.</span>
-
-<span class="sd">    Args:</span>
-<span class="sd">        spec: Raw RHS specification mapping.</span>
-
-<span class="sd">    Returns:</span>
-<span class="sd">        Backend-facing normalized RHS representation.</span>
-
-<span class="sd">    Raises:</span>
-<span class="sd">        InvalidRhsSpecError: If validation fails.</span>
-<span class="sd">        UnsupportedFeatureError: If validation fails.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">if</span> <span class="n">spec</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="n">InvalidRhsSpecError</span><span class="p">(</span><span class="n">detail</span><span class="o">=</span><span class="s2">&quot;rhs specification is required&quot;</span><span class="p">)</span>
-
-    <span class="n">kind</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">spec</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;kind&quot;</span><span class="p">,</span> <span class="s2">&quot;expr&quot;</span><span class="p">))</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
-
-    <span class="k">if</span> <span class="n">kind</span> <span class="o">==</span> <span class="s2">&quot;expr&quot;</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">normalize_expr_rhs</span><span class="p">(</span><span class="n">spec</span><span class="p">)</span>
-
-    <span class="k">if</span> <span class="n">kind</span> <span class="o">==</span> <span class="s2">&quot;transitions&quot;</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">normalize_transitions_rhs</span><span class="p">(</span><span class="n">spec</span><span class="p">)</span>
-
-    <span class="k">raise</span> <span class="n">UnsupportedFeatureError</span><span class="p">(</span>
-        <span class="n">feature</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;rhs.kind=</span><span class="si">{</span><span class="n">kind</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
-        <span class="n">detail</span><span class="o">=</span><span class="s2">&quot;Only &#39;expr&#39; and &#39;transitions&#39; are supported in v1.&quot;</span><span class="p">,</span>
-    <span class="p">)</span>
-    <span class="k">return</span> <span class="n">normalize_expr_rhs</span><span class="p">(</span><span class="n">spec</span><span class="p">)</span>  <span class="c1"># unreachable; satisfies return type checker</span>
-</code></pre></div></td></tr></table></div>
-            </details>
-    </div>
-
-</div>
-
-<div class="doc doc-object doc-function">
-
-
-<h3 id="op_system.specs.normalize_transitions_rhs" class="doc doc-heading">
-            <code class="highlight language-python"><span class="n">normalize_transitions_rhs</span><span class="p">(</span><span class="n">spec</span><span class="p">)</span></code>
-
-<a href="#op_system.specs.normalize_transitions_rhs" class="headerlink" title="Permanent link">&para;</a></h3>
-
-
-    <div class="doc doc-contents ">
-
-        <p>Normalize a transition-based RHS specification (diagram/hazard semantics).</p>
-
-
-    <p><span class="doc-section-title">Returns:</span></p>
-    <table>
-      <thead>
-        <tr>
-          <th>Type</th>
-          <th>Description</th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-            <td>
-                  <code><a class="autorefs autorefs-internal" title="NormalizedRhs(kind, state_names, equations, aliases, param_names, all_symbols, meta, state_templates=(), shaped_params=(), time_varying_params=(), aliases_ir=dict(), equations_ir=(), equations_ir_raw=())
-
-  
-      dataclass
-   (op_system._normalize.NormalizedRhs)" href="#op_system.specs.NormalizedRhs">NormalizedRhs</a></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Backend-facing normalized RHS representation for the transitions kind.</p>
-              </div>
-            </td>
-          </tr>
-      </tbody>
-    </table>
-
-
-<p><span class="doc-section-title">Raises:</span></p>
-    <table>
-      <thead>
-        <tr>
-          <th>Type</th>
-          <th>Description</th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-            <td>
-                  <code><span title="op_system._errors.InvalidRhsSpecError">InvalidRhsSpecError</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>If validation fails.</p>
-              </div>
-            </td>
-          </tr>
-      </tbody>
-    </table>
-
-
-            <details class="mkdocstrings-source">
-              <summary>Source code in <code>src/op_system/_normalize.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">3191</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">3168</span>
+<span class="normal">3169</span>
+<span class="normal">3170</span>
+<span class="normal">3171</span>
+<span class="normal">3172</span>
+<span class="normal">3173</span>
+<span class="normal">3174</span>
+<span class="normal">3175</span>
+<span class="normal">3176</span>
+<span class="normal">3177</span>
+<span class="normal">3178</span>
+<span class="normal">3179</span>
+<span class="normal">3180</span>
+<span class="normal">3181</span>
+<span class="normal">3182</span>
+<span class="normal">3183</span>
+<span class="normal">3184</span>
+<span class="normal">3185</span>
+<span class="normal">3186</span>
+<span class="normal">3187</span>
+<span class="normal">3188</span>
+<span class="normal">3189</span>
+<span class="normal">3190</span>
+<span class="normal">3191</span>
 <span class="normal">3192</span>
 <span class="normal">3193</span>
 <span class="normal">3194</span>
@@ -2335,29 +1771,663 @@ slice starts in the flat state vector).</p>
 <span class="normal">3372</span>
 <span class="normal">3373</span>
 <span class="normal">3374</span>
-<span class="normal">3375</span>
-<span class="normal">3376</span>
-<span class="normal">3377</span>
-<span class="normal">3378</span>
-<span class="normal">3379</span>
-<span class="normal">3380</span>
-<span class="normal">3381</span>
-<span class="normal">3382</span>
-<span class="normal">3383</span>
-<span class="normal">3384</span>
-<span class="normal">3385</span>
-<span class="normal">3386</span>
-<span class="normal">3387</span>
-<span class="normal">3388</span>
-<span class="normal">3389</span>
-<span class="normal">3390</span>
-<span class="normal">3391</span>
-<span class="normal">3392</span>
-<span class="normal">3393</span>
-<span class="normal">3394</span>
-<span class="normal">3395</span>
-<span class="normal">3396</span>
-<span class="normal">3397</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">normalize_transitions_rhs</span><span class="p">(</span>  <span class="c1"># noqa: C901, PLR0912, PLR0914, PLR0915</span>
+<span class="normal">3375</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">normalize_expr_rhs</span><span class="p">(</span><span class="n">spec</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">NormalizedRhs</span><span class="p">:</span>  <span class="c1"># noqa: C901, PLR0914, PLR0915</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Normalize an expression-based RHS specification.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        spec: Raw RHS specification mapping.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        Backend-facing normalized RHS representation.</span>
+
+<span class="sd">    Raises:</span>
+<span class="sd">        InvalidRhsSpecError: If validation fails.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">state_raw</span> <span class="o">=</span> <span class="n">_ensure_str_list</span><span class="p">(</span><span class="n">spec</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;state&quot;</span><span class="p">),</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;state&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">state_raw</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="n">state_raw</span><span class="p">)):</span>
+        <span class="k">raise</span> <span class="n">InvalidRhsSpecError</span><span class="p">(</span><span class="n">detail</span><span class="o">=</span><span class="s2">&quot;state contains duplicate names&quot;</span><span class="p">)</span>
+
+    <span class="n">equations_map</span> <span class="o">=</span> <span class="n">spec</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;equations&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">equations_map</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="n">InvalidRhsSpecError</span><span class="p">(</span><span class="n">detail</span><span class="o">=</span><span class="s2">&quot;equations must be a mapping of state-&gt;expr&quot;</span><span class="p">)</span>
+
+    <span class="n">equations_map</span> <span class="o">=</span> <span class="p">{</span><span class="n">_normalize_bracket_key</span><span class="p">(</span><span class="n">k</span><span class="p">):</span> <span class="n">v</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">equations_map</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span>
+
+    <span class="n">axes_meta</span> <span class="o">=</span> <span class="n">_normalize_axes</span><span class="p">(</span><span class="n">spec</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;axes&quot;</span><span class="p">))</span>
+    <span class="n">meta_parts</span> <span class="o">=</span> <span class="n">_normalize_common_meta</span><span class="p">(</span>
+        <span class="n">spec</span><span class="p">,</span>
+        <span class="n">axis_names</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;subgroup&quot;</span><span class="p">}</span> <span class="o">|</span> <span class="p">{</span><span class="n">ax</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">]</span> <span class="k">for</span> <span class="n">ax</span> <span class="ow">in</span> <span class="n">axes_meta</span><span class="p">},</span>
+        <span class="n">state_set</span><span class="o">=</span><span class="nb">set</span><span class="p">(</span><span class="n">state_raw</span><span class="p">),</span>
+        <span class="n">operator_state_set</span><span class="o">=</span><span class="nb">set</span><span class="p">(</span><span class="n">state_raw</span><span class="p">),</span>
+        <span class="n">axes</span><span class="o">=</span><span class="n">axes_meta</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="n">meta</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s2">&quot;axes&quot;</span><span class="p">:</span> <span class="n">axes_meta</span><span class="p">,</span>
+        <span class="s2">&quot;state_axes&quot;</span><span class="p">:</span> <span class="n">meta_parts</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span>
+        <span class="s2">&quot;kernels&quot;</span><span class="p">:</span> <span class="n">meta_parts</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span>
+        <span class="s2">&quot;operators&quot;</span><span class="p">:</span> <span class="n">meta_parts</span><span class="p">[</span><span class="mi">3</span><span class="p">],</span>
+    <span class="p">}</span>
+    <span class="k">for</span> <span class="n">reserved_key</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;sources&quot;</span><span class="p">,</span> <span class="s2">&quot;couplings&quot;</span><span class="p">,</span> <span class="s2">&quot;constraints&quot;</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">reserved_key</span> <span class="ow">in</span> <span class="n">spec</span><span class="p">:</span>
+            <span class="n">meta</span><span class="p">[</span><span class="n">reserved_key</span><span class="p">]</span> <span class="o">=</span> <span class="n">spec</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">reserved_key</span><span class="p">)</span>
+
+    <span class="n">state_expanded</span><span class="p">,</span> <span class="n">state_template_map</span> <span class="o">=</span> <span class="n">_expand_state_templates</span><span class="p">(</span>
+        <span class="n">state_raw</span><span class="p">,</span> <span class="n">axes</span><span class="o">=</span><span class="n">axes_meta</span>
+    <span class="p">)</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">state_expanded</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="n">state_expanded</span><span class="p">)):</span>
+        <span class="k">raise</span> <span class="n">InvalidRhsSpecError</span><span class="p">(</span><span class="n">detail</span><span class="o">=</span><span class="s2">&quot;expanded state contains duplicates&quot;</span><span class="p">)</span>
+
+    <span class="c1"># Pre-scan raw aliases + equations for shaped-parameter references before</span>
+    <span class="c1"># alias/template expansion mangles bracketed bases into per-coord names.</span>
+    <span class="n">axis_lookup_dict</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="n">build_axis_lookup</span><span class="p">(</span><span class="n">axes_meta</span><span class="p">)</span>
+    <span class="n">aliases_raw_map</span> <span class="o">=</span> <span class="n">meta_parts</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="ow">or</span> <span class="p">{}</span>
+    <span class="n">name_blocklist</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="p">{</span><span class="n">parse_selector</span><span class="p">(</span><span class="n">s</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span> <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">state_raw</span><span class="p">}</span>
+        <span class="o">|</span> <span class="nb">set</span><span class="p">(</span><span class="n">state_expanded</span><span class="p">)</span>
+        <span class="o">|</span> <span class="p">{</span><span class="n">parse_selector</span><span class="p">(</span><span class="n">_normalize_bracket_key</span><span class="p">(</span><span class="n">k</span><span class="p">))[</span><span class="mi">0</span><span class="p">]</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">aliases_raw_map</span><span class="p">}</span>
+        <span class="o">|</span> <span class="nb">set</span><span class="p">(</span><span class="n">aliases_raw_map</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
+    <span class="p">)</span>
+    <span class="n">raw_expressions</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="n">v</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">aliases_raw_map</span><span class="o">.</span><span class="n">values</span><span class="p">()</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span>
+    <span class="p">]</span>
+    <span class="n">raw_expressions</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">v</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">equations_map</span><span class="o">.</span><span class="n">values</span><span class="p">()</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="nb">str</span><span class="p">))</span>
+    <span class="n">shaped_params</span> <span class="o">=</span> <span class="n">_scan_shaped_param_refs</span><span class="p">(</span>
+        <span class="n">raw_expressions</span><span class="p">,</span>
+        <span class="n">name_blocklist</span><span class="o">=</span><span class="n">name_blocklist</span><span class="p">,</span>
+        <span class="n">axis_lookup</span><span class="o">=</span><span class="n">axis_lookup_dict</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">_reject_legacy_time_varying_field</span><span class="p">(</span><span class="n">spec</span><span class="p">)</span>
+    <span class="n">time_axis_name</span> <span class="o">=</span> <span class="n">_resolve_time_axis_name</span><span class="p">(</span><span class="n">spec</span><span class="p">)</span>
+    <span class="n">shaped_params</span><span class="p">,</span> <span class="n">time_varying_full</span> <span class="o">=</span> <span class="n">_partition_time_varying_shaped</span><span class="p">(</span>
+        <span class="n">shaped_params</span><span class="p">,</span>
+        <span class="n">time_axis_name</span><span class="o">=</span><span class="n">time_axis_name</span><span class="p">,</span>
+        <span class="n">axis_lookup</span><span class="o">=</span><span class="n">axis_lookup_dict</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="k">if</span> <span class="n">time_varying_full</span><span class="p">:</span>
+        <span class="n">_strip_time_axis_in_mapping</span><span class="p">(</span>
+            <span class="n">equations_map</span><span class="p">,</span>
+            <span class="n">tv_full_axes</span><span class="o">=</span><span class="n">time_varying_full</span><span class="p">,</span>
+            <span class="n">time_axis_name</span><span class="o">=</span><span class="n">time_axis_name</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">meta_parts</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="nb">dict</span><span class="p">):</span>
+            <span class="n">_strip_time_axis_in_mapping</span><span class="p">(</span>
+                <span class="n">meta_parts</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+                <span class="n">tv_full_axes</span><span class="o">=</span><span class="n">time_varying_full</span><span class="p">,</span>
+                <span class="n">time_axis_name</span><span class="o">=</span><span class="n">time_axis_name</span><span class="p">,</span>
+            <span class="p">)</span>
+
+    <span class="n">aliases</span><span class="p">,</span> <span class="n">alias_template_map</span> <span class="o">=</span> <span class="n">_expand_alias_templates</span><span class="p">(</span>
+        <span class="n">meta_parts</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+        <span class="n">axes</span><span class="o">=</span><span class="n">axes_meta</span><span class="p">,</span>
+        <span class="n">template_map_seed</span><span class="o">=</span><span class="n">state_template_map</span><span class="p">,</span>
+        <span class="n">shaped_params</span><span class="o">=</span><span class="n">shaped_params</span><span class="p">,</span>
+        <span class="n">axis_lookup</span><span class="o">=</span><span class="n">axis_lookup_dict</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">template_map_all</span> <span class="o">=</span> <span class="p">{</span><span class="o">**</span><span class="n">state_template_map</span><span class="p">,</span> <span class="o">**</span><span class="n">alias_template_map</span><span class="p">}</span>
+
+    <span class="n">chain_block</span> <span class="o">=</span> <span class="n">spec</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;chain&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">chain_block</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">chain_block</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="n">InvalidRhsSpecError</span><span class="p">(</span><span class="n">detail</span><span class="o">=</span><span class="s2">&quot;chain must be a list if provided&quot;</span><span class="p">)</span>
+        <span class="n">_apply_expr_chains</span><span class="p">(</span>
+            <span class="n">chains</span><span class="o">=</span><span class="n">chain_block</span><span class="p">,</span>
+            <span class="n">state_expanded</span><span class="o">=</span><span class="n">state_expanded</span><span class="p">,</span>
+            <span class="n">equations_map</span><span class="o">=</span><span class="n">equations_map</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="n">unknown_keys</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="n">k</span>
+        <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">equations_map</span>
+        <span class="k">if</span> <span class="n">k</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">state_expanded</span> <span class="ow">and</span> <span class="n">k</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">template_map_all</span>
+    <span class="p">]</span>
+    <span class="k">if</span> <span class="n">unknown_keys</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">InvalidRhsSpecError</span><span class="p">(</span>
+            <span class="n">detail</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;unknown equation key(s): </span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="n">unknown_keys</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="p">)</span>
+
+    <span class="n">all_syms</span> <span class="o">=</span> <span class="n">_collect_alias_symbols</span><span class="p">(</span><span class="n">aliases</span><span class="p">,</span> <span class="n">axes</span><span class="o">=</span><span class="n">axes_meta</span><span class="p">)</span>
+    <span class="n">eqs</span> <span class="o">=</span> <span class="n">_gather_equations</span><span class="p">(</span>
+        <span class="n">state_expanded</span><span class="p">,</span>
+        <span class="n">equations_map</span><span class="p">,</span>
+        <span class="n">all_syms</span><span class="p">,</span>
+        <span class="n">axes</span><span class="o">=</span><span class="n">axes_meta</span><span class="p">,</span>
+        <span class="n">template_map</span><span class="o">=</span><span class="n">template_map_all</span><span class="p">,</span>
+        <span class="n">shaped_params</span><span class="o">=</span><span class="n">shaped_params</span><span class="p">,</span>
+        <span class="n">axis_lookup</span><span class="o">=</span><span class="n">axis_lookup_dict</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="n">_maybe_attach_initial_state</span><span class="p">(</span>
+        <span class="n">meta</span><span class="p">,</span>
+        <span class="n">spec</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;initial_state&quot;</span><span class="p">),</span>
+        <span class="n">axes</span><span class="o">=</span><span class="n">axes_meta</span><span class="p">,</span>
+        <span class="n">template_map</span><span class="o">=</span><span class="n">template_map_all</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="n">meta</span><span class="p">[</span><span class="s2">&quot;shaped_params&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="nb">sorted</span><span class="p">(</span><span class="n">shaped_params</span><span class="o">.</span><span class="n">items</span><span class="p">()))</span>
+    <span class="n">meta</span><span class="p">[</span><span class="s2">&quot;time_axis&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">time_axis_name</span>
+    <span class="n">meta</span><span class="p">[</span><span class="s2">&quot;time_varying_params&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="nb">sorted</span><span class="p">(</span><span class="n">time_varying_full</span><span class="o">.</span><span class="n">items</span><span class="p">()))</span>
+
+    <span class="n">shaped_set</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">shaped_params</span><span class="p">)</span>
+    <span class="n">time_varying_set</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">time_varying_full</span><span class="p">)</span>
+    <span class="n">axis_name_set</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">axis_lookup_dict</span><span class="p">)</span>
+    <span class="n">template_base_set</span> <span class="o">=</span> <span class="p">{</span><span class="n">parse_selector</span><span class="p">(</span><span class="n">k</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">template_map_all</span><span class="p">}</span>
+    <span class="n">eqs_tuple</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">eqs</span><span class="p">)</span>
+    <span class="n">aliases_ir_map</span> <span class="o">=</span> <span class="n">_build_aliases_ir</span><span class="p">(</span><span class="n">aliases</span><span class="p">)</span>
+
+    <span class="c1"># Second pass: capture pre-expansion (helper-bearing) strings so we can</span>
+    <span class="c1"># build IR with ``Reduce`` nodes for downstream IR-fast-path consumers.</span>
+    <span class="c1"># Best-effort: failures leave the reduce-bearing fields empty.</span>
+    <span class="n">aliases_ir_reduce_map</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Expr</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="n">equations_ir_reduce</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">Expr</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="p">()</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">aliases_pre</span><span class="p">,</span> <span class="n">_alias_template_map_pre</span> <span class="o">=</span> <span class="n">_expand_alias_templates</span><span class="p">(</span>
+            <span class="n">meta_parts</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+            <span class="n">axes</span><span class="o">=</span><span class="n">axes_meta</span><span class="p">,</span>
+            <span class="n">template_map_seed</span><span class="o">=</span><span class="n">state_template_map</span><span class="p">,</span>
+            <span class="n">shaped_params</span><span class="o">=</span><span class="n">shaped_params</span><span class="p">,</span>
+            <span class="n">axis_lookup</span><span class="o">=</span><span class="n">axis_lookup_dict</span><span class="p">,</span>
+            <span class="n">passthrough_helpers</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">eqs_pre</span> <span class="o">=</span> <span class="n">_gather_equations</span><span class="p">(</span>
+            <span class="n">state_expanded</span><span class="p">,</span>
+            <span class="n">equations_map</span><span class="p">,</span>
+            <span class="nb">set</span><span class="p">(),</span>  <span class="c1"># throwaway: don&#39;t pollute all_syms with helper names</span>
+            <span class="n">axes</span><span class="o">=</span><span class="n">axes_meta</span><span class="p">,</span>
+            <span class="n">template_map</span><span class="o">=</span><span class="n">template_map_all</span><span class="p">,</span>
+            <span class="n">shaped_params</span><span class="o">=</span><span class="n">shaped_params</span><span class="p">,</span>
+            <span class="n">axis_lookup</span><span class="o">=</span><span class="n">axis_lookup_dict</span><span class="p">,</span>
+            <span class="n">passthrough_helpers</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">aliases_ir_reduce_map</span> <span class="o">=</span> <span class="n">_build_aliases_ir</span><span class="p">(</span><span class="n">aliases_pre</span><span class="p">,</span> <span class="n">lower_helpers</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">equations_ir_reduce</span> <span class="o">=</span> <span class="n">_build_equations_ir</span><span class="p">(</span>
+            <span class="nb">tuple</span><span class="p">(</span><span class="n">eqs_pre</span><span class="p">),</span> <span class="n">aliases_ir_reduce_map</span><span class="p">,</span> <span class="n">lower_helpers</span><span class="o">=</span><span class="kc">True</span>
+        <span class="p">)</span>
+    <span class="k">except</span> <span class="p">(</span><span class="ne">ValueError</span><span class="p">,</span> <span class="ne">RecursionError</span><span class="p">,</span> <span class="n">InvalidRhsSpecError</span><span class="p">):</span>
+        <span class="n">aliases_ir_reduce_map</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="n">equations_ir_reduce</span> <span class="o">=</span> <span class="p">()</span>
+
+    <span class="k">return</span> <span class="n">NormalizedRhs</span><span class="p">(</span>
+        <span class="n">kind</span><span class="o">=</span><span class="s2">&quot;expr&quot;</span><span class="p">,</span>
+        <span class="n">state_names</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(</span><span class="n">state_expanded</span><span class="p">),</span>
+        <span class="n">equations</span><span class="o">=</span><span class="n">eqs_tuple</span><span class="p">,</span>
+        <span class="n">aliases</span><span class="o">=</span><span class="n">aliases</span><span class="p">,</span>
+        <span class="n">param_names</span><span class="o">=</span><span class="n">_sorted_unique</span><span class="p">(</span>
+            <span class="n">sym</span>
+            <span class="k">for</span> <span class="n">sym</span> <span class="ow">in</span> <span class="n">all_syms</span>
+            <span class="k">if</span> <span class="n">sym</span> <span class="ow">not</span> <span class="ow">in</span> <span class="nb">set</span><span class="p">(</span><span class="n">state_expanded</span><span class="p">)</span>
+            <span class="ow">and</span> <span class="n">sym</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">aliases</span>
+            <span class="ow">and</span> <span class="n">sym</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">shaped_set</span>
+            <span class="ow">and</span> <span class="n">sym</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">time_varying_set</span>
+            <span class="ow">and</span> <span class="n">sym</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">axis_name_set</span>
+            <span class="ow">and</span> <span class="n">sym</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">template_base_set</span>
+            <span class="ow">and</span> <span class="n">sym</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">_SHAPED_PARAM_BUILTIN_NAMES</span>
+        <span class="p">),</span>
+        <span class="n">all_symbols</span><span class="o">=</span><span class="nb">frozenset</span><span class="p">(</span><span class="n">all_syms</span> <span class="o">|</span> <span class="nb">set</span><span class="p">(</span><span class="n">aliases</span><span class="o">.</span><span class="n">keys</span><span class="p">())),</span>
+        <span class="n">meta</span><span class="o">=</span><span class="n">meta</span><span class="p">,</span>
+        <span class="n">state_templates</span><span class="o">=</span><span class="n">_build_state_templates</span><span class="p">(</span>
+            <span class="n">state_raw</span><span class="p">,</span>
+            <span class="n">axes</span><span class="o">=</span><span class="n">axes_meta</span><span class="p">,</span>
+            <span class="n">state_template_map</span><span class="o">=</span><span class="n">state_template_map</span><span class="p">,</span>
+            <span class="n">state_expanded</span><span class="o">=</span><span class="n">state_expanded</span><span class="p">,</span>
+        <span class="p">),</span>
+        <span class="n">shaped_params</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(</span><span class="nb">sorted</span><span class="p">(</span><span class="n">shaped_params</span><span class="o">.</span><span class="n">items</span><span class="p">())),</span>
+        <span class="n">time_varying_params</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(</span><span class="nb">sorted</span><span class="p">(</span><span class="n">time_varying_full</span><span class="o">.</span><span class="n">items</span><span class="p">())),</span>
+        <span class="n">aliases_ir</span><span class="o">=</span><span class="n">aliases_ir_map</span><span class="p">,</span>
+        <span class="n">equations_ir</span><span class="o">=</span><span class="n">_build_equations_ir</span><span class="p">(</span><span class="n">eqs_tuple</span><span class="p">,</span> <span class="n">aliases_ir_map</span><span class="p">),</span>
+        <span class="n">equations_ir_raw</span><span class="o">=</span><span class="n">_build_equations_ir</span><span class="p">(</span><span class="n">eqs_tuple</span><span class="p">),</span>
+        <span class="n">aliases_ir_reduce</span><span class="o">=</span><span class="n">aliases_ir_reduce_map</span><span class="p">,</span>
+        <span class="n">equations_ir_reduce</span><span class="o">=</span><span class="n">equations_ir_reduce</span><span class="p">,</span>
+    <span class="p">)</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="op_system.specs.normalize_rhs" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">normalize_rhs</span><span class="p">(</span><span class="n">spec</span><span class="p">)</span></code>
+
+<a href="#op_system.specs.normalize_rhs" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Normalize a RHS specification dict into a backend-facing representation.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>spec</code>
+            </td>
+            <td>
+                  <code><span title="collections.abc.Mapping">Mapping</span>[<span title="str">str</span>, <span title="typing.Any">Any</span>] | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Raw RHS specification mapping.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="NormalizedRhs(kind, state_names, equations, aliases, param_names, all_symbols, meta, state_templates=(), shaped_params=(), time_varying_params=(), aliases_ir=dict(), equations_ir=(), equations_ir_raw=(), aliases_ir_reduce=dict(), equations_ir_reduce=())
+
+  
+      dataclass
+   (op_system._normalize.NormalizedRhs)" href="#op_system.specs.NormalizedRhs">NormalizedRhs</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Backend-facing normalized RHS representation.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<p><span class="doc-section-title">Raises:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="op_system._errors.InvalidRhsSpecError">InvalidRhsSpecError</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>If validation fails.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="op_system._errors.UnsupportedFeatureError">UnsupportedFeatureError</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>If validation fails.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+            <details class="mkdocstrings-source">
+              <summary>Source code in <code>src/op_system/_normalize.py</code></summary>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">3137</span>
+<span class="normal">3138</span>
+<span class="normal">3139</span>
+<span class="normal">3140</span>
+<span class="normal">3141</span>
+<span class="normal">3142</span>
+<span class="normal">3143</span>
+<span class="normal">3144</span>
+<span class="normal">3145</span>
+<span class="normal">3146</span>
+<span class="normal">3147</span>
+<span class="normal">3148</span>
+<span class="normal">3149</span>
+<span class="normal">3150</span>
+<span class="normal">3151</span>
+<span class="normal">3152</span>
+<span class="normal">3153</span>
+<span class="normal">3154</span>
+<span class="normal">3155</span>
+<span class="normal">3156</span>
+<span class="normal">3157</span>
+<span class="normal">3158</span>
+<span class="normal">3159</span>
+<span class="normal">3160</span>
+<span class="normal">3161</span>
+<span class="normal">3162</span>
+<span class="normal">3163</span>
+<span class="normal">3164</span>
+<span class="normal">3165</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">normalize_rhs</span><span class="p">(</span><span class="n">spec</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">NormalizedRhs</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Normalize a RHS specification dict into a backend-facing representation.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        spec: Raw RHS specification mapping.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        Backend-facing normalized RHS representation.</span>
+
+<span class="sd">    Raises:</span>
+<span class="sd">        InvalidRhsSpecError: If validation fails.</span>
+<span class="sd">        UnsupportedFeatureError: If validation fails.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">spec</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">InvalidRhsSpecError</span><span class="p">(</span><span class="n">detail</span><span class="o">=</span><span class="s2">&quot;rhs specification is required&quot;</span><span class="p">)</span>
+
+    <span class="n">kind</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">spec</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;kind&quot;</span><span class="p">,</span> <span class="s2">&quot;expr&quot;</span><span class="p">))</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
+
+    <span class="k">if</span> <span class="n">kind</span> <span class="o">==</span> <span class="s2">&quot;expr&quot;</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">normalize_expr_rhs</span><span class="p">(</span><span class="n">spec</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">kind</span> <span class="o">==</span> <span class="s2">&quot;transitions&quot;</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">normalize_transitions_rhs</span><span class="p">(</span><span class="n">spec</span><span class="p">)</span>
+
+    <span class="k">raise</span> <span class="n">UnsupportedFeatureError</span><span class="p">(</span>
+        <span class="n">feature</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;rhs.kind=</span><span class="si">{</span><span class="n">kind</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
+        <span class="n">detail</span><span class="o">=</span><span class="s2">&quot;Only &#39;expr&#39; and &#39;transitions&#39; are supported in v1.&quot;</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="n">normalize_expr_rhs</span><span class="p">(</span><span class="n">spec</span><span class="p">)</span>  <span class="c1"># unreachable; satisfies return type checker</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="op_system.specs.normalize_transitions_rhs" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">normalize_transitions_rhs</span><span class="p">(</span><span class="n">spec</span><span class="p">)</span></code>
+
+<a href="#op_system.specs.normalize_transitions_rhs" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Normalize a transition-based RHS specification (diagram/hazard semantics).</p>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="NormalizedRhs(kind, state_names, equations, aliases, param_names, all_symbols, meta, state_templates=(), shaped_params=(), time_varying_params=(), aliases_ir=dict(), equations_ir=(), equations_ir_raw=(), aliases_ir_reduce=dict(), equations_ir_reduce=())
+
+  
+      dataclass
+   (op_system._normalize.NormalizedRhs)" href="#op_system.specs.NormalizedRhs">NormalizedRhs</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Backend-facing normalized RHS representation for the transitions kind.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<p><span class="doc-section-title">Raises:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="op_system._errors.InvalidRhsSpecError">InvalidRhsSpecError</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>If validation fails.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+            <details class="mkdocstrings-source">
+              <summary>Source code in <code>src/op_system/_normalize.py</code></summary>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">3436</span>
+<span class="normal">3437</span>
+<span class="normal">3438</span>
+<span class="normal">3439</span>
+<span class="normal">3440</span>
+<span class="normal">3441</span>
+<span class="normal">3442</span>
+<span class="normal">3443</span>
+<span class="normal">3444</span>
+<span class="normal">3445</span>
+<span class="normal">3446</span>
+<span class="normal">3447</span>
+<span class="normal">3448</span>
+<span class="normal">3449</span>
+<span class="normal">3450</span>
+<span class="normal">3451</span>
+<span class="normal">3452</span>
+<span class="normal">3453</span>
+<span class="normal">3454</span>
+<span class="normal">3455</span>
+<span class="normal">3456</span>
+<span class="normal">3457</span>
+<span class="normal">3458</span>
+<span class="normal">3459</span>
+<span class="normal">3460</span>
+<span class="normal">3461</span>
+<span class="normal">3462</span>
+<span class="normal">3463</span>
+<span class="normal">3464</span>
+<span class="normal">3465</span>
+<span class="normal">3466</span>
+<span class="normal">3467</span>
+<span class="normal">3468</span>
+<span class="normal">3469</span>
+<span class="normal">3470</span>
+<span class="normal">3471</span>
+<span class="normal">3472</span>
+<span class="normal">3473</span>
+<span class="normal">3474</span>
+<span class="normal">3475</span>
+<span class="normal">3476</span>
+<span class="normal">3477</span>
+<span class="normal">3478</span>
+<span class="normal">3479</span>
+<span class="normal">3480</span>
+<span class="normal">3481</span>
+<span class="normal">3482</span>
+<span class="normal">3483</span>
+<span class="normal">3484</span>
+<span class="normal">3485</span>
+<span class="normal">3486</span>
+<span class="normal">3487</span>
+<span class="normal">3488</span>
+<span class="normal">3489</span>
+<span class="normal">3490</span>
+<span class="normal">3491</span>
+<span class="normal">3492</span>
+<span class="normal">3493</span>
+<span class="normal">3494</span>
+<span class="normal">3495</span>
+<span class="normal">3496</span>
+<span class="normal">3497</span>
+<span class="normal">3498</span>
+<span class="normal">3499</span>
+<span class="normal">3500</span>
+<span class="normal">3501</span>
+<span class="normal">3502</span>
+<span class="normal">3503</span>
+<span class="normal">3504</span>
+<span class="normal">3505</span>
+<span class="normal">3506</span>
+<span class="normal">3507</span>
+<span class="normal">3508</span>
+<span class="normal">3509</span>
+<span class="normal">3510</span>
+<span class="normal">3511</span>
+<span class="normal">3512</span>
+<span class="normal">3513</span>
+<span class="normal">3514</span>
+<span class="normal">3515</span>
+<span class="normal">3516</span>
+<span class="normal">3517</span>
+<span class="normal">3518</span>
+<span class="normal">3519</span>
+<span class="normal">3520</span>
+<span class="normal">3521</span>
+<span class="normal">3522</span>
+<span class="normal">3523</span>
+<span class="normal">3524</span>
+<span class="normal">3525</span>
+<span class="normal">3526</span>
+<span class="normal">3527</span>
+<span class="normal">3528</span>
+<span class="normal">3529</span>
+<span class="normal">3530</span>
+<span class="normal">3531</span>
+<span class="normal">3532</span>
+<span class="normal">3533</span>
+<span class="normal">3534</span>
+<span class="normal">3535</span>
+<span class="normal">3536</span>
+<span class="normal">3537</span>
+<span class="normal">3538</span>
+<span class="normal">3539</span>
+<span class="normal">3540</span>
+<span class="normal">3541</span>
+<span class="normal">3542</span>
+<span class="normal">3543</span>
+<span class="normal">3544</span>
+<span class="normal">3545</span>
+<span class="normal">3546</span>
+<span class="normal">3547</span>
+<span class="normal">3548</span>
+<span class="normal">3549</span>
+<span class="normal">3550</span>
+<span class="normal">3551</span>
+<span class="normal">3552</span>
+<span class="normal">3553</span>
+<span class="normal">3554</span>
+<span class="normal">3555</span>
+<span class="normal">3556</span>
+<span class="normal">3557</span>
+<span class="normal">3558</span>
+<span class="normal">3559</span>
+<span class="normal">3560</span>
+<span class="normal">3561</span>
+<span class="normal">3562</span>
+<span class="normal">3563</span>
+<span class="normal">3564</span>
+<span class="normal">3565</span>
+<span class="normal">3566</span>
+<span class="normal">3567</span>
+<span class="normal">3568</span>
+<span class="normal">3569</span>
+<span class="normal">3570</span>
+<span class="normal">3571</span>
+<span class="normal">3572</span>
+<span class="normal">3573</span>
+<span class="normal">3574</span>
+<span class="normal">3575</span>
+<span class="normal">3576</span>
+<span class="normal">3577</span>
+<span class="normal">3578</span>
+<span class="normal">3579</span>
+<span class="normal">3580</span>
+<span class="normal">3581</span>
+<span class="normal">3582</span>
+<span class="normal">3583</span>
+<span class="normal">3584</span>
+<span class="normal">3585</span>
+<span class="normal">3586</span>
+<span class="normal">3587</span>
+<span class="normal">3588</span>
+<span class="normal">3589</span>
+<span class="normal">3590</span>
+<span class="normal">3591</span>
+<span class="normal">3592</span>
+<span class="normal">3593</span>
+<span class="normal">3594</span>
+<span class="normal">3595</span>
+<span class="normal">3596</span>
+<span class="normal">3597</span>
+<span class="normal">3598</span>
+<span class="normal">3599</span>
+<span class="normal">3600</span>
+<span class="normal">3601</span>
+<span class="normal">3602</span>
+<span class="normal">3603</span>
+<span class="normal">3604</span>
+<span class="normal">3605</span>
+<span class="normal">3606</span>
+<span class="normal">3607</span>
+<span class="normal">3608</span>
+<span class="normal">3609</span>
+<span class="normal">3610</span>
+<span class="normal">3611</span>
+<span class="normal">3612</span>
+<span class="normal">3613</span>
+<span class="normal">3614</span>
+<span class="normal">3615</span>
+<span class="normal">3616</span>
+<span class="normal">3617</span>
+<span class="normal">3618</span>
+<span class="normal">3619</span>
+<span class="normal">3620</span>
+<span class="normal">3621</span>
+<span class="normal">3622</span>
+<span class="normal">3623</span>
+<span class="normal">3624</span>
+<span class="normal">3625</span>
+<span class="normal">3626</span>
+<span class="normal">3627</span>
+<span class="normal">3628</span>
+<span class="normal">3629</span>
+<span class="normal">3630</span>
+<span class="normal">3631</span>
+<span class="normal">3632</span>
+<span class="normal">3633</span>
+<span class="normal">3634</span>
+<span class="normal">3635</span>
+<span class="normal">3636</span>
+<span class="normal">3637</span>
+<span class="normal">3638</span>
+<span class="normal">3639</span>
+<span class="normal">3640</span>
+<span class="normal">3641</span>
+<span class="normal">3642</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">normalize_transitions_rhs</span><span class="p">(</span>  <span class="c1"># noqa: C901, PLR0912, PLR0914, PLR0915</span>
     <span class="n">spec</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">NormalizedRhs</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Normalize a transition-based RHS specification (diagram/hazard semantics).</span>
