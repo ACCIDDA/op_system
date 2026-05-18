@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, NoReturn
 from ._errors import InvalidExpressionError
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Iterator, Mapping
 
 
 @dataclass(frozen=True, slots=True)
@@ -457,6 +457,93 @@ def iter_subscripts(expr: Expr) -> Iterator[Subscript]:
         yield from iter_subscripts(expr.body)
 
 
+def walk(expr: Expr) -> Iterator[Expr]:
+    """Yield every IR node reachable from ``expr`` in pre-order.
+
+    Args:
+        expr: Root IR expression.
+
+    Yields:
+        ``expr`` itself first, followed by every child node.
+    """
+    yield expr
+    if isinstance(expr, Subscript):
+        return
+    if isinstance(expr, Apply):
+        for arg in expr.args:
+            yield from walk(arg)
+        return
+    if isinstance(expr, Reduce):
+        yield from walk(expr.body)
+
+
+def free_symbols(expr: Expr) -> frozenset[str]:
+    """Return the set of ``Sym`` names referenced under ``expr``.
+
+    ``Reduce`` bindings shadow outer symbols of the same name: a bound name
+    appearing only inside a reduction body is *not* considered free.
+
+    Args:
+        expr: Root IR expression.
+
+    Returns:
+        Frozen set of identifier strings that occur as free :class:`Sym`
+        references.
+    """
+    if isinstance(expr, Sym):
+        return frozenset({expr.name})
+    if isinstance(expr, (Literal, Subscript)):
+        return frozenset()
+    if isinstance(expr, Apply):
+        out: set[str] = set()
+        for arg in expr.args:
+            out |= free_symbols(arg)
+        return frozenset(out)
+    if isinstance(expr, Reduce):
+        bound = {bind for _, bind in expr.bindings}
+        return frozenset(free_symbols(expr.body) - bound)
+    _invalid(detail=f"unsupported IR node in free_symbols: {type(expr).__name__}")
+
+
+def substitute(expr: Expr, mapping: Mapping[str, Expr]) -> Expr:
+    """Replace named ``Sym`` leaves with their mapped IR expression.
+
+    The substitution is capture-avoiding with respect to ``Reduce`` bindings:
+    if a name is bound by an enclosing ``Reduce``, occurrences of that name
+    in the body are left untouched (the binding shadows the outer mapping).
+
+    Args:
+        expr: Root IR expression.
+        mapping: Substitution table from symbol name to replacement IR.
+
+    Returns:
+        A new IR expression with substitutions applied; structurally equal
+        to ``expr`` when no replacements occur.
+    """
+    if isinstance(expr, Sym):
+        return mapping.get(expr.name, expr)
+    if isinstance(expr, (Literal, Subscript)):
+        return expr
+    if isinstance(expr, Apply):
+        return Apply(
+            op=expr.op,
+            args=tuple(substitute(arg, mapping) for arg in expr.args),
+        )
+    if isinstance(expr, Reduce):
+        bound = {bind for _, bind in expr.bindings}
+        inner = (
+            mapping
+            if not bound
+            else {k: v for k, v in mapping.items() if k not in bound}
+        )
+        return Reduce(
+            kind=expr.kind,
+            bindings=expr.bindings,
+            body=substitute(expr.body, inner),
+        )
+    _invalid(detail=f"unsupported IR node in substitute: {type(expr).__name__}")
+
+
 def axis_kinds(
     expr: Expr, *, axis_names: frozenset[str]
 ) -> tuple[AxisKind, ...]:
@@ -488,9 +575,12 @@ __all__ = [
     "Sym",
     "axis_kinds",
     "classify_axis_index",
+    "free_symbols",
     "iter_subscripts",
     "lower_helper_calls",
     "parse_expr_to_ir",
+    "substitute",
     "to_ir",
     "unparse_ir",
+    "walk",
 ]
