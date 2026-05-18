@@ -11,7 +11,11 @@ from op_system._ir import (
     Sym,
     parse_expr_to_ir,
 )
-from op_system._ir_templates import expand_inline_templates
+from op_system._ir_templates import (
+    expand_inline_templates,
+    expand_over_axes,
+    placeholder_axes,
+)
 from op_system._templates import _apply_template_substitutions
 
 AXIS_LOOKUP = {"age": ["0_5", "5_18", "18_65", "65p"], "imm": ["x0", "x1"]}
@@ -146,3 +150,94 @@ def test_expand_parity_with_string_path_shaped_param() -> None:
     )
 
     assert ir_out == parse_expr_to_ir(string_out)
+
+
+def test_placeholder_axes_collects_in_first_seen_order() -> None:
+    """Placeholder axes are returned deterministically by walk order."""
+    expr = parse_expr_to_ir("S[age] * theta[imm] + I[pop] * S[age]")
+    assert placeholder_axes(expr) == ("age", "imm", "pop")
+
+
+def test_placeholder_axes_skips_shaped_param_subscripts() -> None:
+    """Subscripts whose base is a shaped param do not contribute axes."""
+    expr = parse_expr_to_ir("theta[imm] * S[age]")
+    out = placeholder_axes(expr, shaped_params={"theta": ("imm",)})
+    assert out == ("age",)
+
+
+def test_placeholder_axes_ignores_literal_coords_and_placeholders() -> None:
+    """Literal coords and ``$``-placeholders are not collected."""
+    expr = Subscript(
+        name="K",
+        indices=(
+            AxisIndex(axis="", coord="0"),
+            AxisIndex(axis="age", placeholder="age"),
+        ),
+    )
+    assert placeholder_axes(expr) == ()
+
+
+def test_placeholder_axes_drops_reduce_bound_names() -> None:
+    """Names bound by a Reduce do not appear in the result set."""
+    body = Subscript(name="C", indices=(AxisIndex(axis="age"), AxisIndex(axis="ap")))
+    expr = Reduce(kind="sum_over", bindings=(("age", "ap"),), body=body)
+    # "age" is still a free placeholder; "ap" is bound and dropped.
+    assert placeholder_axes(expr) == ("age",)
+
+
+def test_expand_over_axes_empty_axes_returns_singleton() -> None:
+    """With no axes, the input is returned as a single ({}, expr) entry."""
+    expr = parse_expr_to_ir("beta * S")
+    out = expand_over_axes(expr, axes=(), axis_lookup=AXIS_LOOKUP)
+    assert out == [({}, expr)]
+
+
+def test_expand_over_axes_cross_product_count() -> None:
+    """The result length equals the product of coord-list lengths."""
+    expr = parse_expr_to_ir("S[age] * theta[imm]")
+    out = expand_over_axes(
+        expr,
+        axes=("age", "imm"),
+        axis_lookup=AXIS_LOOKUP,
+        shaped_params={"theta": ("imm",)},
+    )
+    assert len(out) == len(AXIS_LOOKUP["age"]) * len(AXIS_LOOKUP["imm"])
+
+
+def test_expand_over_axes_matches_string_path_named_only() -> None:
+    """Each IR expansion matches parsing the string-path expansion."""
+    src = "beta * S[age] + I[age]"
+    expr = parse_expr_to_ir(src)
+    axes = placeholder_axes(expr)
+    ir_results = expand_over_axes(expr, axes=axes, axis_lookup=AXIS_LOOKUP)
+
+    for assignment, ir_expr in ir_results:
+        string_expr = _apply_template_substitutions(
+            src, assignment=assignment, template_map={}
+        )
+        assert ir_expr == parse_expr_to_ir(string_expr)
+
+
+def test_expand_over_axes_matches_string_path_with_shaped_param() -> None:
+    """Cross-product expansion matches the string path for shaped params."""
+    src = "theta[imm] * S[age]"
+    shaped = {"theta": ("imm",)}
+    expr = parse_expr_to_ir(src)
+    axes = placeholder_axes(expr, shaped_params=shaped)
+    ir_results = expand_over_axes(
+        expr,
+        axes=("age", "imm"),  # include imm so theta gets rewritten
+        axis_lookup=AXIS_LOOKUP,
+        shaped_params=shaped,
+    )
+
+    assert axes == ("age",)
+    for assignment, ir_expr in ir_results:
+        string_expr = _apply_template_substitutions(
+            src,
+            assignment=assignment,
+            template_map={},
+            shaped_params=shaped,
+            axis_lookup=AXIS_LOOKUP,
+        )
+        assert ir_expr == parse_expr_to_ir(string_expr)

@@ -21,13 +21,14 @@ template expansion in ``_normalize.py``.
 
 from __future__ import annotations
 
+from itertools import product
 from typing import TYPE_CHECKING
 
 from ._ir import Apply, AxisIndex, Expr, Literal, Reduce, Subscript, Sym
 from ._templates import _render_template_name
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping, Sequence
+    from collections.abc import Iterable, Mapping, Sequence
 
 
 def _expandable_axes(indices: Sequence[AxisIndex]) -> list[str] | None:
@@ -176,4 +177,113 @@ def expand_inline_templates(
     raise TypeError(msg)
 
 
-__all__ = ["expand_inline_templates"]
+__all__ = ["expand_inline_templates", "expand_over_axes", "placeholder_axes"]
+
+
+def _collect_subscript_axes(
+    sub: Subscript,
+    *,
+    shaped: Mapping[str, tuple[str, ...]],
+    out: dict[str, None],
+) -> None:
+    if sub.name in shaped:
+        return
+    for idx in sub.indices:
+        if idx.coord is not None or idx.placeholder is not None:
+            continue
+        if idx.axis:
+            out.setdefault(idx.axis, None)
+
+
+def _walk_for_axes(
+    node: Expr,
+    *,
+    shaped: Mapping[str, tuple[str, ...]],
+    seen: dict[str, None],
+) -> None:
+    if isinstance(node, (Literal, Sym)):
+        return
+    if isinstance(node, Subscript):
+        _collect_subscript_axes(node, shaped=shaped, out=seen)
+        return
+    if isinstance(node, Apply):
+        for arg in node.args:
+            _walk_for_axes(arg, shaped=shaped, seen=seen)
+        return
+    if isinstance(node, Reduce):
+        _walk_for_axes(node.body, shaped=shaped, seen=seen)
+        for _, bind in node.bindings:
+            seen.pop(bind, None)
+
+
+def placeholder_axes(
+    expr: Expr,
+    *,
+    shaped_params: Mapping[str, tuple[str, ...]] | None = None,
+) -> tuple[str, ...]:
+    """Collect placeholder axis names referenced by ``expr``.
+
+    Walks the IR and gathers every bare-identifier axis appearing inside a
+    ``Subscript`` whose base name is *not* a registered shaped parameter.
+    Literal-coord and ``$``-placeholder positions are skipped. Order is
+    deterministic: first appearance in pre-order traversal wins.
+
+    Args:
+        expr: Root IR expression.
+        shaped_params: Optional mapping of shaped-parameter base names
+            (whose subscripts are rewritten to literal indices rather than
+            expanded into scalar symbols).
+
+    Returns:
+        Tuple of distinct axis names in first-seen order.
+    """
+    shaped = shaped_params or {}
+    seen: dict[str, None] = {}
+    _walk_for_axes(expr, shaped=shaped, seen=seen)
+    return tuple(seen)
+
+
+def expand_over_axes(
+    expr: Expr,
+    *,
+    axes: Iterable[str],
+    axis_lookup: Mapping[str, Sequence[str]],
+    shaped_params: Mapping[str, tuple[str, ...]] | None = None,
+) -> list[tuple[dict[str, str], Expr]]:
+    """Cross-expand ``expr`` over the coordinate product of ``axes``.
+
+    For every combination of coords drawn from ``axis_lookup[ax]`` for each
+    ``ax in axes``, builds an assignment and applies
+    :func:`expand_inline_templates` to ``expr``.
+
+    Args:
+        expr: Root IR expression to expand.
+        axes: Axis names to cross-expand over. Typical callers pass
+            ``placeholder_axes(expr, shaped_params=...)``.
+        axis_lookup: Mapping of axis name to its ordered coord list. Must
+            contain every entry in ``axes``.
+        shaped_params: Optional shaped-parameter registry forwarded to
+            :func:`expand_inline_templates`.
+
+    Returns:
+        List of ``(assignment, expanded_expr)`` pairs, one per coordinate
+        combination. When ``axes`` is empty, returns ``[({}, expr)]``.
+    """
+    axis_list = list(axes)
+    if not axis_list:
+        return [({}, expr)]
+
+    coord_lists = [list(axis_lookup[ax]) for ax in axis_list]
+    out: list[tuple[dict[str, str], Expr]] = []
+    for combo in product(*coord_lists):
+        assignment = dict(zip(axis_list, combo, strict=True))
+        out.append((
+            assignment,
+            expand_inline_templates(
+                expr,
+                assignment=assignment,
+                shaped_params=shaped_params,
+                axis_lookup=axis_lookup,
+            ),
+        ))
+    return out
