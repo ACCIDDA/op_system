@@ -33,13 +33,11 @@ from types import MappingProxyType
 from typing import (
     TYPE_CHECKING,
     Any,
-    Literal,
     NamedTuple,
     cast,
 )
 
 import numpy as np
-from flepimop2.configuration import ModuleModel
 from flepimop2.parameter.abc import ModelStateSpecification, ParameterRequest
 from flepimop2.system.abc import SystemABC
 from flepimop2.typing import (
@@ -71,8 +69,7 @@ class _AxesMeta(NamedTuple):
     axis_coords: dict[str, np.ndarray]
 
 
-class OpSystemSystem(ModuleModel, SystemABC):  # noqa: D101
-    module: Literal["flepimop2.system.op_system"] = "flepimop2.system.op_system"
+class OpSystemSystem(SystemABC, module="flepimop2.system.op_system"):  # noqa: D101
     state_change: StateChangeEnum = StateChangeEnum.FLOW
 
     spec: dict[str, object] = Field(

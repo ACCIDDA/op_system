@@ -23,9 +23,11 @@ from op_system._normalize import (
     normalize_rhs,
     normalize_transitions_rhs,
 )
+from op_system._symbols import ExpressionString
 from op_system._templates import PinnedToken, SelectorToken, WildcardToken
 
 __all__ = [
+    "ExpressionString",
     "NormalizedRhs",
     "PinnedToken",
     "SelectorToken",

@@ -6,8 +6,64 @@ AST-level symbol extraction utilities used by expression normalization.
 from __future__ import annotations
 
 import ast
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 from op_system._errors import InvalidExpressionError
+from op_system._ir import parse_expr_to_ir, to_ir
+
+if TYPE_CHECKING:
+    from op_system._ir import Expr
+
+
+@dataclass(frozen=True, slots=True)
+class ExpressionString:
+    """Validated expression wrapper with cached AST and symbol names."""
+
+    source: str
+    ast: ast.AST = field(init=False, repr=False)
+    names: frozenset[str] = field(init=False)
+
+    def __post_init__(self) -> None:
+        try:
+            parsed = ast.parse(self.source, mode="eval")
+        except SyntaxError as exc:
+            raise InvalidExpressionError(
+                detail=f"invalid expression syntax: {exc.msg}"
+            ) from exc
+
+        found_names: set[str] = set()
+        for node in ast.walk(parsed):
+            if isinstance(node, ast.Name):
+                found_names.add(str(node.id))
+
+        object.__setattr__(self, "ast", parsed)
+        object.__setattr__(self, "names", frozenset(found_names))
+
+    def as_ir(self) -> Expr:
+        """Return the typed IR representation for this expression.
+
+        Returns:
+            Parsed typed IR tree.
+        """
+        return to_ir(self.ast)
+
+    def as_lowered_ir(self) -> Expr:
+        """Return helper-lowered typed IR for this expression.
+
+        Returns:
+            Typed IR tree with helper calls lowered to ``Reduce`` nodes.
+        """
+        return parse_expr_to_ir(self.source, lower_helpers=True)
+
+
+def parse_expression_string(expr: str) -> ExpressionString:
+    """Parse ``expr`` into an :class:`ExpressionString`.
+
+    Returns:
+        Validated expression wrapper with parsed AST and names.
+    """
+    return ExpressionString(expr)
 
 
 def _parse_expr(expr: str) -> ast.AST:
@@ -15,26 +71,29 @@ def _parse_expr(expr: str) -> ast.AST:
 
     Returns:
         The parsed AST node.
-
-    Raises:
-        InvalidExpressionError: If validation fails.
     """
-    try:
-        return ast.parse(expr, mode="eval")
-    except SyntaxError as exc:
-        raise InvalidExpressionError(
-            detail=f"invalid expression syntax: {exc.msg}"
-        ) from exc
+    return parse_expression_string(expr).ast
 
 
-def _collect_names(tree: ast.AST) -> set[str]:
+def _collect_names(tree: ast.AST | ExpressionString) -> set[str]:
     """Collect all Name identifiers referenced in an expression AST.
 
     Returns:
         Set of identifier names found in the expression.
     """
+    if isinstance(tree, ExpressionString):
+        return set(tree.names)
+
     names: set[str] = set()
     for node in ast.walk(tree):
         if isinstance(node, ast.Name):
             names.add(str(node.id))
     return names
+
+
+__all__ = [
+    "ExpressionString",
+    "_collect_names",
+    "_parse_expr",
+    "parse_expression_string",
+]
