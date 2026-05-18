@@ -184,3 +184,59 @@ def test_extract_common_subexpressions_skips_reserved_names() -> None:
 
     assert bindings == (("_cse1", parse_expr_to_ir("a + b")),)
     assert rewritten == (parse_expr_to_ir("_cse1 * _cse1"),)
+
+
+def test_lower_helper_recognizes_categorical_filter() -> None:
+    """``axis=var in [c1, c2, ...]`` lowers into ``Reduce.filters``."""
+    ir = parse_expr_to_ir(
+        "apply_along(pop[vax:j], vax=j in [v, w])", lower_helpers=True
+    )
+
+    assert isinstance(ir, Reduce)
+    assert ir.kind == "apply_along"
+    assert ir.bindings == (("vax", "j"),)
+    assert ir.filters == (("vax", ("v", "w")),)
+    assert ir.kernel is None
+
+
+def test_lower_helper_recognizes_continuous_range_filter() -> None:
+    """Numeric coord lists are preserved as string filter coords."""
+    ir = parse_expr_to_ir(
+        "apply_along(u[x:i], x=i in [1.0, 4.0])", lower_helpers=True
+    )
+
+    assert isinstance(ir, Reduce)
+    assert ir.bindings == (("x", "i"),)
+    assert ir.filters == (("x", ("1.0", "4.0")),)
+
+
+def test_lower_helper_recognizes_kernel_kwarg() -> None:
+    """``kernel=sum|integrate`` sets ``Reduce.kernel`` without a binding."""
+    ir = parse_expr_to_ir(
+        "apply_along(u[x:i], x=i, kernel=integrate)", lower_helpers=True
+    )
+
+    assert isinstance(ir, Reduce)
+    assert ir.bindings == (("x", "i"),)
+    assert ir.filters == ()
+    assert ir.kernel == "integrate"
+
+
+def test_lower_helper_rejects_unknown_kernel() -> None:
+    """``kernel=`` only accepts ``sum`` or ``integrate``."""
+    with pytest.raises(InvalidExpressionError):
+        parse_expr_to_ir(
+            "apply_along(u[x:i], x=i, kernel=median)", lower_helpers=True
+        )
+
+
+def test_lower_helper_combines_binding_and_filter_across_axes() -> None:
+    """Multi-axis helpers can mix plain bindings and filtered ones."""
+    ir = parse_expr_to_ir(
+        "apply_along(I[age:a, vax:b], age=a, vax=b in [v, w])",
+        lower_helpers=True,
+    )
+
+    assert isinstance(ir, Reduce)
+    assert ir.bindings == (("age", "a"), ("vax", "b"))
+    assert ir.filters == (("vax", ("v", "w")),)

@@ -72,11 +72,26 @@ class Apply:
 
 @dataclass(frozen=True, slots=True)
 class Reduce:
-    """Reduction primitive placeholder for future helper-lowering passes."""
+    """Reduction primitive placeholder for future helper-lowering passes.
+
+    ``filters`` records optional per-axis coord subsets from helper
+    invocations of the form ``axis=var in [c1, c2, ...]``. Each entry is
+    ``(axis_name, (coord1, coord2, ...))``; absence of an entry for an
+    axis means the reduction spans the full axis. For continuous axes
+    with two numeric coords ``[lo, hi]`` the filter is interpreted as a
+    sub-interval to integrate over.
+
+    ``kernel`` records an explicit ``kernel=`` kwarg from
+    ``apply_along(..., kernel=sum|integrate)``. ``None`` means auto-select
+    based on the bound axis types (the same behavior as the string
+    expander).
+    """
 
     kind: str
     bindings: tuple[tuple[str, str], ...]
     body: Expr
+    filters: tuple[tuple[str, tuple[str, ...]], ...] = ()
+    kernel: str | None = None
 
 
 Expr = Literal | Sym | Subscript | Apply | Reduce
@@ -141,6 +156,38 @@ def _kwarg_value_as_binding(value: Expr, *, key: str) -> str:
     _invalid(detail=f"helper binding {key!r} must be a symbol or literal")
 
 
+_APPLY_ALONG_KERNELS_IR: frozenset[str] = frozenset({"sum", "integrate"})
+
+
+def _extract_filter_from_value(value: Expr) -> tuple[str, tuple[str, ...]] | None:
+    """If ``value`` is ``var in [c1, c2, ...]``, return ``(var, coords)``.
+
+    The coord list elements may be ``Sym`` (categorical/ordinal labels) or
+    ``Literal`` (numeric / string coords for continuous filters). All
+    other shapes return ``None`` so the caller falls back to plain
+    binding interpretation.
+    """
+    if not (isinstance(value, Apply) and value.op == "in" and len(value.args) == 2):
+        return None
+    var_node, list_node = value.args
+    if not isinstance(var_node, Sym):
+        return None
+    if not (
+        isinstance(list_node, Apply)
+        and list_node.op == "list"
+    ):
+        return None
+    coords: list[str] = []
+    for elt in list_node.args:
+        if isinstance(elt, Sym):
+            coords.append(elt.name)
+        elif isinstance(elt, Literal):
+            coords.append(str(elt.value))
+        else:
+            return None
+    return var_node.name, tuple(coords)
+
+
 def _lower_single_helper(node: Apply) -> Expr:
     if node.op not in _HELPER_REDUCE_OPS:
         return node
@@ -157,14 +204,50 @@ def _lower_single_helper(node: Apply) -> Expr:
         _invalid(detail=f"{node.op} helper requires exactly one body expression")
 
     bindings: list[tuple[str, str]] = []
+    filters: list[tuple[str, tuple[str, ...]]] = []
+    kernel: str | None = None
     for kw_node in kw_nodes:
         if len(kw_node.args) != 2:
             _invalid(detail="kwarg marker must contain (key, value)")
         key = _kwarg_name(kw_node.args[0])
-        val = _kwarg_value_as_binding(kw_node.args[1], key=key)
+        value = kw_node.args[1]
+        if key == "kernel":
+            # ``kernel=sum`` / ``kernel=integrate`` selects the per-axis form
+            # explicitly; recognize it specially so it doesn't get mistaken
+            # for an axis binding.
+            if isinstance(value, Sym):
+                kernel_name = value.name
+            elif isinstance(value, Literal):
+                kernel_name = str(value.value)
+            else:
+                _invalid(
+                    detail=f"{node.op} kernel= must be 'sum' or 'integrate'"
+                )
+            if kernel_name not in _APPLY_ALONG_KERNELS_IR:
+                _invalid(
+                    detail=(
+                        f"{node.op} kernel must be one of "
+                        f"{sorted(_APPLY_ALONG_KERNELS_IR)}, got {kernel_name!r}"
+                    )
+                )
+            kernel = kernel_name
+            continue
+        flt = _extract_filter_from_value(value)
+        if flt is not None:
+            var_name, coords = flt
+            bindings.append((key, var_name))
+            filters.append((key, coords))
+            continue
+        val = _kwarg_value_as_binding(value, key=key)
         bindings.append((key, val))
 
-    return Reduce(kind=node.op, bindings=tuple(bindings), body=positional[0])
+    return Reduce(
+        kind=node.op,
+        bindings=tuple(bindings),
+        body=positional[0],
+        filters=tuple(filters),
+        kernel=kernel,
+    )
 
 
 def lower_helper_calls(expr: Expr) -> Expr:
@@ -186,6 +269,8 @@ def lower_helper_calls(expr: Expr) -> Expr:
             kind=expr.kind,
             bindings=expr.bindings,
             body=lower_helper_calls(expr.body),
+            filters=expr.filters,
+            kernel=expr.kernel,
         )
 
     return expr
@@ -282,6 +367,25 @@ def to_ir(node: ast.AST) -> Expr:  # noqa: C901, PLR0911, PLR0912
     if isinstance(node, ast.Compare):
         if len(node.ops) != len(node.comparators):
             _invalid(detail="malformed comparison node")
+        # Special-case ``x in [c1, c2, ...]`` (single ``In`` op) so helper
+        # kwarg values like ``axis=var in [c1, c2]`` survive parsing and
+        # can be recognized as filter specifications by
+        # :func:`_lower_single_helper`.
+        if (
+            len(node.ops) == 1
+            and isinstance(node.ops[0], ast.In)
+            and isinstance(node.comparators[0], ast.List)
+        ):
+            return Apply(
+                op="in",
+                args=(
+                    to_ir(node.left),
+                    Apply(
+                        op="list",
+                        args=tuple(to_ir(e) for e in node.comparators[0].elts),
+                    ),
+                ),
+            )
         left = node.left
         parts: list[Expr] = []
         for op_node, right in zip(node.ops, node.comparators, strict=True):
@@ -712,6 +816,8 @@ def substitute(
             kind=expr.kind,
             bindings=expr.bindings,
             body=substitute(expr.body, inner, memo),
+            filters=expr.filters,
+            kernel=expr.kernel,
         )
     _invalid(detail=f"unsupported IR node in substitute: {type(expr).__name__}")
 
@@ -726,7 +832,13 @@ def _map_children(expr: Expr, fn: Callable[[Expr], Expr]) -> Expr:
         new_body = fn(expr.body)
         if new_body == expr.body:
             return expr
-        return Reduce(kind=expr.kind, bindings=expr.bindings, body=new_body)
+        return Reduce(
+            kind=expr.kind,
+            bindings=expr.bindings,
+            body=new_body,
+            filters=expr.filters,
+            kernel=expr.kernel,
+        )
     return expr
 
 
@@ -871,7 +983,13 @@ def resolve_axis_kinds(expr: Expr, *, axis_names: frozenset[str]) -> Expr:  # no
         new_body = resolve_axis_kinds(expr.body, axis_names=axis_names)
         if new_body is expr.body:
             return expr
-        return Reduce(kind=expr.kind, bindings=expr.bindings, body=new_body)
+        return Reduce(
+            kind=expr.kind,
+            bindings=expr.bindings,
+            body=new_body,
+            filters=expr.filters,
+            kernel=expr.kernel,
+        )
     _invalid(detail=f"unsupported IR node in resolve_axis_kinds: {type(expr).__name__}")
 
 
