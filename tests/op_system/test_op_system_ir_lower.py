@@ -355,3 +355,86 @@ def test_lift_then_lower_round_trip_evaluates_to_buffer_product() -> None:
     i_buf = np.array([[5.0, 6.0], [7.0, 8.0]])
     out = _eval(node, {"S_buf": s_buf, "I_buf": i_buf, "np": np})
     assert np.array_equal(out, s_buf * i_buf)
+
+
+# ---------------------------------------------------------------------------
+# Weighted reductions (integrate_over / continuous-axis bindings)
+# ---------------------------------------------------------------------------
+
+
+def test_lower_integrate_over_emits_weighted_sum_one_axis() -> None:
+    """``integrate_over`` over a single axis multiplies body by deltas then sums."""
+    body = Subscript(
+        name="f",
+        indices=(AxisIndex(axis="x", kind=AxisKind.FREE),),
+    )
+    expr = Reduce(kind="integrate_over", bindings=(("x", "x"),), body=body)
+    node = lower_to_vector_ast(
+        expr,
+        target_axes=(),
+        buffer_axes={"f": ("x",)},
+        axis_names=frozenset({"x"}),
+        axis_weights={"x": (0.5, 1.5, 1.0)},
+    )
+    f_buf = np.array([2.0, 4.0, 6.0])
+    got = _eval(node, {"f_buf": f_buf, "np": np})
+    assert got == pytest.approx(0.5 * 2.0 + 1.5 * 4.0 + 1.0 * 6.0)
+
+
+def test_lower_integrate_over_rejects_when_weights_missing() -> None:
+    """Without ``axis_weights`` for the bound axis, integration cannot lower."""
+    body = Subscript(
+        name="f",
+        indices=(AxisIndex(axis="x", kind=AxisKind.FREE),),
+    )
+    expr = Reduce(kind="integrate_over", bindings=(("x", "x"),), body=body)
+    with pytest.raises(UnsupportedIRLoweringError, match="integration weights"):
+        lower_to_vector_ast(
+            expr,
+            target_axes=(),
+            buffer_axes={"f": ("x",)},
+            axis_names=frozenset({"x"}),
+        )
+
+
+def test_lower_apply_along_with_weights_for_continuous_axis() -> None:
+    """``apply_along`` over a non-reducible axis lowers when weights are provided."""
+    body = Subscript(
+        name="f",
+        indices=(
+            AxisIndex(axis="x", kind=AxisKind.FREE),
+            AxisIndex(axis="age", kind=AxisKind.FREE),
+        ),
+    )
+    expr = Reduce(kind="apply_along", bindings=(("x", "i"),), body=body)
+    node = lower_to_vector_ast(
+        expr,
+        target_axes=("age",),
+        buffer_axes={"f": ("x", "age")},
+        axis_names=frozenset({"x", "age"}),
+        reducible_axes=frozenset({"age"}),
+        axis_weights={"x": (1.0, 2.0)},
+    )
+    f_buf = np.array([[1.0, 2.0, 3.0], [10.0, 20.0, 30.0]])  # shape (x=2, age=3)
+    got = _eval(node, {"f_buf": f_buf, "np": np})
+    expected = 1.0 * f_buf[0] + 2.0 * f_buf[1]
+    assert np.array_equal(got, expected)
+
+
+def test_lower_uniform_apply_along_unchanged_when_weights_absent() -> None:
+    """Plain ``apply_along`` over a reducible axis still lowers without weights."""
+    body = Subscript(
+        name="S",
+        indices=(AxisIndex(axis="age", kind=AxisKind.FREE),),
+    )
+    expr = Reduce(kind="apply_along", bindings=(("age", "a"),), body=body)
+    node = lower_to_vector_ast(
+        expr,
+        target_axes=(),
+        buffer_axes={"S": ("age",)},
+        axis_names=frozenset({"age"}),
+        reducible_axes=frozenset({"age"}),
+    )
+    s_buf = np.array([1.0, 2.0, 3.0])
+    got = _eval(node, {"S_buf": s_buf, "np": np})
+    assert got == pytest.approx(6.0)

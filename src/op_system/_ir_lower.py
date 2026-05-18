@@ -226,6 +226,7 @@ def lower_to_vector_ast(
     buffer_axes: Mapping[str, tuple[str, ...]],
     axis_names: frozenset[str],
     reducible_axes: frozenset[str] = frozenset(),
+    axis_weights: Mapping[str, tuple[float, ...]] | None = None,
 ) -> ast.expr:
     """Lower an IR expression to a vector-shape AST.
 
@@ -246,6 +247,12 @@ def lower_to_vector_ast(
             :class:`Reduce` node. Typically the set of categorical/ordinal
             axes (uniform-weight kernel). Empty by default — when empty,
             any :class:`Reduce` raises :class:`UnsupportedIRLoweringError`.
+        axis_weights: Optional mapping from axis name to per-coordinate
+            integration weights (e.g. trapezoidal deltas) for continuous
+            axes. Required for ``Reduce(kind="integrate_over", ...)`` and
+            for any bound axis not in ``reducible_axes``. When supplied,
+            the reduction emits ``np.sum(weights * body, axis=...)``
+            instead of a plain ``np.sum``.
 
     Returns:
         An ``ast.expr`` suitable for ``compile(ast.Expression(body=...))``
@@ -283,6 +290,7 @@ def lower_to_vector_ast(
             buffer_axes=buffer_axes,
             axis_names=axis_names,
             reducible_axes=reducible_axes,
+            axis_weights=axis_weights,
         )
 
     return _lower_reduce(
@@ -291,10 +299,14 @@ def lower_to_vector_ast(
         buffer_axes=buffer_axes,
         axis_names=axis_names,
         reducible_axes=reducible_axes,
+        axis_weights=axis_weights,
     )
 
 
-_REDUCE_SUM_KINDS: frozenset[str] = frozenset({"apply_along", "sum_over"})
+_REDUCE_SUM_KINDS: frozenset[str] = frozenset(
+    {"apply_along", "sum_over", "integrate_over"}
+)
+_REDUCE_UNIFORM_KINDS: frozenset[str] = frozenset({"apply_along", "sum_over"})
 
 
 def _lower_reduce(
@@ -304,46 +316,52 @@ def _lower_reduce(
     buffer_axes: Mapping[str, tuple[str, ...]],
     axis_names: frozenset[str],
     reducible_axes: frozenset[str],
+    axis_weights: Mapping[str, tuple[float, ...]] | None = None,
 ) -> ast.expr:
     """Lower a :class:`Reduce` node to ``np.sum(body, axis=...)``.
 
-    Restricted to uniform-weight kernels (``apply_along`` / ``sum_over``)
-    over axes that appear in ``reducible_axes`` — i.e. categorical or
-    ordinal axes where the reduction collapses to a plain sum. The
-    ``integrate_over`` kind and any continuous-axis binding raise
-    :class:`UnsupportedIRLoweringError` so callers fall back to the
-    legacy string-expansion path.
+    Supports uniform-weight kernels (``apply_along`` / ``sum_over``) over
+    axes in ``reducible_axes`` and shaped-weight kernels
+    (``integrate_over``, or any binding whose axis appears in
+    ``axis_weights``). For weighted bindings, emits
+    ``np.sum(weights * body, axis=...)`` with per-axis weight constants
+    baked into the AST as ``np.array([...])`` factors broadcast into
+    position.
 
     Returns:
-        An ``ast.expr`` invoking ``np.sum`` on the lowered body, with the
-        bound axes collapsed.
+        An ``ast.expr`` invoking ``np.sum`` on the (possibly
+        weight-scaled) lowered body, with the bound axes collapsed.
 
     Raises:
-        UnsupportedIRLoweringError: If ``expr.kind`` is not a uniform-sum
-            kind, if any bound axis is not in ``reducible_axes``, or if
-            the body itself violates the v1 lowering subset.
+        UnsupportedIRLoweringError: If ``expr.kind`` is not a recognized
+            sum kind, if a binding requires weights but none were
+            provided, if a uniform binding targets a non-reducible axis,
+            or if the body itself violates the v1 lowering subset.
     """
     if expr.kind not in _REDUCE_SUM_KINDS:
         msg = (
-            f"Reduce kind {expr.kind!r} requires shaped weights; v1 "
-            "lowering supports only uniform-weight reductions "
-            f"({sorted(_REDUCE_SUM_KINDS)})"
+            f"Reduce kind {expr.kind!r} is not a recognized sum kind; v1 "
+            f"lowering supports {sorted(_REDUCE_SUM_KINDS)}"
         )
         raise UnsupportedIRLoweringError(msg)
 
+    weights_map: Mapping[str, tuple[float, ...]] = axis_weights or {}
     bound_axes: list[str] = []
+    weighted_axes: list[str] = []
     rebind: dict[str, str] = {}
     for axis, binding in expr.bindings:
-        if axis not in reducible_axes:
-            msg = (
-                f"Reduce binding {axis}={binding} targets a non-reducible "
-                "axis (likely continuous) — v1 lowering supports "
-                "uniform-weight categorical reductions only"
-            )
-            raise UnsupportedIRLoweringError(msg)
         if axis in bound_axes:
             msg = f"Reduce has duplicate axis binding {axis!r}"
             raise UnsupportedIRLoweringError(msg)
+        if expr.kind == "integrate_over" or axis not in reducible_axes:
+            if axis not in weights_map:
+                msg = (
+                    f"Reduce binding {axis}={binding} (kind {expr.kind!r}) "
+                    f"requires integration weights for axis {axis!r}, but "
+                    "none were provided"
+                )
+                raise UnsupportedIRLoweringError(msg)
+            weighted_axes.append(axis)
         bound_axes.append(axis)
         rebind[binding] = axis
 
@@ -358,7 +376,19 @@ def _lower_reduce(
         buffer_axes=buffer_axes,
         axis_names=axis_names,
         reducible_axes=reducible_axes,
+        axis_weights=axis_weights,
     )
+
+    for ax in weighted_axes:
+        body_ast = ast.BinOp(
+            left=_weight_constant_for_axis(
+                ax,
+                weights=weights_map[ax],
+                extended_target=extended_target,
+            ),
+            op=ast.Mult(),
+            right=body_ast,
+        )
 
     reduce_positions = tuple(extended_target.index(ax) for ax in bound_axes)
     if len(reduce_positions) == 1:
@@ -372,6 +402,44 @@ def _lower_reduce(
         func=ast.Attribute(value=_name("np"), attr="sum", ctx=ast.Load()),
         args=[body_ast],
         keywords=[ast.keyword(arg="axis", value=axis_arg)],
+    )
+
+
+def _weight_constant_for_axis(
+    axis: str,
+    *,
+    weights: tuple[float, ...],
+    extended_target: tuple[str, ...],
+) -> ast.expr:
+    """Build ``np.array([w0, w1, ...])[None, ..., :, ..., None]`` for ``axis``.
+
+    Returns a constant 1-D weights vector reshaped to broadcast along the
+    position of ``axis`` within ``extended_target``.
+    """
+    pos = extended_target.index(axis)
+    arr: ast.expr = ast.Call(
+        func=ast.Attribute(value=_name("np"), attr="array", ctx=ast.Load()),
+        args=[
+            ast.List(
+                elts=[ast.Constant(value=float(w)) for w in weights],
+                ctx=ast.Load(),
+            )
+        ],
+        keywords=[],
+    )
+    n = len(extended_target)
+    if n == 1:
+        return arr
+    elts: list[ast.expr] = []
+    for i in range(n):
+        if i == pos:
+            elts.append(ast.Slice(lower=None, upper=None, step=None))
+        else:
+            elts.append(ast.Constant(value=None))
+    return ast.Subscript(
+        value=arr,
+        slice=ast.Tuple(elts=elts, ctx=ast.Load()),
+        ctx=ast.Load(),
     )
 
 
@@ -425,6 +493,7 @@ def _lower_apply(
     buffer_axes: Mapping[str, tuple[str, ...]],
     axis_names: frozenset[str],
     reducible_axes: frozenset[str] = frozenset(),
+    axis_weights: Mapping[str, tuple[float, ...]] | None = None,
 ) -> ast.expr:
     def lower(child: Expr) -> ast.expr:
         return lower_to_vector_ast(
@@ -433,6 +502,7 @@ def _lower_apply(
             buffer_axes=buffer_axes,
             axis_names=axis_names,
             reducible_axes=reducible_axes,
+            axis_weights=axis_weights,
         )
 
     if expr.op == "neg" and len(expr.args) == 1:
