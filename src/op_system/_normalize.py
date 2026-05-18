@@ -37,7 +37,7 @@ from op_system._helpers import (
     _sorted_unique,
 )
 from op_system._ir import Expr, parse_expr_to_ir
-from op_system._ir_templates import inline_aliases
+from op_system._ir_templates import _detect_alias_cycle, inline_aliases
 from op_system._symbols import _collect_names, _parse_expr
 from op_system._templates import (
     _INLINE_TEMPLATE_RE,
@@ -1158,10 +1158,26 @@ def _build_aliases_ir(aliases: Mapping[str, str]) -> dict[str, Expr]:
                 parsed[name] = parse_expr_to_ir(body)
             except (ValueError, RecursionError):
                 continue
+        # Validate the alias graph once and share a free_symbols memo across
+        # all per-alias inline_aliases calls: alias bodies are reused by
+        # identity, so id-keyed caching turns the inner traversal cost from
+        # O(#aliases * body_size) into O(body_size).
+        memo: dict[int, frozenset[str]] = {}
+        cycle_validated = False
+        try:
+            cycle = _detect_alias_cycle(parsed)
+            cycle_validated = cycle is None
+        except (ValueError, RecursionError):
+            cycle_validated = False
         inlined: dict[str, Expr] = {}
         for name, expr in parsed.items():
             try:
-                inlined[name] = inline_aliases(expr, parsed)
+                inlined[name] = inline_aliases(
+                    expr,
+                    parsed,
+                    memo=memo,
+                    skip_cycle_check=cycle_validated,
+                )
             except (ValueError, RecursionError):
                 inlined[name] = expr
         return inlined
@@ -1190,6 +1206,18 @@ def _build_equations_ir(
     try:
         if needed > old_limit:
             sys.setrecursionlimit(needed)
+        # Share one free_symbols memo across every equation and validate the
+        # alias cycle once: alias bodies are reused by identity, so id-keyed
+        # caching turns the per-equation inline cost from O(alias_size) into
+        # O(equation_size) after the first call warms the memo.
+        memo: dict[int, frozenset[str]] = {}
+        cycle_validated = False
+        if aliases_ir:
+            try:
+                cycle = _detect_alias_cycle(aliases_ir)
+                cycle_validated = cycle is None
+            except (ValueError, RecursionError):
+                cycle_validated = False
         out: list[Expr | None] = []
         for eq in equations:
             try:
@@ -1201,7 +1229,14 @@ def _build_equations_ir(
                 out.append(expr)
                 continue
             try:
-                out.append(inline_aliases(expr, aliases_ir))
+                out.append(
+                    inline_aliases(
+                        expr,
+                        aliases_ir,
+                        memo=memo,
+                        skip_cycle_check=cycle_validated,
+                    )
+                )
             except (ValueError, RecursionError):
                 out.append(expr)
         return tuple(out)
