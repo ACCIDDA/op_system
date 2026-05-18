@@ -1289,7 +1289,7 @@ def _build_equations_ir(
             sys.setrecursionlimit(old_limit)
 
 
-def _build_equations_ir_via_pointwise(
+def _build_equations_ir_via_pointwise(  # noqa: PLR0913
     *,
     equations_ir_reduce: tuple[Expr | None, ...],
     aliases_ir_reduce: Mapping[str, Expr],
@@ -1310,15 +1310,18 @@ def _build_equations_ir_via_pointwise(
 
     Best-effort: cells whose IR cannot be inlined or expanded are returned
     as ``None`` to preserve positional alignment with ``state_expanded``.
+
+    Returns:
+        Tuple of expanded pointwise IR (or ``None`` for failed entries)
+        aligned positionally with ``state_expanded``.
     """
-    from op_system._ir_expand import expand_reduce_pointwise
+    from op_system._ir_expand import expand_reduce_pointwise  # noqa: PLC0415
 
     if not equations_ir_reduce:
         return ()
     cell_to_assignment: dict[str, Mapping[str, str]] = {}
     for variants in template_map.values():
-        for cell, assignment in variants:
-            cell_to_assignment[cell] = assignment
+        cell_to_assignment.update(dict(variants))
 
     memo: dict[int, frozenset[str]] = {}
     try:
@@ -1349,7 +1352,7 @@ def _build_equations_ir_via_pointwise(
             try:
                 expanded = expand_reduce_pointwise(
                     inlined,
-                    axes=list(axes),
+                    axes=axes,
                     shaped_params=shaped_params,
                     lhs_assignment=assignment,
                     axis_coords=axis_lookup,

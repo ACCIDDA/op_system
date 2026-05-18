@@ -16,7 +16,6 @@ the surrounding pass only ever sees already-pointwise children.
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
 from itertools import product
 from typing import TYPE_CHECKING, Any
 
@@ -31,17 +30,17 @@ from op_system._ir import (
 )
 from op_system._templates import _sanitize_fragment
 
-if TYPE_CHECKING:  # pragma: no cover - import cycle break
-    pass
+if TYPE_CHECKING:
+    from collections.abc import Mapping, Sequence
 
 
 def expand_reduce_pointwise(
     expr: Expr,
     *,
-    axes: list[dict[str, Any]],
+    axes: Sequence[Mapping[str, Any]],
     shaped_params: Mapping[str, tuple[str, ...]] | None = None,
     lhs_assignment: Mapping[str, str] | None = None,
-    axis_coords: Mapping[str, list[str]] | None = None,
+    axis_coords: Mapping[str, Sequence[str]] | None = None,
 ) -> Expr:
     """Recursively expand ``Reduce`` nodes into pointwise IR.
 
@@ -90,12 +89,16 @@ def expand_reduce_pointwise(
 def _expand_children(
     expr: Expr,
     *,
-    axes: list[dict[str, Any]],
+    axes: Sequence[Mapping[str, Any]],
     shaped_params: Mapping[str, tuple[str, ...]],
     lhs_assignment: Mapping[str, str],
-    axis_coords: Mapping[str, list[str]],
+    axis_coords: Mapping[str, Sequence[str]],
 ) -> Expr:
-    """Recurse into ``expr``'s children, expanding ``Reduce`` nodes."""
+    """Recurse into ``expr``'s children, expanding ``Reduce`` nodes.
+
+    Returns:
+        ``expr`` with every nested ``Reduce`` replaced by its expansion.
+    """
     if isinstance(expr, (Literal, Sym, Subscript)):
         return expr
     if isinstance(expr, Apply):
@@ -133,20 +136,26 @@ def _expand_children(
 def _expand_one_reduce(
     expr: Reduce,
     *,
-    axes: list[dict[str, Any]],
+    axes: Sequence[Mapping[str, Any]],
     shaped_params: Mapping[str, tuple[str, ...]],
     lhs_assignment: Mapping[str, str],
-    axis_coords: Mapping[str, list[str]],
+    axis_coords: Mapping[str, Sequence[str]],
 ) -> Expr:
-    """Expand a single ``Reduce`` node into a pointwise weighted-sum IR."""
+    """Expand a single ``Reduce`` node into a pointwise weighted-sum IR.
+
+    Returns:
+        The pointwise IR replacement for ``expr``.
+    """
     # Late import to avoid a hard cycle: _normalize imports _ir_expand
     # for its IR-build path.
-    from op_system._normalize import (
+    from op_system._normalize import (  # noqa: PLC0415
         _build_apply_along_axis_options,
         _select_apply_along_kernel,
     )
 
-    axis_lookup = {str(ax.get("name")): ax for ax in axes if ax.get("name")}
+    axis_lookup: dict[str, dict[str, Any]] = {
+        str(ax.get("name")): dict(ax) for ax in axes if ax.get("name")
+    }
     axis_order = tuple(str(ax["name"]) for ax in axes if ax.get("name"))
     filters_dict: dict[str, list[str] | None] = {
         ax: list(coords) if coords else None for ax, coords in expr.filters
@@ -164,7 +173,8 @@ def _expand_one_reduce(
         kernel_form = "integrate"
     else:  # "apply_along"
         kernel_form = expr.kernel
-    kernel = _select_apply_along_kernel(bindings, kernel_form, axes=axes)
+    axes_list: list[dict[str, Any]] = [dict(ax) for ax in axes]
+    kernel = _select_apply_along_kernel(bindings, kernel_form, axes=axes_list)
 
     axis_options = [
         _build_apply_along_axis_options(
@@ -178,9 +188,7 @@ def _expand_one_reduce(
         var_to_coord: dict[str, str] = {}
         bound: dict[str, str] = {}
         weight = 1.0
-        for (ax_name, var_name, _filt), (coord, w) in zip(
-            bindings, combo, strict=True
-        ):
+        for (ax_name, var_name, _filt), (coord, w) in zip(bindings, combo, strict=True):
             var_to_coord[var_name] = coord
             bound[ax_name] = coord
             weight *= w
@@ -207,7 +215,7 @@ def _expand_one_reduce(
     return folded
 
 
-def _substitute_in_body(  # noqa: PLR0913
+def _substitute_in_body(  # noqa: PLR0911, PLR0913
     body: Expr,
     *,
     var_to_coord: Mapping[str, str],
@@ -215,13 +223,16 @@ def _substitute_in_body(  # noqa: PLR0913
     axis_order: Sequence[str],
     shaped_params: Mapping[str, tuple[str, ...]],
     lhs_assignment: Mapping[str, str],
-    axis_coords: Mapping[str, list[str]],
+    axis_coords: Mapping[str, Sequence[str]],
 ) -> Expr:
     """Substitute bound coords into ``body`` (Subscripts and arithmetic Syms).
 
     Inner ``Reduce`` nodes are *not* re-expanded here (the caller handles
     that bottom-up); but their inner body is recursively substituted while
     shadowing any inner binding variable from ``var_to_coord``.
+
+    Returns:
+        A new IR expression with substitutions applied.
     """
     if isinstance(body, Literal):
         return body
@@ -282,7 +293,7 @@ def _substitute_in_body(  # noqa: PLR0913
     return body  # pragma: no cover - exhaustive over Expr union
 
 
-def _rewrite_subscript(  # noqa: C901, PLR0912, PLR0913, PLR0914
+def _rewrite_subscript(  # noqa: C901, PLR0912, PLR0913, PLR0915
     sub: Subscript,
     *,
     var_to_coord: Mapping[str, str],
@@ -290,7 +301,7 @@ def _rewrite_subscript(  # noqa: C901, PLR0912, PLR0913, PLR0914
     axis_order: Sequence[str],
     shaped_params: Mapping[str, tuple[str, ...]],
     lhs_assignment: Mapping[str, str],
-    axis_coords: Mapping[str, list[str]],
+    axis_coords: Mapping[str, Sequence[str]],
 ) -> Expr:
     """IR-level equivalent of :func:`_substitute_apply_along_brackets`.
 
@@ -309,6 +320,11 @@ def _rewrite_subscript(  # noqa: C901, PLR0912, PLR0913, PLR0914
     consumed (axis, coord) pairs are folded into a canonical-order
     ``__axis_<coord>`` suffix on the name and any remaining positions
     are kept in brackets.
+
+    Returns:
+        The rewritten IR node (``Sym`` if all positions are consumed,
+        ``Subscript`` if some positions remain, or the original ``sub``
+        unchanged if no positions were consumed).
     """
     name = sub.name
 
@@ -376,17 +392,16 @@ def _rewrite_subscript(  # noqa: C901, PLR0912, PLR0913, PLR0914
         ):
             try:
                 int_idx = [
-                    axis_coords[param_axes[i]].index(c)  # type: ignore[arg-type]
+                    list(axis_coords[param_axes[i]]).index(c)
                     for i, (_, c) in enumerate(resolved_full)
+                    if c is not None
                 ]
             except ValueError:
                 int_idx = None
             if int_idx is not None:
                 return Subscript(
                     name=name,
-                    indices=tuple(
-                        AxisIndex(axis="", coord=str(i)) for i in int_idx
-                    ),
+                    indices=tuple(AxisIndex(axis="", coord=str(i)) for i in int_idx),
                 )
 
     # Otherwise: fold consumed pairs into a name suffix (canonical axis
@@ -408,6 +423,10 @@ def _split_name_suffix(
     Mirrors :func:`_normalize._substitute_apply_along_brackets._split_suffix`
     so that nested ``apply_along`` expansions converge on the same
     canonical mangled state name regardless of binding order.
+
+    Returns:
+        ``(base_name, [(axis, coord), ...])`` where pairs are in left-to-
+        right order as they appeared in ``name``.
     """
     if not axis_order:
         return name, []
@@ -438,10 +457,12 @@ def _split_name_suffix(
     return base, suffix_pairs
 
 
-def _emit_suffix(
-    pairs: list[tuple[str, str]], axis_order: Sequence[str]
-) -> str:
-    """Render ``pairs`` as ``__axis_<coord>`` tokens in canonical axis order."""
+def _emit_suffix(pairs: list[tuple[str, str]], axis_order: Sequence[str]) -> str:
+    """Render ``pairs`` as ``__axis_<coord>`` tokens in canonical axis order.
+
+    Returns:
+        The concatenated suffix string (empty when ``pairs`` is empty).
+    """
     priority = {ax: i for i, ax in enumerate(axis_order)}
     if not priority:
         return "".join(f"__{ax}_{_sanitize_fragment(c)}" for ax, c in pairs)
@@ -450,6 +471,4 @@ def _emit_suffix(
         key=lambda p: priority[p[0]],
     )
     unknown = [p for p in pairs if p[0] not in priority]
-    return "".join(
-        f"__{ax}_{_sanitize_fragment(c)}" for ax, c in known + unknown
-    )
+    return "".join(f"__{ax}_{_sanitize_fragment(c)}" for ax, c in known + unknown)

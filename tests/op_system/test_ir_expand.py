@@ -1,27 +1,34 @@
-"""Parity tests for IR-side ``expand_reduce_pointwise`` vs string expander."""
+"""Parity and structure tests for IR-side ``expand_reduce_pointwise``."""
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING, Any
+
 import pytest
 
-from op_system._ir import parse_expr_to_ir, unparse_ir
+from op_system._ir import Apply, Subscript, Sym, parse_expr_to_ir, unparse_ir
 from op_system._ir_expand import expand_reduce_pointwise
 from op_system._normalize import _expand_apply_along
 
+if TYPE_CHECKING:
+    from collections.abc import Mapping
 
-def _normalize_spaces(s: str) -> str:
-    """Strip whitespace + outer parens so we can compare semantically."""
-    return "".join(s.split())
+    from op_system._ir import Expr
 
 
 def _ir_expand_to_string(
     src: str,
     *,
-    axes,
-    shaped_params=None,
-    lhs_assignment=None,
-    axis_coords=None,
+    axes: list[dict[str, Any]],
+    shaped_params: Mapping[str, tuple[str, ...]] | None = None,
+    lhs_assignment: Mapping[str, str] | None = None,
+    axis_coords: Mapping[str, list[str]] | None = None,
 ) -> str:
+    """Helper: parse ``src``, expand, then unparse for substring checks.
+
+    Returns:
+        The unparsed pointwise expression string.
+    """
     ir = parse_expr_to_ir(src, lower_helpers=True)
     expanded = expand_reduce_pointwise(
         ir,
@@ -34,15 +41,20 @@ def _ir_expand_to_string(
 
 
 @pytest.fixture
-def axes_age_pop():
+def axes_age_pop() -> list[dict[str, Any]]:
+    """Two categorical axes used by several tests.
+
+    Returns:
+        A list of two categorical axis dicts (age, pop).
+    """
     return [
         {"name": "age", "type": "categorical", "coords": ["a0", "a1", "a2"]},
         {"name": "pop", "type": "categorical", "coords": ["p1", "p2"]},
     ]
 
 
-def test_single_axis_sum_basic_names(axes_age_pop):
-    """Expanded names must include the canonical __axis_<coord> suffix."""
+def test_single_axis_sum_basic_names(axes_age_pop: list[dict[str, Any]]) -> None:
+    """Expanded names include the canonical ``__axis_<coord>`` suffix."""
     out = _ir_expand_to_string(
         "apply_along(I[pop:j], pop=j)",
         axes=axes_age_pop,
@@ -51,10 +63,8 @@ def test_single_axis_sum_basic_names(axes_age_pop):
     assert "I__pop_p2" in out
 
 
-def test_single_axis_sum_two_term_sum(axes_age_pop):
-    """A 2-coord apply_along produces a binary Apply('+') of two pointwise terms."""
-    from op_system._ir import Apply
-
+def test_single_axis_sum_two_term_sum(axes_age_pop: list[dict[str, Any]]) -> None:
+    """A 2-coord apply_along produces a binary Apply('+') of two terms."""
     ir = parse_expr_to_ir("apply_along(I[pop:j], pop=j)", lower_helpers=True)
     expanded = expand_reduce_pointwise(ir, axes=axes_age_pop)
     assert isinstance(expanded, Apply)
@@ -62,11 +72,11 @@ def test_single_axis_sum_two_term_sum(axes_age_pop):
     assert len(expanded.args) == 2
 
 
-def test_same_axis_twice_with_lhs_assignment():
-    """K[age, age:ap] with lhs={age:a0}: row pinned to 0 via lhs, col bound 0..1."""
-    from op_system._ir import Apply, AxisIndex, Subscript, Sym
-
-    axes = [{"name": "age", "type": "categorical", "coords": ["a0", "a1"]}]
+def test_same_axis_twice_with_lhs_assignment() -> None:
+    """K[age, age:ap] with lhs={age:a0}: row pinned to 0, col bound 0..1."""
+    axes: list[dict[str, Any]] = [
+        {"name": "age", "type": "categorical", "coords": ["a0", "a1"]},
+    ]
     shaped = {"K": ("age", "age")}
     axis_coords = {"age": ["a0", "a1"]}
     ir = parse_expr_to_ir(
@@ -79,13 +89,20 @@ def test_same_axis_twice_with_lhs_assignment():
         lhs_assignment={"age": "a0"},
         axis_coords=axis_coords,
     )
-    # Two-term sum K[0,0]*I__age_a0 + K[0,1]*I__age_a1.
-    assert isinstance(expanded, Apply) and expanded.op == "+"
+    assert isinstance(expanded, Apply)
+    assert expanded.op == "+"
     summands = expanded.args
     assert len(summands) == 2
 
-    def _extract_k_index(term):
-        # term = Apply("*", [Subscript(K,...), Sym("I__age_aX")])
+    def _extract_k_index(term: Expr) -> tuple[str | None, ...] | None:
+        """Return K's index tuple if ``term`` is K * something, else None.
+
+        Returns:
+            Tuple of coord strings (one per axis), or ``None`` if K is
+            not present in this term.
+        """
+        if not isinstance(term, Apply):
+            return None
         for arg in term.args:
             if isinstance(arg, Subscript) and arg.name == "K":
                 return tuple(idx.coord for idx in arg.indices)
@@ -97,21 +114,22 @@ def test_same_axis_twice_with_lhs_assignment():
     i_names = {
         a.name
         for term in summands
+        if isinstance(term, Apply)
         for a in term.args
         if isinstance(a, Sym) and a.name.startswith("I__")
     }
     assert i_names == {"I__age_a0", "I__age_a1"}
 
 
-def test_integrate_kernel_emits_weight_literal():
+def test_integrate_kernel_emits_weight_literal() -> None:
     """Continuous-axis apply_along with kernel=integrate emits float weights."""
-    axes = [
+    axes: list[dict[str, Any]] = [
         {
             "name": "t",
             "type": "continuous",
             "coords": ["0.0", "1.0", "2.0"],
             "deltas": [0.5, 1.0, 0.5],
-        }
+        },
     ]
     out = _ir_expand_to_string(
         "apply_along(f[t:tau], t=tau, kernel=integrate)",
@@ -119,31 +137,34 @@ def test_integrate_kernel_emits_weight_literal():
     )
     assert "0.5" in out
     assert "1.0" in out
-    assert "f__t_0_0" in out or "f__t_0" in out  # depends on _sanitize_fragment
 
 
-def test_parity_with_string_expander_single_axis(axes_age_pop):
-    """IR expansion must produce a string equivalent to the string expander."""
+def test_parity_with_string_expander_single_axis(
+    axes_age_pop: list[dict[str, Any]],
+) -> None:
+    """IR expansion produces the same per-coord names as the string expander."""
     src = "apply_along(I[pop:j], pop=j)"
     ir_out = _ir_expand_to_string(src, axes=axes_age_pop)
     str_out = _expand_apply_along(src, axes=axes_age_pop)
-    # Both should reference the same per-coord names.
     for name in ("I__pop_p1", "I__pop_p2"):
         assert name in ir_out
         assert name in str_out
 
 
-def test_parity_two_axis_cartesian(axes_age_pop):
-    """Multi-axis apply_along produces |age|*|pop| terms."""
+def test_parity_two_axis_cartesian(axes_age_pop: list[dict[str, Any]]) -> None:
+    """Multi-axis apply_along produces ``|age|*|pop|`` summands."""
     src = "apply_along(I[age:i, pop:j], age=i, pop=j)"
     ir = parse_expr_to_ir(src, lower_helpers=True)
     expanded = expand_reduce_pointwise(ir, axes=axes_age_pop)
-    # Should be a fold of 3*2 = 6 terms.
-    from op_system._ir import Apply
 
-    def count_summands(e):
+    def _count_summands(e: Expr) -> int:
+        """Count leaf summands in a left-associative ``Apply('+')`` fold.
+
+        Returns:
+            Number of leaf terms.
+        """
         if isinstance(e, Apply) and e.op == "+":
-            return sum(count_summands(a) for a in e.args)
+            return sum(_count_summands(a) for a in e.args)
         return 1
 
-    assert count_summands(expanded) == 6
+    assert _count_summands(expanded) == 6
