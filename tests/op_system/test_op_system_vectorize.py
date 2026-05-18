@@ -648,3 +648,66 @@ def test_ir_fast_path_preserves_numerical_parity_with_scalar() -> None:
     # but kept distinct so a regression that disables the fast path is
     # caught by the structural test above without masking the parity check.
     _eval_equal(_sir_two_axis_spec(), beta=0.3, gamma=0.1)
+
+
+def _apply_along_categorical_spec() -> dict[str, object]:
+    """SIR over (pop,) with an ``apply_along(pop=j, I[pop=j])`` reduction.
+
+    Used to exercise Stage 1b: the reduce-bearing IR carries a
+    ``Reduce(kind='apply_along', ...)`` node that lowers directly to
+    ``np.sum`` over the bound axis, bypassing the post-expansion string
+    fallback.
+
+    Returns:
+        A spec dict suitable for passing to ``normalize_rhs``.
+    """
+    return {
+        "kind": "expr",
+        "axes": [{"name": "pop", "coords": ["p1", "p2", "p3"]}],
+        "state": ["S[pop]", "I[pop]", "R[pop]"],
+        "params": ["beta", "gamma"],
+        "equations": {
+            "S[pop]": "-beta * S[pop] * apply_along(pop=j, I[pop=j])",
+            "I[pop]": ("beta * S[pop] * apply_along(pop=j, I[pop=j]) - gamma * I[pop]"),
+            "R[pop]": "gamma * I[pop]",
+        },
+    }
+
+
+def test_reduce_ir_fast_path_emits_np_sum_for_apply_along() -> None:
+    """Reduce-bearing IR lowers apply_along directly to ``np.sum`` on the buffer.
+
+    Stage 1b: the IR fast path now consumes
+    ``NormalizedRhs.equations_ir_reduce`` (Reduce nodes preserved) and
+    emits a ``np.sum(I_buf, axis=...)`` reduction without falling back to
+    the string-expanded ``I__pop_p1 + I__pop_p2 + ...`` form. The compiled
+    code must therefore reference ``I_buf`` and ``sum`` once each, with no
+    per-cell ``I__pop_*`` names leaking through.
+    """
+    rhs = normalize_rhs(_apply_along_categorical_spec())
+    assert rhs.equations_ir_reduce, "Stage 1a should have populated reduce IR"
+    plan = build_vector_plan(rhs)
+    assert plan is not None
+    # Locate the S-equation code (it contains the reduction).
+    s_group = next(g for g in plan.eq_groups if g.base == "S")
+    code = s_group.codes[0]
+    names = set(code.co_names)
+    # No per-cell name leakage from string expansion.
+    assert not any("__" in n for n in names), (
+        f"per-cell names leaked into reduce-lowered code: "
+        f"{sorted(n for n in names if '__' in n)}"
+    )
+    assert "I_buf" in names, f"expected I_buf in {sorted(names)}"
+    assert "sum" in names, f"expected np.sum in {sorted(names)}"
+    # A direct np.sum(I_buf, axis=0) collapse loads I_buf exactly once.
+    i_buf_loads = sum(
+        1
+        for instr in dis.get_instructions(code)
+        if instr.opname.startswith("LOAD_") and instr.argval == "I_buf"
+    )
+    assert i_buf_loads == 1, f"expected single fused I_buf load, got {i_buf_loads}"
+
+
+def test_reduce_ir_fast_path_numerical_parity() -> None:
+    """Reduce-lowered apply_along eval matches the scalar reference."""
+    _eval_equal(_apply_along_categorical_spec(), beta=0.3, gamma=0.1)
