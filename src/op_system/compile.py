@@ -199,12 +199,31 @@ class EvalFn(Protocol):
 
 @dataclass(frozen=True, slots=True)
 class CompiledRhs:
-    """Container for a compiled RHS evaluation function."""
+    """Container for a compiled RHS evaluation function.
+
+    Instances produced by :func:`compile_rhs` retain a private reference to
+    their source :class:`NormalizedRhs` so the container can be pickled and
+    re-hydrated by re-running the compile pipeline on load. ``eval_fn``
+    itself is a closure (and on the vectorized path captures compiled code
+    objects), so it is dropped from the pickle and rebuilt by
+    :func:`compile_rhs` in :meth:`__setstate__`. Round-tripping a
+    ``CompiledRhs`` therefore costs one compile on load and yields a
+    functionally equivalent instance whose ``eval_fn`` produces identical
+    outputs for identical inputs.
+    """
 
     state_names: tuple[str, ...]
     param_names: tuple[str, ...]
     eval_fn: EvalFn
     meta: Mapping[str, Any] = field(default_factory=lambda: MappingProxyType({}))
+    # Private: source spec retained for pickling. ``compile_rhs`` populates
+    # this; direct constructions without ``_rhs`` are not picklable (the
+    # ``eval_fn`` closure cannot be serialized) and will raise from
+    # ``__getstate__``. Excluded from equality and repr so it doesn't leak
+    # into the public surface.
+    _rhs: NormalizedRhs | None = field(
+        default=None, repr=False, compare=False, hash=False
+    )
 
     def bind(
         self, params: Mapping[str, object]
@@ -223,6 +242,39 @@ class CompiledRhs:
             return self.eval_fn(t, y, **params_dict)
 
         return rhs
+
+    def __getstate__(self) -> dict[str, Any]:
+        """Return picklable state.
+
+        The compiled ``eval_fn`` is a closure (and on the vectorized path
+        captures compiled :class:`types.CodeType` objects), which is not
+        portably picklable. Instead we serialize just the source
+        :class:`NormalizedRhs` and let :meth:`__setstate__` recompile.
+
+        Raises:
+            TypeError: If the source ``NormalizedRhs`` was not retained
+                (i.e. the instance was constructed directly rather than
+                via :func:`compile_rhs`).
+        """
+        if self._rhs is None:
+            msg = (
+                "CompiledRhs is not picklable: the source NormalizedRhs was "
+                "not retained. Construct via compile_rhs() to produce a "
+                "picklable CompiledRhs."
+            )
+            raise TypeError(msg)
+        return {"_rhs": self._rhs}
+
+    def __setstate__(self, state: Mapping[str, Any]) -> None:
+        """Restore by recompiling from the pickled :class:`NormalizedRhs`."""
+        rhs = state["_rhs"]
+        rebuilt = compile_rhs(rhs)
+        # frozen+slots dataclass: bypass __setattr__ via object.__setattr__
+        object.__setattr__(self, "state_names", rebuilt.state_names)
+        object.__setattr__(self, "param_names", rebuilt.param_names)
+        object.__setattr__(self, "eval_fn", rebuilt.eval_fn)
+        object.__setattr__(self, "meta", rebuilt.meta)
+        object.__setattr__(self, "_rhs", rhs)
 
 
 # -----------------------------------------------------------------------------
@@ -813,4 +865,5 @@ def compile_rhs(rhs: NormalizedRhs, *, xp: object | None = None) -> CompiledRhs:
         param_names=tuple(rhs.param_names),
         eval_fn=eval_fn,
         meta=rhs.meta,
+        _rhs=rhs,
     )

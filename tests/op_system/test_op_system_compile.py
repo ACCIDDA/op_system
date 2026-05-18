@@ -19,6 +19,7 @@ Note:
 
 from __future__ import annotations
 
+import pickle  # noqa: S403
 import re
 from dataclasses import replace
 
@@ -593,3 +594,61 @@ def test_compile_rhs_traces_through_blackjax_nuts() -> None:
 
     next_state, _info = jax.jit(nuts.step)(key, state)
     assert np.isfinite(float(next_state.logdensity))
+
+
+# -----------------------------------------------------------------------------
+# Pickling round-trip
+# -----------------------------------------------------------------------------
+
+
+def test_compiledrhs_pickle_roundtrip_scalar_path(
+    compiled_xy: CompiledRhs,
+) -> None:
+    """A CompiledRhs from the scalar path round-trips through pickle."""
+    blob = pickle.dumps(compiled_xy)
+    restored = pickle.loads(blob)  # noqa: S301
+
+    assert isinstance(restored, CompiledRhs)
+    assert restored.state_names == compiled_xy.state_names
+    assert restored.param_names == compiled_xy.param_names
+
+    y = np.array([2.0, 3.0], dtype=np.float64)
+    expected = compiled_xy.eval_fn(np.float64(0.0), y, a=2.0, b=1.0)
+    got = restored.eval_fn(np.float64(0.0), y, a=2.0, b=1.0)
+    assert np.allclose(got, expected)
+
+
+def test_compiledrhs_pickle_roundtrip_vectorized_path() -> None:
+    """A CompiledRhs from the vectorized path round-trips through pickle."""
+    spec = {
+        "kind": "expr",
+        "axes": [{"name": "age", "coords": ["y", "o"]}],
+        "state": ["S[age]", "I[age]"],
+        "param": ["beta", "gamma"],
+        "equations": {
+            "S[age]": "-beta * S[age] * I[age]",
+            "I[age]": "beta * S[age] * I[age] - gamma * I[age]",
+        },
+    }
+    cr = compile_rhs(normalize_rhs(spec))
+    blob = pickle.dumps(cr)
+    restored = pickle.loads(blob)  # noqa: S301
+
+    assert restored.state_names == cr.state_names
+    y = np.array([99.0, 99.0, 1.0, 1.0], dtype=np.float64)
+    expected = cr.eval_fn(0.0, y, beta=0.3, gamma=0.1)
+    got = restored.eval_fn(0.0, y, beta=0.3, gamma=0.1)
+    assert np.allclose(got, expected)
+
+
+def test_compiledrhs_pickle_rejects_direct_construction(
+    rhs_xy: NormalizedRhs,
+) -> None:
+    """A CompiledRhs built without ``_rhs`` raises a clear error on pickle."""
+    cr = compile_rhs(rhs_xy)
+    # Drop the retained source via dataclasses.replace and re-attach the
+    # original eval_fn so the instance is still callable but no longer
+    # carries a recipe for rebuilding itself.
+    stripped = replace(cr, _rhs=None)
+    with pytest.raises(TypeError, match=r"not picklable"):
+        pickle.dumps(stripped)
