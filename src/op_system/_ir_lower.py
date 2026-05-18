@@ -34,6 +34,7 @@ from typing import TYPE_CHECKING
 
 from op_system._ir import (
     Apply,
+    AxisIndex,
     AxisKind,
     Expr,
     Literal,
@@ -41,6 +42,8 @@ from op_system._ir import (
     Subscript,
     Sym,
     classify_axis_index,
+    substitute,
+    walk,
 )
 
 if TYPE_CHECKING:
@@ -49,6 +52,7 @@ if TYPE_CHECKING:
 
 __all__ = [
     "UnsupportedIRLoweringError",
+    "lift_cell_ir_to_template",
     "lower_subscript_to_buffer",
     "lower_to_vector_ast",
 ]
@@ -334,3 +338,90 @@ def _lower_apply(
         "ifelse operators are supported"
     )
     raise UnsupportedIRLoweringError(msg)
+
+
+# ---------------------------------------------------------------------------
+# Per-cell → template-form lift
+# ---------------------------------------------------------------------------
+
+
+def lift_cell_ir_to_template(
+    expr: Expr,
+    *,
+    cell_to_template: Mapping[str, tuple[str, tuple[str, ...]]],
+) -> Expr:
+    """Lift per-cell IR to template-form IR.
+
+    The normalizer expands templated states/aliases/params into per-cell
+    scalar names (e.g. ``S__age_y__loc_a``) before parsing into IR, so the
+    resulting :class:`Sym` leaves carry expanded names rather than
+    :class:`Subscript` nodes against base buffers. This function walks
+    ``expr`` and rewrites each ``Sym(name)`` whose ``name`` appears in
+    ``cell_to_template`` (with non-empty axes) into a wildcard
+    :class:`Subscript` against the buffer's base name, suitable as input to
+    :func:`lower_to_vector_ast`.
+
+    Symbols not in ``cell_to_template`` — scalar parameters or unbound
+    names — are left unchanged. Mappings whose template has ``axes == ()``
+    (e.g. scalar aliases) rewrite the symbol to a bare ``Sym(f"{base}_buf")``
+    leaf so the result evaluates against the runtime's ``<base>_buf``
+    binding.
+
+    Args:
+        expr: Per-cell IR expression (typically from
+            ``NormalizedRhs.equations_ir_raw`` or
+            ``NormalizedRhs.aliases_ir``).
+        cell_to_template: Mapping from expanded per-cell name to a
+            ``(base_name, axes)`` pair describing the buffer the cell
+            belongs to. Empty-axes entries are treated as scalar aliases
+            (rewritten to ``Sym(f"{base}_buf")``); non-empty entries are
+            rewritten to FREE-index :class:`Subscript` nodes.
+
+    Returns:
+        A new IR expression equivalent to ``expr`` but with all matched
+        cell-name :class:`Sym` leaves replaced — by FREE-index
+        :class:`Subscript` nodes (templated buffers) or scalar-buffer
+        :class:`Sym` leaves (scalar aliases).
+
+    Raises:
+        UnsupportedIRLoweringError: If two distinct per-cell symbols
+            sharing the same templated ``base`` co-occur in ``expr``
+            (signals a string-expanded axis reduction that cannot be
+            represented as a single FREE-axis subscript).
+    """
+    mapping: dict[str, Expr] = {}
+    for cell_name, (base, axes) in cell_to_template.items():
+        if not axes:
+            mapping[cell_name] = Sym(name=f"{base}_buf")
+            continue
+        mapping[cell_name] = Subscript(
+            name=base,
+            indices=tuple(AxisIndex(axis=ax, kind=AxisKind.FREE) for ax in axes),
+        )
+    if not mapping:
+        return expr
+    # Refuse the lift when multiple distinct per-cell symbols of the same
+    # templated buffer co-occur in ``expr``: that signals an axis reduction
+    # (e.g. ``apply_along`` or ``sum_over``) that the normalizer expanded
+    # to a per-cell sum at the string level. Collapsing those cells back to
+    # a single FREE-axis subscript would silently broadcast instead of
+    # reduce, producing wrong results.
+    seen_bases: dict[str, str] = {}
+    for node in walk(expr):
+        if not isinstance(node, Sym):
+            continue
+        entry = cell_to_template.get(node.name)
+        if entry is None or not entry[1]:
+            continue
+        base = entry[0]
+        prior = seen_bases.get(base)
+        if prior is None:
+            seen_bases[base] = node.name
+        elif prior != node.name:
+            msg = (
+                f"cannot lift per-cell IR for buffer {base!r}: multiple "
+                f"distinct cells co-occur ({prior!r} and {node.name!r}); "
+                "this signals a string-expanded axis reduction"
+            )
+            raise UnsupportedIRLoweringError(msg)
+    return substitute(expr, mapping)
