@@ -589,6 +589,7 @@ def _try_ir_fast_path(  # noqa: PLR0913
     reducible_axes: frozenset[str] = frozenset(),
     axis_weights: Mapping[str, tuple[float, ...]] | None = None,
     axis_coords: Mapping[str, tuple[str, ...]] | None = None,
+    axis_types: Mapping[str, str] | None = None,
 ) -> ast.Expression | None:
     """Attempt to lower per-cell IR straight to a vector AST.
 
@@ -627,6 +628,7 @@ def _try_ir_fast_path(  # noqa: PLR0913
             reducible_axes=reducible_axes,
             axis_weights=axis_weights,
             axis_coords=axis_coords,
+            axis_types=axis_types,
         )
     except UnsupportedIRLoweringError:
         return None
@@ -648,6 +650,7 @@ def _rewrite_cell_to_vector(  # noqa: PLR0913
     reducible_axes: frozenset[str] = frozenset(),
     axis_weights: Mapping[str, tuple[float, ...]] | None = None,
     axis_coords: Mapping[str, tuple[str, ...]] | None = None,
+    axis_types: Mapping[str, str] | None = None,
     shaped_param_axes: Mapping[str, tuple[str, ...]] | None = None,
 ) -> ast.Expression:
     """Rewrite a per-cell expression string into a shaped buffer expression.
@@ -676,6 +679,7 @@ def _rewrite_cell_to_vector(  # noqa: PLR0913
             reducible_axes=reducible_axes,
             axis_weights=axis_weights,
             axis_coords=axis_coords,
+            axis_types=axis_types,
         )
         if fast is not None:
             return fast
@@ -688,6 +692,7 @@ def _rewrite_cell_to_vector(  # noqa: PLR0913
             reducible_axes=reducible_axes,
             axis_weights=axis_weights,
             axis_coords=axis_coords,
+            axis_types=axis_types,
         )
         if fast is not None:
             return fast
@@ -1236,6 +1241,7 @@ def _vectorize_template_equations(  # noqa: C901, PLR0912, PLR0913, PLR0914, PLR
     reducible_axes: frozenset[str] = frozenset(),
     axis_weights: Mapping[str, tuple[float, ...]] | None = None,
     axis_coords: Mapping[str, tuple[str, ...]] | None = None,
+    axis_types: Mapping[str, str] | None = None,
     shaped_param_axes: Mapping[str, tuple[str, ...]] | None = None,
 ) -> (
     tuple[
@@ -1348,6 +1354,7 @@ def _vectorize_template_equations(  # noqa: C901, PLR0912, PLR0913, PLR0914, PLR
                     reducible_axes=reducible_axes,
                     axis_weights=axis_weights,
                     axis_coords=axis_coords,
+                    axis_types=axis_types,
                     shaped_param_axes=shaped_param_axes,
                 )
             except (ValueError, RuntimeError):
@@ -1369,6 +1376,7 @@ def _vectorize_template_equations(  # noqa: C901, PLR0912, PLR0913, PLR0914, PLR
                         reducible_axes=reducible_axes,
                         axis_weights=axis_weights,
                         axis_coords=axis_coords,
+                        axis_types=axis_types,
                         shaped_param_axes=shaped_param_axes,
                     )
                 except (ValueError, RuntimeError):
@@ -1473,6 +1481,7 @@ def _build_vector_plan_inner(  # noqa: C901, PLR0911, PLR0912, PLR0914, PLR0915
     axes_pairs: list[tuple[str, list[str]]] = []
     reducible_axes_set: set[str] = set()
     axis_weights: dict[str, tuple[float, ...]] = {}
+    axis_types: dict[str, str] = {}
     for ax in axes_meta:
         if not isinstance(ax, Mapping):
             return None
@@ -1488,6 +1497,7 @@ def _build_vector_plan_inner(  # noqa: C901, PLR0911, PLR0912, PLR0914, PLR0915
         # ``str(float)``, causing ``KeyError`` in ``_build_access_ast``.
         axes_pairs.append((ax["name"], [str(c) for c in coords]))
         ax_type = str(ax.get("type", "categorical")).strip().lower()
+        axis_types[ax["name"]] = ax_type
         if ax_type in {"categorical", "ordinal"}:
             reducible_axes_set.add(ax["name"])
         deltas = ax.get("deltas")
@@ -1588,6 +1598,7 @@ def _build_vector_plan_inner(  # noqa: C901, PLR0911, PLR0912, PLR0914, PLR0915
                     reducible_axes=reducible_axes,
                     axis_weights=axis_weights,
                     axis_coords=axis_coords,
+                    axis_types=axis_types,
                     shaped_param_axes=shaped_param_axes,
                 )
                 if len(buf.expanded_names) > 1:
@@ -1605,6 +1616,7 @@ def _build_vector_plan_inner(  # noqa: C901, PLR0911, PLR0912, PLR0914, PLR0915
                         reducible_axes=reducible_axes,
                         axis_weights=axis_weights,
                         axis_coords=axis_coords,
+                        axis_types=axis_types,
                         shaped_param_axes=shaped_param_axes,
                     )
                     if ast.dump(tree) != ast.dump(last_tree):
@@ -1624,6 +1636,7 @@ def _build_vector_plan_inner(  # noqa: C901, PLR0911, PLR0912, PLR0914, PLR0915
                     reducible_axes=reducible_axes,
                     axis_weights=axis_weights,
                     axis_coords=axis_coords,
+                    axis_types=axis_types,
                     shaped_param_axes=shaped_param_axes,
                 )
             tree = _distribute_const_over_add(tree)
@@ -1647,6 +1660,7 @@ def _build_vector_plan_inner(  # noqa: C901, PLR0911, PLR0912, PLR0914, PLR0915
             reducible_axes=reducible_axes,
             axis_weights=axis_weights,
             axis_coords=axis_coords,
+            axis_types=axis_types,
             shaped_param_axes=shaped_param_axes,
         )
         if result is None:

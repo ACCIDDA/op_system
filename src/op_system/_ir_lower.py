@@ -228,6 +228,7 @@ def lower_to_vector_ast(  # noqa: PLR0913
     reducible_axes: frozenset[str] = frozenset(),
     axis_weights: Mapping[str, tuple[float, ...]] | None = None,
     axis_coords: Mapping[str, tuple[str, ...]] | None = None,
+    axis_types: Mapping[str, str] | None = None,
 ) -> ast.expr:
     """Lower an IR expression to a vector-shape AST.
 
@@ -258,6 +259,13 @@ def lower_to_vector_ast(  # noqa: PLR0913
             coord labels (as strings). Required when a :class:`Reduce`
             carries non-empty ``filters`` so coord labels can be
             resolved to integer indices for ``np.take`` slicing.
+        axis_types: Optional mapping from axis name to its declared type
+            (``"categorical"``, ``"ordinal"``, or ``"continuous"``).
+            Controls how :class:`Reduce` filter coord lists are
+            interpreted: categorical → exact-label subset, ordinal →
+            inclusive ``[lo_label, hi_label]`` index range, continuous →
+            closed ``[lo, hi]`` numeric sub-interval (with trapezoidal
+            weight recomputation for the integrate kernel).
 
     Returns:
         An ``ast.expr`` suitable for ``compile(ast.Expression(body=...))``
@@ -297,6 +305,7 @@ def lower_to_vector_ast(  # noqa: PLR0913
             reducible_axes=reducible_axes,
             axis_weights=axis_weights,
             axis_coords=axis_coords,
+            axis_types=axis_types,
         )
 
     return _lower_reduce(
@@ -307,6 +316,7 @@ def lower_to_vector_ast(  # noqa: PLR0913
         reducible_axes=reducible_axes,
         axis_weights=axis_weights,
         axis_coords=axis_coords,
+        axis_types=axis_types,
     )
 
 
@@ -318,6 +328,132 @@ _REDUCE_SUM_KINDS: frozenset[str] = frozenset({
 _REDUCE_UNIFORM_KINDS: frozenset[str] = frozenset({"apply_along", "sum_over"})
 
 
+def _resolve_ordinal_range_filter(
+    axis: str, declared: tuple[str, ...], filt: tuple[str, ...]
+) -> tuple[int, ...]:
+    """Resolve an ordinal-axis ``[lo_label, hi_label]`` filter to indices.
+
+    Returns:
+        Tuple of declared-coord indices spanning the inclusive index
+        range ``declared.index(lo)..declared.index(hi)``.
+
+    Raises:
+        UnsupportedIRLoweringError: If ``filt`` is not a 2-element list,
+            either endpoint is not a declared coord label, or
+            ``index(lo) > index(hi)``.
+    """
+    if len(filt) != 2:
+        msg = (
+            f"Reduce filter for ordinal axis {axis!r} must be a 2-element "
+            f"[lo_label, hi_label] range (got {len(filt)} entries)"
+        )
+        raise UnsupportedIRLoweringError(msg)
+    lo_label, hi_label = filt
+    unknown = [c for c in (lo_label, hi_label) if c not in declared]
+    if unknown:
+        msg = f"Reduce filter for ordinal axis {axis!r} has unknown coords: {unknown}"
+        raise UnsupportedIRLoweringError(msg)
+    lo_idx = declared.index(lo_label)
+    hi_idx = declared.index(hi_label)
+    if lo_idx > hi_idx:
+        msg = (
+            f"Reduce filter for ordinal axis {axis!r} endpoints must satisfy "
+            f"index(lo) <= index(hi) (got [{lo_label!r}, {hi_label!r}] at "
+            f"indices [{lo_idx}, {hi_idx}])"
+        )
+        raise UnsupportedIRLoweringError(msg)
+    return tuple(range(lo_idx, hi_idx + 1))
+
+
+def _resolve_continuous_range_filter(  # noqa: C901
+    axis: str,
+    declared: tuple[str, ...],
+    filt: tuple[str, ...],
+    *,
+    recompute_trapezoidal: bool,
+) -> tuple[tuple[int, ...], tuple[float, ...] | None]:
+    """Resolve a continuous-axis ``[lo, hi]`` filter to indices (+ weights).
+
+    Selects declared coord positions ``i`` for which ``lo <= float(c) <= hi``.
+    When ``recompute_trapezoidal`` is true (axis is integrated over), the
+    selected coords are parsed as floats and trapezoidal weights are
+    computed for the sub-interval; otherwise the second element is
+    ``None``.
+
+    Returns:
+        ``(indices, sub_interval_weights_or_None)``.
+
+    Raises:
+        UnsupportedIRLoweringError: If ``filt`` is not a 2-element list,
+            the endpoints aren't numeric, ``lo > hi``, the sub-interval
+            selects no axis coords, or trapezoidal weight recomputation
+            requires fewer than two coords / non-strictly-increasing
+            coords.
+    """
+    if len(filt) != 2:
+        msg = (
+            f"Reduce filter for continuous axis {axis!r} must be a 2-element "
+            f"[lo, hi] interval (got {len(filt)} entries)"
+        )
+        raise UnsupportedIRLoweringError(msg)
+    try:
+        lo = float(filt[0])
+        hi = float(filt[1])
+    except ValueError as exc:
+        msg = (
+            f"Reduce filter for continuous axis {axis!r} endpoints must be "
+            f"numeric (got {list(filt)!r})"
+        )
+        raise UnsupportedIRLoweringError(msg) from exc
+    if lo > hi:
+        msg = (
+            f"Reduce filter for continuous axis {axis!r} endpoints must "
+            f"satisfy lo <= hi (got [{lo}, {hi}])"
+        )
+        raise UnsupportedIRLoweringError(msg)
+    try:
+        coord_floats = [float(c) for c in declared]
+    except ValueError as exc:
+        msg = (
+            f"Reduce filter for continuous axis {axis!r} requires numeric "
+            f"declared coords (got {list(declared)!r})"
+        )
+        raise UnsupportedIRLoweringError(msg) from exc
+    indices = tuple(i for i, c in enumerate(coord_floats) if lo <= c <= hi)
+    if not indices:
+        msg = (
+            f"Reduce filter for continuous axis {axis!r} interval [{lo}, "
+            f"{hi}] selects no axis coords"
+        )
+        raise UnsupportedIRLoweringError(msg)
+    if not recompute_trapezoidal:
+        return indices, None
+    sub_floats = [coord_floats[i] for i in indices]
+    if len(sub_floats) < 2:
+        msg = (
+            f"Reduce filter for continuous axis {axis!r} sub-interval needs "
+            "at least 2 coords for trapezoidal integration"
+        )
+        raise UnsupportedIRLoweringError(msg)
+    sub_weights: list[float] = []
+    for i in range(len(sub_floats)):
+        if i == 0:
+            width = (sub_floats[1] - sub_floats[0]) / 2.0
+        elif i == len(sub_floats) - 1:
+            width = (sub_floats[-1] - sub_floats[-2]) / 2.0
+        else:
+            width = (sub_floats[i + 1] - sub_floats[i - 1]) / 2.0
+        if width <= 0.0:
+            msg = (
+                f"Reduce filter for continuous axis {axis!r} sub-interval "
+                "coords must be strictly increasing for trapezoidal "
+                "integration"
+            )
+            raise UnsupportedIRLoweringError(msg)
+        sub_weights.append(width)
+    return indices, tuple(sub_weights)
+
+
 def _lower_reduce(  # noqa: C901, PLR0912, PLR0913, PLR0914, PLR0915
     expr: Reduce,
     *,
@@ -327,6 +463,7 @@ def _lower_reduce(  # noqa: C901, PLR0912, PLR0913, PLR0914, PLR0915
     reducible_axes: frozenset[str],
     axis_weights: Mapping[str, tuple[float, ...]] | None = None,
     axis_coords: Mapping[str, tuple[str, ...]] | None = None,
+    axis_types: Mapping[str, str] | None = None,
 ) -> ast.expr:
     """Lower a :class:`Reduce` node to ``np.sum(body, axis=...)``.
 
@@ -364,6 +501,7 @@ def _lower_reduce(  # noqa: C901, PLR0912, PLR0913, PLR0914, PLR0915
 
     weights_map: Mapping[str, tuple[float, ...]] = axis_weights or {}
     coords_map: Mapping[str, tuple[str, ...]] = axis_coords or {}
+    types_map: Mapping[str, str] = axis_types or {}
     filter_map: dict[str, tuple[str, ...]] = dict(expr.filters)
     force_integrate = expr.kind == "integrate_over" or expr.kernel == "integrate"
     force_sum = expr.kernel == "sum"
@@ -399,14 +537,25 @@ def _lower_reduce(  # noqa: C901, PLR0912, PLR0913, PLR0914, PLR0915
         reducible_axes=reducible_axes,
         axis_weights=axis_weights,
         axis_coords=axis_coords,
+        axis_types=axis_types,
     )
 
-    # Resolve per-axis filter coord lists to integer indices. v1 lowering
-    # supports the categorical/ordinal-subset case where every filter coord
-    # is an exact label in the axis's declared coords. Continuous-range
-    # filters (numeric ``[lo, hi]`` re-grid) and ordinal label-range
-    # filters fall back to the legacy string-expansion path.
+    # Resolve per-axis filter coord lists to integer indices. The
+    # interpretation depends on the axis type carried in ``axis_types``
+    # (mirroring :func:`_normalize._build_apply_along_axis_options`):
+    #
+    # * ``categorical`` (or unknown type): exact-label subset \u2014 every
+    #   filter coord must appear in the axis's declared coord list.
+    # * ``ordinal``: filter must be exactly ``[lo_label, hi_label]``;
+    #   resolves to the inclusive index range ``index(lo)..index(hi)``.
+    # * ``continuous``: filter must be exactly ``[lo, hi]`` numeric
+    #   endpoints; resolves to declared coords ``c`` with
+    #   ``lo <= float(c) <= hi``. When the axis is also weighted, the
+    #   integration weights for the sub-interval are recomputed via the
+    #   trapezoidal rule on the selected coords (not sub-selected from
+    #   the original axis weights).
     filter_indices: dict[str, tuple[int, ...]] = {}
+    filter_subinterval_weights: dict[str, tuple[float, ...]] = {}
     for ax, coords in filter_map.items():
         if ax not in bound_axes:
             msg = f"Reduce filter for axis {ax!r} has no matching binding"
@@ -418,15 +567,28 @@ def _lower_reduce(  # noqa: C901, PLR0912, PLR0913, PLR0914, PLR0915
             )
             raise UnsupportedIRLoweringError(msg)
         declared = coords_map[ax]
-        try:
-            indices = tuple(declared.index(c) for c in coords)
-        except ValueError:
-            msg = (
-                f"Reduce filter {ax}={list(coords)} contains coord(s) not "
-                f"declared on axis {ax!r}; v1 lowering only supports exact "
-                "subsets of the declared coords"
+        ax_type = types_map.get(ax, "categorical")
+        if ax_type == "ordinal":
+            indices = _resolve_ordinal_range_filter(ax, declared, coords)
+        elif ax_type == "continuous":
+            indices, sub_weights = _resolve_continuous_range_filter(
+                ax,
+                declared,
+                coords,
+                recompute_trapezoidal=ax in weighted_axes,
             )
-            raise UnsupportedIRLoweringError(msg) from None
+            if sub_weights is not None:
+                filter_subinterval_weights[ax] = sub_weights
+        else:
+            try:
+                indices = tuple(declared.index(c) for c in coords)
+            except ValueError:
+                msg = (
+                    f"Reduce filter {ax}={list(coords)} contains coord(s) "
+                    f"not declared on axis {ax!r}; categorical filters "
+                    "require an exact subset of the declared coords"
+                )
+                raise UnsupportedIRLoweringError(msg) from None
         filter_indices[ax] = indices
 
     for ax, indices in filter_indices.items():
@@ -445,8 +607,14 @@ def _lower_reduce(  # noqa: C901, PLR0912, PLR0913, PLR0914, PLR0915
 
     for ax in weighted_axes:
         weights = weights_map[ax]
-        if ax in filter_indices:
-            # Sub-select weights to match the filtered slice.
+        if ax in filter_subinterval_weights:
+            # Continuous-axis sub-interval integration uses freshly
+            # recomputed trapezoidal weights, not the original axis
+            # weights indexed by position.
+            weights = filter_subinterval_weights[ax]
+        elif ax in filter_indices:
+            # Categorical / ordinal filter: sub-select the original
+            # uniform-or-weighted vector to match the slice.
             weights = tuple(weights[i] for i in filter_indices[ax])
         body_ast = ast.BinOp(
             left=_weight_constant_for_axis(
@@ -573,6 +741,7 @@ def _lower_apply(  # noqa: PLR0913
     reducible_axes: frozenset[str] = frozenset(),
     axis_weights: Mapping[str, tuple[float, ...]] | None = None,
     axis_coords: Mapping[str, tuple[str, ...]] | None = None,
+    axis_types: Mapping[str, str] | None = None,
 ) -> ast.expr:
     def lower(child: Expr) -> ast.expr:
         return lower_to_vector_ast(
@@ -583,6 +752,7 @@ def _lower_apply(  # noqa: PLR0913
             reducible_axes=reducible_axes,
             axis_weights=axis_weights,
             axis_coords=axis_coords,
+            axis_types=axis_types,
         )
 
     if expr.op == "neg" and len(expr.args) == 1:

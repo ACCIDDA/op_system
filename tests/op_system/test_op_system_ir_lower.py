@@ -584,3 +584,192 @@ def test_lower_apply_along_categorical_filter_with_continuous_weighted_axis() ->
     got = _eval(node, {"f_buf": f_buf, "np": np})
     # Take indices [0, 2]; weights become (1.0, 3.0); sum = 1*10 + 3*30 = 100
     assert got == pytest.approx(100.0)
+
+
+def test_lower_apply_along_ordinal_range_filter() -> None:
+    """Ordinal axis_types maps ``[lo, hi]`` to an inclusive index range."""
+    body = Subscript(
+        name="pop",
+        indices=(AxisIndex(axis="imm", kind=AxisKind.FREE),),
+    )
+    expr = Reduce(
+        kind="apply_along",
+        bindings=(("imm", "k"),),
+        body=body,
+        filters=(("imm", ("X1", "X3")),),
+    )
+    node = lower_to_vector_ast(
+        expr,
+        target_axes=(),
+        buffer_axes={"pop": ("imm",)},
+        axis_names=frozenset({"imm"}),
+        reducible_axes=frozenset({"imm"}),
+        axis_coords={"imm": ("X0", "X1", "X2", "X3", "X4")},
+        axis_types={"imm": "ordinal"},
+    )
+    pop_buf = np.array([1.0, 2.0, 4.0, 8.0, 16.0])
+    got = _eval(node, {"pop_buf": pop_buf, "np": np})
+    # Inclusive index range [1, 3] -> 2.0 + 4.0 + 8.0
+    assert got == pytest.approx(14.0)
+
+
+def test_lower_apply_along_ordinal_range_filter_rejects_non_pair() -> None:
+    """An ordinal-axis filter must be exactly ``[lo, hi]``."""
+    body = Subscript(
+        name="pop",
+        indices=(AxisIndex(axis="imm", kind=AxisKind.FREE),),
+    )
+    expr = Reduce(
+        kind="apply_along",
+        bindings=(("imm", "k"),),
+        body=body,
+        filters=(("imm", ("X0", "X1", "X2")),),
+    )
+    with pytest.raises(UnsupportedIRLoweringError, match="2-element"):
+        lower_to_vector_ast(
+            expr,
+            target_axes=(),
+            buffer_axes={"pop": ("imm",)},
+            axis_names=frozenset({"imm"}),
+            reducible_axes=frozenset({"imm"}),
+            axis_coords={"imm": ("X0", "X1", "X2", "X3")},
+            axis_types={"imm": "ordinal"},
+        )
+
+
+def test_lower_apply_along_ordinal_range_filter_rejects_reversed() -> None:
+    """An ordinal-axis filter with ``index(lo) > index(hi)`` is rejected."""
+    body = Subscript(
+        name="pop",
+        indices=(AxisIndex(axis="imm", kind=AxisKind.FREE),),
+    )
+    expr = Reduce(
+        kind="apply_along",
+        bindings=(("imm", "k"),),
+        body=body,
+        filters=(("imm", ("X3", "X1")),),
+    )
+    with pytest.raises(UnsupportedIRLoweringError, match="index"):
+        lower_to_vector_ast(
+            expr,
+            target_axes=(),
+            buffer_axes={"pop": ("imm",)},
+            axis_names=frozenset({"imm"}),
+            reducible_axes=frozenset({"imm"}),
+            axis_coords={"imm": ("X0", "X1", "X2", "X3")},
+            axis_types={"imm": "ordinal"},
+        )
+
+
+def test_lower_apply_along_continuous_range_filter_uniform_sum() -> None:
+    """Continuous ``[lo, hi]`` filter with kernel='sum' selects coords unweighted."""
+    body = Subscript(
+        name="f",
+        indices=(AxisIndex(axis="x", kind=AxisKind.FREE),),
+    )
+    expr = Reduce(
+        kind="apply_along",
+        bindings=(("x", "i"),),
+        body=body,
+        filters=(("x", ("1.0", "3.0")),),
+        kernel="sum",
+    )
+    node = lower_to_vector_ast(
+        expr,
+        target_axes=(),
+        buffer_axes={"f": ("x",)},
+        axis_names=frozenset({"x"}),
+        reducible_axes=frozenset(),
+        axis_weights={"x": (0.5, 1.5, 1.0, 0.5)},  # ignored due to kernel='sum'
+        axis_coords={"x": ("0.0", "1.0", "3.0", "4.0")},
+        axis_types={"x": "continuous"},
+    )
+    f_buf = np.array([1.0, 2.0, 4.0, 8.0])
+    got = _eval(node, {"f_buf": f_buf, "np": np})
+    # Coords 1.0 and 3.0 are in [1.0, 3.0] -> 2.0 + 4.0 = 6.0
+    assert got == pytest.approx(6.0)
+
+
+def test_lower_apply_along_continuous_range_filter_integrate_recomputes_weights() -> (
+    None
+):
+    """Continuous-axis filter under integrate kernel recomputes trapezoidal weights."""
+    body = Subscript(
+        name="f",
+        indices=(AxisIndex(axis="x", kind=AxisKind.FREE),),
+    )
+    # Mirrors test_apply_along_continuous_filter_recomputes_trapezoidal_deltas:
+    # declared coords [0.0, 1.0, 3.0, 4.0], filter [1.0, 4.0] -> sub-coords
+    # [1.0, 3.0, 4.0], trapezoidal weights [1.0, 1.5, 0.5].
+    expr = Reduce(
+        kind="integrate_over",
+        bindings=(("x", "i"),),
+        body=body,
+        filters=(("x", ("1.0", "4.0")),),
+    )
+    node = lower_to_vector_ast(
+        expr,
+        target_axes=(),
+        buffer_axes={"f": ("x",)},
+        axis_names=frozenset({"x"}),
+        reducible_axes=frozenset(),
+        axis_weights={"x": (0.5, 1.5, 1.5, 0.5)},
+        axis_coords={"x": ("0.0", "1.0", "3.0", "4.0")},
+        axis_types={"x": "continuous"},
+    )
+    f_buf = np.array([10.0, 2.0, 4.0, 8.0])
+    got = _eval(node, {"f_buf": f_buf, "np": np})
+    # 1.0*2 + 1.5*4 + 0.5*8 = 2 + 6 + 4 = 12
+    assert got == pytest.approx(12.0)
+
+
+def test_lower_apply_along_continuous_range_filter_rejects_non_pair() -> None:
+    """A continuous-axis filter must be exactly ``[lo, hi]``."""
+    body = Subscript(
+        name="f",
+        indices=(AxisIndex(axis="x", kind=AxisKind.FREE),),
+    )
+    expr = Reduce(
+        kind="apply_along",
+        bindings=(("x", "i"),),
+        body=body,
+        filters=(("x", ("0.0", "1.0", "3.0")),),
+        kernel="sum",
+    )
+    with pytest.raises(UnsupportedIRLoweringError, match="2-element"):
+        lower_to_vector_ast(
+            expr,
+            target_axes=(),
+            buffer_axes={"f": ("x",)},
+            axis_names=frozenset({"x"}),
+            reducible_axes=frozenset(),
+            axis_weights={"x": (0.5, 1.5, 1.0, 0.5)},
+            axis_coords={"x": ("0.0", "1.0", "3.0", "4.0")},
+            axis_types={"x": "continuous"},
+        )
+
+
+def test_lower_apply_along_continuous_range_filter_empty_subinterval_errors() -> None:
+    """A continuous-axis filter that selects no declared coord is rejected."""
+    body = Subscript(
+        name="f",
+        indices=(AxisIndex(axis="x", kind=AxisKind.FREE),),
+    )
+    expr = Reduce(
+        kind="apply_along",
+        bindings=(("x", "i"),),
+        body=body,
+        filters=(("x", ("1.5", "2.5")),),
+        kernel="sum",
+    )
+    with pytest.raises(UnsupportedIRLoweringError, match="selects no axis coords"):
+        lower_to_vector_ast(
+            expr,
+            target_axes=(),
+            buffer_axes={"f": ("x",)},
+            axis_names=frozenset({"x"}),
+            reducible_axes=frozenset(),
+            axis_weights={"x": (0.5, 1.5, 1.0, 0.5)},
+            axis_coords={"x": ("0.0", "1.0", "3.0", "4.0")},
+            axis_types={"x": "continuous"},
+        )
