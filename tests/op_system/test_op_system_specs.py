@@ -18,6 +18,7 @@ import pytest
 from op_system import compile_rhs
 from op_system._constraints import _ConstraintRule, _normalize_constraints
 from op_system._errors import InvalidRhsSpecError
+from op_system._ir import Apply, free_symbols, parse_expr_to_ir
 from op_system.specs import (
     NormalizedRhs,
     StateTemplate,
@@ -2007,3 +2008,66 @@ def test_state_templates_expr_kind_populated() -> None:
     assert len(out.state_templates) == 2
     flat = tuple(n for tpl in out.state_templates for n in tpl.expanded_names)
     assert flat == out.state_names
+
+
+# ---------------------------------------------------------------------------
+# aliases_ir field (typed IR exposed alongside string aliases)
+# ---------------------------------------------------------------------------
+
+
+def test_aliases_ir_exposes_parsed_ir_for_simple_alias() -> None:
+    """``aliases_ir`` should contain a parsed IR Expr for each string alias."""
+    spec = {
+        "kind": "expr",
+        "state": ["S", "I", "R"],
+        "aliases": {"N": "S + I + R"},
+        "equations": {"S": "0", "I": "0", "R": "0"},
+    }
+    out = normalize_expr_rhs(spec)
+    assert "N" in out.aliases_ir
+    assert out.aliases_ir["N"] == parse_expr_to_ir("S + I + R")
+    assert isinstance(out.aliases_ir["N"], Apply)
+    assert free_symbols(out.aliases_ir["N"]) == {"S", "I", "R"}
+
+
+def test_aliases_ir_inlines_chained_aliases() -> None:
+    """Alias bodies that reference other aliases should be flattened in IR."""
+    spec = {
+        "kind": "expr",
+        "state": ["S", "I"],
+        "aliases": {"N": "S + I", "frac": "S / N"},
+        "equations": {"S": "0", "I": "0"},
+    }
+    out = normalize_expr_rhs(spec)
+    # ``frac`` should no longer reference ``N`` after inlining.
+    assert "N" not in free_symbols(out.aliases_ir["frac"])
+    assert {"S", "I"} <= free_symbols(out.aliases_ir["frac"])
+
+
+def test_aliases_ir_falls_back_for_cyclic_aliases() -> None:
+    """Cyclic aliases must not abort normalization; cycle survives at eval time."""
+    spec = {
+        "kind": "expr",
+        "state": ["x"],
+        "aliases": {"a": "b + 1", "b": "a + 1"},
+        "equations": {"x": "a"},
+    }
+    out = normalize_expr_rhs(spec)
+    # Both entries are present (un-inlined) so existing string-based consumers
+    # remain authoritative; lazy cycle detection still fires at eval time.
+    assert set(out.aliases_ir) == {"a", "b"}
+
+
+def test_aliases_ir_present_for_transitions_kind() -> None:
+    """``transitions`` kind should also populate the typed IR alias map."""
+    spec = {
+        "kind": "transitions",
+        "state": ["S", "I", "R"],
+        "aliases": {"N": "S + I + R"},
+        "transitions": [
+            {"from": "S", "to": "I", "rate": "beta * I / N"},
+            {"from": "I", "to": "R", "rate": "gamma"},
+        ],
+    }
+    out = normalize_transitions_rhs(spec)
+    assert "N" in out.aliases_ir

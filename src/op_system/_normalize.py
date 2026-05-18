@@ -15,8 +15,9 @@ types and functions are re-exported from ``specs.py`` for backward compat.
 from __future__ import annotations
 
 import re
+import sys
 from collections.abc import Mapping as _MappingABC
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from itertools import product
 from typing import TYPE_CHECKING, Any
 
@@ -35,6 +36,8 @@ from op_system._helpers import (
     _ensure_str_list,
     _sorted_unique,
 )
+from op_system._ir import Expr, parse_expr_to_ir
+from op_system._ir_templates import inline_aliases
 from op_system._symbols import _collect_names, _parse_expr
 from op_system._templates import (
     _INLINE_TEMPLATE_RE,
@@ -120,6 +123,7 @@ class NormalizedRhs:
     state_templates: tuple[StateTemplate, ...] = ()
     shaped_params: tuple[tuple[str, tuple[str, ...]], ...] = ()
     time_varying_params: tuple[tuple[str, tuple[str, ...]], ...] = ()
+    aliases_ir: Mapping[str, Expr] = field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------
@@ -1124,6 +1128,44 @@ def _expand_alias_templates(
             )
 
     return aliases_out, alias_template_map
+
+
+def _build_aliases_ir(aliases: Mapping[str, str]) -> dict[str, Expr]:
+    """Parse each alias body to IR and inline alias-to-alias references.
+
+    Best-effort: when parsing or inlining fails (cyclic aliases, AST recursion
+    on very long expanded chains, unsupported syntax), the failing alias is
+    omitted rather than aborting normalization. Existing string-based consumers
+    rely on lazy cycle detection at evaluation time, so this preserves
+    backward-compatible behaviour while still exposing IR where available.
+
+    Returns:
+        Mapping from alias name to its (fully inlined) IR expression. Entries
+        that could not be parsed or inlined are omitted.
+    """
+    # Long expanded Add chains (e.g. ``apply_along`` over many coords) can
+    # exceed Python's default recursion limit during AST descent / inlining.
+    old_limit = sys.getrecursionlimit()
+    needed = max(old_limit, 10_000)
+    try:
+        if needed > old_limit:
+            sys.setrecursionlimit(needed)
+        parsed: dict[str, Expr] = {}
+        for name, body in aliases.items():
+            try:
+                parsed[name] = parse_expr_to_ir(body)
+            except (ValueError, RecursionError):
+                continue
+        inlined: dict[str, Expr] = {}
+        for name, expr in parsed.items():
+            try:
+                inlined[name] = inline_aliases(expr, parsed)
+            except (ValueError, RecursionError):
+                inlined[name] = expr
+        return inlined
+    finally:
+        if needed > old_limit:
+            sys.setrecursionlimit(old_limit)
 
 
 _INITIAL_STATE_SHAPED_KEY = "shaped"
@@ -3003,6 +3045,7 @@ def normalize_expr_rhs(spec: Mapping[str, Any]) -> NormalizedRhs:  # noqa: C901,
         ),
         shaped_params=tuple(sorted(shaped_params.items())),
         time_varying_params=tuple(sorted(time_varying_full.items())),
+        aliases_ir=_build_aliases_ir(aliases),
     )
 
 
@@ -3265,4 +3308,5 @@ def normalize_transitions_rhs(  # noqa: C901, PLR0912, PLR0914, PLR0915
         ),
         shaped_params=tuple(sorted(shaped_params.items())),
         time_varying_params=tuple(sorted(time_varying_full.items())),
+        aliases_ir=_build_aliases_ir(aliases),
     )
