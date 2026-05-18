@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, NoReturn
 from ._errors import InvalidExpressionError
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator, Mapping
+    from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 
 
 @dataclass(frozen=True, slots=True)
@@ -334,6 +334,132 @@ def parse_expr_to_ir(expr: str, *, lower_helpers: bool = False) -> Expr:
     return ir
 
 
+def _literal_coord_value(coord: str) -> int | float | str:
+    try:
+        return int(coord)
+    except ValueError:
+        try:
+            return float(coord)
+        except ValueError:
+            return coord
+
+
+def _axis_index_to_ast(idx: AxisIndex) -> ast.expr:
+    if idx.coord is not None:
+        return ast.Constant(value=_literal_coord_value(idx.coord))
+    return ast.Name(id=idx.placeholder or idx.axis, ctx=ast.Load())
+
+
+def _call_func_ast(name: str) -> ast.expr:
+    parts = name.split(".")
+    node: ast.expr = ast.Name(id=parts[0], ctx=ast.Load())
+    for part in parts[1:]:
+        node = ast.Attribute(value=node, attr=part, ctx=ast.Load())
+    return node
+
+
+def _binary_ast(op: str) -> ast.operator:
+    if op == "+":
+        return ast.Add()
+    if op == "-":
+        return ast.Sub()
+    if op == "*":
+        return ast.Mult()
+    if op == "/":
+        return ast.Div()
+    if op == "%":
+        return ast.Mod()
+    if op == "pow":
+        return ast.Pow()
+    _invalid(detail=f"unsupported binary IR op: {op}")
+
+
+def _compare_ast(op: str) -> ast.cmpop:
+    if op == "==":
+        return ast.Eq()
+    if op == "!=":
+        return ast.NotEq()
+    if op == "<":
+        return ast.Lt()
+    if op == "<=":
+        return ast.LtE()
+    if op == ">":
+        return ast.Gt()
+    if op == ">=":
+        return ast.GtE()
+    _invalid(detail=f"unsupported comparison IR op: {op}")
+
+
+def ir_to_ast_expr(expr: Expr) -> ast.expr:  # noqa: C901, PLR0911, PLR0912
+    """Convert typed IR back to a Python AST expression node.
+
+    Args:
+        expr: Typed IR expression.
+
+    Returns:
+        Equivalent Python ``ast.expr`` node, suitable for validation,
+        rewriting, and compilation by the existing runtime paths.
+    """
+    if isinstance(expr, Literal):
+        return ast.Constant(value=expr.value)
+    if isinstance(expr, Sym):
+        return ast.Name(id=expr.name, ctx=ast.Load())
+    if isinstance(expr, Subscript):
+        parts = [_axis_index_to_ast(idx) for idx in expr.indices]
+        slc: ast.expr = (
+            parts[0] if len(parts) == 1 else ast.Tuple(parts, ctx=ast.Load())
+        )
+        return ast.Subscript(
+            value=ast.Name(id=expr.name, ctx=ast.Load()),
+            slice=slc,
+            ctx=ast.Load(),
+        )
+    if isinstance(expr, Reduce):
+        _invalid(detail="structured Reduce nodes cannot be converted to Python AST yet")
+    if isinstance(expr, Apply):
+        if expr.op == "neg" and len(expr.args) == 1:
+            return ast.UnaryOp(op=ast.USub(), operand=ir_to_ast_expr(expr.args[0]))
+        if expr.op == "pos" and len(expr.args) == 1:
+            return ast.UnaryOp(op=ast.UAdd(), operand=ir_to_ast_expr(expr.args[0]))
+        if expr.op in {"+", "-", "*", "/", "%", "pow"} and len(expr.args) == 2:
+            return ast.BinOp(
+                left=ir_to_ast_expr(expr.args[0]),
+                op=_binary_ast(expr.op),
+                right=ir_to_ast_expr(expr.args[1]),
+            )
+        if expr.op in {"==", "!=", "<", "<=", ">", ">="} and len(expr.args) == 2:
+            return ast.Compare(
+                left=ir_to_ast_expr(expr.args[0]),
+                ops=[_compare_ast(expr.op)],
+                comparators=[ir_to_ast_expr(expr.args[1])],
+            )
+        if expr.op in {"and", "or"}:
+            bool_op: ast.boolop = ast.And() if expr.op == "and" else ast.Or()
+            return ast.BoolOp(op=bool_op, values=[ir_to_ast_expr(a) for a in expr.args])
+        if expr.op == "ifelse" and len(expr.args) == 3:
+            return ast.IfExp(
+                test=ir_to_ast_expr(expr.args[0]),
+                body=ir_to_ast_expr(expr.args[1]),
+                orelse=ir_to_ast_expr(expr.args[2]),
+            )
+        call_args: list[ast.expr] = []
+        keywords: list[ast.keyword] = []
+        for arg in expr.args:
+            if isinstance(arg, Apply) and arg.op == "kwarg" and len(arg.args) == 2:
+                key_node = arg.args[0]
+                if not isinstance(key_node, Literal) or not isinstance(
+                    key_node.value, str
+                ):
+                    _invalid(detail="malformed kwarg IR node")
+                keywords.append(
+                    ast.keyword(arg=key_node.value, value=ir_to_ast_expr(arg.args[1]))
+                )
+            else:
+                call_args.append(ir_to_ast_expr(arg))
+        return ast.Call(func=_call_func_ast(expr.op), args=call_args, keywords=keywords)
+    _invalid(detail=f"unsupported IR node for AST conversion: {type(expr).__name__}")
+
+
 def _unparse_axis_index(idx: AxisIndex) -> str:
     if idx.placeholder is not None:
         return f"${idx.placeholder}"
@@ -546,6 +672,99 @@ def substitute(expr: Expr, mapping: Mapping[str, Expr]) -> Expr:
     _invalid(detail=f"unsupported IR node in substitute: {type(expr).__name__}")
 
 
+def _map_children(expr: Expr, fn: Callable[[Expr], Expr]) -> Expr:
+    if isinstance(expr, Apply):
+        new_args = tuple(fn(arg) for arg in expr.args)
+        if new_args == expr.args:
+            return expr
+        return Apply(op=expr.op, args=new_args)
+    if isinstance(expr, Reduce):
+        new_body = fn(expr.body)
+        if new_body == expr.body:
+            return expr
+        return Reduce(kind=expr.kind, bindings=expr.bindings, body=new_body)
+    return expr
+
+
+def _is_cse_candidate(expr: Expr) -> bool:
+    return isinstance(expr, (Apply, Reduce))
+
+
+def _expr_cost(expr: Expr) -> int:
+    if isinstance(expr, Apply):
+        return 1 + sum(_expr_cost(arg) for arg in expr.args)
+    if isinstance(expr, Reduce):
+        return 1 + _expr_cost(expr.body)
+    return 1
+
+
+def _postorder(expr: Expr, out: dict[Expr, int]) -> None:
+    if isinstance(expr, Apply):
+        for arg in expr.args:
+            _postorder(arg, out)
+    elif isinstance(expr, Reduce):
+        _postorder(expr.body, out)
+    out[expr] = out.get(expr, 0) + 1
+
+
+def extract_common_subexpressions(
+    exprs: Sequence[Expr],
+    *,
+    prefix: str = "_cse",
+    min_cost: int = 2,
+    reserved_names: Iterable[str] = (),
+) -> tuple[tuple[tuple[str, Expr], ...], tuple[Expr, ...]]:
+    """Extract repeated IR subtrees into deterministic symbol bindings.
+
+    This is a pure planning pass for the #112 IR migration. It does not
+    perform code generation; callers receive a list of temporary bindings and
+    rewritten root expressions that reference those temporaries. Bindings are
+    emitted in child-before-parent order so later bindings may depend on
+    earlier temporary names.
+
+    Args:
+        exprs: Root IR expressions to analyze together.
+        prefix: Prefix used for generated temporary symbol names.
+        min_cost: Minimum subtree cost eligible for extraction.
+        reserved_names: Names that generated temporaries must not use.
+
+    Returns:
+        ``(bindings, rewritten_exprs)`` where ``bindings`` is a tuple of
+        ``(name, expr)`` pairs and ``rewritten_exprs`` is positionally aligned
+        with ``exprs``.
+    """
+    counts: dict[Expr, int] = {}
+    for expr in exprs:
+        _postorder(expr, counts)
+
+    selected = tuple(
+        expr
+        for expr, count in counts.items()
+        if count > 1 and _is_cse_candidate(expr) and _expr_cost(expr) >= min_cost
+    )
+    reserved = set(reserved_names)
+    names: dict[Expr, str] = {}
+    next_index = 0
+    for expr in selected:
+        while True:
+            candidate = f"{prefix}{next_index}"
+            next_index += 1
+            if candidate not in reserved:
+                break
+        names[expr] = candidate
+        reserved.add(candidate)
+
+    def replace(expr: Expr) -> Expr:
+        name = names.get(expr)
+        if name is not None:
+            return Sym(name=name)
+        return _map_children(expr, replace)
+
+    bindings = tuple((names[expr], _map_children(expr, replace)) for expr in selected)
+    rewritten = tuple(replace(expr) for expr in exprs)
+    return bindings, rewritten
+
+
 def axis_kinds(expr: Expr, *, axis_names: frozenset[str]) -> tuple[AxisKind, ...]:
     """Classify every ``AxisIndex`` position in walk order.
 
@@ -623,7 +842,9 @@ __all__ = [
     "Sym",
     "axis_kinds",
     "classify_axis_index",
+    "extract_common_subexpressions",
     "free_symbols",
+    "ir_to_ast_expr",
     "iter_subscripts",
     "lower_helper_calls",
     "parse_expr_to_ir",

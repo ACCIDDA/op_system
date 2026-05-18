@@ -34,6 +34,7 @@ from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
 
+from op_system._ir import Expr, ir_to_ast_expr
 from op_system.compile import (
     _SAFE_BUILTINS,
     _check_numeric_dtype,
@@ -577,6 +578,7 @@ class _NameRewriter(ast.NodeTransformer):
 def _rewrite_cell_to_vector(  # noqa: PLR0913
     *,
     expr: str,
+    expr_ir: Expr | None = None,
     target_axes: tuple[str, ...],
     cell_coords: Mapping[str, str],
     name_to_template: Mapping[str, _BufferTemplate],
@@ -590,7 +592,12 @@ def _rewrite_cell_to_vector(  # noqa: PLR0913
         An ``ast.Expression`` whose body evaluates to an array shaped per
         ``target_axes`` (or a scalar when ``target_axes`` is empty).
     """
-    tree = _parse_expr(expr)
+    tree = (
+        ast.Expression(body=ir_to_ast_expr(expr_ir))
+        if expr_ir is not None
+        else _parse_expr(expr)
+    )
+    ast.fix_missing_locations(tree)
     _validate_ast(tree, expr=expr)
     rewriter = _NameRewriter(
         target_axes=target_axes,
@@ -1129,6 +1136,7 @@ def _vectorize_template_equations(  # noqa: C901, PLR0912, PLR0913, PLR0914, PLR
     *,
     template: _BufferTemplate,
     equations: tuple[str, ...],
+    equations_ir: tuple[Expr | None, ...] | None = None,
     name_to_template: Mapping[str, _BufferTemplate],
     name_to_coords: Mapping[str, Mapping[str, str]],
     axis_index: Mapping[str, Mapping[str, int]],
@@ -1163,6 +1171,11 @@ def _vectorize_template_equations(  # noqa: C901, PLR0912, PLR0913, PLR0914, PLR
     cell_exprs = equations[template.offset : template.offset + size]
     if len(cell_exprs) != size or size == 0:
         return None
+    cell_irs = (
+        equations_ir[template.offset : template.offset + size]
+        if equations_ir is not None and len(equations_ir) == len(equations)
+        else ()
+    )
     n_axes = len(template.axes)
 
     # Enumerate candidate unroll-axis index subsets, smallest first.
@@ -1221,6 +1234,7 @@ def _vectorize_template_equations(  # noqa: C901, PLR0912, PLR0913, PLR0914, PLR
             try:
                 first_tree = _rewrite_cell_to_vector(
                     expr=cell_exprs[first_idx],
+                    expr_ir=cell_irs[first_idx] if cell_irs else None,
                     target_axes=vec_axes,
                     cell_coords=template.coord_assignments[first_idx],
                     name_to_template=name_to_template,
@@ -1235,6 +1249,7 @@ def _vectorize_template_equations(  # noqa: C901, PLR0912, PLR0913, PLR0914, PLR
                 try:
                     last_tree = _rewrite_cell_to_vector(
                         expr=cell_exprs[last_idx],
+                        expr_ir=cell_irs[last_idx] if cell_irs else None,
                         target_axes=vec_axes,
                         cell_coords=template.coord_assignments[last_idx],
                         name_to_template=name_to_template,
@@ -1437,6 +1452,7 @@ def _build_vector_plan_inner(  # noqa: C901, PLR0911, PLR0912, PLR0914, PLR0915
             if buf.axes:
                 tree = _rewrite_cell_to_vector(
                     expr=rhs.aliases[buf.expanded_names[0]],
+                    expr_ir=rhs.aliases_ir.get(buf.expanded_names[0]),
                     target_axes=buf.axes,
                     cell_coords=buf.coord_assignments[0],
                     name_to_template=name_to_template,
@@ -1447,6 +1463,7 @@ def _build_vector_plan_inner(  # noqa: C901, PLR0911, PLR0912, PLR0914, PLR0915
                 if len(buf.expanded_names) > 1:
                     last_tree = _rewrite_cell_to_vector(
                         expr=rhs.aliases[buf.expanded_names[-1]],
+                        expr_ir=rhs.aliases_ir.get(buf.expanded_names[-1]),
                         target_axes=buf.axes,
                         cell_coords=buf.coord_assignments[-1],
                         name_to_template=name_to_template,
@@ -1461,6 +1478,7 @@ def _build_vector_plan_inner(  # noqa: C901, PLR0911, PLR0912, PLR0914, PLR0915
                 # templated state cells become buffer-index accesses.
                 tree = _rewrite_cell_to_vector(
                     expr=rhs.aliases[buf.expanded_names[0]],
+                    expr_ir=rhs.aliases_ir.get(buf.expanded_names[0]),
                     target_axes=(),
                     cell_coords={},
                     name_to_template=name_to_template,
@@ -1481,6 +1499,7 @@ def _build_vector_plan_inner(  # noqa: C901, PLR0911, PLR0912, PLR0914, PLR0915
         result = _vectorize_template_equations(
             template=buf,
             equations=rhs.equations,
+            equations_ir=rhs.equations_ir_raw,
             name_to_template=name_to_template,
             name_to_coords=name_to_coords,
             axis_index=axis_index,

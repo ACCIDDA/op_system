@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import ast
+
 import pytest
 
 from op_system._errors import InvalidExpressionError
@@ -12,6 +14,8 @@ from op_system._ir import (
     Reduce,
     Subscript,
     Sym,
+    extract_common_subexpressions,
+    ir_to_ast_expr,
     lower_helper_calls,
     parse_expr_to_ir,
 )
@@ -92,3 +96,91 @@ def test_lower_helper_calls_preserves_non_helper_apply() -> None:
 
     assert isinstance(lowered, Apply)
     assert lowered.op == "np.maximum"
+
+
+def _eval_ir_expr(expr: str, **env: object) -> object:
+    tree = ast.Expression(body=ir_to_ast_expr(parse_expr_to_ir(expr)))
+    ast.fix_missing_locations(tree)
+    code = compile(tree, filename="<test_ir_to_ast>", mode="eval")
+    return eval(code, {"__builtins__": {}, **env})  # noqa: S307
+
+
+def test_ir_to_ast_expr_evaluates_arithmetic_equivalently() -> None:
+    """The IR-to-AST bridge should preserve arithmetic semantics."""
+    out = _eval_ir_expr(
+        "beta * S * I / N - gamma * I", beta=0.3, S=9, I=2, N=11, gamma=0.1
+    )
+    assert out == pytest.approx(0.3 * 9 * 2 / 11 - 0.1 * 2)
+
+
+def test_ir_to_ast_expr_preserves_calls_and_kwargs() -> None:
+    """Function calls, attributes, and kwargs round-trip through AST."""
+
+    class _Np:
+        @staticmethod
+        def maximum(x: float, y: float) -> float:
+            return max(x, y)
+
+    assert _eval_ir_expr("np.maximum(x, y)", np=_Np, x=1.0, y=2.0) == pytest.approx(2.0)
+
+
+def test_ir_to_ast_expr_preserves_subscripts_and_literal_indices() -> None:
+    """Subscript indices should become executable Python AST indices."""
+    assert (
+        _eval_ir_expr("arr[1] + K[age]", arr=[10, 20], K={"young": 3}, age="young")
+        == 23
+    )
+
+
+def test_ir_to_ast_expr_preserves_conditionals_and_comparisons() -> None:
+    """Conditionals and comparisons should remain executable."""
+    assert _eval_ir_expr("1 if x > 0 else -1", x=2) == 1
+    assert _eval_ir_expr("1 if x > 0 else -1", x=-2) == -1
+
+
+def test_extract_common_subexpressions_reuses_repeated_apply() -> None:
+    """Repeated non-leaf subexpressions become generated symbol bindings."""
+    bindings, rewritten = extract_common_subexpressions((
+        parse_expr_to_ir("(a + b) * (a + b)"),
+        parse_expr_to_ir("c + (a + b)"),
+    ))
+
+    assert bindings == (("_cse0", parse_expr_to_ir("a + b")),)
+    assert rewritten == (
+        parse_expr_to_ir("_cse0 * _cse0"),
+        parse_expr_to_ir("c + _cse0"),
+    )
+
+
+def test_extract_common_subexpressions_orders_children_before_parents() -> None:
+    """Nested CSE bindings should be emitted child-before-parent."""
+    repeated = "(a + b) * (a + b)"
+    bindings, rewritten = extract_common_subexpressions((
+        parse_expr_to_ir(f"({repeated}) + ({repeated})"),
+    ))
+
+    assert bindings == (
+        ("_cse0", parse_expr_to_ir("a + b")),
+        ("_cse1", parse_expr_to_ir("_cse0 * _cse0")),
+    )
+    assert rewritten == (parse_expr_to_ir("_cse1 + _cse1"),)
+
+
+def test_extract_common_subexpressions_ignores_repeated_leaves() -> None:
+    """Bare symbol repetition alone should not introduce temporaries."""
+    expr = parse_expr_to_ir("a + a")
+    bindings, rewritten = extract_common_subexpressions((expr,))
+
+    assert bindings == ()
+    assert rewritten == (expr,)
+
+
+def test_extract_common_subexpressions_skips_reserved_names() -> None:
+    """Generated temporaries must avoid caller-reserved runtime names."""
+    bindings, rewritten = extract_common_subexpressions(
+        (parse_expr_to_ir("(a + b) * (a + b)"),),
+        reserved_names={"_cse0"},
+    )
+
+    assert bindings == (("_cse1", parse_expr_to_ir("a + b")),)
+    assert rewritten == (parse_expr_to_ir("_cse1 * _cse1"),)

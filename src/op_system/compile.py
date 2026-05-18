@@ -38,10 +38,11 @@ import numpy as np
 from numpy.typing import NDArray
 
 from op_system._errors import InvalidExpressionError
+from op_system._ir import Expr, extract_common_subexpressions, ir_to_ast_expr
 from op_system._symbols import parse_expression_string
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Mapping
+    from collections.abc import Callable, Iterable, Mapping
     from types import CodeType
 
     from .specs import NormalizedRhs
@@ -359,16 +360,22 @@ def _validate_ast(tree: ast.AST, *, expr: str) -> None:
             _validate_call(node.func, expr=expr)
 
 
-def _compile_expr(expr: str) -> CodeType:
+def _compile_expr(expr: str, expr_ir: Expr | None = None) -> CodeType:
     """Parse, validate, and compile an expression into a code object.
 
     Args:
         expr: Expression string.
+        expr_ir: Optional typed IR expression to compile directly.
 
     Returns:
         Compiled code object.
     """
-    tree = _parse_expr(expr)
+    tree = (
+        ast.Expression(body=ir_to_ast_expr(expr_ir))
+        if expr_ir is not None
+        else _parse_expr(expr)
+    )
+    ast.fix_missing_locations(tree)
     _validate_ast(tree, expr=expr)
     try:
         return compile(tree, filename="<op_system>", mode="eval")
@@ -378,28 +385,78 @@ def _compile_expr(expr: str) -> CodeType:
         )
 
 
-def _collect_alias_code(aliases: Mapping[str, str]) -> dict[str, CodeType]:
+def _collect_alias_code(
+    aliases: Mapping[str, str],
+    aliases_ir: Mapping[str, Expr] | None = None,
+) -> dict[str, CodeType]:
     """Compile alias expressions into code objects.
 
     Args:
         aliases: Mapping from alias name to expression string.
+        aliases_ir: Optional mapping from alias name to typed IR.
 
     Returns:
         Dictionary mapping alias name to compiled code object.
     """
-    return {name: _compile_expr(expr) for name, expr in aliases.items()}
+    ir_map = aliases_ir or {}
+    return {
+        name: _compile_expr(expr, ir_map.get(name)) for name, expr in aliases.items()
+    }
 
 
-def _collect_eq_code(equations: tuple[str, ...]) -> list[CodeType]:
+def _collect_eq_code(
+    equations: tuple[str, ...],
+    equations_ir: tuple[Expr | None, ...] | None = None,
+    reserved_names: Iterable[str] = (),
+) -> tuple[tuple[tuple[str, CodeType], ...], list[CodeType]]:
     """Compile equation expressions into code objects.
 
     Args:
         equations: Tuple of equation expression strings.
+        equations_ir: Optional tuple of typed IR expressions, positionally
+            aligned with ``equations``.
+        reserved_names: Runtime names that generated CSE temporaries must avoid.
 
     Returns:
-        List of compiled code objects.
+        CSE binding code objects plus equation code objects.
     """
-    return [_compile_expr(expr) for expr in equations]
+    if (
+        equations_ir
+        and len(equations_ir) == len(equations)
+        and all(expr is not None for expr in equations_ir)
+    ):
+        concrete_ir = tuple(expr for expr in equations_ir if expr is not None)
+        bindings, rewritten = extract_common_subexpressions(
+            concrete_ir,
+            prefix="__op_system_cse_",
+            reserved_names=reserved_names,
+        )
+        cse_code = tuple((name, _compile_expr(name, expr)) for name, expr in bindings)
+        eq_code = [  # noqa: FURB140
+            _compile_expr(expr_s, expr_ir)
+            for expr_s, expr_ir in zip(equations, rewritten, strict=True)
+        ]
+        return cse_code, eq_code
+    return (), [_compile_expr(expr) for expr in equations]
+
+
+def _evaluate_cse_bindings(
+    cse_code: tuple[tuple[str, CodeType], ...],
+    *,
+    env: dict[str, object],
+) -> None:
+    """Evaluate CSE temporaries into ``env`` before equation evaluation."""
+    for name, codeobj in cse_code:
+        try:
+            env[name] = eval(  # noqa: S307
+                codeobj,
+                {"__builtins__": _SAFE_BUILTINS},
+                env,
+            )
+        except NameError as exc:
+            _raise_parameter_error(detail=f"unknown symbol in CSE binding: {exc!s}")
+        except (ValueError, TypeError, ArithmeticError) as exc:
+            _raise_invalid_expression(detail=f"CSE binding evaluation failed: {exc!r}")
 
 
 def _resolve_aliases(
@@ -494,6 +551,8 @@ def _make_eval_fn(
     state_names: tuple[str, ...],
     aliases: Mapping[str, str],
     equations: tuple[str, ...],
+    aliases_ir: Mapping[str, Expr] | None = None,
+    equations_ir: tuple[Expr | None, ...] | None = None,
 ) -> EvalFn:
     """Build a namespace-polymorphic ``eval_fn(t, y, **params) -> dydt``.
 
@@ -510,8 +569,13 @@ def _make_eval_fn(
     """
     n_state = len(state_names)
     name_to_idx = {s: i for i, s in enumerate(state_names)}
-    alias_code = _collect_alias_code(aliases)
-    eq_code = _collect_eq_code(equations)
+    alias_code = _collect_alias_code(aliases, aliases_ir)
+    reserved_names = {*state_names, *aliases, "np", "t", "sum_state", "sum_prefix"}
+    cse_code, eq_code = _collect_eq_code(
+        equations,
+        equations_ir,
+        reserved_names=reserved_names,
+    )
 
     def eval_fn(t: object, y: object, **params: object) -> Float64Array:
         xp = _namespace_of(y)
@@ -544,6 +608,8 @@ def _make_eval_fn(
 
         if alias_code:
             env.update(_resolve_aliases(alias_code, base_env=env))
+        if cse_code:
+            _evaluate_cse_bindings(cse_code, env=env)
 
         return _evaluate_equations(eq_code=eq_code, env=env, xp=xp)
 
@@ -731,6 +797,8 @@ def compile_rhs(rhs: NormalizedRhs, *, xp: object | None = None) -> CompiledRhs:
             state_names=rhs.state_names,
             aliases=rhs.aliases,
             equations=rhs.equations,
+            aliases_ir=rhs.aliases_ir,
+            equations_ir=rhs.equations_ir,
         )
 
     eval_fn = _wrap_eval_fn_for_time_varying(
