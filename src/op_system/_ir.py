@@ -9,9 +9,13 @@ from __future__ import annotations
 
 import ast
 from dataclasses import dataclass
-from typing import NoReturn
+from enum import StrEnum
+from typing import TYPE_CHECKING, NoReturn
 
 from ._errors import InvalidExpressionError
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator, Mapping
 
 
 @dataclass(frozen=True, slots=True)
@@ -35,11 +39,15 @@ class AxisIndex:
     For the initial parse-only phase, ``axis`` stores the token text for
     name-style indices (e.g. ``age`` in ``K[age, ap]``). Literal indices
     (e.g. ``K[0]`` or ``K['x']``) are represented by ``coord``.
+
+    The optional ``kind`` field is populated by :func:`resolve_axis_kinds`
+    once an axis registry is known. Parser output leaves ``kind`` unset.
     """
 
     axis: str
     coord: str | None = None
     placeholder: str | None = None
+    kind: AxisKind | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -393,16 +401,235 @@ def unparse_ir(expr: Expr) -> str:  # noqa: C901, PLR0911
     _invalid(detail=f"unsupported IR node in unparser: {type(expr).__name__}")
 
 
+class AxisKind(StrEnum):
+    """Classification of an ``AxisIndex`` after axis resolution.
+
+    Categories:
+        FREE: A known axis name with no coord or placeholder
+            (e.g. ``K[age]`` where ``age`` is a registered axis).
+        COORD: A literal coord value (e.g. ``K[0]`` or ``K['x']``).
+        PLACEHOLDER: A ``$``-prefixed independent placeholder (#88).
+        COORD_SYMBOL: An identifier used in a subscript that is not a known
+            axis - treated as a bound coord variable
+            (e.g. the ``ap`` in ``K[age, ap]`` when only ``age`` is an axis).
+    """
+
+    FREE = "free"
+    COORD = "coord"
+    PLACEHOLDER = "placeholder"
+    COORD_SYMBOL = "coord_symbol"
+
+
+def classify_axis_index(idx: AxisIndex, *, axis_names: frozenset[str]) -> AxisKind:
+    """Classify a single ``AxisIndex`` against a registry of known axes.
+
+    Args:
+        idx: The axis index node to classify.
+        axis_names: Set of registered axis identifier strings.
+
+    Returns:
+        The :class:`AxisKind` describing this index position.
+    """
+    if idx.placeholder is not None:
+        return AxisKind.PLACEHOLDER
+    if idx.coord is not None:
+        return AxisKind.COORD
+    if idx.axis in axis_names:
+        return AxisKind.FREE
+    return AxisKind.COORD_SYMBOL
+
+
+def iter_subscripts(expr: Expr) -> Iterator[Subscript]:
+    """Yield every ``Subscript`` node reachable from ``expr`` in walk order.
+
+    Args:
+        expr: Root IR expression.
+
+    Yields:
+        Each :class:`Subscript` node encountered during a pre-order traversal.
+    """
+    if isinstance(expr, Subscript):
+        yield expr
+        return
+    if isinstance(expr, Apply):
+        for arg in expr.args:
+            yield from iter_subscripts(arg)
+        return
+    if isinstance(expr, Reduce):
+        yield from iter_subscripts(expr.body)
+
+
+def walk(expr: Expr) -> Iterator[Expr]:
+    """Yield every IR node reachable from ``expr`` in pre-order.
+
+    Args:
+        expr: Root IR expression.
+
+    Yields:
+        ``expr`` itself first, followed by every child node.
+    """
+    yield expr
+    if isinstance(expr, Subscript):
+        return
+    if isinstance(expr, Apply):
+        for arg in expr.args:
+            yield from walk(arg)
+        return
+    if isinstance(expr, Reduce):
+        yield from walk(expr.body)
+
+
+def free_symbols(expr: Expr) -> frozenset[str]:
+    """Return the set of ``Sym`` names referenced under ``expr``.
+
+    ``Reduce`` bindings shadow outer symbols of the same name: a bound name
+    appearing only inside a reduction body is *not* considered free.
+
+    Args:
+        expr: Root IR expression.
+
+    Returns:
+        Frozen set of identifier strings that occur as free :class:`Sym`
+        references.
+    """
+    if isinstance(expr, Sym):
+        return frozenset({expr.name})
+    if isinstance(expr, (Literal, Subscript)):
+        return frozenset()
+    if isinstance(expr, Apply):
+        out: set[str] = set()
+        for arg in expr.args:
+            out |= free_symbols(arg)
+        return frozenset(out)
+    if isinstance(expr, Reduce):
+        bound = {bind for _, bind in expr.bindings}
+        return frozenset(free_symbols(expr.body) - bound)
+    _invalid(detail=f"unsupported IR node in free_symbols: {type(expr).__name__}")
+
+
+def substitute(expr: Expr, mapping: Mapping[str, Expr]) -> Expr:
+    """Replace named ``Sym`` leaves with their mapped IR expression.
+
+    The substitution is capture-avoiding with respect to ``Reduce`` bindings:
+    if a name is bound by an enclosing ``Reduce``, occurrences of that name
+    in the body are left untouched (the binding shadows the outer mapping).
+
+    Args:
+        expr: Root IR expression.
+        mapping: Substitution table from symbol name to replacement IR.
+
+    Returns:
+        A new IR expression with substitutions applied; structurally equal
+        to ``expr`` when no replacements occur.
+    """
+    if isinstance(expr, Sym):
+        return mapping.get(expr.name, expr)
+    if isinstance(expr, (Literal, Subscript)):
+        return expr
+    if isinstance(expr, Apply):
+        return Apply(
+            op=expr.op,
+            args=tuple(substitute(arg, mapping) for arg in expr.args),
+        )
+    if isinstance(expr, Reduce):
+        bound = {bind for _, bind in expr.bindings}
+        inner = (
+            mapping
+            if not bound
+            else {k: v for k, v in mapping.items() if k not in bound}
+        )
+        return Reduce(
+            kind=expr.kind,
+            bindings=expr.bindings,
+            body=substitute(expr.body, inner),
+        )
+    _invalid(detail=f"unsupported IR node in substitute: {type(expr).__name__}")
+
+
+def axis_kinds(expr: Expr, *, axis_names: frozenset[str]) -> tuple[AxisKind, ...]:
+    """Classify every ``AxisIndex`` position in walk order.
+
+    Args:
+        expr: Root IR expression.
+        axis_names: Set of registered axis identifier strings.
+
+    Returns:
+        Tuple of :class:`AxisKind` values in pre-order subscript / position
+        traversal order.
+    """
+    return tuple(
+        classify_axis_index(idx, axis_names=axis_names)
+        for sub in iter_subscripts(expr)
+        for idx in sub.indices
+    )
+
+
+def _resolve_index(idx: AxisIndex, *, axis_names: frozenset[str]) -> AxisIndex:
+    kind = classify_axis_index(idx, axis_names=axis_names)
+    if idx.kind is kind:
+        return idx
+    return AxisIndex(
+        axis=idx.axis, coord=idx.coord, placeholder=idx.placeholder, kind=kind
+    )
+
+
+def resolve_axis_kinds(expr: Expr, *, axis_names: frozenset[str]) -> Expr:  # noqa: PLR0911
+    """Return a copy of ``expr`` with every ``AxisIndex.kind`` populated.
+
+    Walks the IR tree and rewrites each :class:`AxisIndex` so its ``kind``
+    field reflects classification against ``axis_names``. Nodes that already
+    carry the correct kind are reused, so a resolved tree is idempotent.
+
+    Args:
+        expr: Root IR expression (typically straight from the parser).
+        axis_names: Set of registered axis identifier strings.
+
+    Returns:
+        Structurally equivalent IR with ``AxisIndex.kind`` set on every
+        subscript position.
+    """
+    if isinstance(expr, (Literal, Sym)):
+        return expr
+    if isinstance(expr, Subscript):
+        new_indices = tuple(
+            _resolve_index(i, axis_names=axis_names) for i in expr.indices
+        )
+        if new_indices == expr.indices:
+            return expr
+        return Subscript(name=expr.name, indices=new_indices)
+    if isinstance(expr, Apply):
+        new_args = tuple(
+            resolve_axis_kinds(arg, axis_names=axis_names) for arg in expr.args
+        )
+        if new_args == expr.args:
+            return expr
+        return Apply(op=expr.op, args=new_args)
+    if isinstance(expr, Reduce):
+        new_body = resolve_axis_kinds(expr.body, axis_names=axis_names)
+        if new_body is expr.body:
+            return expr
+        return Reduce(kind=expr.kind, bindings=expr.bindings, body=new_body)
+    _invalid(detail=f"unsupported IR node in resolve_axis_kinds: {type(expr).__name__}")
+
+
 __all__ = [
     "Apply",
     "AxisIndex",
+    "AxisKind",
     "Expr",
     "Literal",
     "Reduce",
     "Subscript",
     "Sym",
+    "axis_kinds",
+    "classify_axis_index",
+    "free_symbols",
+    "iter_subscripts",
     "lower_helper_calls",
     "parse_expr_to_ir",
+    "resolve_axis_kinds",
+    "substitute",
     "to_ir",
     "unparse_ir",
+    "walk",
 ]
