@@ -350,6 +350,8 @@ def inline_aliases(
     aliases: Mapping[str, Expr],
     *,
     max_depth: int = 64,
+    memo: dict[int, frozenset[str]] | None = None,
+    skip_cycle_check: bool = False,
 ) -> Expr:
     """Fixed-point inline ``Sym`` references that match ``aliases`` keys.
 
@@ -366,6 +368,14 @@ def inline_aliases(
             Keys are expected to be fully expanded alias names (after
             template expansion), and bodies are expected to be IR.
         max_depth: Safety bound on the number of substitution rounds.
+        memo: Optional identity-keyed cache shared with
+            :func:`op_system._ir.free_symbols`. Pass a single dict across
+            many inline calls that share the same alias bodies to avoid
+            re-walking each body per equation.
+        skip_cycle_check: If ``True``, bypass :func:`_detect_alias_cycle`.
+            Callers that batch-inline many expressions against the same
+            ``aliases`` mapping should validate once and set this flag on
+            subsequent calls.
 
     Returns:
         A new IR expression with all alias references resolved.
@@ -377,19 +387,34 @@ def inline_aliases(
     if not aliases:
         return expr
 
-    cycle = _detect_alias_cycle(aliases)
-    if cycle is not None:
-        msg = f"alias cycle detected: {' -> '.join(cycle)}"
-        raise ValueError(msg)
+    if not skip_cycle_check:
+        cycle = _detect_alias_cycle(aliases)
+        if cycle is not None:
+            msg = f"alias cycle detected: {' -> '.join(cycle)}"
+            raise ValueError(msg)
 
+    if memo is None:
+        memo = {}
     keys = set(aliases)
+    # Precompute, for each alias body, which other alias names it references.
+    # The next "live" set after a substitution is exactly the union of these
+    # entries over the just-inlined names, so we never need to re-walk the
+    # substituted expression with ``free_symbols`` (which on large inlined
+    # bodies dominates inline cost when many equations share one alias).
+    body_refs: dict[str, frozenset[str]] = {
+        name: free_symbols(body, memo) & keys for name, body in aliases.items()
+    }
     current = expr
+    live = free_symbols(current, memo) & keys
     for _ in range(max_depth):
-        live = free_symbols(current) & keys
         if not live:
             return current
         mapping = {name: aliases[name] for name in live}
-        current = substitute(current, mapping)
+        current = substitute(current, mapping, memo)
+        next_live: set[str] = set()
+        for name in live:
+            next_live |= body_refs[name]
+        live = frozenset(next_live)
 
     msg = f"alias inlining did not converge within {max_depth} iterations"
     raise ValueError(msg)
