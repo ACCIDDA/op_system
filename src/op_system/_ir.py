@@ -9,9 +9,13 @@ from __future__ import annotations
 
 import ast
 from dataclasses import dataclass
-from typing import NoReturn
+from enum import StrEnum
+from typing import TYPE_CHECKING, NoReturn
 
 from ._errors import InvalidExpressionError
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 
 
 @dataclass(frozen=True, slots=True)
@@ -393,14 +397,98 @@ def unparse_ir(expr: Expr) -> str:  # noqa: C901, PLR0911
     _invalid(detail=f"unsupported IR node in unparser: {type(expr).__name__}")
 
 
+class AxisKind(StrEnum):
+    """Classification of an ``AxisIndex`` after axis resolution.
+
+    Categories:
+        FREE: A known axis name with no coord or placeholder
+            (e.g. ``K[age]`` where ``age`` is a registered axis).
+        COORD: A literal coord value (e.g. ``K[0]`` or ``K['x']``).
+        PLACEHOLDER: A ``$``-prefixed independent placeholder (#88).
+        COORD_SYMBOL: An identifier used in a subscript that is not a known
+            axis - treated as a bound coord variable
+            (e.g. the ``ap`` in ``K[age, ap]`` when only ``age`` is an axis).
+    """
+
+    FREE = "free"
+    COORD = "coord"
+    PLACEHOLDER = "placeholder"
+    COORD_SYMBOL = "coord_symbol"
+
+
+def classify_axis_index(
+    idx: AxisIndex, *, axis_names: frozenset[str]
+) -> AxisKind:
+    """Classify a single ``AxisIndex`` against a registry of known axes.
+
+    Args:
+        idx: The axis index node to classify.
+        axis_names: Set of registered axis identifier strings.
+
+    Returns:
+        The :class:`AxisKind` describing this index position.
+    """
+    if idx.placeholder is not None:
+        return AxisKind.PLACEHOLDER
+    if idx.coord is not None:
+        return AxisKind.COORD
+    if idx.axis in axis_names:
+        return AxisKind.FREE
+    return AxisKind.COORD_SYMBOL
+
+
+def iter_subscripts(expr: Expr) -> Iterator[Subscript]:
+    """Yield every ``Subscript`` node reachable from ``expr`` in walk order.
+
+    Args:
+        expr: Root IR expression.
+
+    Yields:
+        Each :class:`Subscript` node encountered during a pre-order traversal.
+    """
+    if isinstance(expr, Subscript):
+        yield expr
+        return
+    if isinstance(expr, Apply):
+        for arg in expr.args:
+            yield from iter_subscripts(arg)
+        return
+    if isinstance(expr, Reduce):
+        yield from iter_subscripts(expr.body)
+
+
+def axis_kinds(
+    expr: Expr, *, axis_names: frozenset[str]
+) -> tuple[AxisKind, ...]:
+    """Classify every ``AxisIndex`` position in walk order.
+
+    Args:
+        expr: Root IR expression.
+        axis_names: Set of registered axis identifier strings.
+
+    Returns:
+        Tuple of :class:`AxisKind` values in pre-order subscript / position
+        traversal order.
+    """
+    return tuple(
+        classify_axis_index(idx, axis_names=axis_names)
+        for sub in iter_subscripts(expr)
+        for idx in sub.indices
+    )
+
+
 __all__ = [
     "Apply",
     "AxisIndex",
+    "AxisKind",
     "Expr",
     "Literal",
     "Reduce",
     "Subscript",
     "Sym",
+    "axis_kinds",
+    "classify_axis_index",
+    "iter_subscripts",
     "lower_helper_calls",
     "parse_expr_to_ir",
     "to_ir",
