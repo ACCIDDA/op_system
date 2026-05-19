@@ -18,7 +18,14 @@ import pytest
 from op_system import compile_rhs
 from op_system._constraints import _ConstraintRule, _normalize_constraints
 from op_system._errors import InvalidRhsSpecError
-from op_system._ir import Apply, Reduce, free_symbols, parse_expr_to_ir, walk
+from op_system._ir import (
+    Apply,
+    Reduce,
+    free_symbols,
+    parse_expr_to_ir,
+    unparse_ir,
+    walk,
+)
 from op_system._normalize import _derive_alias_strings, _derive_equation_strings
 from op_system.specs import (
     NormalizedRhs,
@@ -2299,3 +2306,63 @@ def test_equations_ir_reduce_matches_equations_ir_when_no_helpers() -> None:
         out.equations_ir_reduce, out.equations_ir_raw, strict=True
     ):
         assert ir_reduce == ir_raw
+
+
+# ---------------------------------------------------------------------------
+# IR-derived string parity: equations and aliases strings == unparse_ir(ir)
+# ---------------------------------------------------------------------------
+
+
+def test_expr_equation_strings_are_unparse_of_equations_ir() -> None:
+    """Each equation string equals ``unparse_ir`` of the aligned IR entry."""
+    spec = {
+        "kind": "expr",
+        "state": ["S", "I", "R"],
+        "aliases": {"N": "S + I + R"},
+        "equations": {
+            "S": "-beta * S * I / N",
+            "I": "beta * S * I / N - gamma * I",
+            "R": "gamma * I",
+        },
+    }
+    out = normalize_expr_rhs(spec)
+    for eq_str, eq_ir in zip(out.equations, out.equations_ir, strict=True):
+        assert eq_ir is not None
+        assert eq_str == unparse_ir(eq_ir)
+
+
+def test_expr_alias_strings_are_unparse_of_aliases_ir() -> None:
+    """Each alias string equals ``unparse_ir`` of the aligned IR entry."""
+    spec = {
+        "kind": "expr",
+        "state": ["S", "I"],
+        "aliases": {
+            "N": "S + I",
+            "frac": "I / N",
+        },
+        "equations": {
+            "S": "-beta * frac * S",
+            "I": "beta * frac * S - gamma * I",
+        },
+    }
+    out = normalize_expr_rhs(spec)
+    for name, alias_str in out.aliases.items():
+        assert name in out.aliases_ir
+        assert alias_str == unparse_ir(out.aliases_ir[name])
+
+
+def test_expr_templated_equation_strings_match_unparse_ir() -> None:
+    """Template-expanded equation strings equal ``unparse_ir`` of each cell IR."""
+    spec = {
+        "kind": "expr",
+        "axes": [{"name": "age", "coords": ["y", "o"]}],
+        "state": ["S[age]", "I[age]"],
+        "equations": {
+            "S[age]": "-beta * S[age] * I[age]",
+            "I[age]": "beta * S[age] * I[age] - gamma * I[age]",
+        },
+    }
+    out = normalize_expr_rhs(spec)
+    for eq_str, eq_ir in zip(out.equations, out.equations_ir, strict=True):
+        assert eq_ir is not None
+        assert eq_str == unparse_ir(eq_ir)

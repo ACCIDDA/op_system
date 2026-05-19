@@ -303,3 +303,63 @@ def test_inline_aliases_respects_reduce_binding_shadowing() -> None:
     # The Reduce shadows "rho" -> body's "rho" stays a Sym.
     assert isinstance(out, Reduce)
     assert out.body == body
+
+
+# ---------------------------------------------------------------------------
+# Alias expansion IR: expand_over_axes + inline_aliases pipeline
+# ---------------------------------------------------------------------------
+
+
+def test_alias_template_expands_to_one_ir_per_coord() -> None:
+    """expand_over_axes on a templated alias body yields one entry per coord."""
+    src = "b0 * S[age]"
+    expr = parse_expr_to_ir(src)
+    axes = placeholder_axes(expr)
+    results = expand_over_axes(expr, axes=axes, axis_lookup=AXIS_LOOKUP)
+
+    assert axes == ("age",)
+    assert len(results) == len(AXIS_LOOKUP["age"])
+    for assignment, ir_expr in results:
+        coord = assignment["age"]
+        assert ir_expr == parse_expr_to_ir(f"b0 * S__age_{coord}")
+
+
+def test_alias_pipeline_inlines_cross_alias_after_template_expansion() -> None:
+    """After expand_over_axes, inline_aliases resolves chained alias refs."""
+    # Suppose: k[age] = k_base * 2,  beta[age] = b0 * k[age]
+    # After expansion over age=["0_5", "5_18", "18_65", "65p"]:
+    #   k__age_<c>  maps to  k_base * 2
+    #   beta__age_<c> = b0 * k[age] -> after inline -> b0 * (k_base * 2)
+    k_body = parse_expr_to_ir("k_base * 2")
+    aliases_ir = {f"k__age_{c}": k_body for c in AXIS_LOOKUP["age"]}
+
+    src = "b0 * k[age]"
+    expr = parse_expr_to_ir(src)
+    for _assignment, ir_expr in expand_over_axes(
+        expr, axes=("age",), axis_lookup=AXIS_LOOKUP
+    ):
+        inlined = inline_aliases(ir_expr, aliases_ir)
+        assert inlined == parse_expr_to_ir("b0 * (k_base * 2)")
+
+
+def test_alias_template_expansion_matches_string_path() -> None:
+    """expand_over_axes on a templated alias matches parse of string expansion."""
+    src = "b0 * S[age] + offset[imm]"
+    shaped = {"offset": ("imm",)}
+    expr = parse_expr_to_ir(src)
+    ir_results = expand_over_axes(
+        expr,
+        axes=("age", "imm"),
+        axis_lookup=AXIS_LOOKUP,
+        shaped_params=shaped,
+    )
+
+    for assignment, ir_expr in ir_results:
+        string_expr = _apply_template_substitutions(
+            src,
+            assignment=assignment,
+            template_map={},
+            shaped_params=shaped,
+            axis_lookup=AXIS_LOOKUP,
+        )
+        assert ir_expr == parse_expr_to_ir(string_expr)
