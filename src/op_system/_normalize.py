@@ -37,8 +37,12 @@ from op_system._helpers import (
     _ensure_str_list,
     _sorted_unique,
 )
-from op_system._ir import Expr, parse_expr_to_ir, unparse_ir
-from op_system._ir_templates import _detect_alias_cycle, inline_aliases
+from op_system._ir import Expr, free_symbols, parse_expr_to_ir, unparse_ir
+from op_system._ir_templates import (
+    _detect_alias_cycle,
+    expand_inline_templates,
+    inline_aliases,
+)
 from op_system._symbols import _collect_names, _parse_expr
 from op_system._templates import (
     _INLINE_TEMPLATE_RE,
@@ -1277,86 +1281,253 @@ def _build_equations_ir(
             sys.setrecursionlimit(old_limit)
 
 
-def _build_equations_ir_via_pointwise(  # noqa: C901, PLR0913
+def _build_aliases_ir_from_raw(  # noqa: C901
+    aliases_raw: Mapping[str, str],
     *,
-    equations_ir_reduce: tuple[Expr | None, ...],
-    aliases_ir_inline: Mapping[str, Expr] | None = None,
-    state_expanded: Sequence[str],
-    template_map: Mapping[str, Sequence[tuple[str, Mapping[str, str]]]],
-    axes: Sequence[Mapping[str, Any]],
-    shaped_params: Mapping[str, tuple[str, ...]],
-    axis_lookup: Mapping[str, Sequence[str]],
-) -> tuple[Expr | None, ...]:
-    """Build pointwise equation IR by IR-side expansion of ``Reduce`` nodes.
+    axes: list[dict[str, Any]],
+    shaped_params: Mapping[str, tuple[str, ...]] | None = None,
+    axis_lookup: Mapping[str, list[str]] | None = None,
+) -> tuple[
+    dict[str, Expr],
+    dict[str, Expr],
+    dict[str, list[tuple[str, dict[str, str]]]],
+]:
+    """Build alias IR directly from raw (pre-expansion) strings.
 
-    For each state cell, expand the cell's own ``Reduce`` nodes via
-    :func:`expand_reduce_pointwise` against the cell's LHS template
-    assignment, then optionally inline alias references against
-    ``aliases_ir_inline`` (the post-expansion alias map, free of
-    ``Reduce`` nodes). This is the authoritative IR-side equivalent of
-    the (now retired) string-level ``apply_along`` expander.
+    Replaces the two-pass :func:`_expand_alias_templates` +
+    :func:`_build_aliases_ir` pipeline with a single IR-native path:
 
-    Best-effort: cells whose IR cannot be expanded are returned as
-    ``None`` to preserve positional alignment with ``state_expanded``.
+    1. Expand alias name templates via :func:`_expand_state_templates`.
+    2. Parse each raw alias body to IR with ``lower_helpers=True``.
+    3. For templated aliases, apply :func:`expand_inline_templates` per
+       assignment to resolve placeholder subscripts.
+    4. For ``aliases_ir``: expand ``Reduce`` nodes via
+       :func:`expand_reduce_pointwise`, then inline alias cross-references.
+    5. For ``aliases_ir_reduce``: skip ``expand_reduce_pointwise`` but still
+       inline cross-references, preserving ``Reduce`` nodes for downstream
+       IR-fast-path consumers.
 
     Returns:
-        Tuple of expanded pointwise IR (or ``None`` for failed entries)
-        aligned positionally with ``state_expanded``.
+        ``(aliases_ir, aliases_ir_reduce, alias_template_map)`` where:
+
+        - ``aliases_ir``: expanded name → fully expanded + inlined IR.
+        - ``aliases_ir_reduce``: expanded name → template-expanded +
+          alias-inlined IR with ``Reduce`` nodes preserved.
+        - ``alias_template_map``: template key → [(expanded_name, assignment)]
+          (same shape as :func:`_expand_state_templates`).
+
+    Raises:
+        InvalidRhsSpecError: If any alias body is an invalid expression.
     """
     from op_system._ir_expand import expand_reduce_pointwise  # noqa: PLC0415
 
-    if not equations_ir_reduce:
-        return ()
-    cell_to_assignment: dict[str, Mapping[str, str]] = {}
-    for variants in template_map.values():
-        cell_to_assignment.update(dict(variants))
+    shaped = shaped_params or {}
+    ax_lookup = dict(axis_lookup or {})
 
-    inline_memo: dict[int, frozenset[str]] = {}
-    inline_cycle_validated = False
+    _, alias_template_map = _expand_state_templates(list(aliases_raw.keys()), axes=axes)
 
-    out: list[Expr | None] = []
+    reduce_parsed: dict[str, Expr] = {}
+    full_parsed: dict[str, Expr] = {}
     old_limit = sys.getrecursionlimit()
     needed = max(old_limit, 10_000)
     try:
         if needed > old_limit:
             sys.setrecursionlimit(needed)
-        if aliases_ir_inline:
-            try:
-                inline_cycle_validated = _detect_alias_cycle(aliases_ir_inline) is None
-            except (ValueError, RecursionError):
-                inline_cycle_validated = False
-        for cell, ir in zip(state_expanded, equations_ir_reduce, strict=False):
-            if ir is None:
-                out.append(None)
-                continue
-            # Expand the cell's own ``Reduce`` nodes first. Aliases are
-            # inlined afterwards against ``aliases_ir_inline`` (the
-            # post-expansion alias map): this guarantees inlined bodies
-            # are free of ``Reduce`` nodes and avoids re-expanding alias
-            # bodies in the equation cell's context (which would defeat
-            # downstream optimizers in ``_vectorize``).
-            assignment = cell_to_assignment.get(cell, {})
-            try:
-                expanded = expand_reduce_pointwise(
-                    ir,
-                    axes=axes,
-                    shaped_params=shaped_params,
-                    lhs_assignment=assignment,
-                    axis_coords=axis_lookup,
+
+        for raw_name, expr_str in aliases_raw.items():
+            canonical_name = _normalize_bracket_key(raw_name)
+            expr_s = expr_str.strip() if isinstance(expr_str, str) else ""
+            if not expr_s:
+                raise InvalidRhsSpecError(
+                    detail=f"aliases[{raw_name!r}] must be a non-empty string"
                 )
-            except (ValueError, RecursionError, KeyError):
-                out.append(None)
-                continue
-            if aliases_ir_inline:
-                with contextlib.suppress(ValueError, RecursionError):
-                    expanded = inline_aliases(
-                        expanded,
-                        aliases_ir_inline,
-                        memo=inline_memo,
-                        skip_cycle_check=inline_cycle_validated,
+            try:
+                ir_raw = parse_expr_to_ir(expr_s, lower_helpers=True)
+            except Exception as exc:
+                raise InvalidRhsSpecError(
+                    detail=f"aliases[{raw_name!r}] has invalid expression: {exc}"
+                ) from exc
+
+            if canonical_name in alias_template_map:
+                for expanded_name, assignment in alias_template_map[canonical_name]:
+                    ir_tmpl = expand_inline_templates(
+                        ir_raw,
+                        assignment=assignment,
+                        shaped_params=shaped,
+                        axis_lookup=ax_lookup,
                     )
-            out.append(expanded)
-        return tuple(out)
+                    reduce_parsed[expanded_name] = ir_tmpl
+                    full_parsed[expanded_name] = expand_reduce_pointwise(
+                        ir_tmpl,
+                        axes=list(axes),
+                        shaped_params=shaped,
+                        lhs_assignment=assignment,
+                        axis_coords=ax_lookup,
+                    )
+            else:
+                reduce_parsed[raw_name] = ir_raw
+                full_parsed[raw_name] = expand_reduce_pointwise(
+                    ir_raw,
+                    axes=list(axes),
+                    shaped_params=shaped,
+                    lhs_assignment={},
+                    axis_coords=ax_lookup,
+                )
+
+        def _inline_all(parsed: dict[str, Expr]) -> dict[str, Expr]:
+            memo: dict[int, frozenset[str]] = {}
+            cycle_ok = False
+            with contextlib.suppress(ValueError, RecursionError):
+                cycle_ok = _detect_alias_cycle(parsed) is None
+            inlined: dict[str, Expr] = {}
+            for name, expr in parsed.items():
+                try:
+                    inlined[name] = inline_aliases(
+                        expr, parsed, memo=memo, skip_cycle_check=cycle_ok
+                    )
+                except (ValueError, RecursionError):
+                    inlined[name] = expr
+            return inlined
+
+        return _inline_all(full_parsed), _inline_all(reduce_parsed), alias_template_map
+    finally:
+        if needed > old_limit:
+            sys.setrecursionlimit(old_limit)
+
+
+def _lookup_cell_expr(
+    cell: str,
+    equations_map: Mapping[str, Any],
+    template_map: Mapping[str, Sequence[tuple[str, Mapping[str, str]]]],
+) -> str:
+    """Return the raw equation string for *cell*.
+
+    Searches ``equations_map`` directly first, then falls back to
+    template-key lookup.
+
+    Raises:
+        InvalidRhsSpecError: If the cell has no equation or its body is not a
+            non-empty string.
+    """
+    if cell in equations_map:
+        raw = equations_map[cell]
+        if not isinstance(raw, str) or not raw.strip():
+            raise InvalidRhsSpecError(
+                detail=f"equations[{cell!r}] must be a non-empty string"
+            )
+        return raw.strip()
+    for template_key, variants in template_map.items():
+        if template_key not in equations_map:
+            continue
+        for expanded_name, _ in variants:
+            if expanded_name == cell:
+                raw = equations_map[template_key]
+                if not isinstance(raw, str) or not raw.strip():
+                    raise InvalidRhsSpecError(
+                        detail=(
+                            f"equations[{template_key!r}] must be a non-empty string"
+                        )
+                    )
+                return raw.strip()
+    raise InvalidRhsSpecError(detail=f"Missing equation for state {cell!r}")
+
+
+def _build_equations_ir_from_raw(  # noqa: PLR0913, PLR0914
+    *,
+    state_expanded: Sequence[str],
+    equations_map: Mapping[str, Any],
+    template_map: Mapping[str, Sequence[tuple[str, Mapping[str, str]]]],
+    axes: Sequence[Mapping[str, Any]],
+    shaped_params: Mapping[str, tuple[str, ...]],
+    axis_lookup: Mapping[str, Sequence[str]],
+    aliases_ir: Mapping[str, Expr] | None = None,
+) -> tuple[
+    tuple[Expr | None, ...],
+    tuple[Expr | None, ...],
+    tuple[Expr | None, ...],
+    set[str],
+]:
+    """Build per-cell equation IR directly from raw spec expressions.
+
+    Replaces the :func:`_gather_equations` string-surgery path with a single
+    IR-native pass:
+
+    1. Look up the raw equation string per cell (strict — raises if missing).
+    2. Parse to IR with ``lower_helpers=True`` (``Reduce`` nodes for helpers).
+    3. :func:`expand_inline_templates` with the cell's LHS assignment.
+    4. :func:`expand_reduce_pointwise` with the cell's LHS assignment.
+    5. :func:`inline_aliases` against ``aliases_ir`` (post-expansion alias map).
+
+    The intermediate states after steps 3 and 4 (before alias inlining) are
+    returned as ``equations_ir_reduce`` and ``equations_ir_raw`` respectively.
+
+    Returns:
+        ``(equations_ir, equations_ir_reduce, equations_ir_raw, all_syms)``
+        where each IR tuple is aligned with ``state_expanded`` and failed
+        cells are represented as ``None``.
+    """
+    from op_system._ir_expand import expand_reduce_pointwise  # noqa: PLC0415
+
+    cell_to_assignment: dict[str, dict[str, str]] = {}
+    for variants in template_map.values():
+        for cell, asgmt in variants:
+            cell_to_assignment[cell] = dict(asgmt)
+
+    # Strict lookup: every state cell must have an equation string.
+    cell_to_expr = {
+        cell: _lookup_cell_expr(cell, equations_map, template_map)
+        for cell in state_expanded
+    }
+
+    alias_memo: dict[int, frozenset[str]] = {}
+    alias_cycle_ok = False
+    if aliases_ir:
+        with contextlib.suppress(ValueError, RecursionError):
+            alias_cycle_ok = _detect_alias_cycle(aliases_ir) is None
+
+    out_reduce: list[Expr | None] = []
+    out_raw: list[Expr | None] = []
+    out_full: list[Expr | None] = []
+    all_syms: set[str] = set()
+    old_limit = sys.getrecursionlimit()
+    needed = max(old_limit, 10_000)
+    try:
+        if needed > old_limit:
+            sys.setrecursionlimit(needed)
+        for cell in state_expanded:
+            raw_expr = cell_to_expr[cell]
+            assignment = cell_to_assignment.get(cell, {})
+            ir = parse_expr_to_ir(raw_expr, lower_helpers=True)
+            ir_tmpl = expand_inline_templates(
+                ir,
+                assignment=assignment,
+                shaped_params=shaped_params,
+                axis_lookup=axis_lookup,
+            )
+            out_reduce.append(ir_tmpl)
+            ir_expanded = expand_reduce_pointwise(
+                ir_tmpl,
+                axes=list(axes),
+                shaped_params=shaped_params,
+                lhs_assignment=assignment,
+                axis_coords=dict(axis_lookup),
+            )
+            out_raw.append(ir_expanded)
+            if aliases_ir:
+                try:
+                    ir_inlined = inline_aliases(
+                        ir_expanded,
+                        aliases_ir,
+                        memo=alias_memo,
+                        skip_cycle_check=alias_cycle_ok,
+                    )
+                except (ValueError, RecursionError):
+                    ir_inlined = ir_expanded
+            else:
+                ir_inlined = ir_expanded
+            all_syms |= free_symbols(ir_inlined)
+            out_full.append(ir_inlined)
+        return tuple(out_full), tuple(out_reduce), tuple(out_raw), all_syms
     finally:
         if needed > old_limit:
             sys.setrecursionlimit(old_limit)
@@ -1400,7 +1571,7 @@ def _derive_equation_strings(
 
 def _derive_alias_strings(
     aliases_ir: Mapping[str, Expr],
-    alias_order: Mapping[str, str],
+    alias_order: Iterable[str],
 ) -> dict[str, str]:
     """Render each alias body directly from typed IR.
 
@@ -2147,112 +2318,6 @@ def _expand_helpers(  # noqa: PLR0913
             sys.setrecursionlimit(old_limit)
 
 
-def _resolve_template_equation(  # noqa: PLR0913
-    *,
-    name: str,
-    equations_map: Mapping[str, Any],
-    axes: list[dict[str, Any]],
-    template_map: Mapping[str, list[tuple[str, dict[str, str]]]],
-    all_syms: set[str],
-    shaped_params: Mapping[str, tuple[str, ...]] | None = None,
-    axis_lookup: Mapping[str, list[str]] | None = None,
-    passthrough_helpers: bool = False,
-) -> str | None:
-    """Resolve an equation for a templated state name.
-
-    Returns:
-        Expanded expression string if found, otherwise ``None``.
-
-    Raises:
-        InvalidRhsSpecError: If validation fails.
-    """
-    for template_key, variants in template_map.items():
-        for expanded_name, assignment in variants:
-            if expanded_name != name or template_key not in equations_map:
-                continue
-            expr = equations_map[template_key]
-            if not isinstance(expr, str) or not expr.strip():
-                raise InvalidRhsSpecError(
-                    detail=(f"equations[{template_key!r}] must be a non-empty string")
-                )
-            expr_s = _expand_helpers(
-                expr.strip(),
-                axes=axes,
-                shaped_params=shaped_params,
-                lhs_assignment=assignment,
-                axis_coords=axis_lookup,
-                passthrough=passthrough_helpers,
-            )
-            expr_s = _apply_template_substitutions(
-                expr_s,
-                assignment=assignment,
-                template_map=template_map,
-                shaped_params=shaped_params,
-                axis_lookup=axis_lookup,
-            )
-            if not passthrough_helpers:
-                tree = _parse_expr(expr_s)
-                all_syms |= _collect_names(tree)
-            return expr_s
-    return None
-
-
-def _gather_equations(  # noqa: PLR0913
-    state: list[str],
-    equations_map: Mapping[str, Any],
-    all_syms: set[str],
-    *,
-    axes: list[dict[str, Any]],
-    template_map: Mapping[str, list[tuple[str, dict[str, str]]]] | None = None,
-    shaped_params: Mapping[str, tuple[str, ...]] | None = None,
-    axis_lookup: Mapping[str, list[str]] | None = None,
-    passthrough_helpers: bool = False,
-) -> list[str]:
-    """Gather and expand one equation string per state variable.
-
-    Returns:
-        List of expanded equation strings in the same order as *state*.
-
-    Raises:
-        InvalidRhsSpecError: If validation fails.
-    """
-    eqs: list[str] = []
-    template_map = template_map or {}
-    for name in state:
-        if name in equations_map:
-            expr = equations_map[name]
-            if not isinstance(expr, str) or not expr.strip():
-                raise InvalidRhsSpecError(
-                    detail=f"equations[{name!r}] must be a non-empty string"
-                )
-            expr_s = _expand_helpers(
-                expr.strip(),
-                axes=axes,
-                shaped_params=shaped_params,
-                passthrough=passthrough_helpers,
-            )
-            if not passthrough_helpers:
-                tree = _parse_expr(expr_s)
-                all_syms |= _collect_names(tree)
-            eqs.append(expr_s)
-            continue
-
-        expr_res = _resolve_template_equation(
-            name=name,
-            equations_map=equations_map,
-            axes=axes,
-            template_map=template_map,
-            all_syms=all_syms,
-            shaped_params=shaped_params,
-            axis_lookup=axis_lookup,
-            passthrough_helpers=passthrough_helpers,
-        )
-        if expr_res is None:
-            raise InvalidRhsSpecError(detail=f"Missing equation for state {name!r}")
-        eqs.append(expr_res)
-    return eqs
-
-
 # ---------------------------------------------------------------------------
 # Chain helpers
 # ---------------------------------------------------------------------------
@@ -2837,12 +2902,13 @@ def normalize_expr_rhs(spec: Mapping[str, Any]) -> NormalizedRhs:  # noqa: C901,
                 time_axis_name=time_axis_name,
             )
 
-    aliases, alias_template_map = _expand_alias_templates(
-        meta_parts[0],
-        axes=axes_meta,
-        template_map_seed=state_template_map,
-        shaped_params=shaped_params,
-        axis_lookup=axis_lookup_dict,
+    aliases_ir_map, aliases_ir_reduce_map, alias_template_map = (
+        _build_aliases_ir_from_raw(
+            meta_parts[0],
+            axes=axes_meta,
+            shaped_params=shaped_params,
+            axis_lookup=axis_lookup_dict,
+        )
     )
     template_map_all = {**state_template_map, **alias_template_map}
 
@@ -2866,16 +2932,21 @@ def normalize_expr_rhs(spec: Mapping[str, Any]) -> NormalizedRhs:  # noqa: C901,
             detail=f"unknown equation key(s): {sorted(unknown_keys)}"
         )
 
-    all_syms = _collect_alias_symbols(aliases, axes=axes_meta)
-    eqs = _gather_equations(
-        state_expanded,
-        equations_map,
-        all_syms,
-        axes=axes_meta,
-        template_map=template_map_all,
-        shaped_params=shaped_params,
-        axis_lookup=axis_lookup_dict,
+    equations_ir_built, equations_ir_reduce, equations_ir_raw, all_syms = (
+        _build_equations_ir_from_raw(
+            state_expanded=state_expanded,
+            equations_map=equations_map,
+            template_map=template_map_all,
+            axes=axes_meta,
+            shaped_params=shaped_params,
+            axis_lookup=axis_lookup_dict,
+            aliases_ir=aliases_ir_map,
+        )
     )
+    # Collect free symbols from alias bodies (alias bodies may reference
+    # params not appearing in any equation directly).
+    for alias_ir_val in aliases_ir_map.values():
+        all_syms |= free_symbols(alias_ir_val)
 
     _maybe_attach_initial_state(
         meta,
@@ -2892,61 +2963,8 @@ def normalize_expr_rhs(spec: Mapping[str, Any]) -> NormalizedRhs:  # noqa: C901,
     time_varying_set = set(time_varying_full)
     axis_name_set = set(axis_lookup_dict)
     template_base_set = {parse_selector(k)[0] for k in template_map_all}
-    eqs_tuple = tuple(eqs)
-    aliases_ir_map = _build_aliases_ir(aliases)
-
-    # Second pass: capture pre-expansion (helper-bearing) strings so we can
-    # build IR with ``Reduce`` nodes for downstream IR-fast-path consumers.
-    # Best-effort: failures leave the reduce-bearing fields empty.
-    aliases_ir_reduce_map: Mapping[str, Expr] = {}
-    equations_ir_reduce: tuple[Expr | None, ...] = ()
-    try:
-        aliases_pre, _alias_template_map_pre = _expand_alias_templates(
-            meta_parts[0],
-            axes=axes_meta,
-            template_map_seed=state_template_map,
-            shaped_params=shaped_params,
-            axis_lookup=axis_lookup_dict,
-            passthrough_helpers=True,
-        )
-        eqs_pre = _gather_equations(
-            state_expanded,
-            equations_map,
-            set(),  # throwaway: don't pollute all_syms with helper names
-            axes=axes_meta,
-            template_map=template_map_all,
-            shaped_params=shaped_params,
-            axis_lookup=axis_lookup_dict,
-            passthrough_helpers=True,
-        )
-        aliases_ir_reduce_map = _build_aliases_ir(aliases_pre, lower_helpers=True)
-        # Parse equation IR without inlining alias bodies in their
-        # reduce-bearing form: alias inlining is performed downstream in
-        # ``_build_equations_ir_via_pointwise`` against the post-expansion
-        # alias map (``aliases_ir_map``), which is free of ``Reduce`` nodes.
-        # Inlining reduce-form aliases here would leave embedded ``Reduce``
-        # nodes inside ``equations_ir_reduce``, which the downstream
-        # ``_vectorize`` fast path then mis-lowers when the surrounding
-        # equation cell has non-empty target axes.
-        equations_ir_reduce = _build_equations_ir(
-            tuple(eqs_pre), None, lower_helpers=True
-        )
-    except (ValueError, RecursionError, InvalidRhsSpecError):
-        aliases_ir_reduce_map = {}
-        equations_ir_reduce = ()
-
-    equations_ir_built = _build_equations_ir_via_pointwise(
-        equations_ir_reduce=equations_ir_reduce,
-        aliases_ir_inline=aliases_ir_map,
-        state_expanded=state_expanded,
-        template_map=template_map_all,
-        axes=axes_meta,
-        shaped_params=shaped_params,
-        axis_lookup=axis_lookup_dict,
-    ) or _build_equations_ir(eqs_tuple, aliases_ir_map)
-
     equations_strings = _derive_equation_strings(equations_ir_built)
-    aliases_strings = _derive_alias_strings(aliases_ir_map, aliases)
+    aliases_strings = _derive_alias_strings(aliases_ir_map, aliases_ir_map)
 
     return NormalizedRhs(
         kind="expr",
@@ -2957,14 +2975,14 @@ def normalize_expr_rhs(spec: Mapping[str, Any]) -> NormalizedRhs:  # noqa: C901,
             sym
             for sym in all_syms
             if sym not in set(state_expanded)
-            and sym not in aliases
+            and sym not in aliases_ir_map
             and sym not in shaped_set
             and sym not in time_varying_set
             and sym not in axis_name_set
             and sym not in template_base_set
             and sym not in _SHAPED_PARAM_BUILTIN_NAMES
         ),
-        all_symbols=frozenset(all_syms | set(aliases.keys())),
+        all_symbols=frozenset(all_syms | set(aliases_ir_map.keys())),
         meta=meta,
         state_templates=_build_state_templates(
             state_raw,
@@ -2976,7 +2994,7 @@ def normalize_expr_rhs(spec: Mapping[str, Any]) -> NormalizedRhs:  # noqa: C901,
         time_varying_params=tuple(sorted(time_varying_full.items())),
         aliases_ir=aliases_ir_map,
         equations_ir=equations_ir_built,
-        equations_ir_raw=_build_equations_ir(eqs_tuple),
+        equations_ir_raw=equations_ir_raw,
         aliases_ir_reduce=aliases_ir_reduce_map,
         equations_ir_reduce=equations_ir_reduce,
     )
