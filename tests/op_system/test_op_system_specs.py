@@ -99,11 +99,7 @@ def test_normalize_transitions_rhs_happy_path() -> None:
     # The exact parenthesization may vary between the raw transition builder
     # form and canonical IR-rendered forms.
     assert eq_s.startswith("-(")
-    assert (
-        ")*(S)" in eq_s
-        or "*(S)" in eq_s
-        or eq_s.endswith((" * S)", "* S)"))
-    )
+    assert ")*(S)" in eq_s or "*(S)" in eq_s or eq_s.endswith((" * S)", "* S)"))
 
     assert "+(" in eq_r or eq_r.startswith("(") or "gamma" in eq_r
 
@@ -2235,8 +2231,9 @@ def test_aliases_ir_reduce_contains_reduce_for_aliased_apply_along() -> None:
     assert reduces[0].kind == "apply_along"
 
 
-def test_equations_ir_reduce_matches_equations_ir_for_transitions_without_helpers(
-) -> None:
+def test_equations_ir_reduce_matches_equations_ir_for_transitions_without_helpers() -> (
+    None
+):
     """Transitions without helpers still populate reduce-bearing IR fields."""
     spec = {
         "kind": "transitions",
