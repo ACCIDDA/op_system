@@ -861,6 +861,44 @@ def walk(expr: Expr) -> Iterator[Expr]:
         yield from walk(expr.body)
 
 
+def _free_symbols_push_children(
+    stack: list[tuple[Expr, bool]],
+    node: Expr,
+    memo: Mapping[int, frozenset[str]],
+) -> None:
+    """Push unresolved children for ``free_symbols`` post-order traversal."""
+    if isinstance(node, Apply):
+        stack.append((node, True))
+        stack.extend((arg, False) for arg in reversed(node.args) if id(arg) not in memo)
+        return
+    if isinstance(node, Reduce):
+        stack.append((node, True))
+        if id(node.body) not in memo:
+            stack.append((node.body, False))
+        return
+    _invalid(detail=f"unsupported IR node in free_symbols: {type(node).__name__}")
+
+
+def _free_symbols_finalize(
+    node: Expr,
+    memo: Mapping[int, frozenset[str]],
+) -> frozenset[str]:
+    """Combine already-computed child results for ``free_symbols``.
+
+    Returns:
+        The free-symbol set for ``node`` assembled from cached child results.
+    """
+    if isinstance(node, Apply):
+        acc: set[str] = set()
+        for arg in node.args:
+            acc.update(memo[id(arg)])
+        return frozenset(acc)
+    if isinstance(node, Reduce):
+        bound = {bind for _, bind in node.bindings}
+        return frozenset(memo[id(node.body)] - bound)
+    _invalid(detail=f"unsupported IR node in free_symbols: {type(node).__name__}")
+
+
 def free_symbols(
     expr: Expr,
     memo: dict[int, frozenset[str]] | None = None,
@@ -884,26 +922,27 @@ def free_symbols(
     """
     if memo is None:
         memo = {}
-    key = id(expr)
-    cached = memo.get(key)
+    root_key = id(expr)
+    cached = memo.get(root_key)
     if cached is not None:
         return cached
-    if isinstance(expr, Sym):
-        out: frozenset[str] = frozenset({expr.name})
-    elif isinstance(expr, (Literal, Subscript)):
-        out = frozenset()
-    elif isinstance(expr, Apply):
-        acc: set[str] = set()
-        for arg in expr.args:
-            acc |= free_symbols(arg, memo)
-        out = frozenset(acc)
-    elif isinstance(expr, Reduce):
-        bound = {bind for _, bind in expr.bindings}
-        out = frozenset(free_symbols(expr.body, memo) - bound)
-    else:
-        _invalid(detail=f"unsupported IR node in free_symbols: {type(expr).__name__}")
-    memo[key] = out
-    return out
+    stack: list[tuple[Expr, bool]] = [(expr, False)]
+    while stack:
+        node, expanded = stack.pop()
+        key = id(node)
+        if key in memo:
+            continue
+        if isinstance(node, Sym):
+            memo[key] = frozenset({node.name})
+            continue
+        if isinstance(node, (Literal, Subscript)):
+            memo[key] = frozenset()
+            continue
+        if expanded:
+            memo[key] = _free_symbols_finalize(node, memo)
+            continue
+        _free_symbols_push_children(stack, node, memo)
+    return memo[root_key]
 
 
 def substitute(
