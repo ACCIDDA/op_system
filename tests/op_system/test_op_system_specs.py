@@ -378,8 +378,8 @@ def test_same_axis_twice_in_templated_alias_substituted_into_transition() -> Non
         "state": ["I[age, vax]", "X[age, vax, imm]", "E[age, vax]"],
         "aliases": {
             "foi[age]": (
-                "apply_along(age=ap, K[age, age=ap]"
-                " * apply_along(I[age:ap, vax:v], vax=v))"
+                "apply_along(K[age, age:ap]"
+                " * apply_along(I[age:ap, vax:v], vax=v), age=ap)"
             ),
         },
         "transitions": [

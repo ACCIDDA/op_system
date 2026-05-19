@@ -14,7 +14,7 @@ types and functions are re-exported from ``specs.py`` for backward compat.
 
 from __future__ import annotations
 
-import re
+import contextlib
 import sys
 from collections.abc import Mapping as _MappingABC
 from dataclasses import dataclass, field
@@ -22,6 +22,7 @@ from itertools import product
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    import re
     from collections.abc import Iterable, Mapping, Sequence
 
 from op_system._axes import (
@@ -1289,10 +1290,10 @@ def _build_equations_ir(
             sys.setrecursionlimit(old_limit)
 
 
-def _build_equations_ir_via_pointwise(  # noqa: PLR0913
+def _build_equations_ir_via_pointwise(  # noqa: C901, PLR0913
     *,
     equations_ir_reduce: tuple[Expr | None, ...],
-    aliases_ir_reduce: Mapping[str, Expr],
+    aliases_ir_inline: Mapping[str, Expr] | None = None,
     state_expanded: Sequence[str],
     template_map: Mapping[str, Sequence[tuple[str, Mapping[str, str]]]],
     axes: Sequence[Mapping[str, Any]],
@@ -1301,15 +1302,15 @@ def _build_equations_ir_via_pointwise(  # noqa: PLR0913
 ) -> tuple[Expr | None, ...]:
     """Build pointwise equation IR by IR-side expansion of ``Reduce`` nodes.
 
-    For each state cell, inline alias references (resolved against the
-    pre-expansion ``aliases_ir_reduce`` map so nested ``Reduce`` nodes are
-    preserved) and then call :func:`expand_reduce_pointwise` with the cell's
-    LHS template assignment so that same-axis-twice references resolve
-    correctly. Avoids the string roundtrip that :func:`_build_equations_ir`
-    performs against ``_expand_apply_along`` output.
+    For each state cell, expand the cell's own ``Reduce`` nodes via
+    :func:`expand_reduce_pointwise` against the cell's LHS template
+    assignment, then optionally inline alias references against
+    ``aliases_ir_inline`` (the post-expansion alias map, free of
+    ``Reduce`` nodes). This is the authoritative IR-side equivalent of
+    the (now retired) string-level ``apply_along`` expander.
 
-    Best-effort: cells whose IR cannot be inlined or expanded are returned
-    as ``None`` to preserve positional alignment with ``state_expanded``.
+    Best-effort: cells whose IR cannot be expanded are returned as
+    ``None`` to preserve positional alignment with ``state_expanded``.
 
     Returns:
         Tuple of expanded pointwise IR (or ``None`` for failed entries)
@@ -1323,11 +1324,8 @@ def _build_equations_ir_via_pointwise(  # noqa: PLR0913
     for variants in template_map.values():
         cell_to_assignment.update(dict(variants))
 
-    memo: dict[int, frozenset[str]] = {}
-    try:
-        cycle_validated = _detect_alias_cycle(aliases_ir_reduce) is None
-    except (ValueError, RecursionError):
-        cycle_validated = False
+    inline_memo: dict[int, frozenset[str]] = {}
+    inline_cycle_validated = False
 
     out: list[Expr | None] = []
     old_limit = sys.getrecursionlimit()
@@ -1335,30 +1333,41 @@ def _build_equations_ir_via_pointwise(  # noqa: PLR0913
     try:
         if needed > old_limit:
             sys.setrecursionlimit(needed)
+        if aliases_ir_inline:
+            try:
+                inline_cycle_validated = _detect_alias_cycle(aliases_ir_inline) is None
+            except (ValueError, RecursionError):
+                inline_cycle_validated = False
         for cell, ir in zip(state_expanded, equations_ir_reduce, strict=False):
             if ir is None:
                 out.append(None)
                 continue
-            try:
-                inlined = inline_aliases(
-                    ir,
-                    aliases_ir_reduce,
-                    memo=memo,
-                    skip_cycle_check=cycle_validated,
-                )
-            except (ValueError, RecursionError):
-                inlined = ir
+            # Expand the cell's own ``Reduce`` nodes first. Aliases are
+            # inlined afterwards against ``aliases_ir_inline`` (the
+            # post-expansion alias map): this guarantees inlined bodies
+            # are free of ``Reduce`` nodes and avoids re-expanding alias
+            # bodies in the equation cell's context (which would defeat
+            # downstream optimizers in ``_vectorize``).
             assignment = cell_to_assignment.get(cell, {})
             try:
                 expanded = expand_reduce_pointwise(
-                    inlined,
+                    ir,
                     axes=axes,
                     shaped_params=shaped_params,
                     lhs_assignment=assignment,
                     axis_coords=axis_lookup,
                 )
             except (ValueError, RecursionError, KeyError):
-                expanded = None
+                out.append(None)
+                continue
+            if aliases_ir_inline:
+                with contextlib.suppress(ValueError, RecursionError):
+                    expanded = inline_aliases(
+                        expanded,
+                        aliases_ir_inline,
+                        memo=inline_memo,
+                        skip_cycle_check=inline_cycle_validated,
+                    )
             out.append(expanded)
         return tuple(out)
     finally:
@@ -1826,167 +1835,6 @@ def _expand_transition_templates(
 # ---------------------------------------------------------------------------
 
 
-def _find_call_span(expr: str, name: str) -> tuple[int, int] | None:
-    """Locate the first balanced ``name(...)`` call in *expr*.
-
-    Returns:
-        ``(start, end)`` half-open span covering ``name(...)`` (end is the
-        index just past the closing paren), or ``None`` if no such call
-        exists.  Matches whole-word identifiers only.
-
-    Raises:
-        InvalidRhsSpecError: If parentheses inside the call are unbalanced.
-    """
-    pat = re.compile(rf"\b{re.escape(name)}\s*\(")
-    m = pat.search(expr)
-    if m is None:
-        return None
-    start = m.start()
-    i = m.end()
-    depth = 1
-    n = len(expr)
-    while i < n:
-        c = expr[i]
-        if c == "(":
-            depth += 1
-        elif c == ")":
-            depth -= 1
-            if depth == 0:
-                return (start, i + 1)
-        i += 1
-    raise InvalidRhsSpecError(detail=f"unbalanced parentheses in {name}(...) call")
-
-
-def _split_top_level_commas(s: str) -> list[str]:
-    """Split *s* on commas at the top paren/bracket nesting level.
-
-    Returns:
-        List of comma-separated argument strings (each stripped of
-        surrounding whitespace).  Empty input yields ``[]``.
-    """
-    out: list[str] = []
-    depth = 0
-    last = 0
-    for i, c in enumerate(s):
-        if c in "([{":
-            depth += 1
-        elif c in ")]}":
-            depth -= 1
-        elif c == "," and depth == 0:
-            out.append(s[last:i].strip())
-            last = i + 1
-    tail = s[last:].strip()
-    if tail or out:
-        out.append(tail)
-    return out
-
-
-_KERNEL_KW_RE = re.compile(r"^kernel\s*=\s*(.+)$", re.DOTALL)
-_AXIS_BIND_RE = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.+)$", re.DOTALL)
-_AXIS_FILTER_RE = re.compile(
-    r"^([A-Za-z_][A-Za-z0-9_]*)\s+in\s+\[([^\[\]]*)\]\s*$",
-    re.IGNORECASE | re.DOTALL,
-)
-_APPLY_ALONG_KERNELS = frozenset({"sum", "integrate"})
-
-
-def _parse_apply_along_args(  # noqa: C901, PLR0912
-    args_str: str,
-    *,
-    axis_names: set[str],
-) -> tuple[list[tuple[str, str, list[str] | None]], str | None, str]:
-    """Parse the argument list of an ``apply_along(...)`` call.
-
-    Args:
-        args_str: The raw text between the call's parentheses.
-        axis_names: Known axis names (used to distinguish axis bindings
-            from the inner expression).
-
-    Returns:
-        Tuple ``(axis_bindings, kernel_form, inner_expr)`` where
-        ``axis_bindings`` is a list of ``(axis_name, var_name, filter)``
-        triples in declaration order.  ``filter`` is the optional list of
-        coord names parsed from ``axis=var in [c1, c2, ...]``, or ``None``
-        if the binding takes the full axis.  ``kernel_form`` is ``"sum"``,
-        ``"integrate"`` or ``None`` (meaning auto-select from axis types),
-        and ``inner_expr`` is the bound inner expression.
-
-    Raises:
-        InvalidRhsSpecError: If the argument list is malformed (no args,
-            empty arg, duplicate ``kernel=``, unknown kernel name, missing
-            axis bindings, non-identifier var name, empty filter list, or
-            wrong number of inner expressions).
-    """
-    parts = _split_top_level_commas(args_str)
-    if not parts or all(not p for p in parts):
-        raise InvalidRhsSpecError(detail="apply_along(...) requires arguments")
-
-    bindings: list[tuple[str, str, list[str] | None]] = []
-    kernel_form: str | None = None
-    inner_parts: list[str] = []
-
-    for part in parts:
-        if not part:
-            raise InvalidRhsSpecError(detail="apply_along(...) has empty argument")
-        km = _KERNEL_KW_RE.match(part)
-        if km is not None:
-            if kernel_form is not None:
-                raise InvalidRhsSpecError(
-                    detail="apply_along(...) accepts at most one 'kernel=' kwarg"
-                )
-            kf = km.group(1).strip().lower()
-            if kf not in _APPLY_ALONG_KERNELS:
-                raise InvalidRhsSpecError(
-                    detail=(
-                        f"apply_along(...) kernel must be one of "
-                        f"{sorted(_APPLY_ALONG_KERNELS)}, got {kf!r}"
-                    )
-                )
-            kernel_form = kf
-            continue
-        bm = _AXIS_BIND_RE.match(part)
-        if bm is not None and bm.group(1) in axis_names:
-            ax_name = bm.group(1)
-            rhs = bm.group(2).strip()
-            fm = _AXIS_FILTER_RE.match(rhs)
-            if fm is not None:
-                var_name = fm.group(1).strip()
-                filter_coords = [c.strip() for c in fm.group(2).split(",") if c.strip()]
-                if not filter_coords:
-                    raise InvalidRhsSpecError(
-                        detail=(
-                            f"apply_along(...) axis filter {ax_name}={var_name} "
-                            "in [...] requires at least one coord"
-                        )
-                    )
-            else:
-                var_name = rhs
-                filter_coords = None
-            if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", var_name):
-                raise InvalidRhsSpecError(
-                    detail=(
-                        f"apply_along(...) axis binding {ax_name}={var_name!r} "
-                        "must bind to an identifier"
-                    )
-                )
-            bindings.append((ax_name, var_name, filter_coords))
-            continue
-        inner_parts.append(part)
-
-    if not bindings:
-        raise InvalidRhsSpecError(
-            detail="apply_along(...) requires at least one axis=var binding"
-        )
-    if len(inner_parts) != 1:
-        raise InvalidRhsSpecError(
-            detail=(
-                "apply_along(...) requires exactly one inner expression argument "
-                f"(got {len(inner_parts)})"
-            )
-        )
-    return bindings, kernel_form, inner_parts[0]
-
-
 def _select_apply_along_kernel(
     bindings: list[tuple[str, str, list[str] | None]],
     kernel_form: str | None,
@@ -2038,218 +1886,6 @@ def _select_apply_along_kernel(
             f"({sorted(t for t in types if t)}); pass kernel=sum or kernel=integrate"
         )
     )
-
-
-def _substitute_apply_along_brackets(  # noqa: C901, PLR0913, PLR0915
-    expr: str,
-    bound: Mapping[str, str],
-    *,
-    axis_order: Sequence[str] = (),
-    shaped_params: Mapping[str, tuple[str, ...]] | None = None,
-    lhs_assignment: Mapping[str, str] | None = None,
-    axis_coords: Mapping[str, list[str]] | None = None,
-) -> str:
-    """Rewrite ``name[ax=c, ...]`` to ``name__ax_<c>__...`` for bound axes.
-
-    For each ``name[...]`` subexpression, axis assignments whose axis is in
-    ``bound`` and whose coord matches ``bound[axis]`` are consumed into a
-    ``__axis_<sanitized-coord>`` suffix on ``name``.  Remaining assignments
-    stay inside the brackets.  The bracket itself is dropped if every
-    assignment is consumed.
-
-    When ``axis_order`` is provided (the canonical ordering taken from the
-    spec's ``axes:`` list), any pre-existing ``__<axis>_<coord>`` suffix on
-    ``name`` is parsed off, merged with the newly-consumed pairs, and the
-    combined suffix is re-emitted in canonical order.  This makes nested
-    ``apply_along`` calls (where the inner pass appends a partial suffix and
-    the outer pass appends more) yield the same canonical state name as a
-    direct expansion, e.g. ``X__age_..__vax_..__loc_..__imm_..`` rather than
-    the binding-order accident ``X__imm_..__age_..__vax_..__loc_..``.
-
-    Same-axis-twice disambiguation
-    ------------------------------
-    For a shaped parameter declared on duplicate axes (e.g. a contact kernel
-    ``K[age, age]``), the natural reference inside an ``apply_along`` is
-    ``K[age, age:ap]`` where the **bare** ``age`` token is the *free outer*
-    axis (taken from the LHS template assignment of the equation being
-    expanded) and the ``age:ap`` token is the *bound inner* axis (assigned
-    by the surrounding ``apply_along``).  ``lhs_assignment`` carries the
-    LHS-free axis bindings so this case can be lowered to per-row
-    indexing/mangling rather than collapsing both positions onto the bound
-    coord (which would produce only the diagonal of ``K``).
-
-    If ``shaped_params`` is provided and contains ``name`` with multiple axes
-    (e.g., a contact kernel ``K[age, age]``), and all those axes are bound,
-    the bracket assignments are converted to direct indexing instead of
-    name mangling. For example, ``K[age, age:ap]`` with bound ``age=c1`` is
-    converted to ``K[c1, ap]`` rather than ``K__age_<c1>[age:ap]``.
-
-    Returns:
-        Expression string with bound bracket assignments folded into
-        ``__axis_coord`` suffixes or indexing operations.
-    """
-    pat = re.compile(r"([A-Za-z_][A-Za-z0-9_]*)\[([^\[\]]*)\]")
-    priority = {ax: i for i, ax in enumerate(axis_order)}
-    shaped_params = shaped_params or {}
-    lhs_assignment = lhs_assignment or {}
-    axis_coords = axis_coords or {}
-
-    def _split_suffix(name: str) -> tuple[str, list[tuple[str, str]]]:
-        """Strip trailing ``__<axis>_<coord>`` tokens recognised by axis_order.
-
-        Walks ``__``-separated segments from the right, consuming each one
-        whose ``<axis>_`` prefix matches a known axis.  Stops at the first
-        non-matching segment; everything to its left is treated as the base
-        name.
-
-        Returns:
-            ``(base, [(axis, coord), ...])`` where the suffix pairs are in
-            left-to-right (original) order.
-        """
-        if not priority:
-            return name, []
-        parts = name.split("__")
-        if len(parts) <= 1:
-            return name, []
-        suffix_pairs: list[tuple[str, str]] = []
-        cut = len(parts)
-        for i in range(len(parts) - 1, 0, -1):
-            tok = parts[i]
-            # Longest matching axis name keeps the parse unambiguous when
-            # axis names share a prefix.
-            best: str | None = None
-            for ax in priority:
-                if (
-                    tok.startswith(f"{ax}_")
-                    and len(tok) > len(ax) + 1
-                    and (best is None or len(ax) > len(best))
-                ):
-                    best = ax
-            if best is None:
-                break
-            coord = tok[len(best) + 1 :]
-            suffix_pairs.append((best, coord))
-            cut = i
-        if not suffix_pairs:
-            return name, []
-        suffix_pairs.reverse()
-        base = "__".join(parts[:cut])
-        return base, suffix_pairs
-
-    def _emit_suffix(pairs: list[tuple[str, str]]) -> str:
-        if not priority:
-            return "".join(f"__{ax}_{_sanitize_fragment(c)}" for ax, c in pairs)
-        # Sort by canonical priority; pairs whose axis is unknown to priority
-        # (shouldn't occur for well-formed specs) preserve their original
-        # order at the end.
-        known = sorted(
-            (p for p in pairs if p[0] in priority),
-            key=lambda p: priority[p[0]],
-        )
-        unknown = [p for p in pairs if p[0] not in priority]
-        return "".join(f"__{ax}_{_sanitize_fragment(c)}" for ax, c in known + unknown)
-
-    def _sub(match: re.Match[str]) -> str:  # noqa: C901, PLR0914
-        name = match.group(1)
-        body = match.group(2)
-        entries = [e.strip() for e in body.split(",") if e.strip()]
-
-        def _entry_parts(e: str) -> tuple[str, str | None]:
-            """Return (axis, coord) for one bracket entry.
-
-            Accepts both the canonical slice form ``axis:coord`` (valid
-            Python) and the legacy ``axis=coord`` form used by some
-            substitution outputs. Returns ``coord=None`` for bare
-            wildcard tokens.
-            """
-            for sep in (":", "="):
-                if sep in e:
-                    ax, _, c = e.partition(sep)
-                    return ax.strip(), c.strip()
-            return e, None
-
-        parsed_entries = [_entry_parts(e) for e in entries]
-
-        # Same-axis-twice disambiguation: detect axes that appear in this
-        # bracket both as a bare token and as ``axis:coord``. The bare token
-        # then refers to the LHS-free axis (taken from ``lhs_assignment``);
-        # the ``axis:coord`` token refers to the bound apply_along axis.
-        bare_axes = {ax for ax, c in parsed_entries if c is None}
-        pinned_axes = {ax for ax, c in parsed_entries if c is not None}
-        same_axis_twice = bare_axes & pinned_axes
-
-        # Resolve each entry positionally to (axis_name, coord, source) where
-        # source is "bound", "lhs", or None (unresolved → kept in brackets).
-        resolved: list[tuple[str, str | None, str | None]] = []
-        consumed: list[tuple[str, str]] = []
-        remaining: list[str] = []
-        for entry, (ax, coord) in zip(entries, parsed_entries, strict=True):
-            if coord is not None:
-                if ax in bound and bound[ax] == coord:
-                    consumed.append((ax, coord))
-                    resolved.append((ax, coord, "bound"))
-                    continue
-                resolved.append((ax, None, None))
-                remaining.append(entry)
-                continue
-            # Bare axis token.
-            if entry in same_axis_twice:
-                # Free outer axis — must be supplied by the LHS template
-                # assignment. If we don't have it (e.g., a non-templated
-                # equation), leave the token in the brackets for downstream
-                # template substitution.
-                if entry in lhs_assignment:
-                    lhs_coord = lhs_assignment[entry]
-                    consumed.append((entry, lhs_coord))
-                    resolved.append((entry, lhs_coord, "lhs"))
-                    continue
-                resolved.append((entry, None, None))
-                remaining.append(entry)
-                continue
-            if entry in bound:
-                # Plain bound axis (no same-axis-twice ambiguity).
-                consumed.append((entry, bound[entry]))
-                resolved.append((entry, bound[entry], "bound"))
-                continue
-            resolved.append((entry, None, None))
-            remaining.append(entry)
-
-        if not consumed:
-            return match.group(0)
-
-        # Multi-axis shaped parameter → direct indexing when every position
-        # is resolved. Use positional coords from ``resolved`` so that
-        # same-axis-twice references like ``K[age, age:ap]`` get distinct
-        # row/column indices instead of collapsing onto the bound coord.
-        if name in shaped_params and len(shaped_params[name]) > 1:
-            param_axes = shaped_params[name]
-            if (
-                len(resolved) == len(param_axes)
-                and not remaining
-                and all(coord is not None for _, coord, _ in resolved)
-                and all(ax == param_axes[i] for i, (ax, _, _) in enumerate(resolved))
-                and all(ax in axis_coords for ax in param_axes)
-            ):
-                # Convert coord names to integer positions on each axis so
-                # the downstream compiler sees a literal subscript.
-                try:
-                    int_idx = [
-                        axis_coords[param_axes[i]].index(coord)  # type: ignore[arg-type]
-                        for i, (_, coord, _) in enumerate(resolved)
-                    ]
-                except ValueError:
-                    int_idx = None
-                if int_idx is not None:
-                    indices = ", ".join(str(i) for i in int_idx)
-                    return f"{name}[{indices}]"
-
-        base, existing = _split_suffix(name)
-        suffix = _emit_suffix(existing + consumed)
-        if remaining:
-            return f"{base}{suffix}[{', '.join(remaining)}]"
-        return f"{base}{suffix}"
-
-    return pat.sub(_sub, expr)
 
 
 def _build_apply_along_axis_options(
@@ -2434,89 +2070,6 @@ def _ordinal_subrange_coords(
     return coords[lo_idx : hi_idx + 1]
 
 
-def _expand_apply_along(  # noqa: PLR0914
-    expr: str,
-    *,
-    axes: list[dict[str, Any]],
-    shaped_params: Mapping[str, tuple[str, ...]] | None = None,
-    lhs_assignment: Mapping[str, str] | None = None,
-    axis_coords: Mapping[str, list[str]] | None = None,
-) -> str:
-    """Expand ``apply_along(...)`` calls directly to weighted sums.
-
-    The ``apply_along`` primitive contracts an expression along one or more
-    axes using a single shared kernel form.  Categorical axes use uniform
-    weights of 1; continuous axes use trapezoidal weights derived from the
-    axis ``deltas``.  All bound axes are substituted in a single Cartesian
-    expansion, so ``name[ax1=c1, ax2=c2, ...]`` brackets that fully bind
-    apply_along axes collapse to ``name__ax1_<c1>__ax2_<c2>``.
-
-    A binding may restrict expansion to a subset of an axis with the
-    ``axis=var in [c1, c2, ...]`` form.  For categorical axes the listed
-    coords just filter the expansion set.  For continuous axes the listed
-    coords must be a contiguous slice of the axis coords (in axis order),
-    and trapezoidal weights are recomputed for that sub-interval.
-
-    Returns:
-        Expression string with ``apply_along`` calls fully expanded.
-    """
-    shaped_params = shaped_params or {}
-    axis_lookup = {str(ax.get("name")): ax for ax in axes if ax.get("name")}
-    axis_order = tuple(str(ax["name"]) for ax in axes if ax.get("name"))
-    out = expr
-    while True:
-        span = _find_call_span(out, "apply_along")
-        if span is None:
-            return out
-        start, end = span
-        args_str = out[start + len("apply_along(") : end - 1]
-        bindings, kernel_form, inner = _parse_apply_along_args(
-            args_str, axis_names=set(axis_lookup)
-        )
-        kernel = _select_apply_along_kernel(bindings, kernel_form, axes=axes)
-        # Recursively expand any inner apply_along first so we work on a flat
-        # inner expression for substitution.
-        inner = _expand_apply_along(
-            inner,
-            axes=axes,
-            shaped_params=shaped_params,
-            lhs_assignment=lhs_assignment,
-            axis_coords=axis_coords,
-        )
-
-        axis_options = [
-            _build_apply_along_axis_options(
-                ax_name, filt, kernel=kernel, axis=axis_lookup[ax_name]
-            )
-            for ax_name, _var, filt in bindings
-        ]
-
-        terms: list[str] = []
-        for combo in product(*axis_options):
-            replaced = inner
-            bound: dict[str, str] = {}
-            for (ax_name, var_name, _filt), (coord, _w) in zip(
-                bindings, combo, strict=True
-            ):
-                replaced = re.sub(rf"\b{re.escape(var_name)}\b", coord, replaced)
-                bound[ax_name] = coord
-            replaced = _substitute_apply_along_brackets(
-                replaced,
-                bound,
-                axis_order=axis_order,
-                shaped_params=shaped_params,
-                lhs_assignment=lhs_assignment,
-                axis_coords=axis_coords,
-            )
-            if kernel == "integrate":
-                weight = "*".join(str(w) for _, w in combo)
-                terms.append(f"({weight})*({replaced})")
-            else:
-                terms.append(f"({replaced})")
-        replacement = " + ".join(terms)
-        out = out[:start] + f"({replacement})" + out[end:]
-
-
 def _expand_helpers(  # noqa: PLR0913
     expr: str,
     *,
@@ -2530,9 +2083,9 @@ def _expand_helpers(  # noqa: PLR0913
 
     ``lhs_assignment`` carries the LHS template assignment of the equation
     being expanded (e.g. ``{"age": "a0"}`` for the row ``foi__age_a0`` of
-    ``foi[age]``). It is forwarded to :func:`_substitute_apply_along_brackets`
-    so that same-axis-twice references like ``K[age, age:ap]`` can resolve
-    the bare (free outer) axis position from the LHS row rather than
+    ``foi[age]``). It is forwarded to the IR-side ``expand_reduce_pointwise``
+    pipeline so that same-axis-twice references like ``K[age, age:ap]`` can
+    resolve the bare (free outer) axis position from the LHS row rather than
     collapsing it onto the bound apply_along coord.
 
     ``axis_coords`` maps each axis name to its coord list and is used to
@@ -2547,15 +2100,30 @@ def _expand_helpers(  # noqa: PLR0913
         Expression string with helper calls expanded (or the input
         unchanged when ``passthrough`` is true).
     """
-    if passthrough:
+    if passthrough or "apply_along" not in expr:
         return expr
-    return _expand_apply_along(
-        expr,
-        axes=axes,
-        shaped_params=shaped_params,
-        lhs_assignment=lhs_assignment,
-        axis_coords=axis_coords,
-    )
+    # Route apply_along expansion through the IR-side
+    # ``expand_reduce_pointwise`` pipeline (see ``_ir_expand.py``). The
+    # legacy string-level expander has been retired (#112).
+    from op_system._ir_expand import expand_reduce_pointwise  # noqa: PLC0415
+
+    old_limit = sys.getrecursionlimit()
+    needed = max(old_limit, 10_000)
+    try:
+        if needed > old_limit:
+            sys.setrecursionlimit(needed)
+        ir = parse_expr_to_ir(expr, lower_helpers=True)
+        expanded = expand_reduce_pointwise(
+            ir,
+            axes=list(axes),
+            shaped_params=dict(shaped_params or {}),
+            lhs_assignment=dict(lhs_assignment or {}),
+            axis_coords=dict(axis_coords or {}),
+        )
+        return unparse_ir(expanded)
+    finally:
+        if needed > old_limit:
+            sys.setrecursionlimit(old_limit)
 
 
 def _resolve_template_equation(  # noqa: PLR0913
@@ -3331,8 +2899,16 @@ def normalize_expr_rhs(spec: Mapping[str, Any]) -> NormalizedRhs:  # noqa: C901,
             passthrough_helpers=True,
         )
         aliases_ir_reduce_map = _build_aliases_ir(aliases_pre, lower_helpers=True)
+        # Parse equation IR without inlining alias bodies in their
+        # reduce-bearing form: alias inlining is performed downstream in
+        # ``_build_equations_ir_via_pointwise`` against the post-expansion
+        # alias map (``aliases_ir_map``), which is free of ``Reduce`` nodes.
+        # Inlining reduce-form aliases here would leave embedded ``Reduce``
+        # nodes inside ``equations_ir_reduce``, which the downstream
+        # ``_vectorize`` fast path then mis-lowers when the surrounding
+        # equation cell has non-empty target axes.
         equations_ir_reduce = _build_equations_ir(
-            tuple(eqs_pre), aliases_ir_reduce_map, lower_helpers=True
+            tuple(eqs_pre), None, lower_helpers=True
         )
     except (ValueError, RecursionError, InvalidRhsSpecError):
         aliases_ir_reduce_map = {}
@@ -3340,7 +2916,7 @@ def normalize_expr_rhs(spec: Mapping[str, Any]) -> NormalizedRhs:  # noqa: C901,
 
     equations_ir_built = _build_equations_ir_via_pointwise(
         equations_ir_reduce=equations_ir_reduce,
-        aliases_ir_reduce=aliases_ir_reduce_map,
+        aliases_ir_inline=aliases_ir_map,
         state_expanded=state_expanded,
         template_map=template_map_all,
         axes=axes_meta,

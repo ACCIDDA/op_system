@@ -254,9 +254,11 @@ def test_apply_along_nested_three_axes_canonical_order() -> None:
             # Inner-most binds imm, middle binds vax, outer binds age — the
             # exact pathological pattern that triggered the SMH R19 KeyError.
             "N": (
-                "apply_along(age=a, "
-                "apply_along(vax=b, "
-                "apply_along(X[age:a, vax:b, imm:k], imm=k)))"
+                "apply_along("
+                "apply_along("
+                "apply_along(X[age:a, vax:b, imm:k], imm=k), "
+                "vax=b), "
+                "age=a)"
             ),
         },
     }
