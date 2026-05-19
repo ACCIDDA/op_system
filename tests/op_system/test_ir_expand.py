@@ -8,7 +8,6 @@ import pytest
 
 from op_system._ir import Apply, Subscript, Sym, parse_expr_to_ir, unparse_ir
 from op_system._ir_expand import expand_reduce_pointwise
-from op_system._normalize import _expand_apply_along
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -137,18 +136,6 @@ def test_integrate_kernel_emits_weight_literal() -> None:
     )
     assert "0.5" in out
     assert "1.0" in out
-
-
-def test_parity_with_string_expander_single_axis(
-    axes_age_pop: list[dict[str, Any]],
-) -> None:
-    """IR expansion produces the same per-coord names as the string expander."""
-    src = "apply_along(I[pop:j], pop=j)"
-    ir_out = _ir_expand_to_string(src, axes=axes_age_pop)
-    str_out = _expand_apply_along(src, axes=axes_age_pop)
-    for name in ("I__pop_p1", "I__pop_p2"):
-        assert name in ir_out
-        assert name in str_out
 
 
 def test_parity_two_axis_cartesian(axes_age_pop: list[dict[str, Any]]) -> None:

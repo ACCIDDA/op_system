@@ -154,9 +154,7 @@ def _kwarg_value_as_binding(value: Expr, *, key: str) -> str:
         return value.name
     if isinstance(value, Literal):
         return str(value.value)
-    _invalid(
-        detail=f"apply_along axis {key!r} must bind to an identifier"
-    )
+    _invalid(detail=f"apply_along axis {key!r} must bind to an identifier")
 
 
 _APPLY_ALONG_KERNELS_IR: frozenset[str] = frozenset({"sum", "integrate"})
@@ -256,11 +254,7 @@ def _lower_single_helper(node: Apply) -> Expr:  # noqa: C901, PLR0912
 
 def _validate_reduce(reduce_node: Reduce) -> None:
     if not reduce_node.bindings:
-        _invalid(
-            detail=(
-                f"{reduce_node.kind} requires at least one axis=var binding"
-            )
-        )
+        _invalid(detail=(f"{reduce_node.kind} requires at least one axis=var binding"))
 
 
 def lower_helper_calls(expr: Expr) -> Expr:

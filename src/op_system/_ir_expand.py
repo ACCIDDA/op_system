@@ -133,19 +133,6 @@ def _expand_children(
     return expr
 
 
-def _flatten_add(expr: Expr) -> list[Expr]:
-    """Flatten a left-folded ``Add`` chain into its addend list.
-
-    Non-``+`` expressions are returned as a single-element list.
-    """
-    if isinstance(expr, Apply) and expr.op == "+":
-        out: list[Expr] = []
-        for arg in expr.args:
-            out.extend(_flatten_add(arg))
-        return out
-    return [expr]
-
-
 def _expand_one_reduce(
     expr: Reduce,
     *,
