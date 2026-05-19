@@ -3202,11 +3202,12 @@ def normalize_transitions_rhs(  # noqa: C901, PLR0912, PLR0914, PLR0915
     template_base_set = {parse_selector(k)[0] for k in template_map_all}
     eqs_tuple = tuple(_build_transition_equations(state_expanded, d_terms))
     aliases_ir_map = _build_aliases_ir(aliases)
+    equations_ir_built = _build_equations_ir(eqs_tuple, aliases_ir_map)
     return NormalizedRhs(
         kind="transitions",
         state_names=tuple(state_expanded),
         equations=eqs_tuple,
-        aliases=aliases,
+        aliases=_derive_alias_strings(aliases_ir_map, aliases),
         param_names=_sorted_unique(
             sym
             for sym in all_syms
@@ -3229,6 +3230,6 @@ def normalize_transitions_rhs(  # noqa: C901, PLR0912, PLR0914, PLR0915
         shaped_params=tuple(sorted(shaped_params.items())),
         time_varying_params=tuple(sorted(time_varying_full.items())),
         aliases_ir=aliases_ir_map,
-        equations_ir=_build_equations_ir(eqs_tuple, aliases_ir_map),
+        equations_ir=equations_ir_built,
         equations_ir_raw=_build_equations_ir(eqs_tuple),
     )

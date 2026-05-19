@@ -56,7 +56,10 @@ def test_normalize_expr_rhs_happy_path() -> None:
 
 def test_derive_equation_strings_requires_typed_ir() -> None:
     """Equation rendering should fail fast when typed IR is missing."""
-    with pytest.raises(InvalidRhsSpecError, match=r"equations\[0\] is missing typed IR"):
+    with pytest.raises(
+        InvalidRhsSpecError,
+        match=r"equations\[0\] is missing typed IR",
+    ):
         _derive_equation_strings((None,))
 
 
@@ -93,9 +96,14 @@ def test_normalize_transitions_rhs_happy_path() -> None:
     assert "I" in eq_r
 
     # S must lose infection flow; R must gain recovery flow.
-    # The current normalization format is: -((rate_expr)*(from_state))
+    # The exact parenthesization may vary between the raw transition builder
+    # form and canonical IR-rendered forms.
     assert eq_s.startswith("-(")
-    assert ")*(S)" in eq_s or "*(S)" in eq_s
+    assert (
+        ")*(S)" in eq_s
+        or "*(S)" in eq_s
+        or eq_s.endswith((" * S)", "* S)"))
+    )
 
     assert "+(" in eq_r or eq_r.startswith("(") or "gamma" in eq_r
 
@@ -2086,6 +2094,21 @@ def test_aliases_ir_present_for_transitions_kind() -> None:
     }
     out = normalize_transitions_rhs(spec)
     assert "N" in out.aliases_ir
+
+
+def test_transitions_alias_strings_are_rendered_from_ir() -> None:
+    """Transitions aliases should be returned from canonical IR rendering."""
+    spec = {
+        "kind": "transitions",
+        "state": ["S", "I", "R"],
+        "aliases": {"N": "S+I+R"},
+        "transitions": [
+            {"from": "S", "to": "I", "rate": "beta * I / N"},
+            {"from": "I", "to": "R", "rate": "gamma"},
+        ],
+    }
+    out = normalize_transitions_rhs(spec)
+    assert out.aliases["N"] == "S + I + R"
 
 
 # ---------------------------------------------------------------------------
