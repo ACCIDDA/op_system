@@ -1162,11 +1162,9 @@ def _build_aliases_ir(
 ) -> dict[str, Expr]:
     """Parse each alias body to IR and inline alias-to-alias references.
 
-    Best-effort: when parsing or inlining fails (cyclic aliases, AST recursion
-    on very long expanded chains, unsupported syntax), the failing alias is
-    omitted rather than aborting normalization. Existing string-based consumers
-    rely on lazy cycle detection at evaluation time, so this preserves
-    backward-compatible behaviour while still exposing IR where available.
+    Parsing is strict: invalid alias expressions abort normalization with the
+    original parser error. Alias inlining remains best-effort so cyclic aliases
+    can still survive to the existing lazy cycle detection at evaluation time.
 
     Args:
         aliases: Mapping from alias name to body string.
@@ -1177,8 +1175,7 @@ def _build_aliases_ir(
             reduction IR to downstream consumers.
 
     Returns:
-        Mapping from alias name to its (fully inlined) IR expression. Entries
-        that could not be parsed or inlined are omitted.
+        Mapping from alias name to its (fully inlined) IR expression.
     """
     # Long expanded Add chains (e.g. ``apply_along`` over many coords) can
     # exceed Python's default recursion limit during AST descent / inlining.
@@ -1189,11 +1186,7 @@ def _build_aliases_ir(
             sys.setrecursionlimit(needed)
         parsed: dict[str, Expr] = {}
         for name, body in aliases.items():
-            try:
-                expr = parse_expr_to_ir(body, lower_helpers=lower_helpers)
-            except (ValueError, RecursionError):
-                continue
-            parsed[name] = expr
+            parsed[name] = parse_expr_to_ir(body, lower_helpers=lower_helpers)
         # Validate the alias graph once and share a free_symbols memo across
         # all per-alias inline_aliases calls: alias bodies are reused by
         # identity, so id-keyed caching turns the inner traversal cost from
@@ -1230,10 +1223,9 @@ def _build_equations_ir(
 ) -> tuple[Expr | None, ...]:
     """Parse each equation RHS to IR, optionally inlining alias references.
 
-    Best-effort: entries that fail to parse or inline are returned as ``None``
-    so positional alignment with ``equations`` is preserved. Mirrors the
-    fallback policy of :func:`_build_aliases_ir` to keep this slice purely
-    additive — existing string-based consumers remain authoritative.
+    Parsing is strict: invalid equation expressions abort normalization with
+    the original parser error. Alias inlining remains best-effort so callers
+    retain the current cycle/lowering behavior once parsing succeeds.
 
     Args:
         equations: Tuple of equation RHS strings.
@@ -1243,8 +1235,7 @@ def _build_equations_ir(
             with pre-expansion equation strings.
 
     Returns:
-        Tuple of IR expressions (or ``None`` for failed entries) aligned
-        positionally with ``equations``.
+        Tuple of IR expressions aligned positionally with ``equations``.
     """
     old_limit = sys.getrecursionlimit()
     needed = max(old_limit, 10_000)
@@ -1263,13 +1254,9 @@ def _build_equations_ir(
                 cycle_validated = cycle is None
             except (ValueError, RecursionError):
                 cycle_validated = False
-        out: list[Expr | None] = []
+        out: list[Expr] = []
         for eq in equations:
-            try:
-                expr = parse_expr_to_ir(eq, lower_helpers=lower_helpers)
-            except (ValueError, RecursionError):
-                out.append(None)
-                continue
+            expr = parse_expr_to_ir(eq, lower_helpers=lower_helpers)
             if aliases_ir is None:
                 out.append(expr)
                 continue
@@ -1377,58 +1364,77 @@ def _build_equations_ir_via_pointwise(  # noqa: C901, PLR0913
 
 def _derive_equation_strings(
     equations_ir: tuple[Expr | None, ...],
-    legacy: tuple[str, ...],
 ) -> tuple[str, ...]:
-    """Render each equation's RHS from its IR, falling back to legacy strings.
-
-    When an entry in ``equations_ir`` is ``None``, the corresponding legacy
-    string is used. This keeps positional alignment intact while letting the
-    IR-side pipeline serve as the authoritative source for apply_along-bearing
-    equations.
+    """Render each equation's RHS directly from typed IR.
 
     Args:
-        equations_ir: Per-cell post-expansion IR (``None`` allowed).
-        legacy: Pre-existing string equations to fall back on.
+        equations_ir: Per-cell post-expansion IR.
 
     Returns:
         Tuple of equation strings aligned with ``equations_ir``.
+
+    Raises:
+        InvalidRhsSpecError: If any equation IR is missing or cannot be
+            rendered back to source.
     """
-    rendered: list[str] = []
-    for ir, fallback in zip(equations_ir, legacy, strict=False):
-        if ir is None:
-            rendered.append(fallback)
-            continue
-        try:
-            rendered.append(unparse_ir(ir))
-        except (ValueError, RecursionError):
-            rendered.append(fallback)
-    return tuple(rendered)
+    old_limit = sys.getrecursionlimit()
+    sys.setrecursionlimit(max(old_limit, 10_000))
+    try:
+        rendered: list[str] = []
+        for idx, ir in enumerate(equations_ir):
+            if ir is None:
+                raise InvalidRhsSpecError(
+                    detail=f"equations[{idx}] is missing typed IR during rendering"
+                )
+            try:
+                rendered.append(unparse_ir(ir))
+            except (ValueError, RecursionError) as exc:
+                raise InvalidRhsSpecError(
+                    detail=f"equations[{idx}] could not be rendered from typed IR"
+                ) from exc
+        return tuple(rendered)
+    finally:
+        with contextlib.suppress(ValueError, RecursionError):
+            sys.setrecursionlimit(old_limit)
 
 
 def _derive_alias_strings(
     aliases_ir: Mapping[str, Expr],
-    legacy: Mapping[str, str],
+    alias_order: Mapping[str, str],
 ) -> dict[str, str]:
-    """Render each alias body from its IR, falling back to legacy strings.
+    """Render each alias body directly from typed IR.
 
     Args:
         aliases_ir: Alias-name → IR map.
-        legacy: Pre-existing alias-name → string map (preserves ordering).
+        alias_order: Alias-name → string map used only to preserve ordering.
 
     Returns:
-        New alias mapping with IR-derived bodies where available.
+        New alias mapping with IR-derived bodies.
+
+    Raises:
+        InvalidRhsSpecError: If any alias IR is missing or cannot be rendered
+            back to source.
     """
-    out: dict[str, str] = {}
-    for name, body in legacy.items():
-        ir = aliases_ir.get(name)
-        if ir is None:
-            out[name] = body
-            continue
-        try:
-            out[name] = unparse_ir(ir)
-        except (ValueError, RecursionError):
-            out[name] = body
-    return out
+    old_limit = sys.getrecursionlimit()
+    sys.setrecursionlimit(max(old_limit, 10_000))
+    try:
+        out: dict[str, str] = {}
+        for name in alias_order:
+            ir = aliases_ir.get(name)
+            if ir is None:
+                raise InvalidRhsSpecError(
+                    detail=f"alias {name!r} is missing typed IR during rendering"
+                )
+            try:
+                out[name] = unparse_ir(ir)
+            except (ValueError, RecursionError) as exc:
+                raise InvalidRhsSpecError(
+                    detail=f"alias {name!r} could not be rendered from typed IR"
+                ) from exc
+        return out
+    finally:
+        with contextlib.suppress(ValueError, RecursionError):
+            sys.setrecursionlimit(old_limit)
 
 
 _INITIAL_STATE_SHAPED_KEY = "shaped"
@@ -1659,6 +1665,7 @@ class _TransitionEndpoints:
     template_map: Mapping[str, list[tuple[str, dict[str, str]]]]
     axis_lookup: dict[str, list[str]]
     shaped_params: Mapping[str, tuple[str, ...]] | None = None
+    passthrough_helpers: bool = False
 
 
 def _collect_transition_wildcard_axes(
@@ -1684,6 +1691,11 @@ def _collect_transition_wildcard_axes(
             endpoints.name_s, shaped_param_names=skip
         )
     for ph in sorted(expr_placeholders):
+        if ":" in ph or "=" in ph:
+            # Helper-bound names like ``pop:j`` or ``age=ap`` are local to the
+            # helper call and should not participate in transition template
+            # wildcard expansion.
+            continue
         if ph not in seen:
             if ph not in endpoints.axis_lookup:
                 raise InvalidRhsSpecError(
@@ -1726,7 +1738,10 @@ def _render_transition_combo(
         axis_lookup=endpoints.axis_lookup,
     )
     tr_out["rate"] = _expand_helpers(
-        rate_sub, axes=endpoints.axes, shaped_params=endpoints.shaped_params
+        rate_sub,
+        axes=endpoints.axes,
+        shaped_params=endpoints.shaped_params,
+        passthrough=endpoints.passthrough_helpers,
     )
     if endpoints.name_s:
         tr_out["name"] = _apply_template_substitutions(
@@ -1755,7 +1770,9 @@ def _expand_single_transition(
     Raises:
         InvalidRhsSpecError: If validation fails.
     """
-    tr_valid = _validate_transition_mapping(tr_map, idx=0)
+    tr_work = dict(tr_map)
+    passthrough_helpers = bool(tr_work.pop("_passthrough_helpers", False))
+    tr_valid = _validate_transition_mapping(tr_work, idx=0)
     frm_s = _get_required_str(tr_valid, idx=0, key="from")
     to_s = _get_required_str(tr_valid, idx=0, key="to")
     rate_s = _get_required_str(tr_valid, idx=0, key="rate")
@@ -1774,6 +1791,7 @@ def _expand_single_transition(
         template_map=template_map,
         axis_lookup=axis_lookup,
         shaped_params=shaped_params,
+        passthrough_helpers=passthrough_helpers,
     )
     wildcard_axes = _collect_transition_wildcard_axes(endpoints)
 
@@ -1804,6 +1822,7 @@ def _expand_transition_templates(
     axes: list[dict[str, Any]],
     template_map: Mapping[str, list[tuple[str, dict[str, str]]]],
     shaped_params: Mapping[str, tuple[str, ...]] | None = None,
+    passthrough_helpers: bool = False,
 ) -> list[dict[str, Any]]:
     """Expand templated transitions over categorical axes.
 
@@ -1818,9 +1837,11 @@ def _expand_transition_templates(
 
     expanded: list[dict[str, Any]] = []
     for tr_map in transitions_raw:
+        tr_context = dict(tr_map)
+        tr_context["_passthrough_helpers"] = passthrough_helpers
         expanded.extend(
             _expand_single_transition(
-                tr_map,
+                tr_context,
                 axes=axes,
                 template_map=template_map,
                 axis_lookup=axis_lookup,
@@ -2924,7 +2945,7 @@ def normalize_expr_rhs(spec: Mapping[str, Any]) -> NormalizedRhs:  # noqa: C901,
         axis_lookup=axis_lookup_dict,
     ) or _build_equations_ir(eqs_tuple, aliases_ir_map)
 
-    equations_strings = _derive_equation_strings(equations_ir_built, eqs_tuple)
+    equations_strings = _derive_equation_strings(equations_ir_built)
     aliases_strings = _derive_alias_strings(aliases_ir_map, aliases)
 
     return NormalizedRhs(
@@ -3196,11 +3217,46 @@ def normalize_transitions_rhs(  # noqa: C901, PLR0912, PLR0914, PLR0915
     template_base_set = {parse_selector(k)[0] for k in template_map_all}
     eqs_tuple = tuple(_build_transition_equations(state_expanded, d_terms))
     aliases_ir_map = _build_aliases_ir(aliases)
+    equations_ir_built = _build_equations_ir(eqs_tuple, aliases_ir_map)
+    aliases_ir_reduce_map: Mapping[str, Expr] = {}
+    equations_ir_reduce: tuple[Expr | None, ...] = ()
+    try:
+        aliases_pre, _alias_template_map_pre = _expand_alias_templates(
+            meta_parts[0],
+            axes=axes_meta,
+            template_map_seed=state_template_map,
+            shaped_params=shaped_params,
+            axis_lookup=axis_lookup_dict,
+            passthrough_helpers=True,
+        )
+        transitions_expanded_pre = _expand_transition_templates(
+            transitions_raw,
+            axes=axes_meta,
+            template_map=template_map_all,
+            shaped_params=shaped_params,
+            passthrough_helpers=True,
+        )
+        d_terms_pre: dict[str, list[str]] = {s: [] for s in state_expanded}
+        all_syms_pre: set[str] = set()
+        for idx, tr_map in enumerate(transitions_expanded_pre):
+            _apply_transition(
+                idx=idx,
+                tr=tr_map,
+                state_set=state_set,
+                all_syms=all_syms_pre,
+                d_terms=d_terms_pre,
+            )
+        eqs_pre = tuple(_build_transition_equations(state_expanded, d_terms_pre))
+        aliases_ir_reduce_map = _build_aliases_ir(aliases_pre, lower_helpers=True)
+        equations_ir_reduce = _build_equations_ir(eqs_pre, None, lower_helpers=True)
+    except (ValueError, RecursionError, InvalidRhsSpecError):
+        aliases_ir_reduce_map = {}
+        equations_ir_reduce = ()
     return NormalizedRhs(
         kind="transitions",
         state_names=tuple(state_expanded),
         equations=eqs_tuple,
-        aliases=aliases,
+        aliases=_derive_alias_strings(aliases_ir_map, aliases),
         param_names=_sorted_unique(
             sym
             for sym in all_syms
@@ -3223,6 +3279,8 @@ def normalize_transitions_rhs(  # noqa: C901, PLR0912, PLR0914, PLR0915
         shaped_params=tuple(sorted(shaped_params.items())),
         time_varying_params=tuple(sorted(time_varying_full.items())),
         aliases_ir=aliases_ir_map,
-        equations_ir=_build_equations_ir(eqs_tuple, aliases_ir_map),
+        equations_ir=equations_ir_built,
         equations_ir_raw=_build_equations_ir(eqs_tuple),
+        aliases_ir_reduce=aliases_ir_reduce_map,
+        equations_ir_reduce=equations_ir_reduce,
     )

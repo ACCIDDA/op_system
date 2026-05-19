@@ -19,6 +19,7 @@ from op_system import compile_rhs
 from op_system._constraints import _ConstraintRule, _normalize_constraints
 from op_system._errors import InvalidRhsSpecError
 from op_system._ir import Apply, Reduce, free_symbols, parse_expr_to_ir, walk
+from op_system._normalize import _derive_alias_strings, _derive_equation_strings
 from op_system.specs import (
     NormalizedRhs,
     StateTemplate,
@@ -53,6 +54,21 @@ def test_normalize_expr_rhs_happy_path() -> None:
     assert "N" in out.all_symbols
 
 
+def test_derive_equation_strings_requires_typed_ir() -> None:
+    """Equation rendering should fail fast when typed IR is missing."""
+    with pytest.raises(
+        InvalidRhsSpecError,
+        match=r"equations\[0\] is missing typed IR",
+    ):
+        _derive_equation_strings((None,))
+
+
+def test_derive_alias_strings_requires_typed_ir() -> None:
+    """Alias rendering should fail fast when typed IR is missing."""
+    with pytest.raises(InvalidRhsSpecError, match="alias 'N' is missing typed IR"):
+        _derive_alias_strings({}, {"N": "S + I + R"})
+
+
 def test_normalize_transitions_rhs_happy_path() -> None:
     """Test transitions-style RHS normalization happy path."""
     spec = {
@@ -80,9 +96,10 @@ def test_normalize_transitions_rhs_happy_path() -> None:
     assert "I" in eq_r
 
     # S must lose infection flow; R must gain recovery flow.
-    # The current normalization format is: -((rate_expr)*(from_state))
+    # The exact parenthesization may vary between the raw transition builder
+    # form and canonical IR-rendered forms.
     assert eq_s.startswith("-(")
-    assert ")*(S)" in eq_s or "*(S)" in eq_s
+    assert ")*(S)" in eq_s or "*(S)" in eq_s or eq_s.endswith((" * S)", "* S)"))
 
     assert "+(" in eq_r or eq_r.startswith("(") or "gamma" in eq_r
 
@@ -2075,6 +2092,21 @@ def test_aliases_ir_present_for_transitions_kind() -> None:
     assert "N" in out.aliases_ir
 
 
+def test_transitions_alias_strings_are_rendered_from_ir() -> None:
+    """Transitions aliases should be returned from canonical IR rendering."""
+    spec = {
+        "kind": "transitions",
+        "state": ["S", "I", "R"],
+        "aliases": {"N": "S+I+R"},
+        "transitions": [
+            {"from": "S", "to": "I", "rate": "beta * I / N"},
+            {"from": "I", "to": "R", "rate": "gamma"},
+        ],
+    }
+    out = normalize_transitions_rhs(spec)
+    assert out.aliases["N"] == "S + I + R"
+
+
 # ---------------------------------------------------------------------------
 # equations_ir field (typed IR exposed alongside string equations)
 # ---------------------------------------------------------------------------
@@ -2199,8 +2231,10 @@ def test_aliases_ir_reduce_contains_reduce_for_aliased_apply_along() -> None:
     assert reduces[0].kind == "apply_along"
 
 
-def test_equations_ir_reduce_empty_for_transitions_kind() -> None:
-    """``transitions`` kind leaves the reduce-bearing IR fields empty."""
+def test_equations_ir_reduce_matches_equations_ir_for_transitions_without_helpers() -> (
+    None
+):
+    """Transitions without helpers still populate reduce-bearing IR fields."""
     spec = {
         "kind": "transitions",
         "state": ["S", "I", "R"],
@@ -2211,8 +2245,45 @@ def test_equations_ir_reduce_empty_for_transitions_kind() -> None:
         ],
     }
     out = normalize_transitions_rhs(spec)
-    assert out.aliases_ir_reduce == {}
-    assert out.equations_ir_reduce == ()
+    assert out.aliases_ir_reduce == out.aliases_ir
+    assert len(out.equations_ir_reduce) == len(out.equations_ir_raw)
+    for ir_reduce, ir_raw in zip(
+        out.equations_ir_reduce,
+        out.equations_ir_raw,
+        strict=True,
+    ):
+        assert ir_reduce == ir_raw
+
+
+def test_equations_ir_reduce_contains_reduce_nodes_for_transitions_helpers() -> None:
+    """Transitions with helper-bearing rates should populate reduce IR."""
+    spec = {
+        "kind": "transitions",
+        "axes": [{"name": "pop", "coords": ["p1", "p2"]}],
+        "state": ["S[pop]", "I[pop]", "R[pop]"],
+        "aliases": {"I_total": "apply_along(I[pop:j], pop=j)"},
+        "transitions": [
+            {
+                "from": "S[pop]",
+                "to": "I[pop]",
+                "rate": "beta * apply_along(I[pop:j], pop=j)",
+            },
+            {"from": "I[pop]", "to": "R[pop]", "rate": "gamma"},
+        ],
+    }
+    out = normalize_transitions_rhs(spec)
+    assert "I_total" in out.aliases_ir_reduce
+    reduces = [
+        node
+        for node in walk(out.aliases_ir_reduce["I_total"])
+        if isinstance(node, Reduce)
+    ]
+    assert reduces
+    assert len(out.equations_ir_reduce) == len(out.equations)
+    assert any(
+        expr is not None and any(isinstance(node, Reduce) for node in walk(expr))
+        for expr in out.equations_ir_reduce
+    )
 
 
 def test_equations_ir_reduce_matches_equations_ir_when_no_helpers() -> None:

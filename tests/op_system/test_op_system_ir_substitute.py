@@ -5,6 +5,7 @@ from __future__ import annotations
 from op_system._ir import (
     Apply,
     AxisIndex,
+    Expr,
     Literal,
     Reduce,
     Subscript,
@@ -50,6 +51,18 @@ def test_free_symbols_respects_reduce_binding_shadowing() -> None:
     body = Apply(op="*", args=(Sym(name="ap"), Sym(name="beta")))
     expr = Reduce(kind="sum_over", bindings=(("age", "ap"),), body=body)
     assert free_symbols(expr) == frozenset({"beta"})
+
+
+def test_free_symbols_handles_deep_add_chain_iteratively() -> None:
+    """Deep Apply trees should not require Python recursion headroom."""
+    expr: Expr = Sym(name="x0")
+    expected = {"x0"}
+    for idx in range(1, 2500):
+        name = f"x{idx}"
+        expr = Apply(op="+", args=(expr, Sym(name=name)))
+        expected.add(name)
+
+    assert free_symbols(expr) == frozenset(expected)
 
 
 def test_substitute_replaces_matching_sym() -> None:

@@ -168,11 +168,13 @@ def test_compile_rejects_nonwhitelisted_helper() -> None:
 
 
 def test_compile_rejects_disallowed_attribute_access() -> None:
-    """Disallowed attribute access should be rejected."""
+    """Disallowed attribute access should be rejected before evaluation."""
     spec = {"kind": "expr", "state": ["x"], "equations": {"x": "x.real"}}
-    rhs = normalize_rhs(spec)
-    with pytest.raises(ValueError, match=r"disallowed attribute access"):
-        compile_rhs(rhs, xp=np)
+    with pytest.raises(
+        ValueError,
+        match=r"unsupported AST node in IR parser: Attribute",
+    ):
+        normalize_rhs(spec)
 
 
 def test_eval_allows_whitelisted_np_calls() -> None:
