@@ -1564,188 +1564,188 @@ slice starts in the flat state vector).</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/op_system/_normalize.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">2819</span>
-<span class="normal">2820</span>
-<span class="normal">2821</span>
-<span class="normal">2822</span>
-<span class="normal">2823</span>
-<span class="normal">2824</span>
-<span class="normal">2825</span>
-<span class="normal">2826</span>
-<span class="normal">2827</span>
-<span class="normal">2828</span>
-<span class="normal">2829</span>
-<span class="normal">2830</span>
-<span class="normal">2831</span>
-<span class="normal">2832</span>
-<span class="normal">2833</span>
-<span class="normal">2834</span>
-<span class="normal">2835</span>
-<span class="normal">2836</span>
-<span class="normal">2837</span>
-<span class="normal">2838</span>
-<span class="normal">2839</span>
-<span class="normal">2840</span>
-<span class="normal">2841</span>
-<span class="normal">2842</span>
-<span class="normal">2843</span>
-<span class="normal">2844</span>
-<span class="normal">2845</span>
-<span class="normal">2846</span>
-<span class="normal">2847</span>
-<span class="normal">2848</span>
-<span class="normal">2849</span>
-<span class="normal">2850</span>
-<span class="normal">2851</span>
-<span class="normal">2852</span>
-<span class="normal">2853</span>
-<span class="normal">2854</span>
-<span class="normal">2855</span>
-<span class="normal">2856</span>
-<span class="normal">2857</span>
-<span class="normal">2858</span>
-<span class="normal">2859</span>
-<span class="normal">2860</span>
-<span class="normal">2861</span>
-<span class="normal">2862</span>
-<span class="normal">2863</span>
-<span class="normal">2864</span>
-<span class="normal">2865</span>
-<span class="normal">2866</span>
-<span class="normal">2867</span>
-<span class="normal">2868</span>
-<span class="normal">2869</span>
-<span class="normal">2870</span>
-<span class="normal">2871</span>
-<span class="normal">2872</span>
-<span class="normal">2873</span>
-<span class="normal">2874</span>
-<span class="normal">2875</span>
-<span class="normal">2876</span>
-<span class="normal">2877</span>
-<span class="normal">2878</span>
-<span class="normal">2879</span>
-<span class="normal">2880</span>
-<span class="normal">2881</span>
-<span class="normal">2882</span>
-<span class="normal">2883</span>
-<span class="normal">2884</span>
-<span class="normal">2885</span>
-<span class="normal">2886</span>
-<span class="normal">2887</span>
-<span class="normal">2888</span>
-<span class="normal">2889</span>
-<span class="normal">2890</span>
-<span class="normal">2891</span>
-<span class="normal">2892</span>
-<span class="normal">2893</span>
-<span class="normal">2894</span>
-<span class="normal">2895</span>
-<span class="normal">2896</span>
-<span class="normal">2897</span>
-<span class="normal">2898</span>
-<span class="normal">2899</span>
-<span class="normal">2900</span>
-<span class="normal">2901</span>
-<span class="normal">2902</span>
-<span class="normal">2903</span>
-<span class="normal">2904</span>
-<span class="normal">2905</span>
-<span class="normal">2906</span>
-<span class="normal">2907</span>
-<span class="normal">2908</span>
-<span class="normal">2909</span>
-<span class="normal">2910</span>
-<span class="normal">2911</span>
-<span class="normal">2912</span>
-<span class="normal">2913</span>
-<span class="normal">2914</span>
-<span class="normal">2915</span>
-<span class="normal">2916</span>
-<span class="normal">2917</span>
-<span class="normal">2918</span>
-<span class="normal">2919</span>
-<span class="normal">2920</span>
-<span class="normal">2921</span>
-<span class="normal">2922</span>
-<span class="normal">2923</span>
-<span class="normal">2924</span>
-<span class="normal">2925</span>
-<span class="normal">2926</span>
-<span class="normal">2927</span>
-<span class="normal">2928</span>
-<span class="normal">2929</span>
-<span class="normal">2930</span>
-<span class="normal">2931</span>
-<span class="normal">2932</span>
-<span class="normal">2933</span>
-<span class="normal">2934</span>
-<span class="normal">2935</span>
-<span class="normal">2936</span>
-<span class="normal">2937</span>
-<span class="normal">2938</span>
-<span class="normal">2939</span>
-<span class="normal">2940</span>
-<span class="normal">2941</span>
-<span class="normal">2942</span>
-<span class="normal">2943</span>
-<span class="normal">2944</span>
-<span class="normal">2945</span>
-<span class="normal">2946</span>
-<span class="normal">2947</span>
-<span class="normal">2948</span>
-<span class="normal">2949</span>
-<span class="normal">2950</span>
-<span class="normal">2951</span>
-<span class="normal">2952</span>
-<span class="normal">2953</span>
-<span class="normal">2954</span>
-<span class="normal">2955</span>
-<span class="normal">2956</span>
-<span class="normal">2957</span>
-<span class="normal">2958</span>
-<span class="normal">2959</span>
-<span class="normal">2960</span>
-<span class="normal">2961</span>
-<span class="normal">2962</span>
-<span class="normal">2963</span>
-<span class="normal">2964</span>
-<span class="normal">2965</span>
-<span class="normal">2966</span>
-<span class="normal">2967</span>
-<span class="normal">2968</span>
-<span class="normal">2969</span>
-<span class="normal">2970</span>
-<span class="normal">2971</span>
-<span class="normal">2972</span>
-<span class="normal">2973</span>
-<span class="normal">2974</span>
-<span class="normal">2975</span>
-<span class="normal">2976</span>
-<span class="normal">2977</span>
-<span class="normal">2978</span>
-<span class="normal">2979</span>
-<span class="normal">2980</span>
-<span class="normal">2981</span>
-<span class="normal">2982</span>
-<span class="normal">2983</span>
-<span class="normal">2984</span>
-<span class="normal">2985</span>
-<span class="normal">2986</span>
-<span class="normal">2987</span>
-<span class="normal">2988</span>
-<span class="normal">2989</span>
-<span class="normal">2990</span>
-<span class="normal">2991</span>
-<span class="normal">2992</span>
-<span class="normal">2993</span>
-<span class="normal">2994</span>
-<span class="normal">2995</span>
-<span class="normal">2996</span>
-<span class="normal">2997</span>
-<span class="normal">2998</span>
-<span class="normal">2999</span>
-<span class="normal">3000</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">normalize_expr_rhs</span><span class="p">(</span><span class="n">spec</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">NormalizedRhs</span><span class="p">:</span>  <span class="c1"># noqa: C901, PLR0914, PLR0915</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">2480</span>
+<span class="normal">2481</span>
+<span class="normal">2482</span>
+<span class="normal">2483</span>
+<span class="normal">2484</span>
+<span class="normal">2485</span>
+<span class="normal">2486</span>
+<span class="normal">2487</span>
+<span class="normal">2488</span>
+<span class="normal">2489</span>
+<span class="normal">2490</span>
+<span class="normal">2491</span>
+<span class="normal">2492</span>
+<span class="normal">2493</span>
+<span class="normal">2494</span>
+<span class="normal">2495</span>
+<span class="normal">2496</span>
+<span class="normal">2497</span>
+<span class="normal">2498</span>
+<span class="normal">2499</span>
+<span class="normal">2500</span>
+<span class="normal">2501</span>
+<span class="normal">2502</span>
+<span class="normal">2503</span>
+<span class="normal">2504</span>
+<span class="normal">2505</span>
+<span class="normal">2506</span>
+<span class="normal">2507</span>
+<span class="normal">2508</span>
+<span class="normal">2509</span>
+<span class="normal">2510</span>
+<span class="normal">2511</span>
+<span class="normal">2512</span>
+<span class="normal">2513</span>
+<span class="normal">2514</span>
+<span class="normal">2515</span>
+<span class="normal">2516</span>
+<span class="normal">2517</span>
+<span class="normal">2518</span>
+<span class="normal">2519</span>
+<span class="normal">2520</span>
+<span class="normal">2521</span>
+<span class="normal">2522</span>
+<span class="normal">2523</span>
+<span class="normal">2524</span>
+<span class="normal">2525</span>
+<span class="normal">2526</span>
+<span class="normal">2527</span>
+<span class="normal">2528</span>
+<span class="normal">2529</span>
+<span class="normal">2530</span>
+<span class="normal">2531</span>
+<span class="normal">2532</span>
+<span class="normal">2533</span>
+<span class="normal">2534</span>
+<span class="normal">2535</span>
+<span class="normal">2536</span>
+<span class="normal">2537</span>
+<span class="normal">2538</span>
+<span class="normal">2539</span>
+<span class="normal">2540</span>
+<span class="normal">2541</span>
+<span class="normal">2542</span>
+<span class="normal">2543</span>
+<span class="normal">2544</span>
+<span class="normal">2545</span>
+<span class="normal">2546</span>
+<span class="normal">2547</span>
+<span class="normal">2548</span>
+<span class="normal">2549</span>
+<span class="normal">2550</span>
+<span class="normal">2551</span>
+<span class="normal">2552</span>
+<span class="normal">2553</span>
+<span class="normal">2554</span>
+<span class="normal">2555</span>
+<span class="normal">2556</span>
+<span class="normal">2557</span>
+<span class="normal">2558</span>
+<span class="normal">2559</span>
+<span class="normal">2560</span>
+<span class="normal">2561</span>
+<span class="normal">2562</span>
+<span class="normal">2563</span>
+<span class="normal">2564</span>
+<span class="normal">2565</span>
+<span class="normal">2566</span>
+<span class="normal">2567</span>
+<span class="normal">2568</span>
+<span class="normal">2569</span>
+<span class="normal">2570</span>
+<span class="normal">2571</span>
+<span class="normal">2572</span>
+<span class="normal">2573</span>
+<span class="normal">2574</span>
+<span class="normal">2575</span>
+<span class="normal">2576</span>
+<span class="normal">2577</span>
+<span class="normal">2578</span>
+<span class="normal">2579</span>
+<span class="normal">2580</span>
+<span class="normal">2581</span>
+<span class="normal">2582</span>
+<span class="normal">2583</span>
+<span class="normal">2584</span>
+<span class="normal">2585</span>
+<span class="normal">2586</span>
+<span class="normal">2587</span>
+<span class="normal">2588</span>
+<span class="normal">2589</span>
+<span class="normal">2590</span>
+<span class="normal">2591</span>
+<span class="normal">2592</span>
+<span class="normal">2593</span>
+<span class="normal">2594</span>
+<span class="normal">2595</span>
+<span class="normal">2596</span>
+<span class="normal">2597</span>
+<span class="normal">2598</span>
+<span class="normal">2599</span>
+<span class="normal">2600</span>
+<span class="normal">2601</span>
+<span class="normal">2602</span>
+<span class="normal">2603</span>
+<span class="normal">2604</span>
+<span class="normal">2605</span>
+<span class="normal">2606</span>
+<span class="normal">2607</span>
+<span class="normal">2608</span>
+<span class="normal">2609</span>
+<span class="normal">2610</span>
+<span class="normal">2611</span>
+<span class="normal">2612</span>
+<span class="normal">2613</span>
+<span class="normal">2614</span>
+<span class="normal">2615</span>
+<span class="normal">2616</span>
+<span class="normal">2617</span>
+<span class="normal">2618</span>
+<span class="normal">2619</span>
+<span class="normal">2620</span>
+<span class="normal">2621</span>
+<span class="normal">2622</span>
+<span class="normal">2623</span>
+<span class="normal">2624</span>
+<span class="normal">2625</span>
+<span class="normal">2626</span>
+<span class="normal">2627</span>
+<span class="normal">2628</span>
+<span class="normal">2629</span>
+<span class="normal">2630</span>
+<span class="normal">2631</span>
+<span class="normal">2632</span>
+<span class="normal">2633</span>
+<span class="normal">2634</span>
+<span class="normal">2635</span>
+<span class="normal">2636</span>
+<span class="normal">2637</span>
+<span class="normal">2638</span>
+<span class="normal">2639</span>
+<span class="normal">2640</span>
+<span class="normal">2641</span>
+<span class="normal">2642</span>
+<span class="normal">2643</span>
+<span class="normal">2644</span>
+<span class="normal">2645</span>
+<span class="normal">2646</span>
+<span class="normal">2647</span>
+<span class="normal">2648</span>
+<span class="normal">2649</span>
+<span class="normal">2650</span>
+<span class="normal">2651</span>
+<span class="normal">2652</span>
+<span class="normal">2653</span>
+<span class="normal">2654</span>
+<span class="normal">2655</span>
+<span class="normal">2656</span>
+<span class="normal">2657</span>
+<span class="normal">2658</span>
+<span class="normal">2659</span>
+<span class="normal">2660</span>
+<span class="normal">2661</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">normalize_expr_rhs</span><span class="p">(</span><span class="n">spec</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">NormalizedRhs</span><span class="p">:</span>  <span class="c1"># noqa: C901, PLR0914, PLR0915</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Normalize an expression-based RHS specification.</span>
 
 <span class="sd">    Args:</span>
@@ -2040,35 +2040,35 @@ slice starts in the flat state vector).</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/op_system/_normalize.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">2788</span>
-<span class="normal">2789</span>
-<span class="normal">2790</span>
-<span class="normal">2791</span>
-<span class="normal">2792</span>
-<span class="normal">2793</span>
-<span class="normal">2794</span>
-<span class="normal">2795</span>
-<span class="normal">2796</span>
-<span class="normal">2797</span>
-<span class="normal">2798</span>
-<span class="normal">2799</span>
-<span class="normal">2800</span>
-<span class="normal">2801</span>
-<span class="normal">2802</span>
-<span class="normal">2803</span>
-<span class="normal">2804</span>
-<span class="normal">2805</span>
-<span class="normal">2806</span>
-<span class="normal">2807</span>
-<span class="normal">2808</span>
-<span class="normal">2809</span>
-<span class="normal">2810</span>
-<span class="normal">2811</span>
-<span class="normal">2812</span>
-<span class="normal">2813</span>
-<span class="normal">2814</span>
-<span class="normal">2815</span>
-<span class="normal">2816</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">normalize_rhs</span><span class="p">(</span><span class="n">spec</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">NormalizedRhs</span><span class="p">:</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">2449</span>
+<span class="normal">2450</span>
+<span class="normal">2451</span>
+<span class="normal">2452</span>
+<span class="normal">2453</span>
+<span class="normal">2454</span>
+<span class="normal">2455</span>
+<span class="normal">2456</span>
+<span class="normal">2457</span>
+<span class="normal">2458</span>
+<span class="normal">2459</span>
+<span class="normal">2460</span>
+<span class="normal">2461</span>
+<span class="normal">2462</span>
+<span class="normal">2463</span>
+<span class="normal">2464</span>
+<span class="normal">2465</span>
+<span class="normal">2466</span>
+<span class="normal">2467</span>
+<span class="normal">2468</span>
+<span class="normal">2469</span>
+<span class="normal">2470</span>
+<span class="normal">2471</span>
+<span class="normal">2472</span>
+<span class="normal">2473</span>
+<span class="normal">2474</span>
+<span class="normal">2475</span>
+<span class="normal">2476</span>
+<span class="normal">2477</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">normalize_rhs</span><span class="p">(</span><span class="n">spec</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">NormalizedRhs</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Normalize a RHS specification dict into a backend-facing representation.</span>
 
 <span class="sd">    Args:</span>
@@ -2169,7 +2169,196 @@ slice starts in the flat state vector).</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/op_system/_normalize.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">3061</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">2872</span>
+<span class="normal">2873</span>
+<span class="normal">2874</span>
+<span class="normal">2875</span>
+<span class="normal">2876</span>
+<span class="normal">2877</span>
+<span class="normal">2878</span>
+<span class="normal">2879</span>
+<span class="normal">2880</span>
+<span class="normal">2881</span>
+<span class="normal">2882</span>
+<span class="normal">2883</span>
+<span class="normal">2884</span>
+<span class="normal">2885</span>
+<span class="normal">2886</span>
+<span class="normal">2887</span>
+<span class="normal">2888</span>
+<span class="normal">2889</span>
+<span class="normal">2890</span>
+<span class="normal">2891</span>
+<span class="normal">2892</span>
+<span class="normal">2893</span>
+<span class="normal">2894</span>
+<span class="normal">2895</span>
+<span class="normal">2896</span>
+<span class="normal">2897</span>
+<span class="normal">2898</span>
+<span class="normal">2899</span>
+<span class="normal">2900</span>
+<span class="normal">2901</span>
+<span class="normal">2902</span>
+<span class="normal">2903</span>
+<span class="normal">2904</span>
+<span class="normal">2905</span>
+<span class="normal">2906</span>
+<span class="normal">2907</span>
+<span class="normal">2908</span>
+<span class="normal">2909</span>
+<span class="normal">2910</span>
+<span class="normal">2911</span>
+<span class="normal">2912</span>
+<span class="normal">2913</span>
+<span class="normal">2914</span>
+<span class="normal">2915</span>
+<span class="normal">2916</span>
+<span class="normal">2917</span>
+<span class="normal">2918</span>
+<span class="normal">2919</span>
+<span class="normal">2920</span>
+<span class="normal">2921</span>
+<span class="normal">2922</span>
+<span class="normal">2923</span>
+<span class="normal">2924</span>
+<span class="normal">2925</span>
+<span class="normal">2926</span>
+<span class="normal">2927</span>
+<span class="normal">2928</span>
+<span class="normal">2929</span>
+<span class="normal">2930</span>
+<span class="normal">2931</span>
+<span class="normal">2932</span>
+<span class="normal">2933</span>
+<span class="normal">2934</span>
+<span class="normal">2935</span>
+<span class="normal">2936</span>
+<span class="normal">2937</span>
+<span class="normal">2938</span>
+<span class="normal">2939</span>
+<span class="normal">2940</span>
+<span class="normal">2941</span>
+<span class="normal">2942</span>
+<span class="normal">2943</span>
+<span class="normal">2944</span>
+<span class="normal">2945</span>
+<span class="normal">2946</span>
+<span class="normal">2947</span>
+<span class="normal">2948</span>
+<span class="normal">2949</span>
+<span class="normal">2950</span>
+<span class="normal">2951</span>
+<span class="normal">2952</span>
+<span class="normal">2953</span>
+<span class="normal">2954</span>
+<span class="normal">2955</span>
+<span class="normal">2956</span>
+<span class="normal">2957</span>
+<span class="normal">2958</span>
+<span class="normal">2959</span>
+<span class="normal">2960</span>
+<span class="normal">2961</span>
+<span class="normal">2962</span>
+<span class="normal">2963</span>
+<span class="normal">2964</span>
+<span class="normal">2965</span>
+<span class="normal">2966</span>
+<span class="normal">2967</span>
+<span class="normal">2968</span>
+<span class="normal">2969</span>
+<span class="normal">2970</span>
+<span class="normal">2971</span>
+<span class="normal">2972</span>
+<span class="normal">2973</span>
+<span class="normal">2974</span>
+<span class="normal">2975</span>
+<span class="normal">2976</span>
+<span class="normal">2977</span>
+<span class="normal">2978</span>
+<span class="normal">2979</span>
+<span class="normal">2980</span>
+<span class="normal">2981</span>
+<span class="normal">2982</span>
+<span class="normal">2983</span>
+<span class="normal">2984</span>
+<span class="normal">2985</span>
+<span class="normal">2986</span>
+<span class="normal">2987</span>
+<span class="normal">2988</span>
+<span class="normal">2989</span>
+<span class="normal">2990</span>
+<span class="normal">2991</span>
+<span class="normal">2992</span>
+<span class="normal">2993</span>
+<span class="normal">2994</span>
+<span class="normal">2995</span>
+<span class="normal">2996</span>
+<span class="normal">2997</span>
+<span class="normal">2998</span>
+<span class="normal">2999</span>
+<span class="normal">3000</span>
+<span class="normal">3001</span>
+<span class="normal">3002</span>
+<span class="normal">3003</span>
+<span class="normal">3004</span>
+<span class="normal">3005</span>
+<span class="normal">3006</span>
+<span class="normal">3007</span>
+<span class="normal">3008</span>
+<span class="normal">3009</span>
+<span class="normal">3010</span>
+<span class="normal">3011</span>
+<span class="normal">3012</span>
+<span class="normal">3013</span>
+<span class="normal">3014</span>
+<span class="normal">3015</span>
+<span class="normal">3016</span>
+<span class="normal">3017</span>
+<span class="normal">3018</span>
+<span class="normal">3019</span>
+<span class="normal">3020</span>
+<span class="normal">3021</span>
+<span class="normal">3022</span>
+<span class="normal">3023</span>
+<span class="normal">3024</span>
+<span class="normal">3025</span>
+<span class="normal">3026</span>
+<span class="normal">3027</span>
+<span class="normal">3028</span>
+<span class="normal">3029</span>
+<span class="normal">3030</span>
+<span class="normal">3031</span>
+<span class="normal">3032</span>
+<span class="normal">3033</span>
+<span class="normal">3034</span>
+<span class="normal">3035</span>
+<span class="normal">3036</span>
+<span class="normal">3037</span>
+<span class="normal">3038</span>
+<span class="normal">3039</span>
+<span class="normal">3040</span>
+<span class="normal">3041</span>
+<span class="normal">3042</span>
+<span class="normal">3043</span>
+<span class="normal">3044</span>
+<span class="normal">3045</span>
+<span class="normal">3046</span>
+<span class="normal">3047</span>
+<span class="normal">3048</span>
+<span class="normal">3049</span>
+<span class="normal">3050</span>
+<span class="normal">3051</span>
+<span class="normal">3052</span>
+<span class="normal">3053</span>
+<span class="normal">3054</span>
+<span class="normal">3055</span>
+<span class="normal">3056</span>
+<span class="normal">3057</span>
+<span class="normal">3058</span>
+<span class="normal">3059</span>
+<span class="normal">3060</span>
+<span class="normal">3061</span>
 <span class="normal">3062</span>
 <span class="normal">3063</span>
 <span class="normal">3064</span>
@@ -2186,233 +2375,7 @@ slice starts in the flat state vector).</p>
 <span class="normal">3075</span>
 <span class="normal">3076</span>
 <span class="normal">3077</span>
-<span class="normal">3078</span>
-<span class="normal">3079</span>
-<span class="normal">3080</span>
-<span class="normal">3081</span>
-<span class="normal">3082</span>
-<span class="normal">3083</span>
-<span class="normal">3084</span>
-<span class="normal">3085</span>
-<span class="normal">3086</span>
-<span class="normal">3087</span>
-<span class="normal">3088</span>
-<span class="normal">3089</span>
-<span class="normal">3090</span>
-<span class="normal">3091</span>
-<span class="normal">3092</span>
-<span class="normal">3093</span>
-<span class="normal">3094</span>
-<span class="normal">3095</span>
-<span class="normal">3096</span>
-<span class="normal">3097</span>
-<span class="normal">3098</span>
-<span class="normal">3099</span>
-<span class="normal">3100</span>
-<span class="normal">3101</span>
-<span class="normal">3102</span>
-<span class="normal">3103</span>
-<span class="normal">3104</span>
-<span class="normal">3105</span>
-<span class="normal">3106</span>
-<span class="normal">3107</span>
-<span class="normal">3108</span>
-<span class="normal">3109</span>
-<span class="normal">3110</span>
-<span class="normal">3111</span>
-<span class="normal">3112</span>
-<span class="normal">3113</span>
-<span class="normal">3114</span>
-<span class="normal">3115</span>
-<span class="normal">3116</span>
-<span class="normal">3117</span>
-<span class="normal">3118</span>
-<span class="normal">3119</span>
-<span class="normal">3120</span>
-<span class="normal">3121</span>
-<span class="normal">3122</span>
-<span class="normal">3123</span>
-<span class="normal">3124</span>
-<span class="normal">3125</span>
-<span class="normal">3126</span>
-<span class="normal">3127</span>
-<span class="normal">3128</span>
-<span class="normal">3129</span>
-<span class="normal">3130</span>
-<span class="normal">3131</span>
-<span class="normal">3132</span>
-<span class="normal">3133</span>
-<span class="normal">3134</span>
-<span class="normal">3135</span>
-<span class="normal">3136</span>
-<span class="normal">3137</span>
-<span class="normal">3138</span>
-<span class="normal">3139</span>
-<span class="normal">3140</span>
-<span class="normal">3141</span>
-<span class="normal">3142</span>
-<span class="normal">3143</span>
-<span class="normal">3144</span>
-<span class="normal">3145</span>
-<span class="normal">3146</span>
-<span class="normal">3147</span>
-<span class="normal">3148</span>
-<span class="normal">3149</span>
-<span class="normal">3150</span>
-<span class="normal">3151</span>
-<span class="normal">3152</span>
-<span class="normal">3153</span>
-<span class="normal">3154</span>
-<span class="normal">3155</span>
-<span class="normal">3156</span>
-<span class="normal">3157</span>
-<span class="normal">3158</span>
-<span class="normal">3159</span>
-<span class="normal">3160</span>
-<span class="normal">3161</span>
-<span class="normal">3162</span>
-<span class="normal">3163</span>
-<span class="normal">3164</span>
-<span class="normal">3165</span>
-<span class="normal">3166</span>
-<span class="normal">3167</span>
-<span class="normal">3168</span>
-<span class="normal">3169</span>
-<span class="normal">3170</span>
-<span class="normal">3171</span>
-<span class="normal">3172</span>
-<span class="normal">3173</span>
-<span class="normal">3174</span>
-<span class="normal">3175</span>
-<span class="normal">3176</span>
-<span class="normal">3177</span>
-<span class="normal">3178</span>
-<span class="normal">3179</span>
-<span class="normal">3180</span>
-<span class="normal">3181</span>
-<span class="normal">3182</span>
-<span class="normal">3183</span>
-<span class="normal">3184</span>
-<span class="normal">3185</span>
-<span class="normal">3186</span>
-<span class="normal">3187</span>
-<span class="normal">3188</span>
-<span class="normal">3189</span>
-<span class="normal">3190</span>
-<span class="normal">3191</span>
-<span class="normal">3192</span>
-<span class="normal">3193</span>
-<span class="normal">3194</span>
-<span class="normal">3195</span>
-<span class="normal">3196</span>
-<span class="normal">3197</span>
-<span class="normal">3198</span>
-<span class="normal">3199</span>
-<span class="normal">3200</span>
-<span class="normal">3201</span>
-<span class="normal">3202</span>
-<span class="normal">3203</span>
-<span class="normal">3204</span>
-<span class="normal">3205</span>
-<span class="normal">3206</span>
-<span class="normal">3207</span>
-<span class="normal">3208</span>
-<span class="normal">3209</span>
-<span class="normal">3210</span>
-<span class="normal">3211</span>
-<span class="normal">3212</span>
-<span class="normal">3213</span>
-<span class="normal">3214</span>
-<span class="normal">3215</span>
-<span class="normal">3216</span>
-<span class="normal">3217</span>
-<span class="normal">3218</span>
-<span class="normal">3219</span>
-<span class="normal">3220</span>
-<span class="normal">3221</span>
-<span class="normal">3222</span>
-<span class="normal">3223</span>
-<span class="normal">3224</span>
-<span class="normal">3225</span>
-<span class="normal">3226</span>
-<span class="normal">3227</span>
-<span class="normal">3228</span>
-<span class="normal">3229</span>
-<span class="normal">3230</span>
-<span class="normal">3231</span>
-<span class="normal">3232</span>
-<span class="normal">3233</span>
-<span class="normal">3234</span>
-<span class="normal">3235</span>
-<span class="normal">3236</span>
-<span class="normal">3237</span>
-<span class="normal">3238</span>
-<span class="normal">3239</span>
-<span class="normal">3240</span>
-<span class="normal">3241</span>
-<span class="normal">3242</span>
-<span class="normal">3243</span>
-<span class="normal">3244</span>
-<span class="normal">3245</span>
-<span class="normal">3246</span>
-<span class="normal">3247</span>
-<span class="normal">3248</span>
-<span class="normal">3249</span>
-<span class="normal">3250</span>
-<span class="normal">3251</span>
-<span class="normal">3252</span>
-<span class="normal">3253</span>
-<span class="normal">3254</span>
-<span class="normal">3255</span>
-<span class="normal">3256</span>
-<span class="normal">3257</span>
-<span class="normal">3258</span>
-<span class="normal">3259</span>
-<span class="normal">3260</span>
-<span class="normal">3261</span>
-<span class="normal">3262</span>
-<span class="normal">3263</span>
-<span class="normal">3264</span>
-<span class="normal">3265</span>
-<span class="normal">3266</span>
-<span class="normal">3267</span>
-<span class="normal">3268</span>
-<span class="normal">3269</span>
-<span class="normal">3270</span>
-<span class="normal">3271</span>
-<span class="normal">3272</span>
-<span class="normal">3273</span>
-<span class="normal">3274</span>
-<span class="normal">3275</span>
-<span class="normal">3276</span>
-<span class="normal">3277</span>
-<span class="normal">3278</span>
-<span class="normal">3279</span>
-<span class="normal">3280</span>
-<span class="normal">3281</span>
-<span class="normal">3282</span>
-<span class="normal">3283</span>
-<span class="normal">3284</span>
-<span class="normal">3285</span>
-<span class="normal">3286</span>
-<span class="normal">3287</span>
-<span class="normal">3288</span>
-<span class="normal">3289</span>
-<span class="normal">3290</span>
-<span class="normal">3291</span>
-<span class="normal">3292</span>
-<span class="normal">3293</span>
-<span class="normal">3294</span>
-<span class="normal">3295</span>
-<span class="normal">3296</span>
-<span class="normal">3297</span>
-<span class="normal">3298</span>
-<span class="normal">3299</span>
-<span class="normal">3300</span>
-<span class="normal">3301</span>
-<span class="normal">3302</span>
-<span class="normal">3303</span>
-<span class="normal">3304</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">normalize_transitions_rhs</span><span class="p">(</span>  <span class="c1"># noqa: C901, PLR0912, PLR0914, PLR0915</span>
+<span class="normal">3078</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">normalize_transitions_rhs</span><span class="p">(</span>  <span class="c1"># noqa: C901, PLR0912, PLR0914, PLR0915</span>
     <span class="n">spec</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">NormalizedRhs</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Normalize a transition-based RHS specification (diagram/hazard semantics).</span>
@@ -2529,18 +2492,21 @@ slice starts in the flat state vector).</p>
                     <span class="n">time_axis_name</span><span class="o">=</span><span class="n">time_axis_name</span><span class="p">,</span>
                 <span class="p">)</span>
 
-    <span class="n">aliases</span><span class="p">,</span> <span class="n">alias_template_map</span> <span class="o">=</span> <span class="n">_expand_alias_templates</span><span class="p">(</span>
-        <span class="n">meta_parts</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
-        <span class="n">axes</span><span class="o">=</span><span class="n">axes_meta</span><span class="p">,</span>
-        <span class="n">template_map_seed</span><span class="o">=</span><span class="n">state_template_map</span><span class="p">,</span>
-        <span class="n">shaped_params</span><span class="o">=</span><span class="n">shaped_params</span><span class="p">,</span>
-        <span class="n">axis_lookup</span><span class="o">=</span><span class="n">axis_lookup_dict</span><span class="p">,</span>
+    <span class="n">aliases_ir_map</span><span class="p">,</span> <span class="n">aliases_ir_reduce_map</span><span class="p">,</span> <span class="n">alias_template_map</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">_build_aliases_ir_from_raw</span><span class="p">(</span>
+            <span class="n">aliases_raw_map</span><span class="p">,</span>
+            <span class="n">axes</span><span class="o">=</span><span class="n">axes_meta</span><span class="p">,</span>
+            <span class="n">shaped_params</span><span class="o">=</span><span class="n">shaped_params</span><span class="p">,</span>
+            <span class="n">axis_lookup</span><span class="o">=</span><span class="n">axis_lookup_dict</span><span class="p">,</span>
+        <span class="p">)</span>
     <span class="p">)</span>
     <span class="n">template_map_all</span> <span class="o">=</span> <span class="p">{</span><span class="o">**</span><span class="n">state_template_map</span><span class="p">,</span> <span class="o">**</span><span class="n">alias_template_map</span><span class="p">}</span>
 
     <span class="n">state_set</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">state_expanded</span><span class="p">)</span>
-    <span class="n">d_terms</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="p">{</span><span class="n">s</span><span class="p">:</span> <span class="p">[]</span> <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">state_expanded</span><span class="p">}</span>
-    <span class="n">all_syms</span> <span class="o">=</span> <span class="n">_collect_alias_symbols</span><span class="p">(</span><span class="n">aliases</span><span class="p">,</span> <span class="n">axes</span><span class="o">=</span><span class="n">axes_meta</span><span class="p">)</span>
+    <span class="c1"># Collect alias symbols from IR (replaces _collect_alias_symbols string path)</span>
+    <span class="n">all_syms</span><span class="p">:</span> <span class="nb">set</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+    <span class="k">for</span> <span class="n">alias_expr</span> <span class="ow">in</span> <span class="n">aliases_ir_map</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+        <span class="n">all_syms</span> <span class="o">|=</span> <span class="n">free_symbols</span><span class="p">(</span><span class="n">alias_expr</span><span class="p">)</span>
 
     <span class="n">_apply_coord_shifts</span><span class="p">(</span>
         <span class="n">transitions_raw</span><span class="o">=</span><span class="n">transitions_raw</span><span class="p">,</span>
@@ -2548,29 +2514,24 @@ slice starts in the flat state vector).</p>
         <span class="n">axes</span><span class="o">=</span><span class="n">axes_meta</span><span class="p">,</span>
     <span class="p">)</span>
 
-    <span class="k">for</span> <span class="n">state_name</span> <span class="ow">in</span> <span class="n">state_expanded</span><span class="p">:</span>
-        <span class="n">d_terms</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="n">state_name</span><span class="p">,</span> <span class="p">[])</span>
-
     <span class="k">if</span> <span class="ow">not</span> <span class="n">transitions_raw</span><span class="p">:</span>
         <span class="k">raise</span> <span class="n">InvalidRhsSpecError</span><span class="p">(</span>
             <span class="n">detail</span><span class="o">=</span><span class="s2">&quot;transitions must be non-empty after applying chain expansion&quot;</span>
         <span class="p">)</span>
 
-    <span class="n">transitions_expanded</span> <span class="o">=</span> <span class="n">_expand_transition_templates</span><span class="p">(</span>
-        <span class="n">transitions_raw</span><span class="p">,</span>
-        <span class="n">axes</span><span class="o">=</span><span class="n">axes_meta</span><span class="p">,</span>
-        <span class="n">template_map</span><span class="o">=</span><span class="n">template_map_all</span><span class="p">,</span>
-        <span class="n">shaped_params</span><span class="o">=</span><span class="n">shaped_params</span><span class="p">,</span>
-    <span class="p">)</span>
-
-    <span class="k">for</span> <span class="n">idx</span><span class="p">,</span> <span class="n">tr_map</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">transitions_expanded</span><span class="p">):</span>
-        <span class="n">_apply_transition</span><span class="p">(</span>
-            <span class="n">idx</span><span class="o">=</span><span class="n">idx</span><span class="p">,</span>
-            <span class="n">tr</span><span class="o">=</span><span class="n">tr_map</span><span class="p">,</span>
+    <span class="c1"># Build equations and collect expanded transitions in one IR-native pass</span>
+    <span class="n">equations_ir_pre_inline</span><span class="p">,</span> <span class="n">equations_ir_reduce</span><span class="p">,</span> <span class="n">transitions_expanded</span><span class="p">,</span> <span class="n">rate_syms</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">_build_transition_equations_ir</span><span class="p">(</span>
+            <span class="n">transitions_raw</span><span class="p">,</span>
             <span class="n">state_set</span><span class="o">=</span><span class="n">state_set</span><span class="p">,</span>
-            <span class="n">all_syms</span><span class="o">=</span><span class="n">all_syms</span><span class="p">,</span>
-            <span class="n">d_terms</span><span class="o">=</span><span class="n">d_terms</span><span class="p">,</span>
+            <span class="n">state_expanded</span><span class="o">=</span><span class="n">state_expanded</span><span class="p">,</span>
+            <span class="n">axes</span><span class="o">=</span><span class="n">axes_meta</span><span class="p">,</span>
+            <span class="n">axis_lookup</span><span class="o">=</span><span class="n">axis_lookup_dict</span><span class="p">,</span>
+            <span class="n">template_map</span><span class="o">=</span><span class="n">template_map_all</span><span class="p">,</span>
+            <span class="n">shaped_params</span><span class="o">=</span><span class="n">shaped_params</span><span class="p">,</span>
         <span class="p">)</span>
+    <span class="p">)</span>
+    <span class="n">all_syms</span> <span class="o">|=</span> <span class="n">rate_syms</span>
 
     <span class="n">_maybe_attach_initial_state</span><span class="p">(</span>
         <span class="n">meta</span><span class="p">,</span>
@@ -2587,60 +2548,25 @@ slice starts in the flat state vector).</p>
     <span class="n">time_varying_set</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">time_varying_full</span><span class="p">)</span>
     <span class="n">axis_name_set</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">axis_lookup_dict</span><span class="p">)</span>
     <span class="n">template_base_set</span> <span class="o">=</span> <span class="p">{</span><span class="n">parse_selector</span><span class="p">(</span><span class="n">k</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">template_map_all</span><span class="p">}</span>
-    <span class="n">eqs_tuple</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">_build_transition_equations</span><span class="p">(</span><span class="n">state_expanded</span><span class="p">,</span> <span class="n">d_terms</span><span class="p">))</span>
-    <span class="n">aliases_ir_map</span> <span class="o">=</span> <span class="n">_build_aliases_ir</span><span class="p">(</span><span class="n">aliases</span><span class="p">)</span>
+    <span class="n">eqs_tuple</span> <span class="o">=</span> <span class="n">_derive_equation_strings</span><span class="p">(</span><span class="n">equations_ir_pre_inline</span><span class="p">)</span>
     <span class="n">equations_ir_built</span> <span class="o">=</span> <span class="n">_build_equations_ir</span><span class="p">(</span><span class="n">eqs_tuple</span><span class="p">,</span> <span class="n">aliases_ir_map</span><span class="p">)</span>
-    <span class="n">aliases_ir_reduce_map</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Expr</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
-    <span class="n">equations_ir_reduce</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">Expr</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="p">()</span>
-    <span class="k">try</span><span class="p">:</span>
-        <span class="n">aliases_pre</span><span class="p">,</span> <span class="n">_alias_template_map_pre</span> <span class="o">=</span> <span class="n">_expand_alias_templates</span><span class="p">(</span>
-            <span class="n">meta_parts</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
-            <span class="n">axes</span><span class="o">=</span><span class="n">axes_meta</span><span class="p">,</span>
-            <span class="n">template_map_seed</span><span class="o">=</span><span class="n">state_template_map</span><span class="p">,</span>
-            <span class="n">shaped_params</span><span class="o">=</span><span class="n">shaped_params</span><span class="p">,</span>
-            <span class="n">axis_lookup</span><span class="o">=</span><span class="n">axis_lookup_dict</span><span class="p">,</span>
-            <span class="n">passthrough_helpers</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-        <span class="p">)</span>
-        <span class="n">transitions_expanded_pre</span> <span class="o">=</span> <span class="n">_expand_transition_templates</span><span class="p">(</span>
-            <span class="n">transitions_raw</span><span class="p">,</span>
-            <span class="n">axes</span><span class="o">=</span><span class="n">axes_meta</span><span class="p">,</span>
-            <span class="n">template_map</span><span class="o">=</span><span class="n">template_map_all</span><span class="p">,</span>
-            <span class="n">shaped_params</span><span class="o">=</span><span class="n">shaped_params</span><span class="p">,</span>
-            <span class="n">passthrough_helpers</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-        <span class="p">)</span>
-        <span class="n">d_terms_pre</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="p">{</span><span class="n">s</span><span class="p">:</span> <span class="p">[]</span> <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">state_expanded</span><span class="p">}</span>
-        <span class="n">all_syms_pre</span><span class="p">:</span> <span class="nb">set</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
-        <span class="k">for</span> <span class="n">idx</span><span class="p">,</span> <span class="n">tr_map</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">transitions_expanded_pre</span><span class="p">):</span>
-            <span class="n">_apply_transition</span><span class="p">(</span>
-                <span class="n">idx</span><span class="o">=</span><span class="n">idx</span><span class="p">,</span>
-                <span class="n">tr</span><span class="o">=</span><span class="n">tr_map</span><span class="p">,</span>
-                <span class="n">state_set</span><span class="o">=</span><span class="n">state_set</span><span class="p">,</span>
-                <span class="n">all_syms</span><span class="o">=</span><span class="n">all_syms_pre</span><span class="p">,</span>
-                <span class="n">d_terms</span><span class="o">=</span><span class="n">d_terms_pre</span><span class="p">,</span>
-            <span class="p">)</span>
-        <span class="n">eqs_pre</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">_build_transition_equations</span><span class="p">(</span><span class="n">state_expanded</span><span class="p">,</span> <span class="n">d_terms_pre</span><span class="p">))</span>
-        <span class="n">aliases_ir_reduce_map</span> <span class="o">=</span> <span class="n">_build_aliases_ir</span><span class="p">(</span><span class="n">aliases_pre</span><span class="p">,</span> <span class="n">lower_helpers</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-        <span class="n">equations_ir_reduce</span> <span class="o">=</span> <span class="n">_build_equations_ir</span><span class="p">(</span><span class="n">eqs_pre</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="n">lower_helpers</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-    <span class="k">except</span> <span class="p">(</span><span class="ne">ValueError</span><span class="p">,</span> <span class="ne">RecursionError</span><span class="p">,</span> <span class="n">InvalidRhsSpecError</span><span class="p">):</span>
-        <span class="n">aliases_ir_reduce_map</span> <span class="o">=</span> <span class="p">{}</span>
-        <span class="n">equations_ir_reduce</span> <span class="o">=</span> <span class="p">()</span>
     <span class="k">return</span> <span class="n">NormalizedRhs</span><span class="p">(</span>
         <span class="n">kind</span><span class="o">=</span><span class="s2">&quot;transitions&quot;</span><span class="p">,</span>
         <span class="n">state_names</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(</span><span class="n">state_expanded</span><span class="p">),</span>
         <span class="n">equations</span><span class="o">=</span><span class="n">eqs_tuple</span><span class="p">,</span>
-        <span class="n">aliases</span><span class="o">=</span><span class="n">_derive_alias_strings</span><span class="p">(</span><span class="n">aliases_ir_map</span><span class="p">,</span> <span class="n">aliases</span><span class="p">),</span>
+        <span class="n">aliases</span><span class="o">=</span><span class="n">_derive_alias_strings</span><span class="p">(</span><span class="n">aliases_ir_map</span><span class="p">,</span> <span class="n">aliases_ir_map</span><span class="p">),</span>
         <span class="n">param_names</span><span class="o">=</span><span class="n">_sorted_unique</span><span class="p">(</span>
             <span class="n">sym</span>
             <span class="k">for</span> <span class="n">sym</span> <span class="ow">in</span> <span class="n">all_syms</span>
             <span class="k">if</span> <span class="n">sym</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">state_set</span>
-            <span class="ow">and</span> <span class="n">sym</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">aliases</span>
+            <span class="ow">and</span> <span class="n">sym</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">aliases_ir_map</span>
             <span class="ow">and</span> <span class="n">sym</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">shaped_set</span>
             <span class="ow">and</span> <span class="n">sym</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">time_varying_set</span>
             <span class="ow">and</span> <span class="n">sym</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">axis_name_set</span>
             <span class="ow">and</span> <span class="n">sym</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">template_base_set</span>
             <span class="ow">and</span> <span class="n">sym</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">_SHAPED_PARAM_BUILTIN_NAMES</span>
         <span class="p">),</span>
-        <span class="n">all_symbols</span><span class="o">=</span><span class="nb">frozenset</span><span class="p">(</span><span class="n">all_syms</span> <span class="o">|</span> <span class="nb">set</span><span class="p">(</span><span class="n">aliases</span><span class="o">.</span><span class="n">keys</span><span class="p">())),</span>
+        <span class="n">all_symbols</span><span class="o">=</span><span class="nb">frozenset</span><span class="p">(</span><span class="n">all_syms</span> <span class="o">|</span> <span class="nb">set</span><span class="p">(</span><span class="n">aliases_ir_map</span><span class="o">.</span><span class="n">keys</span><span class="p">())),</span>
         <span class="n">meta</span><span class="o">=</span><span class="p">{</span><span class="o">**</span><span class="n">meta</span><span class="p">,</span> <span class="s2">&quot;transitions&quot;</span><span class="p">:</span> <span class="n">transitions_expanded</span><span class="p">},</span>
         <span class="n">state_templates</span><span class="o">=</span><span class="n">_build_state_templates</span><span class="p">(</span>
             <span class="n">state_raw</span><span class="p">,</span>
