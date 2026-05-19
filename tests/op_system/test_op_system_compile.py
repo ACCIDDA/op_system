@@ -27,7 +27,6 @@ import numpy as np
 import pytest
 
 from op_system import compile_spec
-from op_system._errors import InvalidRhsSpecError
 from op_system.compile import CompiledRhs, _collect_eq_code, compile_rhs
 from op_system.specs import NormalizedRhs, normalize_rhs
 
@@ -172,11 +171,10 @@ def test_compile_rejects_disallowed_attribute_access() -> None:
     """Disallowed attribute access should be rejected before evaluation."""
     spec = {"kind": "expr", "state": ["x"], "equations": {"x": "x.real"}}
     with pytest.raises(
-        (ValueError, InvalidRhsSpecError),
-        match=r"disallowed attribute access|missing typed IR",
+        ValueError,
+        match=r"unsupported AST node in IR parser: Attribute",
     ):
-        rhs = normalize_rhs(spec)
-        compile_rhs(rhs, xp=np)
+        normalize_rhs(spec)
 
 
 def test_eval_allows_whitelisted_np_calls() -> None:

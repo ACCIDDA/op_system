@@ -1162,11 +1162,9 @@ def _build_aliases_ir(
 ) -> dict[str, Expr]:
     """Parse each alias body to IR and inline alias-to-alias references.
 
-    Best-effort: when parsing or inlining fails (cyclic aliases, AST recursion
-    on very long expanded chains, unsupported syntax), the failing alias is
-    omitted rather than aborting normalization. Existing string-based consumers
-    rely on lazy cycle detection at evaluation time, so this preserves
-    backward-compatible behaviour while still exposing IR where available.
+    Parsing is strict: invalid alias expressions abort normalization with the
+    original parser error. Alias inlining remains best-effort so cyclic aliases
+    can still survive to the existing lazy cycle detection at evaluation time.
 
     Args:
         aliases: Mapping from alias name to body string.
@@ -1177,8 +1175,7 @@ def _build_aliases_ir(
             reduction IR to downstream consumers.
 
     Returns:
-        Mapping from alias name to its (fully inlined) IR expression. Entries
-        that could not be parsed or inlined are omitted.
+        Mapping from alias name to its (fully inlined) IR expression.
     """
     # Long expanded Add chains (e.g. ``apply_along`` over many coords) can
     # exceed Python's default recursion limit during AST descent / inlining.
@@ -1189,11 +1186,7 @@ def _build_aliases_ir(
             sys.setrecursionlimit(needed)
         parsed: dict[str, Expr] = {}
         for name, body in aliases.items():
-            try:
-                expr = parse_expr_to_ir(body, lower_helpers=lower_helpers)
-            except (ValueError, RecursionError):
-                continue
-            parsed[name] = expr
+            parsed[name] = parse_expr_to_ir(body, lower_helpers=lower_helpers)
         # Validate the alias graph once and share a free_symbols memo across
         # all per-alias inline_aliases calls: alias bodies are reused by
         # identity, so id-keyed caching turns the inner traversal cost from
@@ -1230,10 +1223,9 @@ def _build_equations_ir(
 ) -> tuple[Expr | None, ...]:
     """Parse each equation RHS to IR, optionally inlining alias references.
 
-    Best-effort: entries that fail to parse or inline are returned as ``None``
-    so positional alignment with ``equations`` is preserved. Mirrors the
-    fallback policy of :func:`_build_aliases_ir` to keep this slice purely
-    additive — existing string-based consumers remain authoritative.
+    Parsing is strict: invalid equation expressions abort normalization with
+    the original parser error. Alias inlining remains best-effort so callers
+    retain the current cycle/lowering behavior once parsing succeeds.
 
     Args:
         equations: Tuple of equation RHS strings.
@@ -1243,8 +1235,7 @@ def _build_equations_ir(
             with pre-expansion equation strings.
 
     Returns:
-        Tuple of IR expressions (or ``None`` for failed entries) aligned
-        positionally with ``equations``.
+        Tuple of IR expressions aligned positionally with ``equations``.
     """
     old_limit = sys.getrecursionlimit()
     needed = max(old_limit, 10_000)
@@ -1263,13 +1254,9 @@ def _build_equations_ir(
                 cycle_validated = cycle is None
             except (ValueError, RecursionError):
                 cycle_validated = False
-        out: list[Expr | None] = []
+        out: list[Expr] = []
         for eq in equations:
-            try:
-                expr = parse_expr_to_ir(eq, lower_helpers=lower_helpers)
-            except (ValueError, RecursionError):
-                out.append(None)
-                continue
+            expr = parse_expr_to_ir(eq, lower_helpers=lower_helpers)
             if aliases_ir is None:
                 out.append(expr)
                 continue
