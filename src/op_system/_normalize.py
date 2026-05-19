@@ -36,7 +36,7 @@ from op_system._helpers import (
     _ensure_str_list,
     _sorted_unique,
 )
-from op_system._ir import Expr, parse_expr_to_ir
+from op_system._ir import Expr, parse_expr_to_ir, unparse_ir
 from op_system._ir_templates import _detect_alias_cycle, inline_aliases
 from op_system._symbols import _collect_names, _parse_expr
 from op_system._templates import (
@@ -1364,6 +1364,62 @@ def _build_equations_ir_via_pointwise(  # noqa: PLR0913
     finally:
         if needed > old_limit:
             sys.setrecursionlimit(old_limit)
+
+
+def _derive_equation_strings(
+    equations_ir: tuple[Expr | None, ...],
+    legacy: tuple[str, ...],
+) -> tuple[str, ...]:
+    """Render each equation's RHS from its IR, falling back to legacy strings.
+
+    When an entry in ``equations_ir`` is ``None``, the corresponding legacy
+    string is used. This keeps positional alignment intact while letting the
+    IR-side pipeline serve as the authoritative source for apply_along-bearing
+    equations.
+
+    Args:
+        equations_ir: Per-cell post-expansion IR (``None`` allowed).
+        legacy: Pre-existing string equations to fall back on.
+
+    Returns:
+        Tuple of equation strings aligned with ``equations_ir``.
+    """
+    rendered: list[str] = []
+    for ir, fallback in zip(equations_ir, legacy, strict=False):
+        if ir is None:
+            rendered.append(fallback)
+            continue
+        try:
+            rendered.append(unparse_ir(ir))
+        except (ValueError, RecursionError):
+            rendered.append(fallback)
+    return tuple(rendered)
+
+
+def _derive_alias_strings(
+    aliases_ir: Mapping[str, Expr],
+    legacy: Mapping[str, str],
+) -> dict[str, str]:
+    """Render each alias body from its IR, falling back to legacy strings.
+
+    Args:
+        aliases_ir: Alias-name → IR map.
+        legacy: Pre-existing alias-name → string map (preserves ordering).
+
+    Returns:
+        New alias mapping with IR-derived bodies where available.
+    """
+    out: dict[str, str] = {}
+    for name, body in legacy.items():
+        ir = aliases_ir.get(name)
+        if ir is None:
+            out[name] = body
+            continue
+        try:
+            out[name] = unparse_ir(ir)
+        except (ValueError, RecursionError):
+            out[name] = body
+    return out
 
 
 _INITIAL_STATE_SHAPED_KEY = "shaped"
@@ -3282,11 +3338,24 @@ def normalize_expr_rhs(spec: Mapping[str, Any]) -> NormalizedRhs:  # noqa: C901,
         aliases_ir_reduce_map = {}
         equations_ir_reduce = ()
 
+    equations_ir_built = _build_equations_ir_via_pointwise(
+        equations_ir_reduce=equations_ir_reduce,
+        aliases_ir_reduce=aliases_ir_reduce_map,
+        state_expanded=state_expanded,
+        template_map=template_map_all,
+        axes=axes_meta,
+        shaped_params=shaped_params,
+        axis_lookup=axis_lookup_dict,
+    ) or _build_equations_ir(eqs_tuple, aliases_ir_map)
+
+    equations_strings = _derive_equation_strings(equations_ir_built, eqs_tuple)
+    aliases_strings = _derive_alias_strings(aliases_ir_map, aliases)
+
     return NormalizedRhs(
         kind="expr",
         state_names=tuple(state_expanded),
-        equations=eqs_tuple,
-        aliases=aliases,
+        equations=equations_strings,
+        aliases=aliases_strings,
         param_names=_sorted_unique(
             sym
             for sym in all_syms
@@ -3309,16 +3378,7 @@ def normalize_expr_rhs(spec: Mapping[str, Any]) -> NormalizedRhs:  # noqa: C901,
         shaped_params=tuple(sorted(shaped_params.items())),
         time_varying_params=tuple(sorted(time_varying_full.items())),
         aliases_ir=aliases_ir_map,
-        equations_ir=_build_equations_ir_via_pointwise(
-            equations_ir_reduce=equations_ir_reduce,
-            aliases_ir_reduce=aliases_ir_reduce_map,
-            state_expanded=state_expanded,
-            template_map=template_map_all,
-            axes=axes_meta,
-            shaped_params=shaped_params,
-            axis_lookup=axis_lookup_dict,
-        )
-        or _build_equations_ir(eqs_tuple, aliases_ir_map),
+        equations_ir=equations_ir_built,
         equations_ir_raw=_build_equations_ir(eqs_tuple),
         aliases_ir_reduce=aliases_ir_reduce_map,
         equations_ir_reduce=equations_ir_reduce,
