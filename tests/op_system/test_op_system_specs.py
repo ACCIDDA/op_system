@@ -181,8 +181,10 @@ def test_alias_and_param_templates_expand_over_axes() -> None:
     expected_aliases = {"beta__age_y", "beta__age_o", "k__age_y", "k__age_o"}
     assert set(out.aliases) == expected_aliases
 
-    assert any("beta__age_y" in eq for eq in out.equations)
-    assert any("beta__age_o" in eq for eq in out.equations)
+    # Aliases are inlined into equations (IR-derived strings); the templated
+    # alias *bodies* — and the LHS cells they multiply — must appear per axis.
+    assert any("offset[0]" in eq and "S__age_y" in eq for eq in out.equations)
+    assert any("offset[1]" in eq and "S__age_o" in eq for eq in out.equations)
 
     # ``offset[age]`` is now a shaped parameter (not per-coord scalars and
     # not included in ``param_names`` — those list scalar params only).
@@ -320,9 +322,9 @@ def test_same_axis_twice_apply_along_per_row_contraction() -> None:
     assert dict(rhs.shaped_params) == {"K": ("age", "age")}
     foi_eqs = rhs.equations[3:6]
     expected = [
-        "((K[0, 0] * I__age_a0) + (K[0, 1] * I__age_a1) + (K[0, 2] * I__age_a2))",
-        "((K[1, 0] * I__age_a0) + (K[1, 1] * I__age_a1) + (K[1, 2] * I__age_a2))",
-        "((K[2, 0] * I__age_a0) + (K[2, 1] * I__age_a1) + (K[2, 2] * I__age_a2))",
+        "K[0, 0] * I__age_a0 + K[0, 1] * I__age_a1 + K[0, 2] * I__age_a2",
+        "K[1, 0] * I__age_a0 + K[1, 1] * I__age_a1 + K[1, 2] * I__age_a2",
+        "K[2, 0] * I__age_a0 + K[2, 1] * I__age_a1 + K[2, 2] * I__age_a2",
     ]
     assert list(foi_eqs) == expected
 

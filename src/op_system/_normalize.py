@@ -36,7 +36,7 @@ from op_system._helpers import (
     _ensure_str_list,
     _sorted_unique,
 )
-from op_system._ir import Expr, parse_expr_to_ir
+from op_system._ir import Expr, parse_expr_to_ir, unparse_ir
 from op_system._ir_templates import _detect_alias_cycle, inline_aliases
 from op_system._symbols import _collect_names, _parse_expr
 from op_system._templates import (
@@ -1287,6 +1287,139 @@ def _build_equations_ir(
     finally:
         if needed > old_limit:
             sys.setrecursionlimit(old_limit)
+
+
+def _build_equations_ir_via_pointwise(  # noqa: PLR0913
+    *,
+    equations_ir_reduce: tuple[Expr | None, ...],
+    aliases_ir_reduce: Mapping[str, Expr],
+    state_expanded: Sequence[str],
+    template_map: Mapping[str, Sequence[tuple[str, Mapping[str, str]]]],
+    axes: Sequence[Mapping[str, Any]],
+    shaped_params: Mapping[str, tuple[str, ...]],
+    axis_lookup: Mapping[str, Sequence[str]],
+) -> tuple[Expr | None, ...]:
+    """Build pointwise equation IR by IR-side expansion of ``Reduce`` nodes.
+
+    For each state cell, inline alias references (resolved against the
+    pre-expansion ``aliases_ir_reduce`` map so nested ``Reduce`` nodes are
+    preserved) and then call :func:`expand_reduce_pointwise` with the cell's
+    LHS template assignment so that same-axis-twice references resolve
+    correctly. Avoids the string roundtrip that :func:`_build_equations_ir`
+    performs against ``_expand_apply_along`` output.
+
+    Best-effort: cells whose IR cannot be inlined or expanded are returned
+    as ``None`` to preserve positional alignment with ``state_expanded``.
+
+    Returns:
+        Tuple of expanded pointwise IR (or ``None`` for failed entries)
+        aligned positionally with ``state_expanded``.
+    """
+    from op_system._ir_expand import expand_reduce_pointwise  # noqa: PLC0415
+
+    if not equations_ir_reduce:
+        return ()
+    cell_to_assignment: dict[str, Mapping[str, str]] = {}
+    for variants in template_map.values():
+        cell_to_assignment.update(dict(variants))
+
+    memo: dict[int, frozenset[str]] = {}
+    try:
+        cycle_validated = _detect_alias_cycle(aliases_ir_reduce) is None
+    except (ValueError, RecursionError):
+        cycle_validated = False
+
+    out: list[Expr | None] = []
+    old_limit = sys.getrecursionlimit()
+    needed = max(old_limit, 10_000)
+    try:
+        if needed > old_limit:
+            sys.setrecursionlimit(needed)
+        for cell, ir in zip(state_expanded, equations_ir_reduce, strict=False):
+            if ir is None:
+                out.append(None)
+                continue
+            try:
+                inlined = inline_aliases(
+                    ir,
+                    aliases_ir_reduce,
+                    memo=memo,
+                    skip_cycle_check=cycle_validated,
+                )
+            except (ValueError, RecursionError):
+                inlined = ir
+            assignment = cell_to_assignment.get(cell, {})
+            try:
+                expanded = expand_reduce_pointwise(
+                    inlined,
+                    axes=axes,
+                    shaped_params=shaped_params,
+                    lhs_assignment=assignment,
+                    axis_coords=axis_lookup,
+                )
+            except (ValueError, RecursionError, KeyError):
+                expanded = None
+            out.append(expanded)
+        return tuple(out)
+    finally:
+        if needed > old_limit:
+            sys.setrecursionlimit(old_limit)
+
+
+def _derive_equation_strings(
+    equations_ir: tuple[Expr | None, ...],
+    legacy: tuple[str, ...],
+) -> tuple[str, ...]:
+    """Render each equation's RHS from its IR, falling back to legacy strings.
+
+    When an entry in ``equations_ir`` is ``None``, the corresponding legacy
+    string is used. This keeps positional alignment intact while letting the
+    IR-side pipeline serve as the authoritative source for apply_along-bearing
+    equations.
+
+    Args:
+        equations_ir: Per-cell post-expansion IR (``None`` allowed).
+        legacy: Pre-existing string equations to fall back on.
+
+    Returns:
+        Tuple of equation strings aligned with ``equations_ir``.
+    """
+    rendered: list[str] = []
+    for ir, fallback in zip(equations_ir, legacy, strict=False):
+        if ir is None:
+            rendered.append(fallback)
+            continue
+        try:
+            rendered.append(unparse_ir(ir))
+        except (ValueError, RecursionError):
+            rendered.append(fallback)
+    return tuple(rendered)
+
+
+def _derive_alias_strings(
+    aliases_ir: Mapping[str, Expr],
+    legacy: Mapping[str, str],
+) -> dict[str, str]:
+    """Render each alias body from its IR, falling back to legacy strings.
+
+    Args:
+        aliases_ir: Alias-name → IR map.
+        legacy: Pre-existing alias-name → string map (preserves ordering).
+
+    Returns:
+        New alias mapping with IR-derived bodies where available.
+    """
+    out: dict[str, str] = {}
+    for name, body in legacy.items():
+        ir = aliases_ir.get(name)
+        if ir is None:
+            out[name] = body
+            continue
+        try:
+            out[name] = unparse_ir(ir)
+        except (ValueError, RecursionError):
+            out[name] = body
+    return out
 
 
 _INITIAL_STATE_SHAPED_KEY = "shaped"
@@ -3205,11 +3338,24 @@ def normalize_expr_rhs(spec: Mapping[str, Any]) -> NormalizedRhs:  # noqa: C901,
         aliases_ir_reduce_map = {}
         equations_ir_reduce = ()
 
+    equations_ir_built = _build_equations_ir_via_pointwise(
+        equations_ir_reduce=equations_ir_reduce,
+        aliases_ir_reduce=aliases_ir_reduce_map,
+        state_expanded=state_expanded,
+        template_map=template_map_all,
+        axes=axes_meta,
+        shaped_params=shaped_params,
+        axis_lookup=axis_lookup_dict,
+    ) or _build_equations_ir(eqs_tuple, aliases_ir_map)
+
+    equations_strings = _derive_equation_strings(equations_ir_built, eqs_tuple)
+    aliases_strings = _derive_alias_strings(aliases_ir_map, aliases)
+
     return NormalizedRhs(
         kind="expr",
         state_names=tuple(state_expanded),
-        equations=eqs_tuple,
-        aliases=aliases,
+        equations=equations_strings,
+        aliases=aliases_strings,
         param_names=_sorted_unique(
             sym
             for sym in all_syms
@@ -3232,7 +3378,7 @@ def normalize_expr_rhs(spec: Mapping[str, Any]) -> NormalizedRhs:  # noqa: C901,
         shaped_params=tuple(sorted(shaped_params.items())),
         time_varying_params=tuple(sorted(time_varying_full.items())),
         aliases_ir=aliases_ir_map,
-        equations_ir=_build_equations_ir(eqs_tuple, aliases_ir_map),
+        equations_ir=equations_ir_built,
         equations_ir_raw=_build_equations_ir(eqs_tuple),
         aliases_ir_reduce=aliases_ir_reduce_map,
         equations_ir_reduce=equations_ir_reduce,

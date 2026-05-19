@@ -8,6 +8,7 @@ expressions into typed IR nodes without changing compile/normalize behavior.
 from __future__ import annotations
 
 import ast
+import re
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import TYPE_CHECKING, NoReturn
@@ -579,11 +580,45 @@ def ir_to_ast_expr(expr: Expr) -> ast.expr:  # noqa: C901, PLR0911, PLR0912
     _invalid(detail=f"unsupported IR node for AST conversion: {type(expr).__name__}")
 
 
+_IDENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+
+def _render_coord(coord: object) -> str:  # noqa: PLR0911
+    """Render an ``AxisIndex.coord`` value for source-text unparsing.
+
+    Integer-like coords render as bare integers, identifier-like coords render
+    bare, and anything else falls back to ``repr``.
+
+    Args:
+        coord: Coordinate value held on an :class:`AxisIndex` node.
+
+    Returns:
+        Source-text rendering of ``coord`` suitable for embedding in a
+        subscript or bound-axis expression.
+    """
+    if isinstance(coord, bool):
+        return repr(coord)
+    if isinstance(coord, int):
+        return str(coord)
+    if isinstance(coord, float):
+        return repr(coord)
+    if isinstance(coord, str):
+        if coord.lstrip("-").isdigit():
+            return coord
+        if _IDENT_RE.match(coord):
+            return coord
+        return repr(coord)
+    return repr(coord)
+
+
 def _unparse_axis_index(idx: AxisIndex) -> str:
     if idx.placeholder is not None:
         return f"${idx.placeholder}"
     if idx.coord is not None:
-        return repr(idx.coord)
+        rendered = _render_coord(idx.coord)
+        if idx.axis and idx.axis != idx.coord:
+            return f"{idx.axis}:{rendered}"
+        return rendered
     return idx.axis
 
 
@@ -600,7 +635,7 @@ def _unparse_call_args(args: tuple[Expr, ...]) -> str:
     return ", ".join(parts)
 
 
-def unparse_ir(expr: Expr) -> str:  # noqa: C901, PLR0911
+def unparse_ir(expr: Expr) -> str:
     """Render a typed IR expression back to its Python source string.
 
     Args:
@@ -609,6 +644,87 @@ def unparse_ir(expr: Expr) -> str:  # noqa: C901, PLR0911
     Returns:
         Python expression source string equivalent to ``expr``.
     """
+    return _unparse_ir(expr, parent_prec=0, is_right=False)
+
+
+# Operator precedence (higher binds tighter). Mirrors Python's grammar for
+# the operator subset accepted by the IR.
+_PREC_OR: int = 1
+_PREC_AND: int = 2
+_PREC_CMP: int = 4
+_PREC_ADD: int = 9
+_PREC_MUL: int = 10
+_PREC_UNARY: int = 11
+_PREC_POW: int = 12
+_PREC_ATOM: int = 100
+
+_BINARY_PREC: dict[str, int] = {
+    "or": _PREC_OR,
+    "and": _PREC_AND,
+    "==": _PREC_CMP,
+    "!=": _PREC_CMP,
+    "<": _PREC_CMP,
+    "<=": _PREC_CMP,
+    ">": _PREC_CMP,
+    ">=": _PREC_CMP,
+    "+": _PREC_ADD,
+    "-": _PREC_ADD,
+    "*": _PREC_MUL,
+    "/": _PREC_MUL,
+    "%": _PREC_MUL,
+}
+
+# Right operand of these left-associative ops needs parens at equal precedence
+# (e.g. ``a - (b + c)`` must not collapse to ``a - b + c``).
+_LEFT_ASSOC_NEEDS_RIGHT_PARENS: frozenset[str] = frozenset({"-", "/", "%"})
+
+
+def _expr_precedence(expr: Expr) -> int:
+    if isinstance(expr, Apply):
+        if expr.op in {"neg", "pos"}:
+            return _PREC_UNARY
+        if expr.op == "pow":
+            return _PREC_POW
+        if expr.op == "ifelse":
+            # ternary binds looser than ``or``
+            return 0
+        if expr.op in _BINARY_PREC:
+            return _BINARY_PREC[expr.op]
+    return _PREC_ATOM
+
+
+def _wrap(text: str, *, need: bool) -> str:
+    return f"({text})" if need else text
+
+
+def _unparse_binary(
+    expr: Apply,
+    *,
+    op: str,
+    prec: int,
+    parent_prec: int,
+    is_right: bool,
+) -> str:
+    sep = f" {op} "
+    # Fold args left-associatively so multi-arg flatten still renders correctly.
+    args = expr.args
+    left_str = _unparse_ir(args[0], parent_prec=prec, is_right=False)
+    rendered = left_str
+    for nxt in args[1:]:
+        right_str = _unparse_ir(nxt, parent_prec=prec, is_right=True)
+        rendered = f"{rendered}{sep}{right_str}"
+    need_parens = prec < parent_prec or (
+        prec == parent_prec and is_right and op in _LEFT_ASSOC_NEEDS_RIGHT_PARENS
+    )
+    return _wrap(rendered, need=need_parens)
+
+
+def _unparse_ir(  # noqa: C901, PLR0911
+    expr: Expr,
+    *,
+    parent_prec: int,
+    is_right: bool,
+) -> str:
     if isinstance(expr, Literal):
         return repr(expr.value)
 
@@ -621,27 +737,41 @@ def unparse_ir(expr: Expr) -> str:  # noqa: C901, PLR0911
 
     if isinstance(expr, Apply):
         if expr.op == "neg" and len(expr.args) == 1:
-            return f"-({unparse_ir(expr.args[0])})"
+            inner = _unparse_ir(expr.args[0], parent_prec=_PREC_UNARY, is_right=False)
+            need = parent_prec > _PREC_UNARY
+            return _wrap(f"-{inner}", need=need)
         if expr.op == "pos" and len(expr.args) == 1:
-            return f"+({unparse_ir(expr.args[0])})"
+            inner = _unparse_ir(expr.args[0], parent_prec=_PREC_UNARY, is_right=False)
+            need = parent_prec > _PREC_UNARY
+            return _wrap(f"+{inner}", need=need)
         if expr.op == "pow" and len(expr.args) == 2:
-            left, right = expr.args
-            return f"({unparse_ir(left)}) ** ({unparse_ir(right)})"
+            left = _unparse_ir(expr.args[0], parent_prec=_PREC_POW + 1, is_right=False)
+            right = _unparse_ir(expr.args[1], parent_prec=_PREC_POW, is_right=True)
+            need = parent_prec > _PREC_POW
+            return _wrap(f"{left} ** {right}", need=need)
         if expr.op == "ifelse" and len(expr.args) == 3:
             test, body, orelse = expr.args
-            return (
-                f"({unparse_ir(body)}) if ({unparse_ir(test)})"
-                f" else ({unparse_ir(orelse)})"
+            rendered = (
+                f"{_unparse_ir(body, parent_prec=1, is_right=False)} if "
+                f"{_unparse_ir(test, parent_prec=1, is_right=False)} else "
+                f"{_unparse_ir(orelse, parent_prec=0, is_right=False)}"
             )
-        if expr.op in _BINARY_OPS and len(expr.args) >= 2:
-            sep = f" {expr.op} "
-            return "(" + sep.join(unparse_ir(a) for a in expr.args) + ")"
+            return _wrap(rendered, need=parent_prec > 0)
+        if expr.op in _BINARY_PREC and len(expr.args) >= 2:
+            return _unparse_binary(
+                expr,
+                op=expr.op,
+                prec=_BINARY_PREC[expr.op],
+                parent_prec=parent_prec,
+                is_right=is_right,
+            )
         return f"{expr.op}({_unparse_call_args(expr.args)})"
 
     if isinstance(expr, Reduce):
         binding_str = ", ".join(f"{k}={v}" for k, v in expr.bindings)
         suffix = f", {binding_str}" if binding_str else ""
-        return f"{expr.kind}({unparse_ir(expr.body)}{suffix})"
+        body_str = _unparse_ir(expr.body, parent_prec=0, is_right=False)
+        return f"{expr.kind}({body_str}{suffix})"
 
     _invalid(detail=f"unsupported IR node in unparser: {type(expr).__name__}")
 
