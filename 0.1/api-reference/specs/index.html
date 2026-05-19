@@ -1564,28 +1564,7 @@ slice starts in the flat state vector).</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/op_system/_normalize.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">2733</span>
-<span class="normal">2734</span>
-<span class="normal">2735</span>
-<span class="normal">2736</span>
-<span class="normal">2737</span>
-<span class="normal">2738</span>
-<span class="normal">2739</span>
-<span class="normal">2740</span>
-<span class="normal">2741</span>
-<span class="normal">2742</span>
-<span class="normal">2743</span>
-<span class="normal">2744</span>
-<span class="normal">2745</span>
-<span class="normal">2746</span>
-<span class="normal">2747</span>
-<span class="normal">2748</span>
-<span class="normal">2749</span>
-<span class="normal">2750</span>
-<span class="normal">2751</span>
-<span class="normal">2752</span>
-<span class="normal">2753</span>
-<span class="normal">2754</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">2754</span>
 <span class="normal">2755</span>
 <span class="normal">2756</span>
 <span class="normal">2757</span>
@@ -1792,7 +1771,28 @@ slice starts in the flat state vector).</p>
 <span class="normal">2958</span>
 <span class="normal">2959</span>
 <span class="normal">2960</span>
-<span class="normal">2961</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">normalize_expr_rhs</span><span class="p">(</span><span class="n">spec</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">NormalizedRhs</span><span class="p">:</span>  <span class="c1"># noqa: C901, PLR0914, PLR0915</span>
+<span class="normal">2961</span>
+<span class="normal">2962</span>
+<span class="normal">2963</span>
+<span class="normal">2964</span>
+<span class="normal">2965</span>
+<span class="normal">2966</span>
+<span class="normal">2967</span>
+<span class="normal">2968</span>
+<span class="normal">2969</span>
+<span class="normal">2970</span>
+<span class="normal">2971</span>
+<span class="normal">2972</span>
+<span class="normal">2973</span>
+<span class="normal">2974</span>
+<span class="normal">2975</span>
+<span class="normal">2976</span>
+<span class="normal">2977</span>
+<span class="normal">2978</span>
+<span class="normal">2979</span>
+<span class="normal">2980</span>
+<span class="normal">2981</span>
+<span class="normal">2982</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">normalize_expr_rhs</span><span class="p">(</span><span class="n">spec</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">NormalizedRhs</span><span class="p">:</span>  <span class="c1"># noqa: C901, PLR0914, PLR0915</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Normalize an expression-based RHS specification.</span>
 
 <span class="sd">    Args:</span>
@@ -1986,7 +1986,7 @@ slice starts in the flat state vector).</p>
         <span class="n">axis_lookup</span><span class="o">=</span><span class="n">axis_lookup_dict</span><span class="p">,</span>
     <span class="p">)</span> <span class="ow">or</span> <span class="n">_build_equations_ir</span><span class="p">(</span><span class="n">eqs_tuple</span><span class="p">,</span> <span class="n">aliases_ir_map</span><span class="p">)</span>
 
-    <span class="n">equations_strings</span> <span class="o">=</span> <span class="n">_derive_equation_strings</span><span class="p">(</span><span class="n">equations_ir_built</span><span class="p">,</span> <span class="n">eqs_tuple</span><span class="p">)</span>
+    <span class="n">equations_strings</span> <span class="o">=</span> <span class="n">_derive_equation_strings</span><span class="p">(</span><span class="n">equations_ir_built</span><span class="p">)</span>
     <span class="n">aliases_strings</span> <span class="o">=</span> <span class="n">_derive_alias_strings</span><span class="p">(</span><span class="n">aliases_ir_map</span><span class="p">,</span> <span class="n">aliases</span><span class="p">)</span>
 
     <span class="k">return</span> <span class="n">NormalizedRhs</span><span class="p">(</span>
@@ -2134,35 +2134,35 @@ slice starts in the flat state vector).</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/op_system/_normalize.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">2702</span>
-<span class="normal">2703</span>
-<span class="normal">2704</span>
-<span class="normal">2705</span>
-<span class="normal">2706</span>
-<span class="normal">2707</span>
-<span class="normal">2708</span>
-<span class="normal">2709</span>
-<span class="normal">2710</span>
-<span class="normal">2711</span>
-<span class="normal">2712</span>
-<span class="normal">2713</span>
-<span class="normal">2714</span>
-<span class="normal">2715</span>
-<span class="normal">2716</span>
-<span class="normal">2717</span>
-<span class="normal">2718</span>
-<span class="normal">2719</span>
-<span class="normal">2720</span>
-<span class="normal">2721</span>
-<span class="normal">2722</span>
-<span class="normal">2723</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">2723</span>
 <span class="normal">2724</span>
 <span class="normal">2725</span>
 <span class="normal">2726</span>
 <span class="normal">2727</span>
 <span class="normal">2728</span>
 <span class="normal">2729</span>
-<span class="normal">2730</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">normalize_rhs</span><span class="p">(</span><span class="n">spec</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">NormalizedRhs</span><span class="p">:</span>
+<span class="normal">2730</span>
+<span class="normal">2731</span>
+<span class="normal">2732</span>
+<span class="normal">2733</span>
+<span class="normal">2734</span>
+<span class="normal">2735</span>
+<span class="normal">2736</span>
+<span class="normal">2737</span>
+<span class="normal">2738</span>
+<span class="normal">2739</span>
+<span class="normal">2740</span>
+<span class="normal">2741</span>
+<span class="normal">2742</span>
+<span class="normal">2743</span>
+<span class="normal">2744</span>
+<span class="normal">2745</span>
+<span class="normal">2746</span>
+<span class="normal">2747</span>
+<span class="normal">2748</span>
+<span class="normal">2749</span>
+<span class="normal">2750</span>
+<span class="normal">2751</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">normalize_rhs</span><span class="p">(</span><span class="n">spec</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">NormalizedRhs</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Normalize a RHS specification dict into a backend-facing representation.</span>
 
 <span class="sd">    Args:</span>
@@ -2263,28 +2263,7 @@ slice starts in the flat state vector).</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/op_system/_normalize.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">3022</span>
-<span class="normal">3023</span>
-<span class="normal">3024</span>
-<span class="normal">3025</span>
-<span class="normal">3026</span>
-<span class="normal">3027</span>
-<span class="normal">3028</span>
-<span class="normal">3029</span>
-<span class="normal">3030</span>
-<span class="normal">3031</span>
-<span class="normal">3032</span>
-<span class="normal">3033</span>
-<span class="normal">3034</span>
-<span class="normal">3035</span>
-<span class="normal">3036</span>
-<span class="normal">3037</span>
-<span class="normal">3038</span>
-<span class="normal">3039</span>
-<span class="normal">3040</span>
-<span class="normal">3041</span>
-<span class="normal">3042</span>
-<span class="normal">3043</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">3043</span>
 <span class="normal">3044</span>
 <span class="normal">3045</span>
 <span class="normal">3046</span>
@@ -2469,7 +2448,65 @@ slice starts in the flat state vector).</p>
 <span class="normal">3225</span>
 <span class="normal">3226</span>
 <span class="normal">3227</span>
-<span class="normal">3228</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">normalize_transitions_rhs</span><span class="p">(</span>  <span class="c1"># noqa: C901, PLR0912, PLR0914, PLR0915</span>
+<span class="normal">3228</span>
+<span class="normal">3229</span>
+<span class="normal">3230</span>
+<span class="normal">3231</span>
+<span class="normal">3232</span>
+<span class="normal">3233</span>
+<span class="normal">3234</span>
+<span class="normal">3235</span>
+<span class="normal">3236</span>
+<span class="normal">3237</span>
+<span class="normal">3238</span>
+<span class="normal">3239</span>
+<span class="normal">3240</span>
+<span class="normal">3241</span>
+<span class="normal">3242</span>
+<span class="normal">3243</span>
+<span class="normal">3244</span>
+<span class="normal">3245</span>
+<span class="normal">3246</span>
+<span class="normal">3247</span>
+<span class="normal">3248</span>
+<span class="normal">3249</span>
+<span class="normal">3250</span>
+<span class="normal">3251</span>
+<span class="normal">3252</span>
+<span class="normal">3253</span>
+<span class="normal">3254</span>
+<span class="normal">3255</span>
+<span class="normal">3256</span>
+<span class="normal">3257</span>
+<span class="normal">3258</span>
+<span class="normal">3259</span>
+<span class="normal">3260</span>
+<span class="normal">3261</span>
+<span class="normal">3262</span>
+<span class="normal">3263</span>
+<span class="normal">3264</span>
+<span class="normal">3265</span>
+<span class="normal">3266</span>
+<span class="normal">3267</span>
+<span class="normal">3268</span>
+<span class="normal">3269</span>
+<span class="normal">3270</span>
+<span class="normal">3271</span>
+<span class="normal">3272</span>
+<span class="normal">3273</span>
+<span class="normal">3274</span>
+<span class="normal">3275</span>
+<span class="normal">3276</span>
+<span class="normal">3277</span>
+<span class="normal">3278</span>
+<span class="normal">3279</span>
+<span class="normal">3280</span>
+<span class="normal">3281</span>
+<span class="normal">3282</span>
+<span class="normal">3283</span>
+<span class="normal">3284</span>
+<span class="normal">3285</span>
+<span class="normal">3286</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">normalize_transitions_rhs</span><span class="p">(</span>  <span class="c1"># noqa: C901, PLR0912, PLR0914, PLR0915</span>
     <span class="n">spec</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">NormalizedRhs</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Normalize a transition-based RHS specification (diagram/hazard semantics).</span>
@@ -2646,11 +2683,46 @@ slice starts in the flat state vector).</p>
     <span class="n">template_base_set</span> <span class="o">=</span> <span class="p">{</span><span class="n">parse_selector</span><span class="p">(</span><span class="n">k</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">template_map_all</span><span class="p">}</span>
     <span class="n">eqs_tuple</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">_build_transition_equations</span><span class="p">(</span><span class="n">state_expanded</span><span class="p">,</span> <span class="n">d_terms</span><span class="p">))</span>
     <span class="n">aliases_ir_map</span> <span class="o">=</span> <span class="n">_build_aliases_ir</span><span class="p">(</span><span class="n">aliases</span><span class="p">)</span>
+    <span class="n">equations_ir_built</span> <span class="o">=</span> <span class="n">_build_equations_ir</span><span class="p">(</span><span class="n">eqs_tuple</span><span class="p">,</span> <span class="n">aliases_ir_map</span><span class="p">)</span>
+    <span class="n">aliases_ir_reduce_map</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Expr</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="n">equations_ir_reduce</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">Expr</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="p">()</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">aliases_pre</span><span class="p">,</span> <span class="n">_alias_template_map_pre</span> <span class="o">=</span> <span class="n">_expand_alias_templates</span><span class="p">(</span>
+            <span class="n">meta_parts</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+            <span class="n">axes</span><span class="o">=</span><span class="n">axes_meta</span><span class="p">,</span>
+            <span class="n">template_map_seed</span><span class="o">=</span><span class="n">state_template_map</span><span class="p">,</span>
+            <span class="n">shaped_params</span><span class="o">=</span><span class="n">shaped_params</span><span class="p">,</span>
+            <span class="n">axis_lookup</span><span class="o">=</span><span class="n">axis_lookup_dict</span><span class="p">,</span>
+            <span class="n">passthrough_helpers</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">transitions_expanded_pre</span> <span class="o">=</span> <span class="n">_expand_transition_templates</span><span class="p">(</span>
+            <span class="n">transitions_raw</span><span class="p">,</span>
+            <span class="n">axes</span><span class="o">=</span><span class="n">axes_meta</span><span class="p">,</span>
+            <span class="n">template_map</span><span class="o">=</span><span class="n">template_map_all</span><span class="p">,</span>
+            <span class="n">shaped_params</span><span class="o">=</span><span class="n">shaped_params</span><span class="p">,</span>
+            <span class="n">passthrough_helpers</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">d_terms_pre</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="p">{</span><span class="n">s</span><span class="p">:</span> <span class="p">[]</span> <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">state_expanded</span><span class="p">}</span>
+        <span class="n">all_syms_pre</span><span class="p">:</span> <span class="nb">set</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">idx</span><span class="p">,</span> <span class="n">tr_map</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">transitions_expanded_pre</span><span class="p">):</span>
+            <span class="n">_apply_transition</span><span class="p">(</span>
+                <span class="n">idx</span><span class="o">=</span><span class="n">idx</span><span class="p">,</span>
+                <span class="n">tr</span><span class="o">=</span><span class="n">tr_map</span><span class="p">,</span>
+                <span class="n">state_set</span><span class="o">=</span><span class="n">state_set</span><span class="p">,</span>
+                <span class="n">all_syms</span><span class="o">=</span><span class="n">all_syms_pre</span><span class="p">,</span>
+                <span class="n">d_terms</span><span class="o">=</span><span class="n">d_terms_pre</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="n">eqs_pre</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">_build_transition_equations</span><span class="p">(</span><span class="n">state_expanded</span><span class="p">,</span> <span class="n">d_terms_pre</span><span class="p">))</span>
+        <span class="n">aliases_ir_reduce_map</span> <span class="o">=</span> <span class="n">_build_aliases_ir</span><span class="p">(</span><span class="n">aliases_pre</span><span class="p">,</span> <span class="n">lower_helpers</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">equations_ir_reduce</span> <span class="o">=</span> <span class="n">_build_equations_ir</span><span class="p">(</span><span class="n">eqs_pre</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="n">lower_helpers</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="k">except</span> <span class="p">(</span><span class="ne">ValueError</span><span class="p">,</span> <span class="ne">RecursionError</span><span class="p">,</span> <span class="n">InvalidRhsSpecError</span><span class="p">):</span>
+        <span class="n">aliases_ir_reduce_map</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="n">equations_ir_reduce</span> <span class="o">=</span> <span class="p">()</span>
     <span class="k">return</span> <span class="n">NormalizedRhs</span><span class="p">(</span>
         <span class="n">kind</span><span class="o">=</span><span class="s2">&quot;transitions&quot;</span><span class="p">,</span>
         <span class="n">state_names</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(</span><span class="n">state_expanded</span><span class="p">),</span>
         <span class="n">equations</span><span class="o">=</span><span class="n">eqs_tuple</span><span class="p">,</span>
-        <span class="n">aliases</span><span class="o">=</span><span class="n">aliases</span><span class="p">,</span>
+        <span class="n">aliases</span><span class="o">=</span><span class="n">_derive_alias_strings</span><span class="p">(</span><span class="n">aliases_ir_map</span><span class="p">,</span> <span class="n">aliases</span><span class="p">),</span>
         <span class="n">param_names</span><span class="o">=</span><span class="n">_sorted_unique</span><span class="p">(</span>
             <span class="n">sym</span>
             <span class="k">for</span> <span class="n">sym</span> <span class="ow">in</span> <span class="n">all_syms</span>
@@ -2673,8 +2745,10 @@ slice starts in the flat state vector).</p>
         <span class="n">shaped_params</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(</span><span class="nb">sorted</span><span class="p">(</span><span class="n">shaped_params</span><span class="o">.</span><span class="n">items</span><span class="p">())),</span>
         <span class="n">time_varying_params</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(</span><span class="nb">sorted</span><span class="p">(</span><span class="n">time_varying_full</span><span class="o">.</span><span class="n">items</span><span class="p">())),</span>
         <span class="n">aliases_ir</span><span class="o">=</span><span class="n">aliases_ir_map</span><span class="p">,</span>
-        <span class="n">equations_ir</span><span class="o">=</span><span class="n">_build_equations_ir</span><span class="p">(</span><span class="n">eqs_tuple</span><span class="p">,</span> <span class="n">aliases_ir_map</span><span class="p">),</span>
+        <span class="n">equations_ir</span><span class="o">=</span><span class="n">equations_ir_built</span><span class="p">,</span>
         <span class="n">equations_ir_raw</span><span class="o">=</span><span class="n">_build_equations_ir</span><span class="p">(</span><span class="n">eqs_tuple</span><span class="p">),</span>
+        <span class="n">aliases_ir_reduce</span><span class="o">=</span><span class="n">aliases_ir_reduce_map</span><span class="p">,</span>
+        <span class="n">equations_ir_reduce</span><span class="o">=</span><span class="n">equations_ir_reduce</span><span class="p">,</span>
     <span class="p">)</span>
 </code></pre></div></td></tr></table></div>
             </details>
