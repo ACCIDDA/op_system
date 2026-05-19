@@ -1293,6 +1293,7 @@ def _build_equations_ir_via_pointwise(  # noqa: PLR0913
     *,
     equations_ir_reduce: tuple[Expr | None, ...],
     aliases_ir_reduce: Mapping[str, Expr],
+    aliases_ir_inline: Mapping[str, Expr] | None = None,
     state_expanded: Sequence[str],
     template_map: Mapping[str, Sequence[tuple[str, Mapping[str, str]]]],
     axes: Sequence[Mapping[str, Any]],
@@ -1301,15 +1302,16 @@ def _build_equations_ir_via_pointwise(  # noqa: PLR0913
 ) -> tuple[Expr | None, ...]:
     """Build pointwise equation IR by IR-side expansion of ``Reduce`` nodes.
 
-    For each state cell, inline alias references (resolved against the
-    pre-expansion ``aliases_ir_reduce`` map so nested ``Reduce`` nodes are
-    preserved) and then call :func:`expand_reduce_pointwise` with the cell's
-    LHS template assignment so that same-axis-twice references resolve
-    correctly. Avoids the string roundtrip that :func:`_build_equations_ir`
-    performs against ``_expand_apply_along`` output.
+    For each state cell, expand the cell's own ``Reduce`` nodes via
+    :func:`expand_reduce_pointwise` against the cell's LHS template
+    assignment, then optionally inline alias references against
+    ``aliases_ir_inline`` (the post-expansion alias map, free of
+    ``Reduce`` nodes). Avoids the string roundtrip that
+    :func:`_build_equations_ir` performs against ``_expand_apply_along``
+    output.
 
-    Best-effort: cells whose IR cannot be inlined or expanded are returned
-    as ``None`` to preserve positional alignment with ``state_expanded``.
+    Best-effort: cells whose IR cannot be expanded are returned as
+    ``None`` to preserve positional alignment with ``state_expanded``.
 
     Returns:
         Tuple of expanded pointwise IR (or ``None`` for failed entries)
@@ -1323,11 +1325,8 @@ def _build_equations_ir_via_pointwise(  # noqa: PLR0913
     for variants in template_map.values():
         cell_to_assignment.update(dict(variants))
 
-    memo: dict[int, frozenset[str]] = {}
-    try:
-        cycle_validated = _detect_alias_cycle(aliases_ir_reduce) is None
-    except (ValueError, RecursionError):
-        cycle_validated = False
+    inline_memo: dict[int, frozenset[str]] = {}
+    inline_cycle_validated = False
 
     out: list[Expr | None] = []
     old_limit = sys.getrecursionlimit()
@@ -1335,30 +1334,45 @@ def _build_equations_ir_via_pointwise(  # noqa: PLR0913
     try:
         if needed > old_limit:
             sys.setrecursionlimit(needed)
+        if aliases_ir_inline:
+            try:
+                inline_cycle_validated = (
+                    _detect_alias_cycle(aliases_ir_inline) is None
+                )
+            except (ValueError, RecursionError):
+                inline_cycle_validated = False
         for cell, ir in zip(state_expanded, equations_ir_reduce, strict=False):
             if ir is None:
                 out.append(None)
                 continue
-            try:
-                inlined = inline_aliases(
-                    ir,
-                    aliases_ir_reduce,
-                    memo=memo,
-                    skip_cycle_check=cycle_validated,
-                )
-            except (ValueError, RecursionError):
-                inlined = ir
+            # Expand the cell's own ``Reduce`` nodes first. Aliases are
+            # inlined afterwards against ``aliases_ir_inline`` (the
+            # post-expansion alias map): this guarantees inlined bodies
+            # are free of ``Reduce`` nodes and avoids re-expanding alias
+            # bodies in the equation cell's context (which would defeat
+            # downstream optimizers in ``_vectorize``).
             assignment = cell_to_assignment.get(cell, {})
             try:
                 expanded = expand_reduce_pointwise(
-                    inlined,
+                    ir,
                     axes=axes,
                     shaped_params=shaped_params,
                     lhs_assignment=assignment,
                     axis_coords=axis_lookup,
                 )
             except (ValueError, RecursionError, KeyError):
-                expanded = None
+                out.append(None)
+                continue
+            if aliases_ir_inline:
+                try:
+                    expanded = inline_aliases(
+                        expanded,
+                        aliases_ir_inline,
+                        memo=inline_memo,
+                        skip_cycle_check=inline_cycle_validated,
+                    )
+                except (ValueError, RecursionError):
+                    pass
             out.append(expanded)
         return tuple(out)
     finally:
@@ -2547,15 +2561,30 @@ def _expand_helpers(  # noqa: PLR0913
         Expression string with helper calls expanded (or the input
         unchanged when ``passthrough`` is true).
     """
-    if passthrough:
+    if passthrough or "apply_along" not in expr:
         return expr
-    return _expand_apply_along(
-        expr,
-        axes=axes,
-        shaped_params=shaped_params,
-        lhs_assignment=lhs_assignment,
-        axis_coords=axis_coords,
-    )
+    # Route apply_along expansion through the IR-side
+    # ``expand_reduce_pointwise`` pipeline (see ``_ir_expand.py``). The
+    # legacy string-level expander has been retired (#112).
+    from op_system._ir_expand import expand_reduce_pointwise  # noqa: PLC0415
+
+    old_limit = sys.getrecursionlimit()
+    needed = max(old_limit, 10_000)
+    try:
+        if needed > old_limit:
+            sys.setrecursionlimit(needed)
+        ir = parse_expr_to_ir(expr, lower_helpers=True)
+        expanded = expand_reduce_pointwise(
+            ir,
+            axes=list(axes),
+            shaped_params=dict(shaped_params or {}),
+            lhs_assignment=dict(lhs_assignment or {}),
+            axis_coords=dict(axis_coords or {}),
+        )
+        return unparse_ir(expanded)
+    finally:
+        if needed > old_limit:
+            sys.setrecursionlimit(old_limit)
 
 
 def _resolve_template_equation(  # noqa: PLR0913
@@ -3331,8 +3360,16 @@ def normalize_expr_rhs(spec: Mapping[str, Any]) -> NormalizedRhs:  # noqa: C901,
             passthrough_helpers=True,
         )
         aliases_ir_reduce_map = _build_aliases_ir(aliases_pre, lower_helpers=True)
+        # Parse equation IR without inlining alias bodies in their
+        # reduce-bearing form: alias inlining is performed downstream in
+        # ``_build_equations_ir_via_pointwise`` against the post-expansion
+        # alias map (``aliases_ir_map``), which is free of ``Reduce`` nodes.
+        # Inlining reduce-form aliases here would leave embedded ``Reduce``
+        # nodes inside ``equations_ir_reduce``, which the downstream
+        # ``_vectorize`` fast path then mis-lowers when the surrounding
+        # equation cell has non-empty target axes.
         equations_ir_reduce = _build_equations_ir(
-            tuple(eqs_pre), aliases_ir_reduce_map, lower_helpers=True
+            tuple(eqs_pre), None, lower_helpers=True
         )
     except (ValueError, RecursionError, InvalidRhsSpecError):
         aliases_ir_reduce_map = {}
@@ -3341,6 +3378,7 @@ def normalize_expr_rhs(spec: Mapping[str, Any]) -> NormalizedRhs:  # noqa: C901,
     equations_ir_built = _build_equations_ir_via_pointwise(
         equations_ir_reduce=equations_ir_reduce,
         aliases_ir_reduce=aliases_ir_reduce_map,
+        aliases_ir_inline=aliases_ir_map,
         state_expanded=state_expanded,
         template_map=template_map_all,
         axes=axes_meta,

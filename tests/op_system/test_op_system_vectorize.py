@@ -390,9 +390,9 @@ def _continuum_integrate_spec() -> dict[str, object]:
         "aliases": {
             # Integrate S over age, sum over loc → scalar.
             "S_total": (
-                "apply_along(age=a, "
+                "apply_along("
                 "apply_along(S[age:a, loc:l], loc=l, kernel=sum), "
-                "kernel=integrate)"
+                "age=a, kernel=integrate)"
             ),
         },
         "equations": {
@@ -430,7 +430,10 @@ def test_weighted_apply_along_collapses_to_fused_reduction() -> None:
     assert s_buf_loads == 1, (
         f"expected a single fused S_buf load after collapse, got {s_buf_loads}"
     )
-    assert "asarray" in code.co_names
+    # The fused form materializes the weight vector with either
+    # ``np.asarray`` (string-collapser path) or ``np.array`` (IR fast path);
+    # both are correct and observably equivalent for a literal-list argument.
+    assert "asarray" in code.co_names or "array" in code.co_names
     assert "sum" in code.co_names
 
     # The collapser must emit at least one numeric weight constant. Python
@@ -486,9 +489,9 @@ def _network_outer_const_spec() -> dict[str, object]:
         "params": ["beta", "gamma"],
         "aliases": {
             "S_scaled": (
-                "0.25 * apply_along(age=a, "
+                "0.25 * apply_along("
                 "apply_along(S[age:a, loc:l], loc=l, kernel=sum), "
-                "kernel=sum)"
+                "age=a, kernel=sum)"
             ),
         },
         "equations": {

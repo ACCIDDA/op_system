@@ -154,7 +154,9 @@ def _kwarg_value_as_binding(value: Expr, *, key: str) -> str:
         return value.name
     if isinstance(value, Literal):
         return str(value.value)
-    _invalid(detail=f"helper binding {key!r} must be a symbol or literal")
+    _invalid(
+        detail=f"apply_along axis {key!r} must bind to an identifier"
+    )
 
 
 _APPLY_ALONG_KERNELS_IR: frozenset[str] = frozenset({"sum", "integrate"})
@@ -203,7 +205,7 @@ def _lower_single_helper(node: Apply) -> Expr:  # noqa: C901, PLR0912
             positional.append(arg)
 
     if len(positional) != 1:
-        _invalid(detail=f"{node.op} helper requires exactly one body expression")
+        _invalid(detail=f"{node.op} requires exactly one inner expression")
 
     bindings: list[tuple[str, str]] = []
     filters: list[tuple[str, tuple[str, ...]]] = []
@@ -241,13 +243,24 @@ def _lower_single_helper(node: Apply) -> Expr:  # noqa: C901, PLR0912
         val = _kwarg_value_as_binding(value, key=key)
         bindings.append((key, val))
 
-    return Reduce(
+    reduce_node = Reduce(
         kind=node.op,
         bindings=tuple(bindings),
         body=positional[0],
         filters=tuple(filters),
         kernel=kernel,
     )
+    _validate_reduce(reduce_node)
+    return reduce_node
+
+
+def _validate_reduce(reduce_node: Reduce) -> None:
+    if not reduce_node.bindings:
+        _invalid(
+            detail=(
+                f"{reduce_node.kind} requires at least one axis=var binding"
+            )
+        )
 
 
 def lower_helper_calls(expr: Expr) -> Expr:
