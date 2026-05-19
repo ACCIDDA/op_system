@@ -1665,6 +1665,7 @@ class _TransitionEndpoints:
     template_map: Mapping[str, list[tuple[str, dict[str, str]]]]
     axis_lookup: dict[str, list[str]]
     shaped_params: Mapping[str, tuple[str, ...]] | None = None
+    passthrough_helpers: bool = False
 
 
 def _collect_transition_wildcard_axes(
@@ -1690,6 +1691,11 @@ def _collect_transition_wildcard_axes(
             endpoints.name_s, shaped_param_names=skip
         )
     for ph in sorted(expr_placeholders):
+        if ":" in ph or "=" in ph:
+            # Helper-bound names like ``pop:j`` or ``age=ap`` are local to the
+            # helper call and should not participate in transition template
+            # wildcard expansion.
+            continue
         if ph not in seen:
             if ph not in endpoints.axis_lookup:
                 raise InvalidRhsSpecError(
@@ -1732,7 +1738,10 @@ def _render_transition_combo(
         axis_lookup=endpoints.axis_lookup,
     )
     tr_out["rate"] = _expand_helpers(
-        rate_sub, axes=endpoints.axes, shaped_params=endpoints.shaped_params
+        rate_sub,
+        axes=endpoints.axes,
+        shaped_params=endpoints.shaped_params,
+        passthrough=endpoints.passthrough_helpers,
     )
     if endpoints.name_s:
         tr_out["name"] = _apply_template_substitutions(
@@ -1761,7 +1770,9 @@ def _expand_single_transition(
     Raises:
         InvalidRhsSpecError: If validation fails.
     """
-    tr_valid = _validate_transition_mapping(tr_map, idx=0)
+    tr_work = dict(tr_map)
+    passthrough_helpers = bool(tr_work.pop("_passthrough_helpers", False))
+    tr_valid = _validate_transition_mapping(tr_work, idx=0)
     frm_s = _get_required_str(tr_valid, idx=0, key="from")
     to_s = _get_required_str(tr_valid, idx=0, key="to")
     rate_s = _get_required_str(tr_valid, idx=0, key="rate")
@@ -1780,6 +1791,7 @@ def _expand_single_transition(
         template_map=template_map,
         axis_lookup=axis_lookup,
         shaped_params=shaped_params,
+        passthrough_helpers=passthrough_helpers,
     )
     wildcard_axes = _collect_transition_wildcard_axes(endpoints)
 
@@ -1810,6 +1822,7 @@ def _expand_transition_templates(
     axes: list[dict[str, Any]],
     template_map: Mapping[str, list[tuple[str, dict[str, str]]]],
     shaped_params: Mapping[str, tuple[str, ...]] | None = None,
+    passthrough_helpers: bool = False,
 ) -> list[dict[str, Any]]:
     """Expand templated transitions over categorical axes.
 
@@ -1824,9 +1837,11 @@ def _expand_transition_templates(
 
     expanded: list[dict[str, Any]] = []
     for tr_map in transitions_raw:
+        tr_context = dict(tr_map)
+        tr_context["_passthrough_helpers"] = passthrough_helpers
         expanded.extend(
             _expand_single_transition(
-                tr_map,
+                tr_context,
                 axes=axes,
                 template_map=template_map,
                 axis_lookup=axis_lookup,
@@ -3203,6 +3218,40 @@ def normalize_transitions_rhs(  # noqa: C901, PLR0912, PLR0914, PLR0915
     eqs_tuple = tuple(_build_transition_equations(state_expanded, d_terms))
     aliases_ir_map = _build_aliases_ir(aliases)
     equations_ir_built = _build_equations_ir(eqs_tuple, aliases_ir_map)
+    aliases_ir_reduce_map: Mapping[str, Expr] = {}
+    equations_ir_reduce: tuple[Expr | None, ...] = ()
+    try:
+        aliases_pre, _alias_template_map_pre = _expand_alias_templates(
+            meta_parts[0],
+            axes=axes_meta,
+            template_map_seed=state_template_map,
+            shaped_params=shaped_params,
+            axis_lookup=axis_lookup_dict,
+            passthrough_helpers=True,
+        )
+        transitions_expanded_pre = _expand_transition_templates(
+            transitions_raw,
+            axes=axes_meta,
+            template_map=template_map_all,
+            shaped_params=shaped_params,
+            passthrough_helpers=True,
+        )
+        d_terms_pre: dict[str, list[str]] = {s: [] for s in state_expanded}
+        all_syms_pre: set[str] = set()
+        for idx, tr_map in enumerate(transitions_expanded_pre):
+            _apply_transition(
+                idx=idx,
+                tr=tr_map,
+                state_set=state_set,
+                all_syms=all_syms_pre,
+                d_terms=d_terms_pre,
+            )
+        eqs_pre = tuple(_build_transition_equations(state_expanded, d_terms_pre))
+        aliases_ir_reduce_map = _build_aliases_ir(aliases_pre, lower_helpers=True)
+        equations_ir_reduce = _build_equations_ir(eqs_pre, None, lower_helpers=True)
+    except (ValueError, RecursionError, InvalidRhsSpecError):
+        aliases_ir_reduce_map = {}
+        equations_ir_reduce = ()
     return NormalizedRhs(
         kind="transitions",
         state_names=tuple(state_expanded),
@@ -3232,4 +3281,6 @@ def normalize_transitions_rhs(  # noqa: C901, PLR0912, PLR0914, PLR0915
         aliases_ir=aliases_ir_map,
         equations_ir=equations_ir_built,
         equations_ir_raw=_build_equations_ir(eqs_tuple),
+        aliases_ir_reduce=aliases_ir_reduce_map,
+        equations_ir_reduce=equations_ir_reduce,
     )

@@ -2235,8 +2235,9 @@ def test_aliases_ir_reduce_contains_reduce_for_aliased_apply_along() -> None:
     assert reduces[0].kind == "apply_along"
 
 
-def test_equations_ir_reduce_empty_for_transitions_kind() -> None:
-    """``transitions`` kind leaves the reduce-bearing IR fields empty."""
+def test_equations_ir_reduce_matches_equations_ir_for_transitions_without_helpers(
+) -> None:
+    """Transitions without helpers still populate reduce-bearing IR fields."""
     spec = {
         "kind": "transitions",
         "state": ["S", "I", "R"],
@@ -2247,8 +2248,45 @@ def test_equations_ir_reduce_empty_for_transitions_kind() -> None:
         ],
     }
     out = normalize_transitions_rhs(spec)
-    assert out.aliases_ir_reduce == {}
-    assert out.equations_ir_reduce == ()
+    assert out.aliases_ir_reduce == out.aliases_ir
+    assert len(out.equations_ir_reduce) == len(out.equations_ir_raw)
+    for ir_reduce, ir_raw in zip(
+        out.equations_ir_reduce,
+        out.equations_ir_raw,
+        strict=True,
+    ):
+        assert ir_reduce == ir_raw
+
+
+def test_equations_ir_reduce_contains_reduce_nodes_for_transitions_helpers() -> None:
+    """Transitions with helper-bearing rates should populate reduce IR."""
+    spec = {
+        "kind": "transitions",
+        "axes": [{"name": "pop", "coords": ["p1", "p2"]}],
+        "state": ["S[pop]", "I[pop]", "R[pop]"],
+        "aliases": {"I_total": "apply_along(I[pop:j], pop=j)"},
+        "transitions": [
+            {
+                "from": "S[pop]",
+                "to": "I[pop]",
+                "rate": "beta * apply_along(I[pop:j], pop=j)",
+            },
+            {"from": "I[pop]", "to": "R[pop]", "rate": "gamma"},
+        ],
+    }
+    out = normalize_transitions_rhs(spec)
+    assert "I_total" in out.aliases_ir_reduce
+    reduces = [
+        node
+        for node in walk(out.aliases_ir_reduce["I_total"])
+        if isinstance(node, Reduce)
+    ]
+    assert reduces
+    assert len(out.equations_ir_reduce) == len(out.equations)
+    assert any(
+        expr is not None and any(isinstance(node, Reduce) for node in walk(expr))
+        for expr in out.equations_ir_reduce
+    )
 
 
 def test_equations_ir_reduce_matches_equations_ir_when_no_helpers() -> None:
