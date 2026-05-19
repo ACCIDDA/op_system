@@ -548,7 +548,17 @@ def ir_to_ast_expr(expr: Expr) -> ast.expr:  # noqa: C901, PLR0911, PLR0912
             return ast.UnaryOp(op=ast.USub(), operand=ir_to_ast_expr(expr.args[0]))
         if expr.op == "pos" and len(expr.args) == 1:
             return ast.UnaryOp(op=ast.UAdd(), operand=ir_to_ast_expr(expr.args[0]))
-        if expr.op in {"+", "-", "*", "/", "%", "pow"} and len(expr.args) == 2:
+        if expr.op in {"+", "-", "*", "/"} and len(expr.args) >= 2:
+            # Left-fold N-ary arithmetic into a chain of binary ops.
+            result: ast.expr = ir_to_ast_expr(expr.args[0])
+            for arg in expr.args[1:]:
+                result = ast.BinOp(
+                    left=result,
+                    op=_binary_ast(expr.op),
+                    right=ir_to_ast_expr(arg),
+                )
+            return result
+        if expr.op in {"%", "pow"} and len(expr.args) == 2:
             return ast.BinOp(
                 left=ir_to_ast_expr(expr.args[0]),
                 op=_binary_ast(expr.op),

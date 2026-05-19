@@ -2366,3 +2366,39 @@ def test_expr_templated_equation_strings_match_unparse_ir() -> None:
     for eq_str, eq_ir in zip(out.equations, out.equations_ir, strict=True):
         assert eq_ir is not None
         assert eq_str == unparse_ir(eq_ir)
+
+
+def test_transitions_equation_strings_are_unparse_of_equations_ir() -> None:
+    """For a plain SIR model, equations[i] == unparse_ir(equations_ir[i])."""
+    spec = {
+        "kind": "transitions",
+        "state": ["S", "I", "R"],
+        "transitions": [
+            {"from": "S", "to": "I", "rate": "beta * I"},
+            {"from": "I", "to": "R", "rate": "gamma"},
+        ],
+    }
+    out = normalize_transitions_rhs(spec)
+    for eq_str, eq_ir in zip(out.equations, out.equations_ir, strict=True):
+        assert eq_ir is not None
+        assert eq_str == unparse_ir(eq_ir)
+
+
+def test_transitions_alias_strings_are_unparse_of_aliases_ir() -> None:
+    """Each alias string in a transitions model equals unparse_ir of its IR entry."""
+    spec = {
+        "kind": "transitions",
+        "state": ["S", "I", "R"],
+        "aliases": {
+            "N": "S + I + R",
+            "foi": "beta * I / N",
+        },
+        "transitions": [
+            {"from": "S", "to": "I", "rate": "foi"},
+            {"from": "I", "to": "R", "rate": "gamma"},
+        ],
+    }
+    out = normalize_transitions_rhs(spec)
+    for name, alias_str in out.aliases.items():
+        assert name in out.aliases_ir
+        assert alias_str == unparse_ir(out.aliases_ir[name])

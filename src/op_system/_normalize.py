@@ -37,17 +37,23 @@ from op_system._helpers import (
     _ensure_str_list,
     _sorted_unique,
 )
-from op_system._ir import Expr, free_symbols, parse_expr_to_ir, unparse_ir
+from op_system._ir import (
+    Apply,
+    Expr,
+    Literal,
+    Sym,
+    free_symbols,
+    parse_expr_to_ir,
+    unparse_ir,
+)
 from op_system._ir_templates import (
     _detect_alias_cycle,
     expand_inline_templates,
     inline_aliases,
 )
-from op_system._symbols import _collect_names, _parse_expr
 from op_system._templates import (
     _INLINE_TEMPLATE_RE,
     PinnedToken,
-    SelectorToken,
     WildcardToken,
     _apply_template_substitutions,
     _extract_placeholders_from_expr,
@@ -743,22 +749,6 @@ def _normalize_common_meta(
 # ---------------------------------------------------------------------------
 
 
-def _collect_alias_symbols(
-    aliases: Mapping[str, str], *, axes: list[dict[str, Any]]
-) -> set[str]:
-    """Collect all symbol names referenced in alias expressions.
-
-    Returns:
-        Set of symbol name strings found across all alias expressions.
-    """
-    symbols: set[str] = set()
-    for expr in aliases.values():
-        expr_s = _expand_helpers(expr, axes=axes)
-        tree = _parse_expr(expr_s)
-        symbols |= _collect_names(tree)
-    return symbols
-
-
 _SHAPED_PARAM_BUILTIN_NAMES: frozenset[str] = frozenset({
     "np",
     "t",
@@ -1089,74 +1079,6 @@ def _expand_state_templates(
                 expanded.append(name)
 
     return expanded, template_map
-
-
-def _expand_alias_templates(  # noqa: PLR0913
-    aliases_raw: Mapping[str, str],
-    *,
-    axes: list[dict[str, Any]],
-    template_map_seed: Mapping[str, list[tuple[str, dict[str, str]]]],
-    shaped_params: Mapping[str, tuple[str, ...]] | None = None,
-    axis_lookup: Mapping[str, list[str]] | None = None,
-    passthrough_helpers: bool = False,
-) -> tuple[dict[str, str], dict[str, list[tuple[str, dict[str, str]]]]]:
-    """Expand templated alias names and substitute inline placeholders.
-
-    Returns:
-        A tuple of ``(expanded_aliases, alias_template_map)``.
-
-    Raises:
-        InvalidRhsSpecError: If validation fails.
-    """
-    alias_names = list(aliases_raw.keys())
-    alias_expanded, alias_template_map = _expand_state_templates(alias_names, axes=axes)
-    if len(alias_expanded) != len(set(alias_expanded)):
-        raise InvalidRhsSpecError(detail="expanded aliases contain duplicates")
-
-    combined_template_map = {**template_map_seed, **alias_template_map}
-    aliases_out: dict[str, str] = {}
-
-    for raw_name, expr in aliases_raw.items():
-        canonical_name = _normalize_bracket_key(raw_name)
-        expr_s = expr.strip()
-        if not expr_s:
-            raise InvalidRhsSpecError(
-                detail=f"aliases[{raw_name!r}] must be a non-empty string"
-            )
-
-        if canonical_name in alias_template_map:
-            # Defer ``_expand_helpers`` until the per-row LHS assignment is
-            # known so that same-axis-twice references like
-            # ``K[age, age:ap]`` inside a templated alias (e.g. ``foi[age]``)
-            # resolve the bare LHS-free position from the row assignment
-            # rather than collapsing onto the bound ``apply_along`` coord.
-            # Mirrors the equations path in ``_resolve_template_equation``.
-            for expanded_name, assignment in alias_template_map[canonical_name]:
-                expanded_expr = _expand_helpers(
-                    expr_s,
-                    axes=axes,
-                    shaped_params=shaped_params,
-                    lhs_assignment=assignment,
-                    axis_coords=axis_lookup,
-                    passthrough=passthrough_helpers,
-                )
-                substituted = _apply_template_substitutions(
-                    expanded_expr,
-                    assignment=assignment,
-                    template_map=combined_template_map,
-                    shaped_params=shaped_params,
-                    axis_lookup=axis_lookup,
-                )
-                aliases_out[expanded_name] = substituted
-        else:
-            aliases_out[raw_name] = _expand_helpers(
-                expr_s,
-                axes=axes,
-                shaped_params=shaped_params,
-                passthrough=passthrough_helpers,
-            )
-
-    return aliases_out, alias_template_map
 
 
 def _build_aliases_ir(
@@ -1818,211 +1740,6 @@ def _maybe_attach_initial_state(
 
 
 # ---------------------------------------------------------------------------
-# Transition expansion
-# ---------------------------------------------------------------------------
-
-
-@dataclass(frozen=True)
-class _TransitionEndpoints:
-    """Parsed endpoint data and expansion context for a single transition template."""
-
-    frm_base: str
-    frm_tokens: list[SelectorToken]
-    to_base: str
-    to_tokens: list[SelectorToken]
-    rate_s: str
-    name_s: str | None
-    axes: list[dict[str, Any]]
-    template_map: Mapping[str, list[tuple[str, dict[str, str]]]]
-    axis_lookup: dict[str, list[str]]
-    shaped_params: Mapping[str, tuple[str, ...]] | None = None
-    passthrough_helpers: bool = False
-
-
-def _collect_transition_wildcard_axes(
-    endpoints: _TransitionEndpoints,
-) -> list[str]:
-    """Return ordered list of unique wildcard axes from endpoints and expressions.
-
-    Raises:
-        InvalidRhsSpecError: If validation fails.
-    """
-    wildcard_axes: list[str] = []
-    seen: set[str] = set()
-    for tok in endpoints.frm_tokens + endpoints.to_tokens:
-        if isinstance(tok, WildcardToken) and tok.axis not in seen:
-            wildcard_axes.append(tok.axis)
-            seen.add(tok.axis)
-    skip = set(endpoints.shaped_params or {})
-    expr_placeholders = _extract_placeholders_from_expr(
-        endpoints.rate_s, shaped_param_names=skip
-    )
-    if endpoints.name_s:
-        expr_placeholders |= _extract_placeholders_from_expr(
-            endpoints.name_s, shaped_param_names=skip
-        )
-    for ph in sorted(expr_placeholders):
-        if ":" in ph or "=" in ph:
-            # Helper-bound names like ``pop:j`` or ``age=ap`` are local to the
-            # helper call and should not participate in transition template
-            # wildcard expansion.
-            continue
-        if ph not in seen:
-            if ph not in endpoints.axis_lookup:
-                raise InvalidRhsSpecError(
-                    detail=f"transition placeholder {ph!r} references unknown axis"
-                )
-            wildcard_axes.append(ph)
-            seen.add(ph)
-    return wildcard_axes
-
-
-def _render_transition_combo(
-    tr_base: dict[str, Any],
-    endpoints: _TransitionEndpoints,
-    *,
-    assignment: dict[str, str],
-) -> dict[str, Any]:
-    """Build one expanded transition dict for a given axis assignment.
-
-    Returns:
-        Expanded transition mapping with concrete from/to/rate fields.
-    """
-    rate_sub = _apply_template_substitutions(
-        endpoints.rate_s,
-        assignment=assignment,
-        template_map=endpoints.template_map,
-        shaped_params=endpoints.shaped_params,
-        axis_lookup=endpoints.axis_lookup,
-    )
-    tr_out: dict[str, Any] = dict(tr_base)
-    tr_out["from"] = render_selector(
-        endpoints.frm_base,
-        endpoints.frm_tokens,
-        assignment,
-        axis_lookup=endpoints.axis_lookup,
-    )
-    tr_out["to"] = render_selector(
-        endpoints.to_base,
-        endpoints.to_tokens,
-        assignment,
-        axis_lookup=endpoints.axis_lookup,
-    )
-    tr_out["rate"] = _expand_helpers(
-        rate_sub,
-        axes=endpoints.axes,
-        shaped_params=endpoints.shaped_params,
-        passthrough=endpoints.passthrough_helpers,
-    )
-    if endpoints.name_s:
-        tr_out["name"] = _apply_template_substitutions(
-            endpoints.name_s,
-            assignment=assignment,
-            template_map=endpoints.template_map,
-            shaped_params=endpoints.shaped_params,
-            axis_lookup=endpoints.axis_lookup,
-        )
-    return tr_out
-
-
-def _expand_single_transition(
-    tr_map: Mapping[str, Any],
-    *,
-    axes: list[dict[str, Any]],
-    template_map: Mapping[str, list[tuple[str, dict[str, str]]]],
-    axis_lookup: dict[str, list[str]],
-    shaped_params: Mapping[str, tuple[str, ...]] | None = None,
-) -> list[dict[str, Any]]:
-    """Expand one transition template over all wildcard combinations.
-
-    Returns:
-        List of concrete transition dicts.
-
-    Raises:
-        InvalidRhsSpecError: If validation fails.
-    """
-    tr_work = dict(tr_map)
-    passthrough_helpers = bool(tr_work.pop("_passthrough_helpers", False))
-    tr_valid = _validate_transition_mapping(tr_work, idx=0)
-    frm_s = _get_required_str(tr_valid, idx=0, key="from")
-    to_s = _get_required_str(tr_valid, idx=0, key="to")
-    rate_s = _get_required_str(tr_valid, idx=0, key="rate")
-    name_s = tr_valid.get("name") if isinstance(tr_valid.get("name"), str) else None
-
-    frm_base, frm_tokens = parse_selector(frm_s)
-    to_base, to_tokens = parse_selector(to_s)
-    endpoints = _TransitionEndpoints(
-        frm_base=frm_base,
-        frm_tokens=frm_tokens,
-        to_base=to_base,
-        to_tokens=to_tokens,
-        rate_s=rate_s,
-        name_s=name_s,
-        axes=axes,
-        template_map=template_map,
-        axis_lookup=axis_lookup,
-        shaped_params=shaped_params,
-        passthrough_helpers=passthrough_helpers,
-    )
-    wildcard_axes = _collect_transition_wildcard_axes(endpoints)
-
-    if not wildcard_axes:
-        return [_render_transition_combo(dict(tr_valid), endpoints, assignment={})]
-
-    coords_lists: list[list[str]] = []
-    for ph in wildcard_axes:
-        if ph not in axis_lookup:
-            raise InvalidRhsSpecError(
-                detail=f"transition placeholder {ph!r} references unknown axis"
-            )
-        coords_lists.append(axis_lookup[ph])
-
-    return [
-        _render_transition_combo(
-            dict(tr_valid),
-            endpoints,
-            assignment=dict(zip(wildcard_axes, combo, strict=True)),
-        )
-        for combo in product(*coords_lists)
-    ]
-
-
-def _expand_transition_templates(
-    transitions_raw: list[Mapping[str, Any]],
-    *,
-    axes: list[dict[str, Any]],
-    template_map: Mapping[str, list[tuple[str, dict[str, str]]]],
-    shaped_params: Mapping[str, tuple[str, ...]] | None = None,
-    passthrough_helpers: bool = False,
-) -> list[dict[str, Any]]:
-    """Expand templated transitions over categorical axes.
-
-    Supports placeholders in from/to/name/rate fields (e.g., ``S[vax,age]``).
-
-    Returns:
-        List of expanded transition mappings with concrete names and rates.
-    """
-    axis_lookup: dict[str, list[str]] = {
-        ax["name"]: [str(c) for c in ax.get("coords", [])] for ax in axes
-    }
-
-    expanded: list[dict[str, Any]] = []
-    for tr_map in transitions_raw:
-        tr_context = dict(tr_map)
-        tr_context["_passthrough_helpers"] = passthrough_helpers
-        expanded.extend(
-            _expand_single_transition(
-                tr_context,
-                axes=axes,
-                template_map=template_map,
-                axis_lookup=axis_lookup,
-                shaped_params=shaped_params,
-            )
-        )
-    return expanded
-
-
-# ---------------------------------------------------------------------------
 # Equation expansion (apply_along, gather)
 # ---------------------------------------------------------------------------
 
@@ -2260,62 +1977,6 @@ def _ordinal_subrange_coords(
             )
         )
     return coords[lo_idx : hi_idx + 1]
-
-
-def _expand_helpers(  # noqa: PLR0913
-    expr: str,
-    *,
-    axes: list[dict[str, Any]],
-    shaped_params: Mapping[str, tuple[str, ...]] | None = None,
-    lhs_assignment: Mapping[str, str] | None = None,
-    axis_coords: Mapping[str, list[str]] | None = None,
-    passthrough: bool = False,
-) -> str:
-    """Expand helper calls (currently only ``apply_along``) before AST parsing.
-
-    ``lhs_assignment`` carries the LHS template assignment of the equation
-    being expanded (e.g. ``{"age": "a0"}`` for the row ``foi__age_a0`` of
-    ``foi[age]``). It is forwarded to the IR-side ``expand_reduce_pointwise``
-    pipeline so that same-axis-twice references like ``K[age, age:ap]`` can
-    resolve the bare (free outer) axis position from the LHS row rather than
-    collapsing it onto the bound apply_along coord.
-
-    ``axis_coords`` maps each axis name to its coord list and is used to
-    rewrite multi-axis shaped-parameter references to literal integer
-    subscripts (``K[2, 0]``) when every position is resolved.
-
-    When ``passthrough`` is true, helpers are *not* expanded — the input
-    is returned unchanged. Used by the second-pass IR build to capture
-    pre-expansion strings for ``parse_expr_to_ir(lower_helpers=True)``.
-
-    Returns:
-        Expression string with helper calls expanded (or the input
-        unchanged when ``passthrough`` is true).
-    """
-    if passthrough or "apply_along" not in expr:
-        return expr
-    # Route apply_along expansion through the IR-side
-    # ``expand_reduce_pointwise`` pipeline (see ``_ir_expand.py``). The
-    # legacy string-level expander has been retired (#112).
-    from op_system._ir_expand import expand_reduce_pointwise  # noqa: PLC0415
-
-    old_limit = sys.getrecursionlimit()
-    needed = max(old_limit, 10_000)
-    try:
-        if needed > old_limit:
-            sys.setrecursionlimit(needed)
-        ir = parse_expr_to_ir(expr, lower_helpers=True)
-        expanded = expand_reduce_pointwise(
-            ir,
-            axes=list(axes),
-            shaped_params=dict(shaped_params or {}),
-            lhs_assignment=dict(lhs_assignment or {}),
-            axis_coords=dict(axis_coords or {}),
-        )
-        return unparse_ir(expanded)
-    finally:
-        if needed > old_limit:
-            sys.setrecursionlimit(old_limit)
 
 
 # ---------------------------------------------------------------------------
@@ -3005,57 +2666,207 @@ def normalize_expr_rhs(spec: Mapping[str, Any]) -> NormalizedRhs:  # noqa: C901,
 # ---------------------------------------------------------------------------
 
 
-def _apply_transition(
+def _build_transition_equations_ir(  # noqa: C901, PLR0912, PLR0913, PLR0914, PLR0915
+    transitions_raw: list[Mapping[str, Any]],
     *,
-    idx: int,
-    tr: Mapping[str, Any],
     state_set: set[str],
-    all_syms: set[str],
-    d_terms: dict[str, list[str]],
-) -> None:
-    """Apply a transition to the derivative-term accumulator.
+    state_expanded: list[str],
+    axes: list[dict[str, Any]],
+    axis_lookup: dict[str, list[str]],
+    template_map: Mapping[str, list[tuple[str, dict[str, str]]]],
+    shaped_params: Mapping[str, tuple[str, ...]] | None = None,
+) -> tuple[
+    tuple[Expr | None, ...],
+    tuple[Expr | None, ...],
+    list[dict[str, Any]],
+    set[str],
+]:
+    """Build per-state equation IR and expanded transitions from raw transition specs.
 
-    Raises:
-        InvalidRhsSpecError: If validation fails.
-    """
-    frm_s = _get_required_str(tr, idx=idx, key="from")
-    to_s = _get_required_str(tr, idx=idx, key="to")
-    rate_s = _get_required_str(tr, idx=idx, key="rate")
+    Replaces the string-surgery chain of
+    ``_expand_transition_templates`` → ``_apply_transition`` →
+    ``_build_transition_equations`` with a single IR-native pass.
 
-    if frm_s not in state_set:
-        raise InvalidRhsSpecError(
-            detail=f"transitions[{idx}].from={frm_s!r} not in state"
-        )
-    if to_s not in state_set:
-        raise InvalidRhsSpecError(detail=f"transitions[{idx}].to={to_s!r} not in state")
+    For each raw transition:
 
-    tree = _parse_expr(rate_s)
-    all_syms |= _collect_names(tree)
+    1. Validate and parse from/to/rate strings.
+    2. Collect wildcard axes (same logic as the deleted
+       ``_collect_transition_wildcard_axes``).
+    3. For each wildcard combo:
 
-    flow = f"({rate_s})*({frm_s})"
-    d_terms[frm_s].append(f"-({flow})")
-    d_terms[to_s].append(f"+({flow})")
+       a. Resolve concrete from/to names via :func:`render_selector`.
+       b. Parse rate to IR once with ``lower_helpers=True``.
+       c. :func:`expand_inline_templates` → rate IR with ``Reduce`` preserved
+          (``equations_ir_reduce`` basis).
+       d. :func:`expand_reduce_pointwise` → fully expanded rate IR (no
+          ``Reduce``; ``equations_ir`` basis).
+       e. Build ``flow_ir = rate_ir * Sym(from_name)``.
+       f. Accumulate ``+flow`` into the to-state list and ``-flow`` into
+          the from-state list (both reduce and full forms).
 
+    4. Sum accumulated terms per state to form per-state equation IR.
 
-def _build_transition_equations(
-    state: list[str], d_terms: Mapping[str, list[str]]
-) -> list[str]:
-    """Build one equation string per state from accumulated derivative terms.
+    Alias inlining is intentionally *not* performed here so that callers can
+    store the un-inlined form as ``equations_ir_raw`` and apply inlining
+    separately via :func:`_build_equations_ir` to obtain ``equations_ir``.
 
     Returns:
-        List of equation strings (``"0.0"`` for states with no terms).
+        ``(equations_ir_pre, equations_ir_reduce_pre, transitions_expanded, all_syms)``
+
+        - ``equations_ir_pre``: fully expanded, alias-unresolved IR per state
+          (aligned with ``state_expanded``).
+        - ``equations_ir_reduce_pre``: template-expanded, ``Reduce``-preserved
+          IR per state.
+        - ``transitions_expanded``: list of concrete transition dicts for
+          ``meta["transitions"]``.
+        - ``all_syms``: symbol names referenced in rate expressions.
+
+    Raises:
+        InvalidRhsSpecError: If any transition is invalid (bad types, unknown
+            states, or unresolvable wildcard axes).
     """
-    equations: list[str] = []
-    for name in state:
-        terms = d_terms[name]
+    from op_system._ir_expand import expand_reduce_pointwise  # noqa: PLC0415
+
+    shaped = shaped_params or {}
+    ax_lookup_dict = dict(axis_lookup)
+    d_ir_full: dict[str, list[Expr]] = {s: [] for s in state_expanded}
+    d_ir_reduce: dict[str, list[Expr]] = {s: [] for s in state_expanded}
+    all_syms: set[str] = set()
+    transitions_expanded_out: list[dict[str, Any]] = []
+
+    old_limit = sys.getrecursionlimit()
+    needed = max(old_limit, 10_000)
+    try:
+        if needed > old_limit:
+            sys.setrecursionlimit(needed)
+        for tr_idx, tr_map in enumerate(transitions_raw):
+            tr_valid = _validate_transition_mapping(dict(tr_map), idx=tr_idx)
+            frm_s = _get_required_str(tr_valid, idx=tr_idx, key="from")
+            to_s = _get_required_str(tr_valid, idx=tr_idx, key="to")
+            rate_s = _get_required_str(tr_valid, idx=tr_idx, key="rate")
+            name_s = (
+                tr_valid.get("name") if isinstance(tr_valid.get("name"), str) else None
+            )
+
+            frm_base, frm_tokens = parse_selector(frm_s)
+            to_base, to_tokens = parse_selector(to_s)
+
+            # Collect wildcard axes (replaces _collect_transition_wildcard_axes)
+            wildcard_axes: list[str] = []
+            seen_wc: set[str] = set()
+            for tok in frm_tokens + to_tokens:
+                if isinstance(tok, WildcardToken) and tok.axis not in seen_wc:
+                    wildcard_axes.append(tok.axis)
+                    seen_wc.add(tok.axis)
+            skip_shaped = set(shaped)
+            expr_phs = _extract_placeholders_from_expr(
+                rate_s, shaped_param_names=skip_shaped
+            )
+            if name_s:
+                expr_phs |= _extract_placeholders_from_expr(
+                    name_s, shaped_param_names=skip_shaped
+                )
+            for ph in sorted(expr_phs):
+                if ":" in ph or "=" in ph:
+                    # Helper-bound names like ``pop:j`` or ``age=ap`` are local
+                    # to the helper call and must not participate in wildcard
+                    # expansion.
+                    continue
+                if ph not in seen_wc:
+                    if ph not in ax_lookup_dict:
+                        raise InvalidRhsSpecError(
+                            detail=(
+                                f"transition placeholder {ph!r} references unknown axis"
+                            )
+                        )
+                    wildcard_axes.append(ph)
+                    seen_wc.add(ph)
+
+            # Parse rate to IR once (Reduce nodes preserved for apply_along)
+            ir_rate_raw = parse_expr_to_ir(rate_s, lower_helpers=True)
+
+            # Build wildcard combos
+            if not wildcard_axes:
+                combos: Iterable[tuple[str, ...]] = [()]
+            else:
+                coords_lists = [ax_lookup_dict[ph] for ph in wildcard_axes]
+                combos = product(*coords_lists)
+
+            for combo in combos:
+                assignment = dict(zip(wildcard_axes, combo, strict=True))
+                from_name = render_selector(
+                    frm_base, frm_tokens, assignment, axis_lookup=ax_lookup_dict
+                )
+                to_name = render_selector(
+                    to_base, to_tokens, assignment, axis_lookup=ax_lookup_dict
+                )
+                if from_name not in state_set:
+                    raise InvalidRhsSpecError(
+                        detail=f"transitions[{tr_idx}].from={from_name!r} not in state"
+                    )
+                if to_name not in state_set:
+                    raise InvalidRhsSpecError(
+                        detail=f"transitions[{tr_idx}].to={to_name!r} not in state"
+                    )
+
+                # Rate IR: template-substituted, Reduce nodes preserved
+                ir_rate_reduce = expand_inline_templates(
+                    ir_rate_raw,
+                    assignment=assignment,
+                    shaped_params=shaped,
+                    axis_lookup=ax_lookup_dict,
+                )
+                # Rate IR: fully expanded, no Reduce nodes
+                ir_rate_full = expand_reduce_pointwise(
+                    ir_rate_reduce,
+                    axes=list(axes),
+                    shaped_params=shaped,
+                    lhs_assignment=assignment,
+                    axis_coords=ax_lookup_dict,
+                )
+
+                # Build flow IR: rate * from_state
+                from_sym = Sym(name=from_name)
+                flow_full = Apply(op="*", args=(ir_rate_full, from_sym))
+                flow_reduce = Apply(op="*", args=(ir_rate_reduce, from_sym))
+
+                # Accumulate: from_state gets -flow, to_state gets +flow
+                d_ir_full[from_name].append(Apply(op="neg", args=(flow_full,)))
+                d_ir_full[to_name].append(flow_full)
+                d_ir_reduce[from_name].append(Apply(op="neg", args=(flow_reduce,)))
+                d_ir_reduce[to_name].append(flow_reduce)
+
+                # Collect rate symbols (alias Syms kept unresolved)
+                all_syms |= free_symbols(ir_rate_full)
+
+                # Build expanded transition dict for meta["transitions"]
+                tr_out: dict[str, Any] = dict(tr_valid)
+                tr_out["from"] = from_name
+                tr_out["to"] = to_name
+                tr_out["rate"] = unparse_ir(ir_rate_full)
+                if name_s:
+                    tr_out["name"] = _apply_template_substitutions(
+                        name_s,
+                        assignment=assignment,
+                        template_map=template_map,
+                        shaped_params=shaped,
+                        axis_lookup=ax_lookup_dict,
+                    )
+                transitions_expanded_out.append(tr_out)
+    finally:
+        if needed > old_limit:
+            sys.setrecursionlimit(old_limit)
+
+    def _sum_terms(terms: list[Expr]) -> Expr:
         if not terms:
-            equations.append("0.0")
-            continue
-        expr = " ".join(terms)
-        if expr.startswith("+") and expr[1:2] == "(":
-            expr = expr[1:]
-        equations.append(expr)
-    return equations
+            return Literal(value=0.0)
+        if len(terms) == 1:
+            return terms[0]
+        return Apply(op="+", args=tuple(terms))
+
+    equations_ir_pre = tuple(_sum_terms(d_ir_full[s]) for s in state_expanded)
+    equations_ir_reduce_pre = tuple(_sum_terms(d_ir_reduce[s]) for s in state_expanded)
+    return equations_ir_pre, equations_ir_reduce_pre, transitions_expanded_out, all_syms
 
 
 def normalize_transitions_rhs(  # noqa: C901, PLR0912, PLR0914, PLR0915
@@ -3175,18 +2986,21 @@ def normalize_transitions_rhs(  # noqa: C901, PLR0912, PLR0914, PLR0915
                     time_axis_name=time_axis_name,
                 )
 
-    aliases, alias_template_map = _expand_alias_templates(
-        meta_parts[0],
-        axes=axes_meta,
-        template_map_seed=state_template_map,
-        shaped_params=shaped_params,
-        axis_lookup=axis_lookup_dict,
+    aliases_ir_map, aliases_ir_reduce_map, alias_template_map = (
+        _build_aliases_ir_from_raw(
+            aliases_raw_map,
+            axes=axes_meta,
+            shaped_params=shaped_params,
+            axis_lookup=axis_lookup_dict,
+        )
     )
     template_map_all = {**state_template_map, **alias_template_map}
 
     state_set = set(state_expanded)
-    d_terms: dict[str, list[str]] = {s: [] for s in state_expanded}
-    all_syms = _collect_alias_symbols(aliases, axes=axes_meta)
+    # Collect alias symbols from IR (replaces _collect_alias_symbols string path)
+    all_syms: set[str] = set()
+    for alias_expr in aliases_ir_map.values():
+        all_syms |= free_symbols(alias_expr)
 
     _apply_coord_shifts(
         transitions_raw=transitions_raw,
@@ -3194,29 +3008,24 @@ def normalize_transitions_rhs(  # noqa: C901, PLR0912, PLR0914, PLR0915
         axes=axes_meta,
     )
 
-    for state_name in state_expanded:
-        d_terms.setdefault(state_name, [])
-
     if not transitions_raw:
         raise InvalidRhsSpecError(
             detail="transitions must be non-empty after applying chain expansion"
         )
 
-    transitions_expanded = _expand_transition_templates(
-        transitions_raw,
-        axes=axes_meta,
-        template_map=template_map_all,
-        shaped_params=shaped_params,
-    )
-
-    for idx, tr_map in enumerate(transitions_expanded):
-        _apply_transition(
-            idx=idx,
-            tr=tr_map,
+    # Build equations and collect expanded transitions in one IR-native pass
+    equations_ir_pre_inline, equations_ir_reduce, transitions_expanded, rate_syms = (
+        _build_transition_equations_ir(
+            transitions_raw,
             state_set=state_set,
-            all_syms=all_syms,
-            d_terms=d_terms,
+            state_expanded=state_expanded,
+            axes=axes_meta,
+            axis_lookup=axis_lookup_dict,
+            template_map=template_map_all,
+            shaped_params=shaped_params,
         )
+    )
+    all_syms |= rate_syms
 
     _maybe_attach_initial_state(
         meta,
@@ -3233,60 +3042,25 @@ def normalize_transitions_rhs(  # noqa: C901, PLR0912, PLR0914, PLR0915
     time_varying_set = set(time_varying_full)
     axis_name_set = set(axis_lookup_dict)
     template_base_set = {parse_selector(k)[0] for k in template_map_all}
-    eqs_tuple = tuple(_build_transition_equations(state_expanded, d_terms))
-    aliases_ir_map = _build_aliases_ir(aliases)
+    eqs_tuple = _derive_equation_strings(equations_ir_pre_inline)
     equations_ir_built = _build_equations_ir(eqs_tuple, aliases_ir_map)
-    aliases_ir_reduce_map: Mapping[str, Expr] = {}
-    equations_ir_reduce: tuple[Expr | None, ...] = ()
-    try:
-        aliases_pre, _alias_template_map_pre = _expand_alias_templates(
-            meta_parts[0],
-            axes=axes_meta,
-            template_map_seed=state_template_map,
-            shaped_params=shaped_params,
-            axis_lookup=axis_lookup_dict,
-            passthrough_helpers=True,
-        )
-        transitions_expanded_pre = _expand_transition_templates(
-            transitions_raw,
-            axes=axes_meta,
-            template_map=template_map_all,
-            shaped_params=shaped_params,
-            passthrough_helpers=True,
-        )
-        d_terms_pre: dict[str, list[str]] = {s: [] for s in state_expanded}
-        all_syms_pre: set[str] = set()
-        for idx, tr_map in enumerate(transitions_expanded_pre):
-            _apply_transition(
-                idx=idx,
-                tr=tr_map,
-                state_set=state_set,
-                all_syms=all_syms_pre,
-                d_terms=d_terms_pre,
-            )
-        eqs_pre = tuple(_build_transition_equations(state_expanded, d_terms_pre))
-        aliases_ir_reduce_map = _build_aliases_ir(aliases_pre, lower_helpers=True)
-        equations_ir_reduce = _build_equations_ir(eqs_pre, None, lower_helpers=True)
-    except (ValueError, RecursionError, InvalidRhsSpecError):
-        aliases_ir_reduce_map = {}
-        equations_ir_reduce = ()
     return NormalizedRhs(
         kind="transitions",
         state_names=tuple(state_expanded),
         equations=eqs_tuple,
-        aliases=_derive_alias_strings(aliases_ir_map, aliases),
+        aliases=_derive_alias_strings(aliases_ir_map, aliases_ir_map),
         param_names=_sorted_unique(
             sym
             for sym in all_syms
             if sym not in state_set
-            and sym not in aliases
+            and sym not in aliases_ir_map
             and sym not in shaped_set
             and sym not in time_varying_set
             and sym not in axis_name_set
             and sym not in template_base_set
             and sym not in _SHAPED_PARAM_BUILTIN_NAMES
         ),
-        all_symbols=frozenset(all_syms | set(aliases.keys())),
+        all_symbols=frozenset(all_syms | set(aliases_ir_map.keys())),
         meta={**meta, "transitions": transitions_expanded},
         state_templates=_build_state_templates(
             state_raw,
