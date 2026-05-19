@@ -1034,12 +1034,14 @@ def _lower_apply(  # noqa: PLR0913
     if expr.op == "pos" and len(expr.args) == 1:
         return ast.UnaryOp(op=ast.UAdd(), operand=lower(expr.args[0]))
 
-    if expr.op in _BINOP and len(expr.args) == 2:
-        return ast.BinOp(
-            left=lower(expr.args[0]),
-            op=_BINOP[expr.op](),
-            right=lower(expr.args[1]),
-        )
+    if expr.op in _BINOP and len(expr.args) >= 2:
+        # Fold left-associatively; expand_reduce_pointwise may produce N-ary
+        # flat Apply('+', ...) to avoid deep recursion in the tree.
+        ast_op_cls = _BINOP[expr.op]
+        result: ast.expr = lower(expr.args[0])
+        for arg in expr.args[1:]:
+            result = ast.BinOp(left=result, op=ast_op_cls(), right=lower(arg))
+        return result
     if expr.op in _CMPOP and len(expr.args) == 2:
         return ast.Compare(
             left=lower(expr.args[0]),

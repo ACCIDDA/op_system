@@ -209,10 +209,8 @@ def _expand_one_reduce(
         return Literal(value=0.0)
     if len(terms) == 1:
         return terms[0]
-    folded: Expr = terms[0]
-    for nxt in terms[1:]:
-        folded = Apply(op="+", args=(folded, nxt))
-    return folded
+    # Flat N-ary Apply avoids O(N) recursion depth in _unparse_ir / lower.
+    return Apply(op="+", args=tuple(terms))
 
 
 def _substitute_in_body(  # noqa: PLR0911, PLR0913
