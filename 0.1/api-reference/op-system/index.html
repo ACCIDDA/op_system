@@ -2607,72 +2607,7 @@ removed in a future release.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/op_system/_normalize.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">2754</span>
-<span class="normal">2755</span>
-<span class="normal">2756</span>
-<span class="normal">2757</span>
-<span class="normal">2758</span>
-<span class="normal">2759</span>
-<span class="normal">2760</span>
-<span class="normal">2761</span>
-<span class="normal">2762</span>
-<span class="normal">2763</span>
-<span class="normal">2764</span>
-<span class="normal">2765</span>
-<span class="normal">2766</span>
-<span class="normal">2767</span>
-<span class="normal">2768</span>
-<span class="normal">2769</span>
-<span class="normal">2770</span>
-<span class="normal">2771</span>
-<span class="normal">2772</span>
-<span class="normal">2773</span>
-<span class="normal">2774</span>
-<span class="normal">2775</span>
-<span class="normal">2776</span>
-<span class="normal">2777</span>
-<span class="normal">2778</span>
-<span class="normal">2779</span>
-<span class="normal">2780</span>
-<span class="normal">2781</span>
-<span class="normal">2782</span>
-<span class="normal">2783</span>
-<span class="normal">2784</span>
-<span class="normal">2785</span>
-<span class="normal">2786</span>
-<span class="normal">2787</span>
-<span class="normal">2788</span>
-<span class="normal">2789</span>
-<span class="normal">2790</span>
-<span class="normal">2791</span>
-<span class="normal">2792</span>
-<span class="normal">2793</span>
-<span class="normal">2794</span>
-<span class="normal">2795</span>
-<span class="normal">2796</span>
-<span class="normal">2797</span>
-<span class="normal">2798</span>
-<span class="normal">2799</span>
-<span class="normal">2800</span>
-<span class="normal">2801</span>
-<span class="normal">2802</span>
-<span class="normal">2803</span>
-<span class="normal">2804</span>
-<span class="normal">2805</span>
-<span class="normal">2806</span>
-<span class="normal">2807</span>
-<span class="normal">2808</span>
-<span class="normal">2809</span>
-<span class="normal">2810</span>
-<span class="normal">2811</span>
-<span class="normal">2812</span>
-<span class="normal">2813</span>
-<span class="normal">2814</span>
-<span class="normal">2815</span>
-<span class="normal">2816</span>
-<span class="normal">2817</span>
-<span class="normal">2818</span>
-<span class="normal">2819</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">2819</span>
 <span class="normal">2820</span>
 <span class="normal">2821</span>
 <span class="normal">2822</span>
@@ -2835,7 +2770,25 @@ removed in a future release.</p>
 <span class="normal">2979</span>
 <span class="normal">2980</span>
 <span class="normal">2981</span>
-<span class="normal">2982</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">normalize_expr_rhs</span><span class="p">(</span><span class="n">spec</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">NormalizedRhs</span><span class="p">:</span>  <span class="c1"># noqa: C901, PLR0914, PLR0915</span>
+<span class="normal">2982</span>
+<span class="normal">2983</span>
+<span class="normal">2984</span>
+<span class="normal">2985</span>
+<span class="normal">2986</span>
+<span class="normal">2987</span>
+<span class="normal">2988</span>
+<span class="normal">2989</span>
+<span class="normal">2990</span>
+<span class="normal">2991</span>
+<span class="normal">2992</span>
+<span class="normal">2993</span>
+<span class="normal">2994</span>
+<span class="normal">2995</span>
+<span class="normal">2996</span>
+<span class="normal">2997</span>
+<span class="normal">2998</span>
+<span class="normal">2999</span>
+<span class="normal">3000</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">normalize_expr_rhs</span><span class="p">(</span><span class="n">spec</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">NormalizedRhs</span><span class="p">:</span>  <span class="c1"># noqa: C901, PLR0914, PLR0915</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Normalize an expression-based RHS specification.</span>
 
 <span class="sd">    Args:</span>
@@ -2921,12 +2874,13 @@ removed in a future release.</p>
                 <span class="n">time_axis_name</span><span class="o">=</span><span class="n">time_axis_name</span><span class="p">,</span>
             <span class="p">)</span>
 
-    <span class="n">aliases</span><span class="p">,</span> <span class="n">alias_template_map</span> <span class="o">=</span> <span class="n">_expand_alias_templates</span><span class="p">(</span>
-        <span class="n">meta_parts</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
-        <span class="n">axes</span><span class="o">=</span><span class="n">axes_meta</span><span class="p">,</span>
-        <span class="n">template_map_seed</span><span class="o">=</span><span class="n">state_template_map</span><span class="p">,</span>
-        <span class="n">shaped_params</span><span class="o">=</span><span class="n">shaped_params</span><span class="p">,</span>
-        <span class="n">axis_lookup</span><span class="o">=</span><span class="n">axis_lookup_dict</span><span class="p">,</span>
+    <span class="n">aliases_ir_map</span><span class="p">,</span> <span class="n">aliases_ir_reduce_map</span><span class="p">,</span> <span class="n">alias_template_map</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">_build_aliases_ir_from_raw</span><span class="p">(</span>
+            <span class="n">meta_parts</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+            <span class="n">axes</span><span class="o">=</span><span class="n">axes_meta</span><span class="p">,</span>
+            <span class="n">shaped_params</span><span class="o">=</span><span class="n">shaped_params</span><span class="p">,</span>
+            <span class="n">axis_lookup</span><span class="o">=</span><span class="n">axis_lookup_dict</span><span class="p">,</span>
+        <span class="p">)</span>
     <span class="p">)</span>
     <span class="n">template_map_all</span> <span class="o">=</span> <span class="p">{</span><span class="o">**</span><span class="n">state_template_map</span><span class="p">,</span> <span class="o">**</span><span class="n">alias_template_map</span><span class="p">}</span>
 
@@ -2950,16 +2904,21 @@ removed in a future release.</p>
             <span class="n">detail</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;unknown equation key(s): </span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="n">unknown_keys</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
         <span class="p">)</span>
 
-    <span class="n">all_syms</span> <span class="o">=</span> <span class="n">_collect_alias_symbols</span><span class="p">(</span><span class="n">aliases</span><span class="p">,</span> <span class="n">axes</span><span class="o">=</span><span class="n">axes_meta</span><span class="p">)</span>
-    <span class="n">eqs</span> <span class="o">=</span> <span class="n">_gather_equations</span><span class="p">(</span>
-        <span class="n">state_expanded</span><span class="p">,</span>
-        <span class="n">equations_map</span><span class="p">,</span>
-        <span class="n">all_syms</span><span class="p">,</span>
-        <span class="n">axes</span><span class="o">=</span><span class="n">axes_meta</span><span class="p">,</span>
-        <span class="n">template_map</span><span class="o">=</span><span class="n">template_map_all</span><span class="p">,</span>
-        <span class="n">shaped_params</span><span class="o">=</span><span class="n">shaped_params</span><span class="p">,</span>
-        <span class="n">axis_lookup</span><span class="o">=</span><span class="n">axis_lookup_dict</span><span class="p">,</span>
+    <span class="n">equations_ir_built</span><span class="p">,</span> <span class="n">equations_ir_reduce</span><span class="p">,</span> <span class="n">equations_ir_raw</span><span class="p">,</span> <span class="n">all_syms</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">_build_equations_ir_from_raw</span><span class="p">(</span>
+            <span class="n">state_expanded</span><span class="o">=</span><span class="n">state_expanded</span><span class="p">,</span>
+            <span class="n">equations_map</span><span class="o">=</span><span class="n">equations_map</span><span class="p">,</span>
+            <span class="n">template_map</span><span class="o">=</span><span class="n">template_map_all</span><span class="p">,</span>
+            <span class="n">axes</span><span class="o">=</span><span class="n">axes_meta</span><span class="p">,</span>
+            <span class="n">shaped_params</span><span class="o">=</span><span class="n">shaped_params</span><span class="p">,</span>
+            <span class="n">axis_lookup</span><span class="o">=</span><span class="n">axis_lookup_dict</span><span class="p">,</span>
+            <span class="n">aliases_ir</span><span class="o">=</span><span class="n">aliases_ir_map</span><span class="p">,</span>
+        <span class="p">)</span>
     <span class="p">)</span>
+    <span class="c1"># Collect free symbols from alias bodies (alias bodies may reference</span>
+    <span class="c1"># params not appearing in any equation directly).</span>
+    <span class="k">for</span> <span class="n">alias_ir_val</span> <span class="ow">in</span> <span class="n">aliases_ir_map</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+        <span class="n">all_syms</span> <span class="o">|=</span> <span class="n">free_symbols</span><span class="p">(</span><span class="n">alias_ir_val</span><span class="p">)</span>
 
     <span class="n">_maybe_attach_initial_state</span><span class="p">(</span>
         <span class="n">meta</span><span class="p">,</span>
@@ -2976,61 +2935,8 @@ removed in a future release.</p>
     <span class="n">time_varying_set</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">time_varying_full</span><span class="p">)</span>
     <span class="n">axis_name_set</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">axis_lookup_dict</span><span class="p">)</span>
     <span class="n">template_base_set</span> <span class="o">=</span> <span class="p">{</span><span class="n">parse_selector</span><span class="p">(</span><span class="n">k</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">template_map_all</span><span class="p">}</span>
-    <span class="n">eqs_tuple</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">eqs</span><span class="p">)</span>
-    <span class="n">aliases_ir_map</span> <span class="o">=</span> <span class="n">_build_aliases_ir</span><span class="p">(</span><span class="n">aliases</span><span class="p">)</span>
-
-    <span class="c1"># Second pass: capture pre-expansion (helper-bearing) strings so we can</span>
-    <span class="c1"># build IR with ``Reduce`` nodes for downstream IR-fast-path consumers.</span>
-    <span class="c1"># Best-effort: failures leave the reduce-bearing fields empty.</span>
-    <span class="n">aliases_ir_reduce_map</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Expr</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
-    <span class="n">equations_ir_reduce</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">Expr</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="p">()</span>
-    <span class="k">try</span><span class="p">:</span>
-        <span class="n">aliases_pre</span><span class="p">,</span> <span class="n">_alias_template_map_pre</span> <span class="o">=</span> <span class="n">_expand_alias_templates</span><span class="p">(</span>
-            <span class="n">meta_parts</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
-            <span class="n">axes</span><span class="o">=</span><span class="n">axes_meta</span><span class="p">,</span>
-            <span class="n">template_map_seed</span><span class="o">=</span><span class="n">state_template_map</span><span class="p">,</span>
-            <span class="n">shaped_params</span><span class="o">=</span><span class="n">shaped_params</span><span class="p">,</span>
-            <span class="n">axis_lookup</span><span class="o">=</span><span class="n">axis_lookup_dict</span><span class="p">,</span>
-            <span class="n">passthrough_helpers</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-        <span class="p">)</span>
-        <span class="n">eqs_pre</span> <span class="o">=</span> <span class="n">_gather_equations</span><span class="p">(</span>
-            <span class="n">state_expanded</span><span class="p">,</span>
-            <span class="n">equations_map</span><span class="p">,</span>
-            <span class="nb">set</span><span class="p">(),</span>  <span class="c1"># throwaway: don&#39;t pollute all_syms with helper names</span>
-            <span class="n">axes</span><span class="o">=</span><span class="n">axes_meta</span><span class="p">,</span>
-            <span class="n">template_map</span><span class="o">=</span><span class="n">template_map_all</span><span class="p">,</span>
-            <span class="n">shaped_params</span><span class="o">=</span><span class="n">shaped_params</span><span class="p">,</span>
-            <span class="n">axis_lookup</span><span class="o">=</span><span class="n">axis_lookup_dict</span><span class="p">,</span>
-            <span class="n">passthrough_helpers</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-        <span class="p">)</span>
-        <span class="n">aliases_ir_reduce_map</span> <span class="o">=</span> <span class="n">_build_aliases_ir</span><span class="p">(</span><span class="n">aliases_pre</span><span class="p">,</span> <span class="n">lower_helpers</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-        <span class="c1"># Parse equation IR without inlining alias bodies in their</span>
-        <span class="c1"># reduce-bearing form: alias inlining is performed downstream in</span>
-        <span class="c1"># ``_build_equations_ir_via_pointwise`` against the post-expansion</span>
-        <span class="c1"># alias map (``aliases_ir_map``), which is free of ``Reduce`` nodes.</span>
-        <span class="c1"># Inlining reduce-form aliases here would leave embedded ``Reduce``</span>
-        <span class="c1"># nodes inside ``equations_ir_reduce``, which the downstream</span>
-        <span class="c1"># ``_vectorize`` fast path then mis-lowers when the surrounding</span>
-        <span class="c1"># equation cell has non-empty target axes.</span>
-        <span class="n">equations_ir_reduce</span> <span class="o">=</span> <span class="n">_build_equations_ir</span><span class="p">(</span>
-            <span class="nb">tuple</span><span class="p">(</span><span class="n">eqs_pre</span><span class="p">),</span> <span class="kc">None</span><span class="p">,</span> <span class="n">lower_helpers</span><span class="o">=</span><span class="kc">True</span>
-        <span class="p">)</span>
-    <span class="k">except</span> <span class="p">(</span><span class="ne">ValueError</span><span class="p">,</span> <span class="ne">RecursionError</span><span class="p">,</span> <span class="n">InvalidRhsSpecError</span><span class="p">):</span>
-        <span class="n">aliases_ir_reduce_map</span> <span class="o">=</span> <span class="p">{}</span>
-        <span class="n">equations_ir_reduce</span> <span class="o">=</span> <span class="p">()</span>
-
-    <span class="n">equations_ir_built</span> <span class="o">=</span> <span class="n">_build_equations_ir_via_pointwise</span><span class="p">(</span>
-        <span class="n">equations_ir_reduce</span><span class="o">=</span><span class="n">equations_ir_reduce</span><span class="p">,</span>
-        <span class="n">aliases_ir_inline</span><span class="o">=</span><span class="n">aliases_ir_map</span><span class="p">,</span>
-        <span class="n">state_expanded</span><span class="o">=</span><span class="n">state_expanded</span><span class="p">,</span>
-        <span class="n">template_map</span><span class="o">=</span><span class="n">template_map_all</span><span class="p">,</span>
-        <span class="n">axes</span><span class="o">=</span><span class="n">axes_meta</span><span class="p">,</span>
-        <span class="n">shaped_params</span><span class="o">=</span><span class="n">shaped_params</span><span class="p">,</span>
-        <span class="n">axis_lookup</span><span class="o">=</span><span class="n">axis_lookup_dict</span><span class="p">,</span>
-    <span class="p">)</span> <span class="ow">or</span> <span class="n">_build_equations_ir</span><span class="p">(</span><span class="n">eqs_tuple</span><span class="p">,</span> <span class="n">aliases_ir_map</span><span class="p">)</span>
-
     <span class="n">equations_strings</span> <span class="o">=</span> <span class="n">_derive_equation_strings</span><span class="p">(</span><span class="n">equations_ir_built</span><span class="p">)</span>
-    <span class="n">aliases_strings</span> <span class="o">=</span> <span class="n">_derive_alias_strings</span><span class="p">(</span><span class="n">aliases_ir_map</span><span class="p">,</span> <span class="n">aliases</span><span class="p">)</span>
+    <span class="n">aliases_strings</span> <span class="o">=</span> <span class="n">_derive_alias_strings</span><span class="p">(</span><span class="n">aliases_ir_map</span><span class="p">,</span> <span class="n">aliases_ir_map</span><span class="p">)</span>
 
     <span class="k">return</span> <span class="n">NormalizedRhs</span><span class="p">(</span>
         <span class="n">kind</span><span class="o">=</span><span class="s2">&quot;expr&quot;</span><span class="p">,</span>
@@ -3041,14 +2947,14 @@ removed in a future release.</p>
             <span class="n">sym</span>
             <span class="k">for</span> <span class="n">sym</span> <span class="ow">in</span> <span class="n">all_syms</span>
             <span class="k">if</span> <span class="n">sym</span> <span class="ow">not</span> <span class="ow">in</span> <span class="nb">set</span><span class="p">(</span><span class="n">state_expanded</span><span class="p">)</span>
-            <span class="ow">and</span> <span class="n">sym</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">aliases</span>
+            <span class="ow">and</span> <span class="n">sym</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">aliases_ir_map</span>
             <span class="ow">and</span> <span class="n">sym</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">shaped_set</span>
             <span class="ow">and</span> <span class="n">sym</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">time_varying_set</span>
             <span class="ow">and</span> <span class="n">sym</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">axis_name_set</span>
             <span class="ow">and</span> <span class="n">sym</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">template_base_set</span>
             <span class="ow">and</span> <span class="n">sym</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">_SHAPED_PARAM_BUILTIN_NAMES</span>
         <span class="p">),</span>
-        <span class="n">all_symbols</span><span class="o">=</span><span class="nb">frozenset</span><span class="p">(</span><span class="n">all_syms</span> <span class="o">|</span> <span class="nb">set</span><span class="p">(</span><span class="n">aliases</span><span class="o">.</span><span class="n">keys</span><span class="p">())),</span>
+        <span class="n">all_symbols</span><span class="o">=</span><span class="nb">frozenset</span><span class="p">(</span><span class="n">all_syms</span> <span class="o">|</span> <span class="nb">set</span><span class="p">(</span><span class="n">aliases_ir_map</span><span class="o">.</span><span class="n">keys</span><span class="p">())),</span>
         <span class="n">meta</span><span class="o">=</span><span class="n">meta</span><span class="p">,</span>
         <span class="n">state_templates</span><span class="o">=</span><span class="n">_build_state_templates</span><span class="p">(</span>
             <span class="n">state_raw</span><span class="p">,</span>
@@ -3060,7 +2966,7 @@ removed in a future release.</p>
         <span class="n">time_varying_params</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(</span><span class="nb">sorted</span><span class="p">(</span><span class="n">time_varying_full</span><span class="o">.</span><span class="n">items</span><span class="p">())),</span>
         <span class="n">aliases_ir</span><span class="o">=</span><span class="n">aliases_ir_map</span><span class="p">,</span>
         <span class="n">equations_ir</span><span class="o">=</span><span class="n">equations_ir_built</span><span class="p">,</span>
-        <span class="n">equations_ir_raw</span><span class="o">=</span><span class="n">_build_equations_ir</span><span class="p">(</span><span class="n">eqs_tuple</span><span class="p">),</span>
+        <span class="n">equations_ir_raw</span><span class="o">=</span><span class="n">equations_ir_raw</span><span class="p">,</span>
         <span class="n">aliases_ir_reduce</span><span class="o">=</span><span class="n">aliases_ir_reduce_map</span><span class="p">,</span>
         <span class="n">equations_ir_reduce</span><span class="o">=</span><span class="n">equations_ir_reduce</span><span class="p">,</span>
     <span class="p">)</span>
@@ -3177,35 +3083,35 @@ removed in a future release.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/op_system/_normalize.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">2723</span>
-<span class="normal">2724</span>
-<span class="normal">2725</span>
-<span class="normal">2726</span>
-<span class="normal">2727</span>
-<span class="normal">2728</span>
-<span class="normal">2729</span>
-<span class="normal">2730</span>
-<span class="normal">2731</span>
-<span class="normal">2732</span>
-<span class="normal">2733</span>
-<span class="normal">2734</span>
-<span class="normal">2735</span>
-<span class="normal">2736</span>
-<span class="normal">2737</span>
-<span class="normal">2738</span>
-<span class="normal">2739</span>
-<span class="normal">2740</span>
-<span class="normal">2741</span>
-<span class="normal">2742</span>
-<span class="normal">2743</span>
-<span class="normal">2744</span>
-<span class="normal">2745</span>
-<span class="normal">2746</span>
-<span class="normal">2747</span>
-<span class="normal">2748</span>
-<span class="normal">2749</span>
-<span class="normal">2750</span>
-<span class="normal">2751</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">normalize_rhs</span><span class="p">(</span><span class="n">spec</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">NormalizedRhs</span><span class="p">:</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">2788</span>
+<span class="normal">2789</span>
+<span class="normal">2790</span>
+<span class="normal">2791</span>
+<span class="normal">2792</span>
+<span class="normal">2793</span>
+<span class="normal">2794</span>
+<span class="normal">2795</span>
+<span class="normal">2796</span>
+<span class="normal">2797</span>
+<span class="normal">2798</span>
+<span class="normal">2799</span>
+<span class="normal">2800</span>
+<span class="normal">2801</span>
+<span class="normal">2802</span>
+<span class="normal">2803</span>
+<span class="normal">2804</span>
+<span class="normal">2805</span>
+<span class="normal">2806</span>
+<span class="normal">2807</span>
+<span class="normal">2808</span>
+<span class="normal">2809</span>
+<span class="normal">2810</span>
+<span class="normal">2811</span>
+<span class="normal">2812</span>
+<span class="normal">2813</span>
+<span class="normal">2814</span>
+<span class="normal">2815</span>
+<span class="normal">2816</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">normalize_rhs</span><span class="p">(</span><span class="n">spec</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">NormalizedRhs</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Normalize a RHS specification dict into a backend-facing representation.</span>
 
 <span class="sd">    Args:</span>
@@ -3306,25 +3212,7 @@ removed in a future release.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/op_system/_normalize.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">3043</span>
-<span class="normal">3044</span>
-<span class="normal">3045</span>
-<span class="normal">3046</span>
-<span class="normal">3047</span>
-<span class="normal">3048</span>
-<span class="normal">3049</span>
-<span class="normal">3050</span>
-<span class="normal">3051</span>
-<span class="normal">3052</span>
-<span class="normal">3053</span>
-<span class="normal">3054</span>
-<span class="normal">3055</span>
-<span class="normal">3056</span>
-<span class="normal">3057</span>
-<span class="normal">3058</span>
-<span class="normal">3059</span>
-<span class="normal">3060</span>
-<span class="normal">3061</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">3061</span>
 <span class="normal">3062</span>
 <span class="normal">3063</span>
 <span class="normal">3064</span>
@@ -3549,7 +3437,25 @@ removed in a future release.</p>
 <span class="normal">3283</span>
 <span class="normal">3284</span>
 <span class="normal">3285</span>
-<span class="normal">3286</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">normalize_transitions_rhs</span><span class="p">(</span>  <span class="c1"># noqa: C901, PLR0912, PLR0914, PLR0915</span>
+<span class="normal">3286</span>
+<span class="normal">3287</span>
+<span class="normal">3288</span>
+<span class="normal">3289</span>
+<span class="normal">3290</span>
+<span class="normal">3291</span>
+<span class="normal">3292</span>
+<span class="normal">3293</span>
+<span class="normal">3294</span>
+<span class="normal">3295</span>
+<span class="normal">3296</span>
+<span class="normal">3297</span>
+<span class="normal">3298</span>
+<span class="normal">3299</span>
+<span class="normal">3300</span>
+<span class="normal">3301</span>
+<span class="normal">3302</span>
+<span class="normal">3303</span>
+<span class="normal">3304</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">normalize_transitions_rhs</span><span class="p">(</span>  <span class="c1"># noqa: C901, PLR0912, PLR0914, PLR0915</span>
     <span class="n">spec</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">NormalizedRhs</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Normalize a transition-based RHS specification (diagram/hazard semantics).</span>
