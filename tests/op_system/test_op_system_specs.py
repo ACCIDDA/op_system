@@ -19,6 +19,7 @@ from op_system import compile_rhs
 from op_system._constraints import _ConstraintRule, _normalize_constraints
 from op_system._errors import InvalidRhsSpecError
 from op_system._ir import Apply, Reduce, free_symbols, parse_expr_to_ir, walk
+from op_system._normalize import _derive_alias_strings, _derive_equation_strings
 from op_system.specs import (
     NormalizedRhs,
     StateTemplate,
@@ -51,6 +52,18 @@ def test_normalize_expr_rhs_happy_path() -> None:
     assert "S" in out.all_symbols
     assert "beta" in out.all_symbols
     assert "N" in out.all_symbols
+
+
+def test_derive_equation_strings_requires_typed_ir() -> None:
+    """Equation rendering should fail fast when typed IR is missing."""
+    with pytest.raises(InvalidRhsSpecError, match=r"equations\[0\] is missing typed IR"):
+        _derive_equation_strings((None,))
+
+
+def test_derive_alias_strings_requires_typed_ir() -> None:
+    """Alias rendering should fail fast when typed IR is missing."""
+    with pytest.raises(InvalidRhsSpecError, match="alias 'N' is missing typed IR"):
+        _derive_alias_strings({}, {"N": "S + I + R"})
 
 
 def test_normalize_transitions_rhs_happy_path() -> None:

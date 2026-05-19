@@ -27,6 +27,7 @@ import numpy as np
 import pytest
 
 from op_system import compile_spec
+from op_system._errors import InvalidRhsSpecError
 from op_system.compile import CompiledRhs, _collect_eq_code, compile_rhs
 from op_system.specs import NormalizedRhs, normalize_rhs
 
@@ -168,10 +169,13 @@ def test_compile_rejects_nonwhitelisted_helper() -> None:
 
 
 def test_compile_rejects_disallowed_attribute_access() -> None:
-    """Disallowed attribute access should be rejected."""
+    """Disallowed attribute access should be rejected before evaluation."""
     spec = {"kind": "expr", "state": ["x"], "equations": {"x": "x.real"}}
-    rhs = normalize_rhs(spec)
-    with pytest.raises(ValueError, match=r"disallowed attribute access"):
+    with pytest.raises(
+        (ValueError, InvalidRhsSpecError),
+        match=r"disallowed attribute access|missing typed IR",
+    ):
+        rhs = normalize_rhs(spec)
         compile_rhs(rhs, xp=np)
 
 

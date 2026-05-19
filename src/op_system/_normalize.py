@@ -1377,58 +1377,77 @@ def _build_equations_ir_via_pointwise(  # noqa: C901, PLR0913
 
 def _derive_equation_strings(
     equations_ir: tuple[Expr | None, ...],
-    legacy: tuple[str, ...],
 ) -> tuple[str, ...]:
-    """Render each equation's RHS from its IR, falling back to legacy strings.
-
-    When an entry in ``equations_ir`` is ``None``, the corresponding legacy
-    string is used. This keeps positional alignment intact while letting the
-    IR-side pipeline serve as the authoritative source for apply_along-bearing
-    equations.
+    """Render each equation's RHS directly from typed IR.
 
     Args:
-        equations_ir: Per-cell post-expansion IR (``None`` allowed).
-        legacy: Pre-existing string equations to fall back on.
+        equations_ir: Per-cell post-expansion IR.
 
     Returns:
         Tuple of equation strings aligned with ``equations_ir``.
+
+    Raises:
+        InvalidRhsSpecError: If any equation IR is missing or cannot be
+            rendered back to source.
     """
-    rendered: list[str] = []
-    for ir, fallback in zip(equations_ir, legacy, strict=False):
-        if ir is None:
-            rendered.append(fallback)
-            continue
-        try:
-            rendered.append(unparse_ir(ir))
-        except (ValueError, RecursionError):
-            rendered.append(fallback)
-    return tuple(rendered)
+    old_limit = sys.getrecursionlimit()
+    sys.setrecursionlimit(max(old_limit, 10_000))
+    try:
+        rendered: list[str] = []
+        for idx, ir in enumerate(equations_ir):
+            if ir is None:
+                raise InvalidRhsSpecError(
+                    detail=f"equations[{idx}] is missing typed IR during rendering"
+                )
+            try:
+                rendered.append(unparse_ir(ir))
+            except (ValueError, RecursionError) as exc:
+                raise InvalidRhsSpecError(
+                    detail=f"equations[{idx}] could not be rendered from typed IR"
+                ) from exc
+        return tuple(rendered)
+    finally:
+        with contextlib.suppress(ValueError, RecursionError):
+            sys.setrecursionlimit(old_limit)
 
 
 def _derive_alias_strings(
     aliases_ir: Mapping[str, Expr],
-    legacy: Mapping[str, str],
+    alias_order: Mapping[str, str],
 ) -> dict[str, str]:
-    """Render each alias body from its IR, falling back to legacy strings.
+    """Render each alias body directly from typed IR.
 
     Args:
         aliases_ir: Alias-name → IR map.
-        legacy: Pre-existing alias-name → string map (preserves ordering).
+        alias_order: Alias-name → string map used only to preserve ordering.
 
     Returns:
-        New alias mapping with IR-derived bodies where available.
+        New alias mapping with IR-derived bodies.
+
+    Raises:
+        InvalidRhsSpecError: If any alias IR is missing or cannot be rendered
+            back to source.
     """
-    out: dict[str, str] = {}
-    for name, body in legacy.items():
-        ir = aliases_ir.get(name)
-        if ir is None:
-            out[name] = body
-            continue
-        try:
-            out[name] = unparse_ir(ir)
-        except (ValueError, RecursionError):
-            out[name] = body
-    return out
+    old_limit = sys.getrecursionlimit()
+    sys.setrecursionlimit(max(old_limit, 10_000))
+    try:
+        out: dict[str, str] = {}
+        for name in alias_order:
+            ir = aliases_ir.get(name)
+            if ir is None:
+                raise InvalidRhsSpecError(
+                    detail=f"alias {name!r} is missing typed IR during rendering"
+                )
+            try:
+                out[name] = unparse_ir(ir)
+            except (ValueError, RecursionError) as exc:
+                raise InvalidRhsSpecError(
+                    detail=f"alias {name!r} could not be rendered from typed IR"
+                ) from exc
+        return out
+    finally:
+        with contextlib.suppress(ValueError, RecursionError):
+            sys.setrecursionlimit(old_limit)
 
 
 _INITIAL_STATE_SHAPED_KEY = "shaped"
@@ -2924,7 +2943,7 @@ def normalize_expr_rhs(spec: Mapping[str, Any]) -> NormalizedRhs:  # noqa: C901,
         axis_lookup=axis_lookup_dict,
     ) or _build_equations_ir(eqs_tuple, aliases_ir_map)
 
-    equations_strings = _derive_equation_strings(equations_ir_built, eqs_tuple)
+    equations_strings = _derive_equation_strings(equations_ir_built)
     aliases_strings = _derive_alias_strings(aliases_ir_map, aliases)
 
     return NormalizedRhs(
