@@ -198,9 +198,7 @@ def _raise_unsupported_feature(*, feature: str, detail: str | None = None) -> No
 class EvalFn(Protocol):
     """Callable RHS evaluator supporting runtime parameter kwargs."""
 
-    def __call__(
-        self, t: object, y: object, **params: object
-    ) -> Float64Array:
+    def __call__(self, t: object, y: object, **params: object) -> Float64Array:
         """Evaluate the RHS at time ``t`` and state ``y`` with bound parameters."""
         ...
 
@@ -506,9 +504,7 @@ def _collect_eq_code(
             reserved_names=reserved_names,
         )
         cse_code = tuple((name, _compile_expr(name, expr)) for name, expr in bindings)
-        eq_code = list(
-            starmap(_compile_expr, zip(equations, rewritten, strict=True))
-        )
+        eq_code = list(starmap(_compile_expr, zip(equations, rewritten, strict=True)))
         return cse_code, eq_code
     return (), [_compile_expr(expr) for expr in equations]
 
