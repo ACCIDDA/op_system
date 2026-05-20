@@ -165,3 +165,18 @@ def _ensure_mapping(x: object, *, name: str) -> Mapping[str, Any]:
     if not isinstance(x, dict):
         raise InvalidRhsSpecError(detail=f"{name} must be a mapping")
     return x
+
+
+def _get_required_str(mapping: Mapping[str, Any], *, idx: int, key: str) -> str:
+    """Fetch a required non-empty string field from a mapping.
+
+    Returns:
+        Stripped string value.
+
+    Raises:
+        InvalidRhsSpecError: If validation fails.
+    """
+    val = mapping.get(key)
+    if not isinstance(val, str) or not val.strip():
+        raise InvalidRhsSpecError(detail=f"transitions[{idx}].{key} must be a string")
+    return val.strip()

@@ -26,7 +26,7 @@ from op_system._ir import (
     unparse_ir,
     walk,
 )
-from op_system._normalize import _derive_alias_strings, _derive_equation_strings
+from op_system._normalize_ir import _derive_alias_strings, _derive_equation_strings
 from op_system.specs import (
     ExprRhs,
     NormalizedRhs,
