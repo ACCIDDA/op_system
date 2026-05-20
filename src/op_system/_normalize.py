@@ -121,10 +121,13 @@ class StateTemplate:
 
 
 @dataclass(frozen=True, slots=True)
-class NormalizedRhs:
-    """Normalized RHS representation suitable for compilation/execution."""
+class _RhsBase:
+    """Shared fields for all normalized-RHS kinds.  Not part of the public API.
 
-    kind: str
+    Use :data:`NormalizedRhs`, :class:`ExprRhs`, or :class:`TransitionsRhs`
+    instead.
+    """
+
     state_names: tuple[str, ...]
     equations: tuple[str, ...]
     aliases: Mapping[str, str]
@@ -134,21 +137,40 @@ class NormalizedRhs:
     state_templates: tuple[StateTemplate, ...] = ()
     shaped_params: tuple[tuple[str, tuple[str, ...]], ...] = ()
     time_varying_params: tuple[tuple[str, tuple[str, ...]], ...] = ()
+    # Post-expansion, alias-inlined IR (Reduce nodes expanded).
+    # Used by the scalar compile path (``compile.py._make_eval_fn``).
     aliases_ir: Mapping[str, Expr] = field(default_factory=dict)
     equations_ir: tuple[Expr | None, ...] = ()
-    equations_ir_raw: tuple[Expr | None, ...] = ()
-    # Helper-bearing IR variants: aliases/equations parsed from their
-    # *pre-expansion* string form (i.e. before ``_expand_helpers`` lowers
-    # ``apply_along`` / ``sum_over`` / ``integrate_over`` to per-cell
-    # sums) with ``parse_expr_to_ir(lower_helpers=True)``. Carries
-    # ``Reduce`` nodes; intended for downstream IR-fast-path consumers.
-    # Best-effort, parallel to ``aliases_ir`` / ``equations_ir`` — entries
-    # that fail to parse or inline are omitted (aliases) or stored as
-    # ``None`` (equations). Empty for ``kind == "transitions"`` (rates are
-    # not yet plumbed through this surface).
+    # Reduce-bearing IR (Reduce nodes preserved).
+    # Used by the vector compile path (``_vectorize.py``).
     aliases_ir_reduce: Mapping[str, Expr] = field(default_factory=dict)
     equations_ir_reduce: tuple[Expr | None, ...] = ()
     alias_templates: tuple[StateTemplate, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class ExprRhs(_RhsBase):
+    """Normalized RHS for ``kind="expr"`` specs (explicit d(state)/dt equations).
+
+    Produced by :func:`normalize_expr_rhs`.  Use :data:`NormalizedRhs` as the
+    union type when you need to accept both kinds.
+    """
+
+
+@dataclass(frozen=True, slots=True)
+class TransitionsRhs(_RhsBase):
+    """Normalized RHS for ``kind="transitions"`` specs (per-capita hazard diagram).
+
+    Produced by :func:`normalize_transitions_rhs`.  Use :data:`NormalizedRhs`
+    as the union type when you need to accept both kinds.
+    """
+
+
+#: Discriminated union of the two normalized-RHS kinds.
+#:
+#: Use ``isinstance(rhs, ExprRhs)`` / ``isinstance(rhs, TransitionsRhs)`` to
+#: dispatch, rather than the legacy ``rhs.kind == "expr"`` string check.
+NormalizedRhs = ExprRhs | TransitionsRhs
 
 
 # ---------------------------------------------------------------------------
@@ -1432,7 +1454,7 @@ def _lookup_cell_expr(
     raise InvalidRhsSpecError(detail=f"Missing equation for state {cell!r}")
 
 
-def _build_equations_ir_from_raw(  # noqa: PLR0913, PLR0914
+def _build_equations_ir_from_raw(  # noqa: PLR0913
     *,
     state_expanded: Sequence[str],
     equations_map: Mapping[str, Any],
@@ -1442,7 +1464,6 @@ def _build_equations_ir_from_raw(  # noqa: PLR0913, PLR0914
     axis_lookup: Mapping[str, Sequence[str]],
     aliases_ir: Mapping[str, Expr] | None = None,
 ) -> tuple[
-    tuple[Expr | None, ...],
     tuple[Expr | None, ...],
     tuple[Expr | None, ...],
     set[str],
@@ -1458,11 +1479,12 @@ def _build_equations_ir_from_raw(  # noqa: PLR0913, PLR0914
     4. :func:`expand_reduce_pointwise` with the cell's LHS assignment.
     5. :func:`inline_aliases` against ``aliases_ir`` (post-expansion alias map).
 
-    The intermediate states after steps 3 and 4 (before alias inlining) are
-    returned as ``equations_ir_reduce`` and ``equations_ir_raw`` respectively.
+    The result after step 3 (Reduce-bearing, pre-expand) is returned as
+    ``equations_ir_reduce``; the fully inlined result after step 5 is returned
+    as ``equations_ir``.
 
     Returns:
-        ``(equations_ir, equations_ir_reduce, equations_ir_raw, all_syms)``
+        ``(equations_ir, equations_ir_reduce, all_syms)``
         where each IR tuple is aligned with ``state_expanded`` and failed
         cells are represented as ``None``.
     """
@@ -1486,7 +1508,6 @@ def _build_equations_ir_from_raw(  # noqa: PLR0913, PLR0914
             alias_cycle_ok = _detect_alias_cycle(aliases_ir) is None
 
     out_reduce: list[Expr | None] = []
-    out_raw: list[Expr | None] = []
     out_full: list[Expr | None] = []
     all_syms: set[str] = set()
     old_limit = sys.getrecursionlimit()
@@ -1512,7 +1533,6 @@ def _build_equations_ir_from_raw(  # noqa: PLR0913, PLR0914
                 lhs_assignment=assignment,
                 axis_coords=dict(axis_lookup),
             )
-            out_raw.append(ir_expanded)
             if aliases_ir:
                 try:
                     ir_inlined = inline_aliases(
@@ -1527,7 +1547,7 @@ def _build_equations_ir_from_raw(  # noqa: PLR0913, PLR0914
                 ir_inlined = ir_expanded
             all_syms |= free_symbols(ir_inlined)
             out_full.append(ir_inlined)
-        return tuple(out_full), tuple(out_reduce), tuple(out_raw), all_syms
+        return tuple(out_full), tuple(out_reduce), all_syms
     finally:
         if needed > old_limit:
             sys.setrecursionlimit(old_limit)
@@ -2552,10 +2572,9 @@ def normalize_rhs(spec: Mapping[str, Any] | None) -> NormalizedRhs:
         feature=f"rhs.kind={kind}",
         detail="Only 'expr' and 'transitions' are supported in v1.",
     )
-    return normalize_expr_rhs(spec)  # unreachable; satisfies return type checker
 
 
-def normalize_expr_rhs(spec: Mapping[str, Any]) -> NormalizedRhs:  # noqa: C901, PLR0914, PLR0915
+def normalize_expr_rhs(spec: Mapping[str, Any]) -> ExprRhs:  # noqa: C901, PLR0914, PLR0915
     """Normalize an expression-based RHS specification.
 
     Args:
@@ -2671,16 +2690,14 @@ def normalize_expr_rhs(spec: Mapping[str, Any]) -> NormalizedRhs:  # noqa: C901,
             detail=f"unknown equation key(s): {sorted(unknown_keys)}"
         )
 
-    equations_ir_built, equations_ir_reduce, equations_ir_raw, all_syms = (
-        _build_equations_ir_from_raw(
-            state_expanded=state_expanded,
-            equations_map=equations_map,
-            template_map=template_map_all,
-            axes=axes_meta,
-            shaped_params=shaped_params,
-            axis_lookup=axis_lookup_dict,
-            aliases_ir=aliases_ir_map,
-        )
+    equations_ir_built, equations_ir_reduce, all_syms = _build_equations_ir_from_raw(
+        state_expanded=state_expanded,
+        equations_map=equations_map,
+        template_map=template_map_all,
+        axes=axes_meta,
+        shaped_params=shaped_params,
+        axis_lookup=axis_lookup_dict,
+        aliases_ir=aliases_ir_map,
     )
     # Collect free symbols from alias bodies (alias bodies may reference
     # params not appearing in any equation directly).
@@ -2705,8 +2722,7 @@ def normalize_expr_rhs(spec: Mapping[str, Any]) -> NormalizedRhs:  # noqa: C901,
     equations_strings = _derive_equation_strings(equations_ir_built)
     aliases_strings = _derive_alias_strings(aliases_ir_map, aliases_ir_map)
 
-    return NormalizedRhs(
-        kind="expr",
+    return ExprRhs(
         state_names=tuple(state_expanded),
         equations=equations_strings,
         aliases=aliases_strings,
@@ -2733,7 +2749,6 @@ def normalize_expr_rhs(spec: Mapping[str, Any]) -> NormalizedRhs:  # noqa: C901,
         time_varying_params=tuple(sorted(time_varying_full.items())),
         aliases_ir=aliases_ir_map,
         equations_ir=equations_ir_built,
-        equations_ir_raw=equations_ir_raw,
         aliases_ir_reduce=aliases_ir_reduce_map,
         equations_ir_reduce=equations_ir_reduce,
         alias_templates=_build_alias_templates(
@@ -2954,7 +2969,7 @@ def _build_transition_equations_ir(  # noqa: C901, PLR0912, PLR0913, PLR0914, PL
 
 def normalize_transitions_rhs(  # noqa: C901, PLR0912, PLR0914, PLR0915
     spec: Mapping[str, Any],
-) -> NormalizedRhs:
+) -> TransitionsRhs:
     """Normalize a transition-based RHS specification (diagram/hazard semantics).
 
     Returns:
@@ -3127,8 +3142,7 @@ def normalize_transitions_rhs(  # noqa: C901, PLR0912, PLR0914, PLR0915
     template_base_set = {parse_selector(k)[0] for k in template_map_all}
     eqs_tuple = _derive_equation_strings(equations_ir_pre_inline)
     equations_ir_built = _build_equations_ir(eqs_tuple, aliases_ir_map)
-    return NormalizedRhs(
-        kind="transitions",
+    return TransitionsRhs(
         state_names=tuple(state_expanded),
         equations=eqs_tuple,
         aliases=_derive_alias_strings(aliases_ir_map, aliases_ir_map),
@@ -3155,7 +3169,6 @@ def normalize_transitions_rhs(  # noqa: C901, PLR0912, PLR0914, PLR0915
         time_varying_params=tuple(sorted(time_varying_full.items())),
         aliases_ir=aliases_ir_map,
         equations_ir=equations_ir_built,
-        equations_ir_raw=_build_equations_ir(eqs_tuple),
         aliases_ir_reduce=aliases_ir_reduce_map,
         equations_ir_reduce=equations_ir_reduce,
         alias_templates=_build_alias_templates(

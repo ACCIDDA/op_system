@@ -449,15 +449,15 @@ def _try_cse_eq_plan(  # noqa: C901, PLR0911, PLR0912, PLR0913, PLR0914
     # Prefer equations_ir_reduce (preserves Reduce helper structure) so that
     # lowering can emit np.sum() directly for apply_along terms.
     eq_ir_reduce = rhs.equations_ir_reduce
-    eq_ir_raw = rhs.equations_ir_raw
+    eq_ir = rhs.equations_ir
     lifted_irs: list[Expr] = []
     for buf in state_buffers:
         first_idx = buf.offset
         cell_ir: Expr | None = None
         if eq_ir_reduce and len(eq_ir_reduce) > first_idx:
             cell_ir = eq_ir_reduce[first_idx]
-        if cell_ir is None and eq_ir_raw and len(eq_ir_raw) > first_idx:
-            cell_ir = eq_ir_raw[first_idx]
+        if cell_ir is None and eq_ir and len(eq_ir) > first_idx:
+            cell_ir = eq_ir[first_idx]
         if cell_ir is None:
             return None
         try:
@@ -906,7 +906,7 @@ def _build_vector_plan_inner(  # noqa: C901, PLR0911, PLR0912, PLR0914, PLR0915
             result = _vectorize_template_equations(
                 template=buf,
                 equations=rhs.equations,
-                equations_ir=rhs.equations_ir_raw,
+                equations_ir=None,
                 equations_ir_reduce=rhs.equations_ir_reduce,
                 name_to_template=name_to_template,
                 axis_index=axis_index,
