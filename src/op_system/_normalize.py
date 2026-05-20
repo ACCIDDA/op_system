@@ -55,7 +55,10 @@ from op_system._ir import (
     parse_expr_to_ir,
     unparse_ir,
 )
-from op_system._ir_templates import expand_inline_templates
+from op_system._ir_templates import (
+    expand_inline_templates,
+    inline_aliases,
+)
 from op_system._normalize_chains import (
     _apply_coord_shifts,
     _apply_expr_chains,
@@ -67,7 +70,6 @@ from op_system._normalize_ir import (
     StateTemplate,
     _build_alias_templates,
     _build_aliases_ir_from_raw,
-    _build_equations_ir,
     _build_equations_ir_from_raw,
     _build_state_templates,
     _derive_alias_strings,
@@ -559,6 +561,13 @@ def _build_transition_equations_ir(  # noqa: C901, PLR0912, PLR0913, PLR0914, PL
     d_ir_reduce: dict[str, list[Expr]] = {s: [] for s in state_expanded}
     all_syms: set[str] = set()
     transitions_expanded_out: list[dict[str, Any]] = []
+    # Cache: ``(base, template_tokens) -> list[str]`` for
+    # ``_enumerate_template_cell_names``. The same (base, tokens) pair is
+    # queried once per (from, to) side per combo expansion, so caching cuts
+    # the dominant ``render_selector`` walk on continuum specs (issue #145).
+    enumerate_template_cell_names_cache: dict[
+        tuple[str, tuple[Any, ...]], list[str]
+    ] = {}
 
     old_limit = sys.getrecursionlimit()
     needed = max(old_limit, 10_000)
@@ -770,10 +779,17 @@ def _build_transition_equations_ir(  # noqa: C901, PLR0912, PLR0913, PLR0914, PL
                 # template-uniform synthesized IR is installed in every
                 # cell. Pinned-coord selection lives inside the body via
                 # the one-hot mask multiplications below.
+                enum_cache = enumerate_template_cell_names_cache
+
                 def _enumerate_template_cell_names(
                     base: str,
                     template_tokens: tuple[Any, ...],
+                    _cache: dict[tuple[str, tuple[Any, ...]], list[str]] = enum_cache,
                 ) -> list[str]:
+                    cache_key = (base, template_tokens)
+                    cached = _cache.get(cache_key)
+                    if cached is not None:
+                        return cached
                     axes_and_coords = [
                         (tok.axis, ax_lookup_dict[tok.axis])
                         for tok in template_tokens
@@ -801,6 +817,7 @@ def _build_transition_equations_ir(  # noqa: C901, PLR0912, PLR0913, PLR0914, PL
                                 axis_lookup=ax_lookup_dict,
                             )
                         )
+                    _cache[cache_key] = out
                     return out
 
                 to_names_for_synthesis = set(
@@ -1063,7 +1080,33 @@ def normalize_transitions_rhs(  # noqa: C901, PLR0912, PLR0914, PLR0915
     axis_name_set = set(axis_lookup_dict)
     template_base_set = {parse_selector(k)[0] for k in template_map_all}
     eqs_tuple = _derive_equation_strings(equations_ir_pre_inline)
-    equations_ir_built = _build_equations_ir(eqs_tuple, aliases_ir_map)
+    # Inline aliases directly into the per-cell IR we already built in
+    # ``_build_transition_equations_ir`` rather than re-parsing the
+    # round-tripped equation strings. Avoids 73k x ``parse_expr_to_ir``
+    # plus a redundant IR rebuild on large continuum specs (issue #145).
+    # ``aliases_ir_map`` is already fully alias-inlined inside
+    # ``_build_aliases_ir_from_raw`` so cycle detection is redundant here.
+    alias_inline_memo: dict[int, frozenset[str]] = {}
+    equations_ir_built_list: list[Expr | None] = []
+    for expr in equations_ir_pre_inline:
+        if expr is None:
+            equations_ir_built_list.append(None)
+            continue
+        if not aliases_ir_map:
+            equations_ir_built_list.append(expr)
+            continue
+        try:
+            equations_ir_built_list.append(
+                inline_aliases(
+                    expr,
+                    aliases_ir_map,
+                    memo=alias_inline_memo,
+                    skip_cycle_check=True,
+                )
+            )
+        except (ValueError, RecursionError):
+            equations_ir_built_list.append(expr)
+    equations_ir_built = tuple(equations_ir_built_list)
     return TransitionsRhs(
         state_names=tuple(state_expanded),
         equations=eqs_tuple,

@@ -467,7 +467,7 @@ def _build_aliases_ir(
         memo: dict[int, frozenset[str]] = {}
         cycle_validated = False
         try:
-            cycle = _detect_alias_cycle(parsed)
+            cycle = _detect_alias_cycle(parsed, memo=memo)
             cycle_validated = cycle is None
         except (ValueError, RecursionError):
             cycle_validated = False
@@ -508,7 +508,7 @@ def _build_equations_ir(
         cycle_validated = False
         if aliases_ir:
             try:
-                cycle = _detect_alias_cycle(aliases_ir)
+                cycle = _detect_alias_cycle(aliases_ir, memo=memo)
                 cycle_validated = cycle is None
             except (ValueError, RecursionError):
                 cycle_validated = False
@@ -609,11 +609,8 @@ def _build_aliases_ir_from_raw(  # noqa: C901
                     axis_coords=ax_lookup,
                 )
 
-        def _inline_all(parsed: dict[str, Expr]) -> dict[str, Expr]:
+        def _inline_all(parsed: dict[str, Expr], *, cycle_ok: bool) -> dict[str, Expr]:
             memo: dict[int, frozenset[str]] = {}
-            cycle_ok = False
-            with contextlib.suppress(ValueError, RecursionError):
-                cycle_ok = _detect_alias_cycle(parsed) is None
             inlined: dict[str, Expr] = {}
             for name, expr in parsed.items():
                 try:
@@ -624,7 +621,23 @@ def _build_aliases_ir_from_raw(  # noqa: C901
                     inlined[name] = expr
             return inlined
 
-        return _inline_all(full_parsed), _inline_all(reduce_parsed), alias_template_map
+        # Cycle topology between aliases depends only on the alias names a body
+        # references, not on the coordinate substitutions performed by
+        # ``expand_inline_templates`` / ``expand_reduce_pointwise``. Detect the
+        # cycle once on the cheaper ``reduce_parsed`` map (which preserves the
+        # ``Reduce`` aggregator nodes verbatim) and reuse the result when
+        # inlining the larger ``full_parsed`` bodies. This avoids walking the
+        # 6500-node continuum alias bodies twice (issue #145).
+        cycle_memo: dict[int, frozenset[str]] = {}
+        cycle_ok = False
+        with contextlib.suppress(ValueError, RecursionError):
+            cycle_ok = _detect_alias_cycle(reduce_parsed, memo=cycle_memo) is None
+
+        return (
+            _inline_all(full_parsed, cycle_ok=cycle_ok),
+            _inline_all(reduce_parsed, cycle_ok=cycle_ok),
+            alias_template_map,
+        )
     finally:
         if needed > old_limit:
             sys.setrecursionlimit(old_limit)
@@ -699,7 +712,7 @@ def _build_equations_ir_from_raw(  # noqa: PLR0913
     alias_cycle_ok = False
     if aliases_ir:
         with contextlib.suppress(ValueError, RecursionError):
-            alias_cycle_ok = _detect_alias_cycle(aliases_ir) is None
+            alias_cycle_ok = _detect_alias_cycle(aliases_ir, memo=alias_memo) is None
 
     out_reduce: list[Expr | None] = []
     out_full: list[Expr | None] = []

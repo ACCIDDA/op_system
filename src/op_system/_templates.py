@@ -90,7 +90,17 @@ def _sanitize_fragment(val: object) -> str:
     Returns:
         Identifier-safe string fragment.
     """
-    return re.sub(r"[^A-Za-z0-9_]", "_", str(val))
+    s = val if type(val) is str else str(val)
+    cached = _SANITIZE_CACHE.get(s)
+    if cached is not None:
+        return cached
+    result = _SANITIZE_RE.sub("_", s)
+    _SANITIZE_CACHE[s] = result
+    return result
+
+
+_SANITIZE_RE = re.compile(r"[^A-Za-z0-9_]")
+_SANITIZE_CACHE: dict[str, str] = {}
 
 
 def build_axis_lookup(axes: list[dict[str, Any]]) -> dict[str, list[str]]:

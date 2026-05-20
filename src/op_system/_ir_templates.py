@@ -41,6 +41,15 @@ if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping, Sequence
 
 
+# Identity-keyed cache mapping ``id(aliases)`` -> ``(aliases, body_refs)``.
+# Many ``inline_aliases`` calls in batch passes share the same ``aliases``
+# mapping, and the ``body_refs`` precomputation is the dominant non-substitute
+# cost (free_symbols over each large alias body). Cache by identity but also
+# store the dict object so we can defensively guard against ``id()`` reuse
+# across distinct ``aliases`` instances (issue #145).
+_BODY_REFS_CACHE: dict[int, tuple[Mapping[str, Expr], dict[str, frozenset[str]]]] = {}
+
+
 def _expandable_axes(indices: Sequence[AxisIndex]) -> list[str] | None:
     """Return the list of bare-identifier axis names from ``indices``.
 
@@ -308,15 +317,28 @@ def expand_over_axes(
     return out
 
 
-def _detect_alias_cycle(aliases: Mapping[str, Expr]) -> list[str] | None:
+def _detect_alias_cycle(
+    aliases: Mapping[str, Expr],
+    *,
+    memo: dict[int, frozenset[str]] | None = None,
+) -> list[str] | None:
     """Return a cycle of alias names if one exists, else ``None``.
 
     Builds a name -> referenced-alias-names graph (only edges into the
     alias namespace itself count) and DFS-checks for a back edge.
+
+    Args:
+        aliases: Mapping of alias name to IR body.
+        memo: Optional identity-keyed ``free_symbols`` cache (shared
+            with downstream ``inline_aliases`` calls to avoid
+            recomputing per-body free-symbol sets).
     """
     keys = set(aliases)
+    if memo is None:
+        memo = {}
     graph: dict[str, frozenset[str]] = {
-        name: frozenset(free_symbols(body) & keys) for name, body in aliases.items()
+        name: frozenset(free_symbols(body, memo=memo) & keys)
+        for name, body in aliases.items()
     }
 
     color: dict[str, int] = dict.fromkeys(graph, _CYCLE_WHITE)
@@ -401,9 +423,26 @@ def inline_aliases(
     # entries over the just-inlined names, so we never need to re-walk the
     # substituted expression with ``free_symbols`` (which on large inlined
     # bodies dominates inline cost when many equations share one alias).
-    body_refs: dict[str, frozenset[str]] = {
-        name: free_symbols(body, memo) & keys for name, body in aliases.items()
-    }
+    # Cache by ``id(aliases)`` so batch-inlining many expressions against the
+    # same alias mapping pays this O(|aliases| * body_size) cost only once
+    # rather than once per call (issue #145).
+    cached_refs = _BODY_REFS_CACHE.get(id(aliases))
+    if cached_refs is None:
+        body_refs: dict[str, frozenset[str]] = {
+            name: free_symbols(body, memo) & keys for name, body in aliases.items()
+        }
+        _BODY_REFS_CACHE[id(aliases)] = (aliases, body_refs)
+    else:
+        # Guard against id() reuse: only trust the cache when the mapping
+        # object is the same instance.
+        cached_obj, cached_body_refs = cached_refs
+        body_refs = (
+            cached_body_refs
+            if cached_obj is aliases
+            else {
+                name: free_symbols(body, memo) & keys for name, body in aliases.items()
+            }
+        )
     current = expr
     live = free_symbols(current, memo) & keys
     for _ in range(max_depth):

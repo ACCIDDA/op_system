@@ -436,6 +436,9 @@ def to_ir(node: ast.AST) -> Expr:  # noqa: C901, PLR0911, PLR0912
     _invalid(detail=f"unsupported AST node in IR parser: {type(node).__name__}")
 
 
+_PARSE_IR_CACHE: dict[tuple[str, bool], Expr] = {}
+
+
 def parse_expr_to_ir(expr: str, *, lower_helpers: bool = False) -> Expr:
     """Parse an expression string and convert it to typed IR.
 
@@ -447,13 +450,18 @@ def parse_expr_to_ir(expr: str, *, lower_helpers: bool = False) -> Expr:
         Parsed IR tree.
 
     """
+    key = (expr, lower_helpers)
+    cached = _PARSE_IR_CACHE.get(key)
+    if cached is not None:
+        return cached
     try:
         tree = ast.parse(expr, mode="eval")
     except SyntaxError as exc:
         _invalid(detail=f"invalid expression syntax: {exc.msg}")
     ir = to_ir(tree)
     if lower_helpers:
-        return lower_helper_calls(ir)
+        ir = lower_helper_calls(ir)
+    _PARSE_IR_CACHE[key] = ir
     return ir
 
 

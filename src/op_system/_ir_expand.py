@@ -419,6 +419,25 @@ def _split_name_suffix(
         ``(base_name, [(axis, coord), ...])`` where pairs are in left-to-
         right order as they appeared in ``name``.
     """
+    ao = tuple(axis_order)
+    key = (name, ao)
+    cached = _SPLIT_SUFFIX_CACHE.get(key)
+    if cached is not None:
+        base, pairs = cached
+        return base, list(pairs)
+    base, pairs_list = _split_name_suffix_impl(name, ao)
+    _SPLIT_SUFFIX_CACHE[key] = (base, tuple(pairs_list))
+    return base, pairs_list
+
+
+_SPLIT_SUFFIX_CACHE: dict[
+    tuple[str, tuple[str, ...]], tuple[str, tuple[tuple[str, str], ...]]
+] = {}
+
+
+def _split_name_suffix_impl(
+    name: str, axis_order: Sequence[str]
+) -> tuple[str, list[tuple[str, str]]]:
     if not axis_order:
         return name, []
     parts = name.split("__")
@@ -454,12 +473,23 @@ def _emit_suffix(pairs: list[tuple[str, str]], axis_order: Sequence[str]) -> str
     Returns:
         The concatenated suffix string (empty when ``pairs`` is empty).
     """
-    priority = {ax: i for i, ax in enumerate(axis_order)}
+    ao = tuple(axis_order)
+    key = (tuple(pairs), ao)
+    cached = _EMIT_SUFFIX_CACHE.get(key)
+    if cached is not None:
+        return cached
+    priority = {ax: i for i, ax in enumerate(ao)}
     if not priority:
-        return "".join(f"__{ax}_{_sanitize_fragment(c)}" for ax, c in pairs)
-    known = sorted(
-        (p for p in pairs if p[0] in priority),
-        key=lambda p: priority[p[0]],
-    )
-    unknown = [p for p in pairs if p[0] not in priority]
-    return "".join(f"__{ax}_{_sanitize_fragment(c)}" for ax, c in known + unknown)
+        result = "".join(f"__{ax}_{_sanitize_fragment(c)}" for ax, c in pairs)
+    else:
+        known = sorted(
+            (p for p in pairs if p[0] in priority),
+            key=lambda p: priority[p[0]],
+        )
+        unknown = [p for p in pairs if p[0] not in priority]
+        result = "".join(f"__{ax}_{_sanitize_fragment(c)}" for ax, c in known + unknown)
+    _EMIT_SUFFIX_CACHE[key] = result
+    return result
+
+
+_EMIT_SUFFIX_CACHE: dict[tuple[tuple[tuple[str, str], ...], tuple[str, ...]], str] = {}
