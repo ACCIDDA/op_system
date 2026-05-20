@@ -12,8 +12,12 @@ from __future__ import annotations
 
 import dis
 from dataclasses import replace
+from typing import TYPE_CHECKING
 
 import numpy as np
+
+if TYPE_CHECKING:
+    from types import CodeType
 
 from op_system._vectorize import build_vector_plan
 from op_system.compile import _make_eval_fn, compile_rhs
@@ -653,6 +657,29 @@ def test_ir_fast_path_preserves_numerical_parity_with_scalar() -> None:
     _eval_equal(_sir_two_axis_spec(), beta=0.3, gamma=0.1)
 
 
+def test_template_level_cse_extracts_shared_subexpressions() -> None:
+    """Template-level CSE finds shared sub-expressions across state templates.
+
+    For the two-axis SIR model the S and I equations both contain
+    ``beta * S_buf * I_total_buf`` (or equivalent product involving those
+    buffers).  After CSE the plan must carry at least one CSE binding, and
+    the binding code must not contain any per-cell ``__`` names.
+    """
+    rhs = normalize_rhs(_sir_two_axis_spec())
+    plan = build_vector_plan(rhs)
+    assert plan is not None
+    assert len(plan.cse_codes) > 0, (
+        "expected at least one CSE binding for the two-axis SIR model "
+        f"(got cse_codes={plan.cse_codes!r})"
+    )
+    # CSE binding codes must reference only buffer/param names, not per-cell names.
+    for name, code in plan.cse_codes:
+        for cn in code.co_names:
+            assert "__" not in cn, (
+                f"per-cell name {cn!r} leaked into CSE binding {name!r}"
+            )
+
+
 def _apply_along_categorical_spec() -> dict[str, object]:
     """SIR over (pop,) with an ``apply_along(I[pop:j], pop=j)`` reduction.
 
@@ -684,31 +711,47 @@ def test_reduce_ir_fast_path_emits_np_sum_for_apply_along() -> None:
     ``NormalizedRhs.equations_ir_reduce`` (Reduce nodes preserved) and
     emits a ``np.sum(I_buf, axis=...)`` reduction without falling back to
     the string-expanded ``I__pop_p1 + I__pop_p2 + ...`` form. The compiled
-    code must therefore reference ``I_buf`` and ``sum`` once each, with no
+    code must therefore reference ``I_buf`` and ``sum`` somewhere in the plan
+    (either in the S-equation code or in a CSE binding it references), with no
     per-cell ``I__pop_*`` names leaking through.
     """
     rhs = normalize_rhs(_apply_along_categorical_spec())
     assert rhs.equations_ir_reduce, "Stage 1a should have populated reduce IR"
     plan = build_vector_plan(rhs)
     assert plan is not None
-    # Locate the S-equation code (it contains the reduction).
-    s_group = next(g for g in plan.eq_groups if g.base == "S")
-    code = s_group.codes[0]
-    names = set(code.co_names)
-    # No per-cell name leakage from string expansion.
-    assert not any("__" in n for n in names), (
+
+    # Collect all code objects: CSE bindings + equation codes.
+    all_codes: list[CodeType] = [c for _, c in plan.cse_codes]
+    for grp in plan.eq_groups:
+        all_codes.extend(grp.codes)
+
+    all_names: set[str] = set()
+    for code in all_codes:
+        all_names.update(code.co_names)
+
+    # No per-cell name leakage from string expansion in any code.
+    assert not any("__" in n for n in all_names), (
         f"per-cell names leaked into reduce-lowered code: "
-        f"{sorted(n for n in names if '__' in n)}"
+        f"{sorted(n for n in all_names if '__' in n)}"
     )
-    assert "I_buf" in names, f"expected I_buf in {sorted(names)}"
-    assert "sum" in names, f"expected np.sum in {sorted(names)}"
-    # A direct np.sum(I_buf, axis=0) collapse loads I_buf exactly once.
-    i_buf_loads = sum(
-        1
-        for instr in dis.get_instructions(code)
-        if instr.opname.startswith("LOAD_") and instr.argval == "I_buf"
+    assert "I_buf" in all_names, (
+        f"expected I_buf somewhere in plan codes: {sorted(all_names)}"
     )
-    assert i_buf_loads == 1, f"expected single fused I_buf load, got {i_buf_loads}"
+    assert "sum" in all_names, (
+        f"expected np.sum somewhere in plan codes: {sorted(all_names)}"
+    )
+    # A direct np.sum(I_buf, axis=0) collapse loads I_buf at most once in any
+    # single code object (CSE binding, S-equation, or I-equation).  More than
+    # one load in a single object would indicate per-cell scalar expansion.
+    for code in all_codes:
+        loads = sum(
+            1
+            for instr in dis.get_instructions(code)
+            if instr.opname.startswith("LOAD_") and instr.argval == "I_buf"
+        )
+        assert loads <= 1, (
+            f"expected at most one I_buf load per code object, got {loads} in {code}"
+        )
 
 
 def test_reduce_ir_fast_path_numerical_parity() -> None:
