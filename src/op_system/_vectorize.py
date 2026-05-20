@@ -8,18 +8,16 @@ this slashes interpreter overhead; for JAX it slashes JIT compile time
 massively because the emitted graph is O(#templates) instead of O(#cells).
 
 Falls back to the scalar compile path if the spec doesn't fit the supported
-subset (mixed scalar/templated states, alias names that can't be parsed,
-expressions whose first cell isn't structurally identical to the last cell,
-etc.).
+subset (mixed scalar/templated states, IR lowering limitations, expressions
+whose first cell isn't structurally identical to the last cell, etc.).
 
 Supported subset (v1):
 - All states are pure-template wildcard entries (e.g. ``S[age, vax]``).
-- Aliases are either scalar or pure-template wildcard entries whose expanded
-  names parse cleanly as ``base__axis_coord__...``.
+- Aliases are either scalar or pure-template wildcard entries.
 - Equation/alias expressions reference only: scalar params, ``t``, ``np``,
-  templated states, templated aliases, and Python arithmetic operators.
+  templated states, templated aliases, shaped params, and Python arithmetic.
 
-Anything outside that subset triggers fallback.
+Anything outside that subset triggers fallback to the scalar engine.
 """
 
 from __future__ import annotations
@@ -27,14 +25,13 @@ from __future__ import annotations
 import ast
 import math
 import sys
-from collections.abc import Iterable, Mapping
+from collections.abc import Mapping
 from dataclasses import dataclass
 from itertools import combinations as _comb
 from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
 
-from op_system._ir import Expr, ir_to_ast_expr
 from op_system._ir_lower import (
     UnsupportedIRLoweringError,
     lift_cell_ir_to_template,
@@ -45,14 +42,13 @@ from op_system.compile import (
     _check_numeric_dtype,
     _Indexable,
     _namespace_of,
-    _parse_expr,
-    _validate_ast,
     _validate_state_vector,
 )
 
 if TYPE_CHECKING:
     from types import CodeType
 
+    from op_system._ir import Expr
     from op_system.compile import EvalFn, Float64Array
     from op_system.specs import NormalizedRhs
 else:
@@ -124,462 +120,6 @@ class _VectorPlan:
     extra_param_buffers: tuple[tuple[str, tuple[str, ...], tuple[int, ...]], ...] = ()
 
 
-# ---------------------------------------------------------------------------
-# Name parsing / template inference
-# ---------------------------------------------------------------------------
-
-
-def _parse_expanded_name(
-    name: str, axes: list[tuple[str, list[str]]]
-) -> tuple[str, dict[str, str]]:
-    """Parse an expanded name like ``base__age_y__vax_u`` -> (base, coords).
-
-    Returns ``(name, {})`` if the name does not match the expected pattern.
-
-    Returns:
-        Tuple ``(base, coords)`` where ``coords`` maps axis name to coord
-        value. Falls back to ``(name, {})`` if parsing fails.
-    """
-    parts = name.split("__")
-    if len(parts) < 2:
-        return name, {}
-    base = parts[0]
-    coords: dict[str, str] = {}
-    for piece in parts[1:]:
-        matched = False
-        for ax_name, ax_coords in axes:
-            prefix = ax_name + "_"
-            if piece.startswith(prefix):
-                coord_val = piece[len(prefix) :]
-                if coord_val in ax_coords:
-                    if ax_name in coords:
-                        return name, {}
-                    coords[ax_name] = coord_val
-                    matched = True
-                    break
-        if not matched:
-            return name, {}
-    return base, coords
-
-
-def _infer_templates_from_names(
-    names: Iterable[str], axes: list[tuple[str, list[str]]]
-) -> dict[str, _BufferTemplate] | None:
-    """Group names by inferred template base.
-
-    Returns ``None`` if any group is inconsistent (mismatched axes, missing
-    cartesian-product members, etc.).
-
-    A name with no parseable axis suffixes becomes a scalar template
-    (axes=(), shape=()).
-
-    Returns:
-        A mapping from base name to ``_BufferTemplate`` on success, or
-        ``None`` if the names cannot be grouped consistently.
-    """
-    by_base: dict[str, list[tuple[str, dict[str, str]]]] = {}
-    for name in names:
-        base, coords = _parse_expanded_name(name, axes)
-        by_base.setdefault(base, []).append((name, coords))
-
-    axis_size = {ax: len(coord_list) for ax, coord_list in axes}
-    axis_index = {
-        ax: {c: i for i, c in enumerate(coord_list)} for ax, coord_list in axes
-    }
-
-    templates: dict[str, _BufferTemplate] = {}
-    for base, members in by_base.items():
-        if len(members) == 1 and not members[0][1]:
-            templates[base] = _BufferTemplate(
-                base=base,
-                axes=(),
-                shape=(),
-                expanded_names=(members[0][0],),
-                coord_assignments=({},),
-                offset=0,
-            )
-            continue
-        first_axes = tuple(members[0][1].keys())
-        if not first_axes:
-            return None
-        for _, c in members:
-            if tuple(c.keys()) != first_axes:
-                return None
-        shape = tuple(axis_size[a] for a in first_axes)
-        if len(members) != math.prod(shape):
-            return None
-        members.sort(
-            key=lambda item: tuple(axis_index[a][item[1][a]] for a in first_axes)
-        )
-        templates[base] = _BufferTemplate(
-            base=base,
-            axes=first_axes,
-            shape=shape,
-            expanded_names=tuple(n for n, _ in members),
-            coord_assignments=tuple(c for _, c in members),
-            offset=0,
-        )
-    return templates
-
-
-def _infer_alias_templates(
-    aliases: Mapping[str, str], axes: list[tuple[str, list[str]]]
-) -> tuple[dict[str, _BufferTemplate], dict[str, str]] | None:
-    """Group aliases by inferred template base.
-
-    Returns:
-        ``(templates_by_base, name_to_base)`` on success or ``None`` on
-        failure.
-    """
-    templates = _infer_templates_from_names(aliases.keys(), axes)
-    if templates is None:
-        return None
-    name_to_base = {n: t.base for t in templates.values() for n in t.expanded_names}
-    return templates, name_to_base
-
-
-# ---------------------------------------------------------------------------
-# AST rewriter
-# ---------------------------------------------------------------------------
-
-
-def _build_access_ast(  # noqa: C901, PLR0912, PLR0913
-    *,
-    src_base: str,
-    src_axes: tuple[str, ...],
-    src_coords: Mapping[str, str],
-    src_axis_index: Mapping[str, Mapping[str, int]],
-    target_axes: tuple[str, ...],
-    cell_coords: Mapping[str, str],
-) -> ast.expr:
-    """Build an AST node accessing a templated buffer for one cell of a target.
-
-    Returns an expression with shape broadcastable to ``target_axes``' shape.
-    Returns the bare buffer name when src and target axes match exactly.
-
-    Returns:
-        An ``ast.expr`` node accessing the source buffer in a way that
-        broadcasts/transposes to the target template's cell layout.
-
-    Raises:
-        RuntimeError: If a source axis is not tied to and not fixed against
-            the target axes (an internal inconsistency).
-    """
-    buf_name = ast.Name(id=f"{src_base}_buf", ctx=ast.Load())
-    if not src_axes:
-        return buf_name
-
-    # Step 1: index the src buffer. Tied axes (axis in target_axes and same
-    # coord as cell_coords[axis]) become slice(None); fixed axes become an
-    # integer index.
-    index_parts: list[ast.expr] = []
-    tied_axis_order: list[str] = []  # in src axes order
-    for ax in src_axes:
-        coord_val = src_coords[ax]
-        if ax in target_axes and cell_coords.get(ax) == coord_val:
-            index_parts.append(ast.Slice(lower=None, upper=None, step=None))
-            tied_axis_order.append(ax)
-        else:
-            idx = src_axis_index[ax][coord_val]
-            index_parts.append(ast.Constant(value=idx))
-
-    if len(index_parts) == 1:
-        slice_node = index_parts[0]
-    else:
-        slice_node = ast.Tuple(elts=index_parts, ctx=ast.Load())
-    accessed: ast.expr = ast.Subscript(value=buf_name, slice=slice_node, ctx=ast.Load())
-
-    if not tied_axis_order:
-        # Pure scalar after indexing.
-        return accessed
-
-    # Step 2: align tied axes to target_axes order, inserting size-1 dims for
-    # target axes not in src.
-    if tuple(tied_axis_order) == target_axes:
-        return accessed
-
-    # Build a tuple subscript with slice(None) for kept axes and None for
-    # broadcast axes, plus a transpose if needed.
-    if set(tied_axis_order) == set(target_axes):
-        # Pure transpose to target order.
-        perm = tuple(tied_axis_order.index(a) for a in target_axes)
-        return ast.Call(
-            func=ast.Attribute(
-                value=ast.Name(id="np", ctx=ast.Load()),
-                attr="transpose",
-                ctx=ast.Load(),
-            ),
-            args=[
-                accessed,
-                ast.Tuple(elts=[ast.Constant(value=p) for p in perm], ctx=ast.Load()),
-            ],
-            keywords=[],
-        )
-
-    # tied is a strict subset of target; transpose then add None axes.
-    if not set(tied_axis_order).issubset(set(target_axes)):
-        # src has axes target doesn't; should have been fully fixed above.
-        msg = "internal: untied axis not in target"
-        raise RuntimeError(msg)
-
-    # Transpose tied axes into the order they appear within target_axes.
-    target_kept_order = tuple(a for a in target_axes if a in tied_axis_order)
-    if tuple(tied_axis_order) != target_kept_order:
-        perm = tuple(tied_axis_order.index(a) for a in target_kept_order)
-        accessed = ast.Call(
-            func=ast.Attribute(
-                value=ast.Name(id="np", ctx=ast.Load()),
-                attr="transpose",
-                ctx=ast.Load(),
-            ),
-            args=[
-                accessed,
-                ast.Tuple(elts=[ast.Constant(value=p) for p in perm], ctx=ast.Load()),
-            ],
-            keywords=[],
-        )
-
-    # Now insert size-1 axes via subscript with None placeholders.
-    elts: list[ast.expr] = []
-    for ax in target_axes:
-        if ax in tied_axis_order:
-            elts.append(ast.Slice(lower=None, upper=None, step=None))
-        else:
-            elts.append(ast.Constant(value=None))
-    return ast.Subscript(
-        value=accessed,
-        slice=ast.Tuple(elts=elts, ctx=ast.Load()),
-        ctx=ast.Load(),
-    )
-
-
-def _build_broadcast_access_ast(
-    *,
-    base: str,
-    src_axes: tuple[str, ...],
-    sub_axes: tuple[str, ...],
-    target_axes: tuple[str, ...],
-) -> ast.expr:
-    """Build a broadcast-shaped access to ``<base>_buf`` for ``base[<sub_axes>]``.
-
-    Used when a shaped (templated) parameter is referenced by axis-name
-    subscript inside an alias / equation body, e.g. ``r0_loc[loc]``. The
-    returned expression evaluates to an array that is the buffer's contents
-    transposed and broadcast-padded so it aligns with ``target_axes``.
-
-    ``sub_axes`` must be a permutation of ``src_axes`` and a subset of
-    ``target_axes``; both invariants are checked by the caller.
-
-    Returns:
-        An ``ast.expr`` evaluating to a buffer view shaped to broadcast
-        cleanly against the cell layout implied by ``target_axes``.
-    """
-    buf: ast.expr = ast.Name(id=f"{base}_buf", ctx=ast.Load())
-
-    # Reorder src_axes -> sub_axes order, since the user may have written
-    # ``base[ax2, ax1]`` even though the buffer is stored as ``(ax1, ax2)``.
-    if tuple(sub_axes) != tuple(src_axes):
-        perm = tuple(src_axes.index(a) for a in sub_axes)
-        buf = ast.Call(
-            func=ast.Attribute(
-                value=ast.Name(id="np", ctx=ast.Load()),
-                attr="transpose",
-                ctx=ast.Load(),
-            ),
-            args=[
-                buf,
-                ast.Tuple(elts=[ast.Constant(value=p) for p in perm], ctx=ast.Load()),
-            ],
-            keywords=[],
-        )
-
-    # If sub_axes already covers target_axes in order, no reshape needed.
-    if tuple(sub_axes) == tuple(target_axes):
-        return buf
-
-    # Insert size-1 dims for target axes not in sub_axes; reorder kept axes
-    # to match their order within target_axes.
-    target_kept = tuple(a for a in target_axes if a in sub_axes)
-    if tuple(sub_axes) != target_kept:
-        perm = tuple(sub_axes.index(a) for a in target_kept)
-        buf = ast.Call(
-            func=ast.Attribute(
-                value=ast.Name(id="np", ctx=ast.Load()),
-                attr="transpose",
-                ctx=ast.Load(),
-            ),
-            args=[
-                buf,
-                ast.Tuple(elts=[ast.Constant(value=p) for p in perm], ctx=ast.Load()),
-            ],
-            keywords=[],
-        )
-    elts: list[ast.expr] = []
-    for ax in target_axes:
-        if ax in sub_axes:
-            elts.append(ast.Slice(lower=None, upper=None, step=None))
-        else:
-            elts.append(ast.Constant(value=None))
-    return ast.Subscript(
-        value=buf,
-        slice=ast.Tuple(elts=elts, ctx=ast.Load()),
-        ctx=ast.Load(),
-    )
-
-
-class _NameRewriter(ast.NodeTransformer):
-    """Rewrites Name nodes in a per-cell expression into shaped buffer access.
-
-    Unrecognized names are left as-is (treated as scalar params / specials).
-    """
-
-    def __init__(  # noqa: PLR0913
-        self,
-        *,
-        target_axes: tuple[str, ...],
-        cell_coords: Mapping[str, str],
-        name_to_template: Mapping[str, _BufferTemplate],
-        name_to_coords: Mapping[str, Mapping[str, str]],
-        axis_index: Mapping[str, Mapping[str, int]],
-        shaped_param_axes: Mapping[str, tuple[str, ...]] | None = None,
-    ) -> None:
-        self._target_axes = target_axes
-        self._cell_coords = cell_coords
-        self._name_to_template = name_to_template
-        self._name_to_coords = name_to_coords
-        self._axis_index = axis_index
-        self._shaped_param_axes = shaped_param_axes or {}
-
-    def visit_Name(self, node: ast.Name) -> ast.AST:
-        tpl = self._name_to_template.get(node.id)
-        if tpl is None:
-            return node
-        if not tpl.axes:
-            return ast.Name(id=f"{tpl.base}_buf", ctx=ast.Load())
-        return _build_access_ast(
-            src_base=tpl.base,
-            src_axes=tpl.axes,
-            src_coords=self._name_to_coords[node.id],
-            src_axis_index=self._axis_index,
-            target_axes=self._target_axes,
-            cell_coords=self._cell_coords,
-        )
-
-    def visit_Subscript(  # noqa: C901, PLR0911, PLR0912, PLR0914
-        self, node: ast.Subscript
-    ) -> ast.AST:
-        # Recognize ``<shaped_param_base>[<axis_name>(, <axis_name>)*]`` and
-        # ``<shaped_param_base>[<int>(, <int>)*]`` (the latter being how the
-        # normalizer expands ``base[axis]`` into per-cell literal indices)
-        # and rewrite to a broadcast-aligned reference to ``<base>_buf``.
-        # This lets shaped-param references inside transitions / aliases
-        # vectorize along the indexed axis instead of forcing per-cell unroll
-        # — without the rewrite each cell carries a different literal index
-        # (``base[0]``, ``base[1]``, ...) whose AST differs across the
-        # subscripted axis, defeating axis vectorization.
-        if not isinstance(node.value, ast.Name):
-            return self.generic_visit(node)
-        base = node.value.id
-        src_axes = self._shaped_param_axes.get(base)
-        if src_axes is None or not src_axes:
-            return self.generic_visit(node)
-        slc = node.slice
-        # Collect the per-axis subscript expressions in src_axes order.
-        if isinstance(slc, ast.Tuple):
-            sub_elts: list[ast.expr] = list(slc.elts)
-        else:
-            sub_elts = [slc]
-        if len(sub_elts) != len(src_axes):
-            return self.generic_visit(node)
-        # Classify each subscript: axis-name (sub_axes mode) or integer
-        # constant (per-cell-expanded mode). Mixing the two is unsupported
-        # — fall back so the standard per-cell path handles it.
-        all_names = all(isinstance(e, ast.Name) for e in sub_elts)
-        all_consts = all(
-            isinstance(e, ast.Constant) and isinstance(e.value, int) for e in sub_elts
-        )
-        if all_names:
-            sub_axes = tuple(cast("ast.Name", e).id for e in sub_elts)
-            # Subscripted axes must be a permutation of the param's axes and
-            # all be present in target_axes (so we can broadcast cleanly).
-            if set(sub_axes) != set(src_axes):
-                return self.generic_visit(node)
-            if any(ax not in self._target_axes for ax in sub_axes):
-                return self.generic_visit(node)
-            return _build_broadcast_access_ast(
-                base=base,
-                src_axes=src_axes,
-                sub_axes=sub_axes,
-                target_axes=self._target_axes,
-            )
-        if not all_consts:
-            return self.generic_visit(node)
-        # Integer-subscript form: each axis is fixed to a single coord index
-        # for *this* cell. If the index matches the cell's own coord on that
-        # axis (and the axis is a target axis), the access "ties" — i.e.
-        # broadcasts along that axis — exactly mirroring the per-cell
-        # expanded-name path used for templated state references.
-        tied_axes: list[str] = []
-        index_parts: list[ast.expr] = []
-        for ax, elt in zip(src_axes, sub_elts, strict=True):
-            idx = cast("ast.Constant", elt).value
-            ax_index = self._axis_index.get(ax)
-            cell_coord = self._cell_coords.get(ax)
-            if (
-                ax in self._target_axes
-                and ax_index is not None
-                and cell_coord is not None
-                and ax_index.get(cell_coord) == idx
-            ):
-                index_parts.append(ast.Slice(lower=None, upper=None, step=None))
-                tied_axes.append(ax)
-            else:
-                index_parts.append(ast.Constant(value=idx))
-        buf_name = ast.Name(id=f"{base}_buf", ctx=ast.Load())
-        slice_node: ast.expr
-        if len(index_parts) == 1:
-            slice_node = index_parts[0]
-        else:
-            slice_node = ast.Tuple(elts=index_parts, ctx=ast.Load())
-        accessed: ast.expr = ast.Subscript(
-            value=buf_name, slice=slice_node, ctx=ast.Load()
-        )
-        if not tied_axes:
-            return accessed
-        # Broadcast tied axes into target_axes layout (insert size-1 axes for
-        # target axes not in tied_axes; transpose if order differs).
-        if tuple(tied_axes) == self._target_axes:
-            return accessed
-        target_kept = tuple(a for a in self._target_axes if a in tied_axes)
-        if tuple(tied_axes) != target_kept:
-            perm = tuple(tied_axes.index(a) for a in target_kept)
-            accessed = ast.Call(
-                func=ast.Attribute(
-                    value=ast.Name(id="np", ctx=ast.Load()),
-                    attr="transpose",
-                    ctx=ast.Load(),
-                ),
-                args=[
-                    accessed,
-                    ast.Tuple(
-                        elts=[ast.Constant(value=p) for p in perm], ctx=ast.Load()
-                    ),
-                ],
-                keywords=[],
-            )
-        elts: list[ast.expr] = []
-        for ax in self._target_axes:
-            if ax in tied_axes:
-                elts.append(ast.Slice(lower=None, upper=None, step=None))
-            else:
-                elts.append(ast.Constant(value=None))
-        return ast.Subscript(
-            value=accessed,
-            slice=ast.Tuple(elts=elts, ctx=ast.Load()),
-            ctx=ast.Load(),
-        )
-
-
 def _try_ir_fast_path(  # noqa: PLR0913
     expr_ir: Expr,
     *,
@@ -598,7 +138,7 @@ def _try_ir_fast_path(  # noqa: PLR0913
     :func:`lift_cell_ir_to_template`, then runs the typed lowering in
     :func:`lower_to_vector_ast`. On any v1-scope violation (raises
     :class:`UnsupportedIRLoweringError`) returns ``None`` so the caller
-    falls back to the legacy :class:`_NameRewriter` path.
+    can try the raw-IR fast path.
 
     The fast path bypasses per-cell name expansion entirely: it produces
     the same shaped buffer expression for every cell of a template, which
@@ -639,15 +179,84 @@ def _try_ir_fast_path(  # noqa: PLR0913
     return tree
 
 
+_ARITH_OPS: dict[str, type[ast.operator]] = {
+    "+": ast.Add,
+    "-": ast.Sub,
+    "*": ast.Mult,
+    "/": ast.Div,
+}
+
+
+def _lower_multicell_sym_ir_to_ast(  # noqa: C901
+    expr_ir: Expr,
+    *,
+    name_to_template: Mapping[str, _BufferTemplate],
+    axis_index: Mapping[str, Mapping[str, int]],
+) -> ast.expr | None:
+    """Lower a scalar IR expression that references expanded cell names.
+
+    For scalar aliases composed of Add/Sub arithmetic over expanded state
+    cell names (e.g. ``I__age_y__loc_a + I__age_y__loc_b + ...``) where
+    ``lift_cell_ir_to_template`` refuses due to multiple-cell ambiguity, we
+    can directly substitute each ``Sym(nm)`` with ``buf[i, j]`` using the
+    integer indices from the template's coord_assignments.
+
+    Only handles ``Apply('+'/'-')`` trees of ``Sym`` and ``Literal`` nodes.
+    Returns ``None`` if any node cannot be lowered.
+
+    Returns:
+        An ``ast.expr`` or ``None`` if any subnode cannot be lowered.
+    """
+    from op_system._ir import Apply, Literal, Sym  # noqa: PLC0415
+
+    # Build a coord-to-index map: {cell_name: ast.Subscript}
+    cell_ast: dict[str, ast.expr] = {}
+    for tpl in name_to_template.values():
+        if not tpl.axes:
+            continue
+        for nm, ca in zip(tpl.expanded_names, tpl.coord_assignments, strict=True):
+            indices: list[ast.expr] = []
+            ok = True
+            for ax in tpl.axes:
+                coord = ca.get(ax)
+                if coord is None or ax not in axis_index or coord not in axis_index[ax]:
+                    ok = False
+                    break
+                indices.append(ast.Constant(value=axis_index[ax][coord]))
+            if ok:
+                buf_name = f"{tpl.base}_buf"
+                if len(indices) == 1:
+                    sl: ast.expr = indices[0]
+                else:
+                    sl = ast.Tuple(elts=indices, ctx=ast.Load())
+                cell_ast[nm] = ast.Subscript(
+                    value=ast.Name(id=buf_name, ctx=ast.Load()),
+                    slice=sl,
+                    ctx=ast.Load(),
+                )
+
+    def _lower(node: Expr) -> ast.expr | None:
+        if isinstance(node, Sym):
+            return cell_ast.get(node.name)
+        if isinstance(node, Literal):
+            return ast.Constant(value=node.value)
+        if isinstance(node, Apply) and node.op in _ARITH_OPS and len(node.args) == 2:
+            left = _lower(node.args[0])
+            right = _lower(node.args[1])
+            if left is None or right is None:
+                return None
+            return ast.BinOp(left=left, op=_ARITH_OPS[node.op](), right=right)
+        return None
+
+    return _lower(expr_ir)
+
+
 def _rewrite_cell_to_vector(  # noqa: PLR0913
     *,
-    expr: str,
     expr_ir: Expr | None = None,
     expr_ir_reduce: Expr | None = None,
     target_axes: tuple[str, ...],
-    cell_coords: Mapping[str, str],
     name_to_template: Mapping[str, _BufferTemplate],
-    name_to_coords: Mapping[str, Mapping[str, str]],
     axis_index: Mapping[str, Mapping[str, int]],
     reducible_axes: frozenset[str] = frozenset(),
     axis_weights: Mapping[str, tuple[float, ...]] | None = None,
@@ -655,23 +264,18 @@ def _rewrite_cell_to_vector(  # noqa: PLR0913
     axis_types: Mapping[str, str] | None = None,
     shaped_param_axes: Mapping[str, tuple[str, ...]] | None = None,
 ) -> ast.Expression:
-    """Rewrite a per-cell expression string into a shaped buffer expression.
+    """Lower per-cell IR to a shaped buffer expression via the IR fast path.
 
     Returns:
         An ``ast.Expression`` whose body evaluates to an array shaped per
         ``target_axes`` (or a scalar when ``target_axes`` is empty).
+
+    Raises:
+        ValueError: If neither IR fast path succeeds.
     """
-    tree = (
-        ast.Expression(body=ir_to_ast_expr(expr_ir))
-        if expr_ir is not None
-        else _parse_expr(expr)
-    )
-    ast.fix_missing_locations(tree)
-    _validate_ast(tree, expr=expr)
     # Prefer reduce-bearing IR (preserves helper structure as Reduce nodes)
-    # so the typed lowering can emit ``np.sum`` directly. On any v1-scope
-    # violation fall back to the post-expansion raw IR fast path, then to
-    # the legacy per-cell name rewriter.
+    # so the typed lowering can emit ``np.sum`` directly. Fall back to the
+    # post-expansion raw IR fast path on any v1-scope violation.
     if expr_ir_reduce is not None:
         fast = _try_ir_fast_path(
             expr_ir_reduce,
@@ -700,17 +304,26 @@ def _rewrite_cell_to_vector(  # noqa: PLR0913
         )
         if fast is not None:
             return fast
-    rewriter = _NameRewriter(
-        target_axes=target_axes,
-        cell_coords=cell_coords,
-        name_to_template=name_to_template,
-        name_to_coords=name_to_coords,
-        axis_index=axis_index,
-        shaped_param_axes=shaped_param_axes,
-    )
-    new_tree = cast("ast.Expression", rewriter.visit(tree))
-    ast.fix_missing_locations(new_tree)
-    return new_tree
+    # Final fallback for scalar aliases (target_axes == ()) whose expression
+    # spans multiple cells of the same template (e.g. an explicit sum written
+    # as ``I__age_y__loc_a + I__age_y__loc_b + ...``).  Directly substitute
+    # each expanded cell name with ``buf[i, j]``; the downstream
+    # ``_collapse_full_buffer_sums`` pass then collapses the result to
+    # ``np.sum(buf)`` when all cells are present.
+    if not target_axes:
+        ir_to_try = expr_ir_reduce if expr_ir_reduce is not None else expr_ir
+        if ir_to_try is not None:
+            body = _lower_multicell_sym_ir_to_ast(
+                ir_to_try,
+                name_to_template=name_to_template,
+                axis_index=axis_index,
+            )
+            if body is not None:
+                tree = ast.Expression(body=body)
+                ast.fix_missing_locations(tree)
+                return tree
+    msg = "no IR fast path succeeded; no fallback available"
+    raise ValueError(msg)
 
 
 # ---------------------------------------------------------------------------
@@ -1240,7 +853,6 @@ def _vectorize_template_equations(  # noqa: C901, PLR0912, PLR0913, PLR0914, PLR
     equations_ir: tuple[Expr | None, ...] | None = None,
     equations_ir_reduce: tuple[Expr | None, ...] | None = None,
     name_to_template: Mapping[str, _BufferTemplate],
-    name_to_coords: Mapping[str, Mapping[str, str]],
     axis_index: Mapping[str, Mapping[str, int]],
     reducible_axes: frozenset[str] = frozenset(),
     axis_weights: Mapping[str, tuple[float, ...]] | None = None,
@@ -1345,15 +957,12 @@ def _vectorize_template_equations(  # noqa: C901, PLR0912, PLR0913, PLR0914, PLR
 
             try:
                 first_tree = _rewrite_cell_to_vector(
-                    expr=cell_exprs[first_idx],
                     expr_ir=cell_irs[first_idx] if cell_irs else None,
                     expr_ir_reduce=(
                         cell_irs_reduce[first_idx] if cell_irs_reduce else None
                     ),
                     target_axes=vec_axes,
-                    cell_coords=template.coord_assignments[first_idx],
                     name_to_template=name_to_template,
-                    name_to_coords=name_to_coords,
                     axis_index=axis_index,
                     reducible_axes=reducible_axes,
                     axis_weights=axis_weights,
@@ -1367,15 +976,12 @@ def _vectorize_template_equations(  # noqa: C901, PLR0912, PLR0913, PLR0914, PLR
             if vec_size > 1:
                 try:
                     last_tree = _rewrite_cell_to_vector(
-                        expr=cell_exprs[last_idx],
                         expr_ir=cell_irs[last_idx] if cell_irs else None,
                         expr_ir_reduce=(
                             cell_irs_reduce[last_idx] if cell_irs_reduce else None
                         ),
                         target_axes=vec_axes,
-                        cell_coords=template.coord_assignments[last_idx],
                         name_to_template=name_to_template,
-                        name_to_coords=name_to_coords,
                         axis_index=axis_index,
                         reducible_axes=reducible_axes,
                         axis_weights=axis_weights,
@@ -1428,11 +1034,10 @@ def build_vector_plan(rhs: NormalizedRhs) -> _VectorPlan | None:
         signal that the spec is unsupported and the caller should fall back
         to the scalar engine.
     """
-    # Several internal passes still rely on recursive AST walks (notably
-    # ``_NameRewriter`` and CPython's ``ast.fix_missing_locations`` /
-    # ``compile``). On models whose normalize-time expansion produces long
-    # ``apply_along(kernel=sum)`` Add chains - e.g. aggregator aliases that
-    # sum every cell of a templated state - those walks consume one Python
+    # CPython's ``ast.fix_missing_locations`` and ``compile`` use recursive
+    # AST walks. On models whose normalize-time expansion produces long
+    # ``apply_along(kernel=sum)`` Add chains — e.g. aggregator aliases that
+    # sum every cell of a templated state — those walks consume one Python
     # frame per chain node and blow the default 1000-frame recursion limit,
     # silently dropping the model to the scalar fallback. Bump the limit
     # for the duration of this call sized to a safe upper bound on the
@@ -1440,7 +1045,7 @@ def build_vector_plan(rhs: NormalizedRhs) -> _VectorPlan | None:
     # while the recursive passes are migrated to iterative term-list form
     # (op_system#103); it does not eliminate the underlying C-stack ceiling
     # (~10-20k frames on typical builds), so it cannot rescue extreme
-    # workloads (e.g. continuum models with >50k-cell aggregators) - those
+    # workloads (e.g. continuum models with >50k-cell aggregators) — those
     # require the structured-IR refactor tracked separately.
     longest_expr = 0
     for s in rhs.equations:
@@ -1494,11 +1099,11 @@ def _build_vector_plan_inner(  # noqa: C901, PLR0911, PLR0912, PLR0914, PLR0915
             return None
         # Stringify coords to match the convention in
         # ``_templates.build_axis_lookup`` (and therefore the per-cell
-        # ``coord_assignments`` carried by state templates).  For categorical
+        # ``coord_assignments`` carried by state templates). For categorical
         # axes coords are already strings; for continuous axes declared with
         # explicit numeric coords (e.g. ``[0.0, 5.0, ...]``) the unconverted
         # raw values would key ``axis_index`` by ``float`` while lookups use
-        # ``str(float)``, causing ``KeyError`` in ``_build_access_ast``.
+        # ``str(float)``, causing a ``KeyError`` in downstream lowering.
         axes_pairs.append((ax["name"], [str(c) for c in coords]))
         ax_type = str(ax.get("type", "categorical")).strip().lower()
         axis_types[ax["name"]] = ax_type
@@ -1515,7 +1120,6 @@ def _build_vector_plan_inner(  # noqa: C901, PLR0911, PLR0912, PLR0914, PLR0915
 
     state_buffers: list[_BufferTemplate] = []
     name_to_template: dict[str, _BufferTemplate] = {}
-    name_to_coords: dict[str, Mapping[str, str]] = {}
     for tpl in rhs.state_templates:
         buf = _BufferTemplate(
             base=tpl.base,
@@ -1526,64 +1130,43 @@ def _build_vector_plan_inner(  # noqa: C901, PLR0911, PLR0912, PLR0914, PLR0915
             offset=tpl.offset,
         )
         state_buffers.append(buf)
-        for nm, coord_map in zip(
-            tpl.expanded_names, tpl.coord_assignments, strict=True
-        ):
+        for nm in tpl.expanded_names:
             name_to_template[nm] = buf
-            name_to_coords[nm] = coord_map
 
-    alias_inference = _infer_alias_templates(rhs.aliases, axes_pairs)
-    if alias_inference is None:
+    # Guard: if aliases exist but alias_templates is not populated, fall back.
+    if rhs.aliases and not rhs.alias_templates:
         return None
-    alias_buffers_by_base, _ = alias_inference
-    alias_buffers = list(alias_buffers_by_base.values())
-    for buf in alias_buffers:
-        for nm, coord_map in zip(
-            buf.expanded_names, buf.coord_assignments, strict=True
-        ):
+    alias_buffers: list[_BufferTemplate] = []
+    for tpl in rhs.alias_templates:
+        buf = _BufferTemplate(
+            base=tpl.base,
+            axes=tpl.axes,
+            shape=tpl.shape,
+            expanded_names=tpl.expanded_names,
+            coord_assignments=tpl.coord_assignments,
+            offset=0,
+        )
+        alias_buffers.append(buf)
+        for nm in tpl.expanded_names:
             name_to_template[nm] = buf
-            name_to_coords[nm] = coord_map
 
-    # Param templates: same name-parsing approach as aliases. These are
-    # gathered from caller-supplied scalar params at eval time into shaped
-    # buffers exposed under ``<base>_buf``.
-    param_templates_by_base = _infer_templates_from_names(rhs.param_names, axes_pairs)
-    if param_templates_by_base is None:
-        return None
-    param_buffers = list(param_templates_by_base.values())
-    for buf in param_buffers:
-        # Skip scalars — they remain available under their original name.
-        if not buf.axes:
-            continue
-        for nm, coord_map in zip(
-            buf.expanded_names, buf.coord_assignments, strict=True
-        ):
-            name_to_template[nm] = buf
-            name_to_coords[nm] = coord_map
-
-    # Map of shaped-parameter base name → axes tuple, drawn from both the
-    # normalizer-declared shaped params (e.g. user-registered hierarchical
-    # fields like ``r0_loc``) and any param templates inferred from the
-    # expanded ``param_names``. Used by ``_NameRewriter.visit_Subscript`` to
-    # rewrite per-cell subscripts like ``r0_loc[<idx>]`` into broadcast
-    # accesses against ``<base>_buf``, allowing the equation vectorizer to
-    # keep the subscripted axis vectorized rather than unrolling it.
+    # Shaped-param buffer map: base name → axes tuple.
+    # Used by _try_ir_fast_path (via lower_to_vector_ast) and buf_shapes.
     shaped_param_axes: dict[str, tuple[str, ...]] = {}
     for name, ax_tuple in rhs.shaped_params:
         ax_t = tuple(ax_tuple)
         if ax_t:
             shaped_param_axes[name] = ax_t
-    for buf in param_buffers:
-        if buf.axes:
-            shaped_param_axes.setdefault(buf.base, buf.axes)
 
-    # Buffer-name → shape table, used by the sum-pattern collapser to
-    # recognize sums-over-all-cells of a buffer and rewrite them as
-    # ``np.sum(buf)``.
+    # Buffer-name → shape table, used by the sum-pattern collapser.
     buf_shapes: dict[str, tuple[int, ...]] = {}
-    for buf in (*state_buffers, *alias_buffers, *param_buffers):
+    for buf in (*state_buffers, *alias_buffers):
         if buf.axes:
             buf_shapes[f"{buf.base}_buf"] = buf.shape
+    for base, ax_t in shaped_param_axes.items():
+        shape = tuple(len(axis_index[a]) for a in ax_t if a in axis_index)
+        if len(shape) == len(ax_t):
+            buf_shapes[f"{base}_buf"] = shape
 
     # Vectorize aliases (in declaration order — best-effort dependency order).
     alias_codes: list[tuple[str, CodeType, tuple[int, ...]]] = []
@@ -1591,13 +1174,10 @@ def _build_vector_plan_inner(  # noqa: C901, PLR0911, PLR0912, PLR0914, PLR0915
         try:
             if buf.axes:
                 tree = _rewrite_cell_to_vector(
-                    expr=rhs.aliases[buf.expanded_names[0]],
                     expr_ir=rhs.aliases_ir.get(buf.expanded_names[0]),
                     expr_ir_reduce=rhs.aliases_ir_reduce.get(buf.expanded_names[0]),
                     target_axes=buf.axes,
-                    cell_coords=buf.coord_assignments[0],
                     name_to_template=name_to_template,
-                    name_to_coords=name_to_coords,
                     axis_index=axis_index,
                     reducible_axes=reducible_axes,
                     axis_weights=axis_weights,
@@ -1607,15 +1187,12 @@ def _build_vector_plan_inner(  # noqa: C901, PLR0911, PLR0912, PLR0914, PLR0915
                 )
                 if len(buf.expanded_names) > 1:
                     last_tree = _rewrite_cell_to_vector(
-                        expr=rhs.aliases[buf.expanded_names[-1]],
                         expr_ir=rhs.aliases_ir.get(buf.expanded_names[-1]),
                         expr_ir_reduce=rhs.aliases_ir_reduce.get(
                             buf.expanded_names[-1]
                         ),
                         target_axes=buf.axes,
-                        cell_coords=buf.coord_assignments[-1],
                         name_to_template=name_to_template,
-                        name_to_coords=name_to_coords,
                         axis_index=axis_index,
                         reducible_axes=reducible_axes,
                         axis_weights=axis_weights,
@@ -1626,16 +1203,13 @@ def _build_vector_plan_inner(  # noqa: C901, PLR0911, PLR0912, PLR0914, PLR0915
                     if ast.dump(tree) != ast.dump(last_tree):
                         return None
             else:
-                # Scalar alias: rewrite through the same engine so referenced
-                # templated state cells become buffer-index accesses.
+                # Scalar alias: rewrite so referenced templated state cells
+                # become buffer-index accesses.
                 tree = _rewrite_cell_to_vector(
-                    expr=rhs.aliases[buf.expanded_names[0]],
                     expr_ir=rhs.aliases_ir.get(buf.expanded_names[0]),
                     expr_ir_reduce=rhs.aliases_ir_reduce.get(buf.expanded_names[0]),
                     target_axes=(),
-                    cell_coords={},
                     name_to_template=name_to_template,
-                    name_to_coords=name_to_coords,
                     axis_index=axis_index,
                     reducible_axes=reducible_axes,
                     axis_weights=axis_weights,
@@ -1659,7 +1233,6 @@ def _build_vector_plan_inner(  # noqa: C901, PLR0911, PLR0912, PLR0914, PLR0915
             equations_ir=rhs.equations_ir_raw,
             equations_ir_reduce=rhs.equations_ir_reduce,
             name_to_template=name_to_template,
-            name_to_coords=name_to_coords,
             axis_index=axis_index,
             reducible_axes=reducible_axes,
             axis_weights=axis_weights,
@@ -1686,18 +1259,13 @@ def _build_vector_plan_inner(  # noqa: C901, PLR0911, PLR0912, PLR0914, PLR0915
     return _VectorPlan(
         state_templates=tuple(state_buffers),
         alias_templates=tuple(alias_buffers),
-        param_templates=tuple(param_buffers),
+        param_templates=(),
         alias_codes=tuple(alias_codes),
         eq_groups=tuple(eq_groups),
         n_state=len(rhs.state_names),
         extra_param_buffers=tuple(
-            (
-                base,
-                axes,
-                tuple(len(axis_index[a]) for a in axes),
-            )
+            (base, axes, tuple(len(axis_index[a]) for a in axes))
             for base, axes in shaped_param_axes.items()
-            if axes and base not in {buf.base for buf in param_buffers if buf.axes}
         ),
     )
 

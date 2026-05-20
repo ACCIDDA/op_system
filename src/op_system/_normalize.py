@@ -148,6 +148,7 @@ class NormalizedRhs:
     # not yet plumbed through this surface).
     aliases_ir_reduce: Mapping[str, Expr] = field(default_factory=dict)
     equations_ir_reduce: tuple[Expr | None, ...] = ()
+    alias_templates: tuple[StateTemplate, ...] = ()
 
 
 # ---------------------------------------------------------------------------
@@ -1035,6 +1036,83 @@ def _build_state_templates(
                     expanded_names=(base,),
                     coord_assignments=({},),
                     offset=name_to_idx[base],
+                )
+            )
+    return tuple(templates)
+
+
+def _build_alias_templates(
+    aliases_raw: Mapping[str, Any],
+    *,
+    axes: list[dict[str, Any]],
+    alias_template_map: Mapping[str, list[tuple[str, dict[str, str]]]],
+) -> tuple[StateTemplate, ...]:
+    """Build per-template structural records for alias names.
+
+    Mirrors :func:`_build_state_templates` but for aliases. Aliases are
+    not part of the flat state vector so ``offset`` is always ``0``.
+
+    Returns:
+        Tuple of :class:`StateTemplate`, one per unique alias template base,
+        in declaration order.
+    """
+    axis_size = {ax["name"]: len(ax.get("coords", ())) for ax in axes}
+    templates: list[StateTemplate] = []
+    seen: set[str] = set()
+    for raw_name in aliases_raw:
+        canonical_name = _normalize_bracket_key(raw_name)
+        if canonical_name in alias_template_map:
+            base, tokens = parse_selector(raw_name)
+            wildcards = [t for t in tokens if isinstance(t, WildcardToken)]
+            if wildcards:
+                ax_names = tuple(wt.axis for wt in wildcards)
+                tpl_key = f"{base}[{','.join(ax_names)}]"
+                if tpl_key in seen:
+                    continue
+                seen.add(tpl_key)
+                shape = tuple(axis_size.get(a, 0) for a in ax_names)
+                results = alias_template_map[canonical_name]
+                templates.append(
+                    StateTemplate(
+                        base=base,
+                        axes=ax_names,
+                        shape=shape,
+                        expanded_names=tuple(name for name, _ in results),
+                        coord_assignments=tuple(
+                            dict(coord_map) for _, coord_map in results
+                        ),
+                        offset=0,
+                    )
+                )
+            else:
+                # Pinned alias — one scalar entry per expanded name
+                for expanded_name, coord_map in alias_template_map[canonical_name]:
+                    if expanded_name in seen:
+                        continue
+                    seen.add(expanded_name)
+                    templates.append(
+                        StateTemplate(
+                            base=base,
+                            axes=(),
+                            shape=(),
+                            expanded_names=(expanded_name,),
+                            coord_assignments=(dict(coord_map),),
+                            offset=0,
+                        )
+                    )
+        else:
+            # Scalar (non-templated) alias
+            if raw_name in seen:
+                continue
+            seen.add(raw_name)
+            templates.append(
+                StateTemplate(
+                    base=raw_name,
+                    axes=(),
+                    shape=(),
+                    expanded_names=(raw_name,),
+                    coord_assignments=({},),
+                    offset=0,
                 )
             )
     return tuple(templates)
@@ -2658,6 +2736,11 @@ def normalize_expr_rhs(spec: Mapping[str, Any]) -> NormalizedRhs:  # noqa: C901,
         equations_ir_raw=equations_ir_raw,
         aliases_ir_reduce=aliases_ir_reduce_map,
         equations_ir_reduce=equations_ir_reduce,
+        alias_templates=_build_alias_templates(
+            aliases_raw_map,
+            axes=axes_meta,
+            alias_template_map=alias_template_map,
+        ),
     )
 
 
@@ -3075,4 +3158,9 @@ def normalize_transitions_rhs(  # noqa: C901, PLR0912, PLR0914, PLR0915
         equations_ir_raw=_build_equations_ir(eqs_tuple),
         aliases_ir_reduce=aliases_ir_reduce_map,
         equations_ir_reduce=equations_ir_reduce,
+        alias_templates=_build_alias_templates(
+            aliases_raw_map,
+            axes=axes_meta,
+            alias_template_map=alias_template_map,
+        ),
     )

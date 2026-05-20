@@ -224,7 +224,7 @@ def _transpose(node: ast.expr, perm: tuple[int, ...]) -> ast.expr:
     )
 
 
-def _lower_shaped_param_subscript(  # noqa: C901
+def _lower_shaped_param_subscript(  # noqa: C901, PLR0911, PLR0912, PLR0915
     sub: Subscript,
     *,
     src_axes: tuple[str, ...],
@@ -283,6 +283,53 @@ def _lower_shaped_param_subscript(  # noqa: C901
             f"indices but buffer has {len(src_axes)} axes"
         )
         raise UnsupportedIRLoweringError(msg)
+
+    # Fast path: all indices are literal integer positions (post-expansion
+    # form, e.g. ``gamma[0]`` after ``gamma[age]`` was string-expanded).
+    # For axes that are in ``target_axes``, emit a full slice (``:``) so
+    # the result vectorizes along that axis and the first-/last-cell AST
+    # equality check in ``_vectorize_template_equations`` passes.  For axes
+    # NOT in ``target_axes`` (i.e. being unrolled by the caller), emit the
+    # literal integer so the access selects the correct element.
+    if all(idx.coord is not None and not idx.axis for idx in sub.indices):
+        buf_node: ast.expr = _name(f"{sub.name}_buf")
+        elts_out: list[ast.expr] = []
+        tied_ax_names: list[str] = []
+        for ax_name, idx in zip(src_axes, sub.indices, strict=True):
+            if ax_name in target_axes:
+                elts_out.append(ast.Slice(lower=None, upper=None, step=None))
+                tied_ax_names.append(ax_name)
+            else:
+                elts_out.append(ast.Constant(value=int(idx.coord)))  # type: ignore[arg-type]
+        if len(elts_out) == 1:
+            sl_node: ast.expr = elts_out[0]
+        else:
+            sl_node = ast.Tuple(elts=elts_out, ctx=ast.Load())
+        accessed: ast.expr = ast.Subscript(
+            value=buf_node, slice=sl_node, ctx=ast.Load()
+        )
+        if not tied_ax_names:
+            return accessed
+        # Broadcast tied axes into target_axes layout.
+        if tuple(tied_ax_names) == tuple(target_axes):
+            return accessed
+        target_kept = tuple(a for a in target_axes if a in tied_ax_names)
+        if tuple(tied_ax_names) != target_kept:
+            perm = tuple(tied_ax_names.index(a) for a in target_kept)
+            accessed = _transpose(accessed, perm)
+        if tuple(target_kept) == tuple(target_axes):
+            return accessed
+        insert_elts: list[ast.expr] = []
+        for ax in target_axes:
+            if ax in tied_ax_names:
+                insert_elts.append(ast.Slice(lower=None, upper=None, step=None))
+            else:
+                insert_elts.append(ast.Constant(value=None))
+        return ast.Subscript(
+            value=accessed,
+            slice=ast.Tuple(elts=insert_elts, ctx=ast.Load()),
+            ctx=ast.Load(),
+        )
 
     sub_axes: list[str] = []
     alias = axis_alias or {}
