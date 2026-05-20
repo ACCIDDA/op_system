@@ -146,9 +146,9 @@ def _expand_one_reduce(
     Returns:
         The pointwise IR replacement for ``expr``.
     """
-    # Late import to avoid a hard cycle: _normalize imports _ir_expand
+    # Late import to avoid a hard cycle: _normalize_ir imports _ir_expand
     # for its IR-build path.
-    from op_system._normalize import (  # noqa: PLC0415
+    from op_system._normalize_kernels import (  # noqa: PLC0415
         _build_apply_along_axis_options,
         _select_apply_along_kernel,
     )
