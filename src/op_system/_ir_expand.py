@@ -291,7 +291,7 @@ def _substitute_in_body(  # noqa: PLR0911, PLR0913
     return body  # pragma: no cover - exhaustive over Expr union
 
 
-def _rewrite_subscript(  # noqa: C901, PLR0912, PLR0913, PLR0915
+def _rewrite_subscript(  # noqa: C901, PLR0912, PLR0913
     sub: Subscript,
     *,
     var_to_coord: Mapping[str, str],
@@ -305,7 +305,6 @@ def _rewrite_subscript(  # noqa: C901, PLR0912, PLR0913, PLR0915
 
     For each :class:`AxisIndex` position:
 
-    * ``placeholder`` indices are passed through unchanged.
     * ``coord`` indices whose value names a binding variable resolve to
       that binding's current coord (consumed).
     * Bare ``axis`` tokens consume to ``bound[axis]`` (or, in the
@@ -331,8 +330,6 @@ def _rewrite_subscript(  # noqa: C901, PLR0912, PLR0913, PLR0915
     pinned_axes: set[str] = set()
     bare_axes: set[str] = set()
     for idx in sub.indices:
-        if idx.placeholder is not None:
-            continue
         if idx.coord is not None:
             if idx.coord in var_to_coord:
                 pinned_axes.add(idx.axis)
@@ -344,10 +341,6 @@ def _rewrite_subscript(  # noqa: C901, PLR0912, PLR0913, PLR0915
     remaining: list[AxisIndex] = []
     resolved_full: list[tuple[str, str | None]] = []
     for idx in sub.indices:
-        if idx.placeholder is not None:
-            resolved_full.append((idx.axis, None))
-            remaining.append(idx)
-            continue
         if idx.coord is not None:
             if idx.coord in var_to_coord:
                 c = var_to_coord[idx.coord]

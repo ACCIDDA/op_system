@@ -44,12 +44,12 @@ if TYPE_CHECKING:
 def _expandable_axes(indices: Sequence[AxisIndex]) -> list[str] | None:
     """Return the list of bare-identifier axis names from ``indices``.
 
-    Returns ``None`` if any index carries a literal coord or placeholder, in
+    Returns ``None`` if any index carries a literal coord, in
     which case the subscript is not eligible for template expansion.
     """
     out: list[str] = []
     for idx in indices:
-        if idx.coord is not None or idx.placeholder is not None:
+        if idx.coord is not None:
             return None
         out.append(idx.axis)
     return out
@@ -135,7 +135,7 @@ def expand_inline_templates(
 
     Returns:
         A new IR expression with templated subscripts expanded. Subscripts
-        that are not eligible (literal coords, placeholders, unknown axis
+        that are not eligible (literal coords, unknown axis
         names) are left untouched.
 
     Raises:
@@ -166,7 +166,7 @@ def expand_inline_templates(
             return expr
         return Apply(op=expr.op, args=new_args)
     if isinstance(expr, Reduce):
-        # Reduce bindings shadow placeholder names: a bound name in this
+        # Reduce bindings shadow outer names: a bound name in this
         # scope should not be substituted from the outer assignment.
         bound = {bind for _, bind in expr.bindings}
         inner_assignment = (
@@ -190,8 +190,8 @@ def expand_inline_templates(
 __all__ = [
     "expand_inline_templates",
     "expand_over_axes",
+    "free_axes",
     "inline_aliases",
-    "placeholder_axes",
 ]
 
 _CYCLE_WHITE = 0
@@ -208,7 +208,7 @@ def _collect_subscript_axes(
     if sub.name in shaped:
         return
     for idx in sub.indices:
-        if idx.coord is not None or idx.placeholder is not None:
+        if idx.coord is not None:
             continue
         if idx.axis:
             out.setdefault(idx.axis, None)
@@ -235,17 +235,17 @@ def _walk_for_axes(
             seen.pop(bind, None)
 
 
-def placeholder_axes(
+def free_axes(
     expr: Expr,
     *,
     shaped_params: Mapping[str, tuple[str, ...]] | None = None,
 ) -> tuple[str, ...]:
-    """Collect placeholder axis names referenced by ``expr``.
+    """Collect free (unbound, non-literal) axis names referenced by ``expr``.
 
     Walks the IR and gathers every bare-identifier axis appearing inside a
     ``Subscript`` whose base name is *not* a registered shaped parameter.
-    Literal-coord and ``$``-placeholder positions are skipped. Order is
-    deterministic: first appearance in pre-order traversal wins.
+    Literal-coord positions are skipped. Order is deterministic: first
+    appearance in pre-order traversal wins.
 
     Args:
         expr: Root IR expression.
