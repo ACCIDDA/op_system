@@ -19,7 +19,9 @@ import numpy as np
 if TYPE_CHECKING:
     from types import CodeType
 
-from op_system._vectorize import build_vector_plan
+    import pytest
+
+from op_system._vectorize import build_vector_plan, last_vector_plan_bail_reason
 from op_system.compile import _make_eval_fn, compile_rhs
 from op_system.specs import normalize_rhs
 
@@ -195,6 +197,56 @@ def test_fallback_on_non_templated_spec() -> None:
     c = compile_rhs(rhs, xp=np)
     out = c.eval_fn(0.0, np.array([1.0, 2.0]))
     assert np.allclose(out, np.array([-1.0, -1.0]))
+
+
+def test_bail_reason_recorded_for_non_templated_spec() -> None:
+    """``last_vector_plan_bail_reason`` exposes why the plan was rejected.
+
+    A scalar-only RHS should record a non-empty diagnostic explaining the
+    bail (here: "scalar (non-wildcard) state template present").
+    """
+    rhs = normalize_rhs({
+        "kind": "expr",
+        "state": ["x", "y"],
+        "equations": {"x": "-x", "y": "x - y"},
+    })
+    assert build_vector_plan(rhs) is None
+    reason = last_vector_plan_bail_reason()
+    assert reason is not None
+    assert "scalar" in reason or "no state templates" in reason
+
+
+def test_bail_reason_cleared_on_success() -> None:
+    """A successful ``build_vector_plan`` clears any prior bail reason."""
+    # First trigger a bail to populate state.
+    scalar_rhs = normalize_rhs({
+        "kind": "expr",
+        "state": ["x"],
+        "equations": {"x": "-x"},
+    })
+    assert build_vector_plan(scalar_rhs) is None
+    assert last_vector_plan_bail_reason() is not None
+    # Then a supported templated spec should clear it.
+    ok_rhs = normalize_rhs(_sir_two_axis_spec())
+    plan = build_vector_plan(ok_rhs)
+    assert plan is not None
+    assert last_vector_plan_bail_reason() is None
+
+
+def test_bail_reason_printed_to_stderr_when_env_set(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Setting ``OP_SYSTEM_DEBUG_VECTOR_PLAN`` prints bail reasons to stderr."""
+    monkeypatch.setenv("OP_SYSTEM_DEBUG_VECTOR_PLAN", "1")
+    rhs = normalize_rhs({
+        "kind": "expr",
+        "state": ["x"],
+        "equations": {"x": "-x"},
+    })
+    assert build_vector_plan(rhs) is None
+    captured = capsys.readouterr()
+    assert "[op_system vector-plan] bail:" in captured.err
 
 
 def test_compile_rhs_returns_finite_output() -> None:

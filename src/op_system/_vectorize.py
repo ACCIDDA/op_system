@@ -24,6 +24,8 @@ from __future__ import annotations
 
 import ast
 import math
+import os
+import sys
 from collections.abc import Mapping
 from dataclasses import dataclass
 from itertools import combinations as _comb
@@ -51,6 +53,53 @@ if TYPE_CHECKING:
     from op_system.specs import NormalizedRhs
 else:
     Float64Array = Any
+
+
+# ---------------------------------------------------------------------------
+# Bail diagnostics
+# ---------------------------------------------------------------------------
+
+#: Environment variable that enables stderr logging of bail reasons.
+#:
+#: When set to any non-empty/non-zero value (e.g. ``OP_SYSTEM_DEBUG_VECTOR_PLAN=1``)
+#: each location in :func:`build_vector_plan` that gives up emits a short
+#: line to stderr explaining why, plus the final reason is exposed via
+#: :func:`last_vector_plan_bail_reason`.
+_VECTOR_PLAN_DEBUG_ENV: str = "OP_SYSTEM_DEBUG_VECTOR_PLAN"
+
+#: Mutable holder for the most recently recorded bail reason (or ``None``
+#: if no recent bail).  Always overwritten on each :func:`build_vector_plan`
+#: call.  Inspected by tests and by :func:`last_vector_plan_bail_reason`.
+_LAST_BAIL_REASON: list[str | None] = [None]
+
+
+def _vector_plan_debug_enabled() -> bool:
+    """Return True if the bail-reason debug env var is set to a truthy value."""
+    raw = os.environ.get(_VECTOR_PLAN_DEBUG_ENV, "").strip().lower()
+    return raw not in {"", "0", "false", "no", "off"}
+
+
+def _bail(reason: str) -> None:
+    """Record a bail reason for later inspection.
+
+    Callers invoke ``_bail("...")`` immediately before ``return None`` at
+    each fall-back site so the cause of a ``build_vector_plan`` rejection
+    is discoverable.  Set ``OP_SYSTEM_DEBUG_VECTOR_PLAN=1`` to print the
+    reason to stderr.
+    """
+    _LAST_BAIL_REASON[0] = reason
+    if _vector_plan_debug_enabled():
+        sys.stderr.write(f"[op_system vector-plan] bail: {reason}\n")
+
+
+def last_vector_plan_bail_reason() -> str | None:
+    """Return the most recently recorded bail reason, or ``None``.
+
+    Useful in tests and interactive debugging to inspect why
+    :func:`build_vector_plan` returned ``None`` without setting the
+    ``OP_SYSTEM_DEBUG_VECTOR_PLAN`` env var globally.
+    """
+    return _LAST_BAIL_REASON[0]
 
 
 # ---------------------------------------------------------------------------
@@ -729,11 +778,17 @@ def _vectorize_template_equations(  # noqa: C901, PLR0912, PLR0913, PLR0914, PLR
 def build_vector_plan(rhs: NormalizedRhs) -> _VectorPlan | None:
     """Try to build a vectorized plan for ``rhs``.
 
+    Set the ``OP_SYSTEM_DEBUG_VECTOR_PLAN`` environment variable (e.g.
+    ``OP_SYSTEM_DEBUG_VECTOR_PLAN=1``) to print a short bail reason to
+    stderr whenever this function returns ``None``.  The reason is also
+    available programmatically via :func:`last_vector_plan_bail_reason`.
+
     Returns:
         A ``_VectorPlan`` describing the vectorized layout, or ``None`` to
         signal that the spec is unsupported and the caller should fall back
         to the scalar engine.
     """
+    _LAST_BAIL_REASON[0] = None
     return _build_vector_plan_inner(rhs)
 
 
@@ -748,13 +803,16 @@ def _build_vector_plan_inner(  # noqa: C901, PLR0911, PLR0912, PLR0914, PLR0915
         to the scalar engine.
     """
     if not rhs.state_templates:
+        _bail("no state templates")
         return None
     # Require all states to be wildcard templates (have axes).
     if any(not tpl.shape for tpl in rhs.state_templates):
+        _bail("scalar (non-wildcard) state template present")
         return None
     # Require axes meta to be present.
     axes_meta = rhs.meta.get("axes") if isinstance(rhs.meta, Mapping) else None
     if not axes_meta:
+        _bail("rhs.meta has no 'axes' entry")
         return None
 
     axes_pairs: list[tuple[str, list[str]]] = []
@@ -763,9 +821,11 @@ def _build_vector_plan_inner(  # noqa: C901, PLR0911, PLR0912, PLR0914, PLR0915
     axis_types: dict[str, str] = {}
     for ax in axes_meta:
         if not isinstance(ax, Mapping):
+            _bail("axes meta contains non-Mapping entry")
             return None
         coords = ax.get("coords")
         if not coords:
+            _bail(f"axis {ax.get('name')!r} has no coords")
             return None
         # Stringify coords to match the convention in
         # ``_templates.build_axis_lookup`` (and therefore the per-cell
@@ -805,6 +865,7 @@ def _build_vector_plan_inner(  # noqa: C901, PLR0911, PLR0912, PLR0914, PLR0915
 
     # Guard: if aliases exist but alias_templates is not populated, fall back.
     if rhs.aliases and not rhs.alias_templates:
+        _bail("rhs.aliases present but rhs.alias_templates is empty")
         return None
     alias_buffers: list[_BufferTemplate] = []
     for tpl in rhs.alias_templates:
@@ -861,6 +922,10 @@ def _build_vector_plan_inner(  # noqa: C901, PLR0911, PLR0912, PLR0914, PLR0915
                         shaped_param_axes=shaped_param_axes,
                     )
                     if ast.dump(tree) != ast.dump(last_tree):
+                        _bail(
+                            f"alias {buf.base!r}: first/last cell trees differ"
+                            " after rewriting"
+                        )
                         return None
             else:
                 # Scalar alias: rewrite so referenced templated state cells
@@ -878,7 +943,11 @@ def _build_vector_plan_inner(  # noqa: C901, PLR0911, PLR0912, PLR0914, PLR0915
                     shaped_param_axes=shaped_param_axes,
                 )
             code = compile(tree, filename="<op_system_vec>", mode="eval")
-        except (ValueError, RuntimeError, TypeError, SyntaxError):
+        except (ValueError, RuntimeError, TypeError, SyntaxError) as exc:
+            _bail(
+                f"alias {buf.base!r}: rewrite/compile failed:"
+                f" {type(exc).__name__}: {exc}"
+            )
             return None
         alias_codes.append((buf.base, code, buf.shape))
 
@@ -917,6 +986,11 @@ def _build_vector_plan_inner(  # noqa: C901, PLR0911, PLR0912, PLR0914, PLR0915
                 shaped_param_axes=shaped_param_axes,
             )
             if result is None:
+                _bail(
+                    f"template {buf.base!r}: per-template vectorization failed"
+                    " (no candidate unroll subset produced identical first/last"
+                    " cell trees)"
+                )
                 return None
             codes, vec_axes, vec_shape, unroll_axes, unroll_shape, assembly_perm = (
                 result
