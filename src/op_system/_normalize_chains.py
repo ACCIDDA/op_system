@@ -374,22 +374,31 @@ def _apply_coord_shifts(
     transitions_raw: list[dict[str, Any]],
     state_expanded: list[str],
     axes: list[dict[str, Any]],
+    state_template_map: Mapping[str, list[tuple[str, dict[str, str]]]] | None = None,
 ) -> None:
     """Expand ``coord_shift`` entries into concrete transitions in-place.
 
     Each ``coord_shift`` entry describes movement along one axis coordinate for
-    a set of states.  The entry is replaced in-place by one concrete transition
-    per state listed in ``apply_to``, per combination of the remaining axes.
+    a set of states.  When ``state_template_map`` is supplied and the
+    ``apply_to`` base has a unique all-wildcard state template, the entry is
+    replaced by a single template-form transition (selectors with the shifted
+    axis pinned and remaining axes left as wildcards); otherwise it falls back
+    to one concrete transition per matching cell.  Template-form output lets
+    downstream synthesis lift the transition into a vectorizable Reduce.
 
     Args:
         transitions_raw: Mutable transition list — ``coord_shift`` entries are
             replaced by concrete transition dicts.
         state_expanded: Expanded state names (used to discover axes per state).
         axes: Normalized axis definitions.
+        state_template_map: Mapping of template-keyed entries (e.g.
+            ``"X[age,vax,loc,imm]"``) to expanded ``(name, coord_map)`` pairs.
+            Used to derive axis order for template-form emission.
     """
     axis_lookup: dict[str, list[str]] = {
         ax["name"]: [str(c) for c in ax.get("coords", [])] for ax in axes
     }
+    tmpl_map: Mapping[str, list[tuple[str, dict[str, str]]]] = state_template_map or {}
 
     i = 0
     while i < len(transitions_raw):
@@ -411,18 +420,78 @@ def _apply_coord_shifts(
             context=f"coord_shift[{axis_name}].apply_to",
         )
         for base in expanded_apply_to:
-            concrete.extend(
-                _expand_coord_shift_for_base(
-                    base=base,
-                    from_frag=from_frag,
-                    to_frag=to_frag,
-                    rate_s=rate_s,
-                    state_expanded=state_expanded,
-                )
+            templated = _build_templated_coord_shift_transition(
+                base=base,
+                axis_name=axis_name,
+                from_coord=from_coord,
+                to_coord=to_coord,
+                rate_s=rate_s,
+                state_template_map=tmpl_map,
             )
+            if templated is not None:
+                concrete.append(templated)
+            else:
+                concrete.extend(
+                    _expand_coord_shift_for_base(
+                        base=base,
+                        from_frag=from_frag,
+                        to_frag=to_frag,
+                        rate_s=rate_s,
+                        state_expanded=state_expanded,
+                    )
+                )
 
         transitions_raw[i : i + 1] = concrete
         i += len(concrete)
+
+
+def _build_templated_coord_shift_transition(  # noqa: PLR0913
+    *,
+    base: str,
+    axis_name: str,
+    from_coord: str,
+    to_coord: str,
+    rate_s: str,
+    state_template_map: Mapping[str, list[tuple[str, dict[str, str]]]],
+) -> dict[str, Any] | None:
+    """Build a single template-form coord_shift transition for ``base``.
+
+    Returns a transition dict with selectors of the form
+    ``"{base}[ax1, ..., axis_name={coord}, ...]"`` when ``base`` has a unique
+    state-template entry whose tokens are all wildcards and include
+    ``axis_name``; returns ``None`` otherwise (caller falls back to per-cell
+    expansion).
+
+    Returns:
+        Template-form transition dict, or ``None`` if no unique all-wildcard
+        template for ``base`` exists (or ``axis_name`` is not among its axes).
+    """
+    prefix = f"{base}["
+    matches = [
+        k for k in state_template_map if k.startswith(prefix) and k.endswith("]")
+    ]
+    if len(matches) != 1:
+        return None
+
+    inside = matches[0][len(prefix) : -1]
+    tokens = [t.strip() for t in inside.split(",") if t.strip()]
+    axes: list[str] = []
+    for tok in tokens:
+        if "=" in tok:
+            # Pinned token in state template — cannot represent generically.
+            return None
+        axes.append(tok)
+
+    if axis_name not in axes:
+        return None
+
+    from_parts = [f"{ax}={from_coord}" if ax == axis_name else ax for ax in axes]
+    to_parts = [f"{ax}={to_coord}" if ax == axis_name else ax for ax in axes]
+    return {
+        "from": f"{base}[{', '.join(from_parts)}]",
+        "to": f"{base}[{', '.join(to_parts)}]",
+        "rate": rate_s,
+    }
 
 
 def _expand_coord_shift_for_base(
