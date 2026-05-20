@@ -475,6 +475,56 @@ def normalize_expr_rhs(spec: Mapping[str, Any]) -> ExprRhs:  # noqa: C901, PLR09
 # ---------------------------------------------------------------------------
 
 
+def _discover_pinned_token_masks(  # noqa: C901
+    transitions_raw: list[Mapping[str, Any]],
+    *,
+    axis_lookup: dict[str, list[str]],
+) -> tuple[dict[tuple[str, str], str], dict[str, tuple[float, ...]]]:
+    """Discover pinned-token masks and one-hot value tuples.
+
+    Scans transition ``from``/``to`` selectors for ``PinnedToken`` entries
+    and allocates a unique mask shaped-param name plus a one-hot value
+    tuple for each ``(axis, coord)`` pair encountered.
+
+    Returns:
+        ``(mask_names, mask_values)`` where ``mask_names`` maps
+        ``(axis, coord) -> mask_name`` and ``mask_values`` maps
+        ``mask_name -> tuple[float, ...]`` (1.0 at the pinned coord index,
+        0.0 elsewhere; length equals the axis cardinality).
+    """
+    mask_names: dict[tuple[str, str], str] = {}
+    mask_values: dict[str, tuple[float, ...]] = {}
+    for tr in transitions_raw:
+        if not isinstance(tr, _MappingABC):
+            continue
+        for key in ("from", "to"):
+            s = tr.get(key)
+            if not isinstance(s, str):
+                continue
+            try:
+                _, tokens = parse_selector(s)
+            except (InvalidRhsSpecError, ValueError):
+                continue
+            for tok in tokens:
+                if not isinstance(tok, PinnedToken):
+                    continue
+                if tok.axis not in axis_lookup:
+                    continue
+                coords = axis_lookup[tok.axis]
+                if tok.coord not in coords:
+                    continue
+                key2 = (tok.axis, tok.coord)
+                if key2 in mask_names:
+                    continue
+                idx = coords.index(tok.coord)
+                name = f"__op_system_mask__{tok.axis}__{idx}"
+                mask_names[key2] = name
+                mask_values[name] = tuple(
+                    1.0 if i == idx else 0.0 for i in range(len(coords))
+                )
+    return mask_names, mask_values
+
+
 def _build_transition_equations_ir(  # noqa: C901, PLR0912, PLR0913, PLR0914, PLR0915
     transitions_raw: list[Mapping[str, Any]],
     *,
@@ -484,6 +534,8 @@ def _build_transition_equations_ir(  # noqa: C901, PLR0912, PLR0913, PLR0914, PL
     axis_lookup: dict[str, list[str]],
     template_map: Mapping[str, list[tuple[str, dict[str, str]]]],
     shaped_params: Mapping[str, tuple[str, ...]] | None = None,
+    mask_names: Mapping[tuple[str, str], str] | None = None,
+    time_axis_name: str | None = None,
 ) -> tuple[
     tuple[Expr | None, ...],
     tuple[Expr | None, ...],
@@ -501,6 +553,7 @@ def _build_transition_equations_ir(  # noqa: C901, PLR0912, PLR0913, PLR0914, PL
     from op_system._ir_expand import expand_reduce_pointwise  # noqa: PLC0415
 
     shaped = shaped_params or {}
+    masks = mask_names or {}
     ax_lookup_dict = dict(axis_lookup)
     d_ir_full: dict[str, list[Expr]] = {s: [] for s in state_expanded}
     d_ir_reduce: dict[str, list[Expr]] = {s: [] for s in state_expanded}
@@ -578,19 +631,45 @@ def _build_transition_equations_ir(  # noqa: C901, PLR0912, PLR0913, PLR0914, PL
             expr_only_axes = [
                 ax
                 for ax in wildcard_axes
-                if ax not in frm_wc_set and ax not in to_wc_set
+                if ax not in frm_wc_set and ax not in to_wc_set and ax != time_axis_name
             ]
-            has_pinned = any(
-                isinstance(tok, PinnedToken) for tok in (*frm_tokens, *to_tokens)
+            pinned_tokens_from: list[PinnedToken] = [
+                tok for tok in frm_tokens if isinstance(tok, PinnedToken)
+            ]
+            pinned_tokens_to: list[PinnedToken] = [
+                tok for tok in to_tokens if isinstance(tok, PinnedToken)
+            ]
+            has_pinned = bool(pinned_tokens_from or pinned_tokens_to)
+            # All pinned tokens must have a registered mask (discovered in
+            # the normalize pre-pass) for the synthesized template-uniform
+            # form to be expressible. If any mask is missing we conservatively
+            # fall back to per-cell accumulation.
+            pinned_masks_ok = all(
+                (tok.axis, tok.coord) in masks
+                for tok in (*pinned_tokens_from, *pinned_tokens_to)
             )
-            synthesize_to_reduce = bool(
-                from_only_axes
+            # Synthesis combines: source side template-uniform ``-flow`` IR,
+            # destination side template-uniform ``Reduce(sum_over)`` over
+            # axes present on the from-template but absent from the
+            # to-template, with one-hot mask multiplications collapsing
+            # pinned-coord slabs.
+            synthesize = (
+                bool(frm_wc_axes)
                 and not to_only_axes
                 and not expr_only_axes
-                and not has_pinned
+                and pinned_masks_ok
+                and (bool(from_only_axes) or has_pinned)
             )
             to_names_for_synthesis: set[str] = set()
             from_names_for_synthesis: set[str] = set()
+            # Reduce bindings: from-template axes that need to be summed
+            # away when evaluating the to-side. Always include from-pinned
+            # axes (the mask inside the reduce filters to the pinned
+            # slab) plus any from-wildcard axes absent from the to-side.
+            reduce_bindings_axes = [
+                *(ax for ax in frm_wc_axes if ax not in set(to_wc_axes)),
+                *(t.axis for t in pinned_tokens_from),
+            ]
 
             # Build wildcard combos
             if not wildcard_axes:
@@ -645,13 +724,15 @@ def _build_transition_equations_ir(  # noqa: C901, PLR0912, PLR0913, PLR0914, PL
                 # in a form the vectorizer can template-lift.
                 d_ir_full[from_name].append(Apply(op="neg", args=(flow_full,)))
                 d_ir_full[to_name].append(flow_full)
-                if synthesize_to_reduce:
-                    from_names_for_synthesis.add(from_name)
-                    to_names_for_synthesis.add(to_name)
+                if synthesize:
+                    # Synthesis installs template-uniform IR into ALL
+                    # cells of both templates after the combo loop; the
+                    # per-combo (pinned-slab-only) names from
+                    # ``render_selector`` would miss non-pinned cells
+                    # whose mask-multiplied contribution is 0.
+                    pass
                 else:
-                    d_ir_reduce[from_name].append(
-                        Apply(op="neg", args=(flow_reduce,))
-                    )
+                    d_ir_reduce[from_name].append(Apply(op="neg", args=(flow_reduce,)))
                     d_ir_reduce[to_name].append(flow_reduce)
 
                 # Collect rate symbols (alias Syms kept unresolved)
@@ -672,37 +753,109 @@ def _build_transition_equations_ir(  # noqa: C901, PLR0912, PLR0913, PLR0914, PL
                     )
                 transitions_expanded_out.append(tr_out)
 
-            # Synthesize template-uniform IR for this transition when
-            # wildcard axes appear only on ``from``. The destination side
-            # uses a ``Reduce(sum_over, ...)`` binding the from-only axes
-            # over a body that multiplies the un-substituted rate IR by a
-            # FREE-axis Subscript reference to the from-state. The source
-            # side uses the negated body without the Reduce — every cell
-            # of the from-template loses the same template-form flow per
-            # unit time. The same expression is installed in every cell of
-            # both templates, so the vectorizer's first/last-cell
-            # structural check passes trivially and
-            # ``lift_cell_ir_to_template`` sees no per-cell ``Sym`` leaves
-            # of the from-buffer to flag as co-occurring.
-            if synthesize_to_reduce:
+            # Synthesize template-uniform IR for this transition when the
+            # source-template's wildcard axes (possibly with pinned-coord
+            # selectors handled by one-hot masks) admit a uniform
+            # representation. The source side installs a ``-flow`` body in
+            # every cell of the from-template; the destination side installs
+            # a ``Reduce(sum_over, ...)`` (or just the body when there are
+            # no from-template-only axes) in every cell of the to-template.
+            # Each pinned (axis, coord) selector multiplies the body by a
+            # one-hot mask shaped param so that only the pinned slab
+            # contributes; the mask zeroes out the non-pinned slabs before
+            # the surrounding Reduce sums them away.
+            if synthesize:
+                # Enumerate ALL cells of both templates (treating pinned
+                # axes as wildcards over their full coord ranges) so the
+                # template-uniform synthesized IR is installed in every
+                # cell. Pinned-coord selection lives inside the body via
+                # the one-hot mask multiplications below.
+                def _enumerate_template_cell_names(
+                    base: str,
+                    template_tokens: tuple[Any, ...],
+                ) -> list[str]:
+                    axes_and_coords = [
+                        (tok.axis, ax_lookup_dict[tok.axis])
+                        for tok in template_tokens
+                        if isinstance(tok, (WildcardToken, PinnedToken))
+                    ]
+                    if not axes_and_coords:
+                        return [base]
+                    tokens_as_wc = tuple(
+                        WildcardToken(axis=tok.axis)
+                        if isinstance(tok, PinnedToken)
+                        else tok
+                        for tok in template_tokens
+                    )
+                    out: list[str] = []
+                    for combo in product(*(coords for _, coords in axes_and_coords)):
+                        assign = {
+                            axis: c
+                            for (axis, _), c in zip(axes_and_coords, combo, strict=True)
+                        }
+                        out.append(
+                            render_selector(
+                                base,
+                                tokens_as_wc,
+                                assign,
+                                axis_lookup=ax_lookup_dict,
+                            )
+                        )
+                    return out
+
+                to_names_for_synthesis = set(
+                    _enumerate_template_cell_names(to_base, tuple(to_tokens))
+                )
+                from_names_for_synthesis = set(
+                    _enumerate_template_cell_names(frm_base, tuple(frm_tokens))
+                )
+
                 from_subscript = Subscript(
                     name=frm_base,
                     indices=tuple(
                         AxisIndex(axis=tok.axis, coord=None)
                         for tok in frm_tokens
-                        if isinstance(tok, WildcardToken)
+                        if isinstance(tok, (WildcardToken, PinnedToken))
                     ),
                 )
-                synth_body = Apply(op="*", args=(ir_rate_raw, from_subscript))
-                synth_neg = Apply(op="neg", args=(synth_body,))
-                synth_to_reduce = Reduce(
-                    kind="sum_over",
-                    bindings=tuple((ax, ax) for ax in from_only_axes),
-                    body=synth_body,
-                )
-                all_syms |= free_symbols(synth_to_reduce)
+
+                def _mask_sub(tok: PinnedToken) -> Subscript:
+                    return Subscript(
+                        name=masks[tok.axis, tok.coord],
+                        indices=(AxisIndex(axis=tok.axis, coord=None),),
+                    )
+
+                # To-side body: rate * from-state * from-pinned masks,
+                # all summed over reduce bindings; then multiplied by
+                # to-side pinned masks (which use to-cell coords). Rate
+                # lives inside the reduce so per-axis terms such as
+                # ``theta[imm]`` correctly bind to the reduce loop.
+                inner_to: Expr = Apply(op="*", args=(ir_rate_raw, from_subscript))
+                for tok in pinned_tokens_from:
+                    inner_to = Apply(op="*", args=(inner_to, _mask_sub(tok)))
+                synth_to: Expr
+                if reduce_bindings_axes:
+                    synth_to = Reduce(
+                        kind="sum_over",
+                        bindings=tuple((ax, ax) for ax in reduce_bindings_axes),
+                        body=inner_to,
+                    )
+                else:
+                    synth_to = inner_to
+                for tok in pinned_tokens_to:
+                    synth_to = Apply(op="*", args=(synth_to, _mask_sub(tok)))
+
+                # From-side body: rate * from-state * masks for FROM-side
+                # pinned tokens only (to-side pinned axes may not be in
+                # the from-template and would broadcast incorrectly).
+                from_body: Expr = Apply(op="*", args=(ir_rate_raw, from_subscript))
+                for tok in pinned_tokens_from:
+                    from_body = Apply(op="*", args=(from_body, _mask_sub(tok)))
+                synth_neg = Apply(op="neg", args=(from_body,))
+
+                all_syms |= free_symbols(synth_to)
                 for to_name in to_names_for_synthesis:
-                    d_ir_reduce[to_name].append(synth_to_reduce)
+                    d_ir_reduce[to_name].append(synth_to)
                 for from_name in from_names_for_synthesis:
                     d_ir_reduce[from_name].append(synth_neg)
     finally:
@@ -858,6 +1011,7 @@ def normalize_transitions_rhs(  # noqa: C901, PLR0912, PLR0914, PLR0915
         transitions_raw=transitions_raw,
         state_expanded=state_expanded,
         axes=axes_meta,
+        state_template_map=state_template_map,
     )
 
     if not transitions_raw:
@@ -866,6 +1020,18 @@ def normalize_transitions_rhs(  # noqa: C901, PLR0912, PLR0914, PLR0915
         )
 
     # Build equations and collect expanded transitions in one IR-native pass
+    pinned_mask_names, pinned_mask_values = _discover_pinned_token_masks(
+        transitions_raw, axis_lookup=axis_lookup_dict
+    )
+    if pinned_mask_values:
+        # Register one-hot masks as shaped params so the vectorizer's
+        # extra-param-buffers plumbing assembles them at eval time; stash
+        # the actual values under ``meta`` so ``compile_rhs`` can inject
+        # them into the eval_fn's ``params`` automatically.
+        for (axis, _coord), mask_name in pinned_mask_names.items():
+            shaped_params[mask_name] = (axis,)
+        meta["op_system_synth_constants"] = dict(pinned_mask_values)
+
     equations_ir_pre_inline, equations_ir_reduce, transitions_expanded, rate_syms = (
         _build_transition_equations_ir(
             transitions_raw,
@@ -875,6 +1041,8 @@ def normalize_transitions_rhs(  # noqa: C901, PLR0912, PLR0914, PLR0915
             axis_lookup=axis_lookup_dict,
             template_map=template_map_all,
             shaped_params=shaped_params,
+            mask_names=pinned_mask_names,
+            time_axis_name=time_axis_name,
         )
     )
     all_syms |= rate_syms

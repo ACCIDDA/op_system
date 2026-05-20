@@ -22,6 +22,7 @@ from __future__ import annotations
 import ast
 import importlib
 import warnings
+from collections.abc import Mapping as _MappingABC
 from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import (
@@ -860,6 +861,19 @@ def compile_rhs(rhs: NormalizedRhs, *, xp: object | None = None) -> CompiledRhs:
         time_axis_name=str(rhs.meta.get("time_axis", "time")),
         axes_meta=tuple(rhs.meta.get("axes") or ()),
     )
+
+    # Inject normalize-time synthesized constants (e.g. one-hot masks for
+    # pinned-coord transition selectors) into ``params`` so callers do not
+    # need to supply them. ``setdefault`` lets user overrides win.
+    synth_consts = rhs.meta.get("op_system_synth_constants")
+    if isinstance(synth_consts, _MappingABC) and synth_consts:
+        synth_const_values = dict(synth_consts)
+        inner_eval_fn = eval_fn
+
+        def eval_fn(t: object, y: object, **params: object) -> Float64Array:
+            for k, v in synth_const_values.items():
+                params.setdefault(k, v)
+            return inner_eval_fn(t, y, **params)
 
     return CompiledRhs(
         state_names=rhs.state_names,
