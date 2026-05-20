@@ -45,8 +45,11 @@ from op_system._helpers import (
 )
 from op_system._ir import (
     Apply,
+    AxisIndex,
     Expr,
     Literal,
+    Reduce,
+    Subscript,
     Sym,
     free_symbols,
     parse_expr_to_ir,
@@ -83,6 +86,7 @@ from op_system._normalize_kernels import (
     _normalize_state_axes,
 )
 from op_system._templates import (
+    PinnedToken,
     WildcardToken,
     _apply_template_substitutions,
     _extract_placeholders_from_expr,
@@ -551,6 +555,43 @@ def _build_transition_equations_ir(  # noqa: C901, PLR0912, PLR0913, PLR0914, PL
             # Parse rate to IR once (Reduce nodes preserved for apply_along)
             ir_rate_raw = parse_expr_to_ir(rate_s, lower_helpers=True)
 
+            # Partition wildcard axes by where they appear, to decide whether
+            # a template-uniform Reduce node can stand in for per-combo flow
+            # accumulation on the destination side. The fully-expanded
+            # ``d_ir_full`` always uses per-cell scalar names (needed by the
+            # scalar engine and by per-cell fallback), but ``d_ir_reduce``
+            # can carry a single Reduce per to-cell when wildcard axes
+            # appear only on the ``from`` side — that lets the vectorizer
+            # template-lift the to-template equation without tripping the
+            # "multiple cells of buffer X co-occur" guard in
+            # ``lift_cell_ir_to_template``.
+            frm_wc_axes: list[str] = [
+                tok.axis for tok in frm_tokens if isinstance(tok, WildcardToken)
+            ]
+            to_wc_axes: list[str] = [
+                tok.axis for tok in to_tokens if isinstance(tok, WildcardToken)
+            ]
+            frm_wc_set = set(frm_wc_axes)
+            to_wc_set = set(to_wc_axes)
+            from_only_axes = [ax for ax in frm_wc_axes if ax not in to_wc_set]
+            to_only_axes = [ax for ax in to_wc_axes if ax not in frm_wc_set]
+            expr_only_axes = [
+                ax
+                for ax in wildcard_axes
+                if ax not in frm_wc_set and ax not in to_wc_set
+            ]
+            has_pinned = any(
+                isinstance(tok, PinnedToken) for tok in (*frm_tokens, *to_tokens)
+            )
+            synthesize_to_reduce = bool(
+                from_only_axes
+                and not to_only_axes
+                and not expr_only_axes
+                and not has_pinned
+            )
+            to_names_for_synthesis: set[str] = set()
+            from_names_for_synthesis: set[str] = set()
+
             # Build wildcard combos
             if not wildcard_axes:
                 combos: Iterable[tuple[str, ...]] = [()]
@@ -596,11 +637,22 @@ def _build_transition_equations_ir(  # noqa: C901, PLR0912, PLR0913, PLR0914, PL
                 flow_full = Apply(op="*", args=(ir_rate_full, from_sym))
                 flow_reduce = Apply(op="*", args=(ir_rate_reduce, from_sym))
 
-                # Accumulate: from_state gets -flow, to_state gets +flow
+                # Accumulate: from_state gets -flow, to_state gets +flow.
+                # When synthesizing template-uniform IR for this transition
+                # (see post-loop block below), skip the per-combo append
+                # into ``d_ir_reduce[from_name]`` and ``d_ir_reduce[to_name]``
+                # — the synthesized nodes carry the same total contribution
+                # in a form the vectorizer can template-lift.
                 d_ir_full[from_name].append(Apply(op="neg", args=(flow_full,)))
                 d_ir_full[to_name].append(flow_full)
-                d_ir_reduce[from_name].append(Apply(op="neg", args=(flow_reduce,)))
-                d_ir_reduce[to_name].append(flow_reduce)
+                if synthesize_to_reduce:
+                    from_names_for_synthesis.add(from_name)
+                    to_names_for_synthesis.add(to_name)
+                else:
+                    d_ir_reduce[from_name].append(
+                        Apply(op="neg", args=(flow_reduce,))
+                    )
+                    d_ir_reduce[to_name].append(flow_reduce)
 
                 # Collect rate symbols (alias Syms kept unresolved)
                 all_syms |= free_symbols(ir_rate_full)
@@ -619,6 +671,40 @@ def _build_transition_equations_ir(  # noqa: C901, PLR0912, PLR0913, PLR0914, PL
                         axis_lookup=ax_lookup_dict,
                     )
                 transitions_expanded_out.append(tr_out)
+
+            # Synthesize template-uniform IR for this transition when
+            # wildcard axes appear only on ``from``. The destination side
+            # uses a ``Reduce(sum_over, ...)`` binding the from-only axes
+            # over a body that multiplies the un-substituted rate IR by a
+            # FREE-axis Subscript reference to the from-state. The source
+            # side uses the negated body without the Reduce — every cell
+            # of the from-template loses the same template-form flow per
+            # unit time. The same expression is installed in every cell of
+            # both templates, so the vectorizer's first/last-cell
+            # structural check passes trivially and
+            # ``lift_cell_ir_to_template`` sees no per-cell ``Sym`` leaves
+            # of the from-buffer to flag as co-occurring.
+            if synthesize_to_reduce:
+                from_subscript = Subscript(
+                    name=frm_base,
+                    indices=tuple(
+                        AxisIndex(axis=tok.axis, coord=None)
+                        for tok in frm_tokens
+                        if isinstance(tok, WildcardToken)
+                    ),
+                )
+                synth_body = Apply(op="*", args=(ir_rate_raw, from_subscript))
+                synth_neg = Apply(op="neg", args=(synth_body,))
+                synth_to_reduce = Reduce(
+                    kind="sum_over",
+                    bindings=tuple((ax, ax) for ax in from_only_axes),
+                    body=synth_body,
+                )
+                all_syms |= free_symbols(synth_to_reduce)
+                for to_name in to_names_for_synthesis:
+                    d_ir_reduce[to_name].append(synth_to_reduce)
+                for from_name in from_names_for_synthesis:
+                    d_ir_reduce[from_name].append(synth_neg)
     finally:
         if needed > old_limit:
             sys.setrecursionlimit(old_limit)
