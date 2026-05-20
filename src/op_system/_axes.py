@@ -301,6 +301,10 @@ def _normalize_single_axis(
     Returns:
         Canonical axis dict (``name``, ``type``, ``coords``, ``size``,
         and optionally ``deltas``, ``domain``, ``spacing``, ``units``).
+
+    Raises:
+        InvalidRhsSpecError: If the axis is categorical or ordinal but
+            has no ``coords`` field.
     """
     name = _normalize_axis_name(ax_map, idx=idx, seen=seen)
     ax_type = _normalize_axis_type(ax_map, idx=idx)

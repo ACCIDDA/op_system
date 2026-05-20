@@ -296,6 +296,9 @@ def _lower_multicell_sym_ir_to_ast(  # noqa: C901
         Returns ``None`` (rather than raising) for any node shape outside
         the supported subset, which lets the caller fall back to the
         generic per-cell lowering.
+
+        Returns:
+            Lowered AST expression, or ``None`` if unsupported.
         """
         if isinstance(node, Sym):
             return cell_ast.get(node.name)
@@ -994,6 +997,13 @@ def make_vectorized_eval_fn(plan: _VectorPlan) -> EvalFn:  # noqa: C901, PLR0915
         Computes the RHS for the entire state vector at once using the
         compiled per-bin AST callables, gathered into a single output
         array in ``y``'s array namespace.
+
+        Returns:
+            ``dydt`` array of shape ``(n_state,)`` in ``y``'s namespace.
+
+        Raises:
+            ValueError: If a required parameter is missing or has the
+                wrong shape.
         """
         xp = _namespace_of(y)
         _check_numeric_dtype(xp, getattr(y, "dtype", None))

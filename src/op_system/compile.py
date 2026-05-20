@@ -23,6 +23,7 @@ import ast
 import importlib
 import warnings
 from dataclasses import dataclass, field
+from itertools import starmap
 from types import MappingProxyType
 from typing import (
     TYPE_CHECKING,
@@ -197,9 +198,11 @@ def _raise_unsupported_feature(*, feature: str, detail: str | None = None) -> No
 class EvalFn(Protocol):
     """Callable RHS evaluator supporting runtime parameter kwargs."""
 
-    def __call__(  # noqa: D102
+    def __call__(
         self, t: object, y: object, **params: object
-    ) -> Float64Array: ...
+    ) -> Float64Array:
+        """Evaluate the RHS at time ``t`` and state ``y`` with bound parameters."""
+        ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -244,7 +247,11 @@ class CompiledRhs:
         params_dict = dict(params)
 
         def rhs(t: object, y: object) -> Float64Array:
-            """Two-argument RHS with parameters bound by the enclosing call."""
+            """Two-argument RHS with parameters bound by the enclosing call.
+
+            Returns:
+                ``dydt`` array in the namespace of ``y``.
+            """
             return self.eval_fn(t, y, **params_dict)
 
         return rhs
@@ -378,9 +385,6 @@ def _validate_call(func: ast.AST, *, expr: str) -> None:
     Args:
         func: ``func`` slot of an ``ast.Call`` node.
         expr: Original expression string, used in diagnostics.
-
-    Raises:
-        InvalidExpressionError: If the call shape or target is not allowed.
     """
     if isinstance(func, ast.Attribute):
         if not isinstance(func.value, ast.Name):
@@ -502,10 +506,9 @@ def _collect_eq_code(
             reserved_names=reserved_names,
         )
         cse_code = tuple((name, _compile_expr(name, expr)) for name, expr in bindings)
-        eq_code = [  # noqa: FURB140
-            _compile_expr(expr_s, expr_ir)
-            for expr_s, expr_ir in zip(equations, rewritten, strict=True)
-        ]
+        eq_code = list(
+            starmap(_compile_expr, zip(equations, rewritten, strict=True))
+        )
         return cse_code, eq_code
     return (), [_compile_expr(expr) for expr in equations]
 
@@ -653,6 +656,9 @@ def _make_eval_fn(
         Infers the array namespace from ``y`` at call time, builds the
         evaluation environment from state, parameters and aliases, and
         returns the equation outputs stacked in ``y``'s namespace.
+
+        Returns:
+            ``dydt`` array of shape ``(n_state,)`` in ``y``'s namespace.
         """
         xp = _namespace_of(y)
         _check_numeric_dtype(xp, getattr(y, "dtype", None))
@@ -807,7 +813,11 @@ def _wrap_eval_fn_for_time_varying(
     )
 
     def wrapped(t: object, y: object, **params: object) -> Float64Array:
-        """Interpolate each time-varying parameter at ``t`` then dispatch."""
+        """Interpolate each time-varying parameter at ``t`` then dispatch.
+
+        Returns:
+            ``dydt`` array produced by the wrapped ``eval_fn``.
+        """
         xp = _namespace_of(y)
         for name, axis_pos in plan:
             if name not in params:

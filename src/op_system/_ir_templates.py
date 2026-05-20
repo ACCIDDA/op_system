@@ -364,7 +364,11 @@ def _detect_alias_cycle(aliases: Mapping[str, Expr]) -> list[str] | None:
     stack: list[str] = []
 
     def visit(node: str) -> list[str] | None:
-        """DFS visitor; returns the cycle path if a back edge is found."""
+        """DFS visitor; returns the cycle path if a back edge is found.
+
+        Returns:
+            List of alias names forming a cycle, or ``None`` if none.
+        """
         color[node] = _CYCLE_GREY
         stack.append(node)
         for nxt in graph[node]:

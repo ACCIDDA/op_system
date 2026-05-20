@@ -652,6 +652,9 @@ def _build_transition_equations_ir(  # noqa: C901, PLR0912, PLR0913, PLR0914, PL
         Returns ``Literal(0.0)`` for an empty list, the lone term unchanged
         for a single-element list, and a flat ``Apply('+', ...)`` for two
         or more terms.
+
+        Returns:
+            Combined IR expression.
         """
         if not terms:
             return Literal(value=0.0)

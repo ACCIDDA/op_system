@@ -228,7 +228,11 @@ def _strip_time_axis_in_expr(
         return expr
 
     def _rewrite(match: re.Match[str]) -> str:
-        """Rewrite one ``base[time, ...]`` match by dropping the time axis."""
+        """Rewrite one ``base[time, ...]`` match by dropping the time axis.
+
+        Returns:
+            Replacement text, or the original match if no rewrite applies.
+        """
         base = match.group(1)
         full = tv_full_axes.get(base)
         if full is None:
@@ -611,7 +615,11 @@ def _build_aliases_ir_from_raw(  # noqa: C901
                 )
 
         def _inline_all(parsed: dict[str, Expr]) -> dict[str, Expr]:
-            """Inline alias references through the alias map (cycle-safe)."""
+            """Inline alias references through the alias map (cycle-safe).
+
+            Returns:
+                Map from alias name to fully-inlined IR.
+            """
             memo: dict[int, frozenset[str]] = {}
             cycle_ok = False
             with contextlib.suppress(ValueError, RecursionError):

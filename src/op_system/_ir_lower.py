@@ -1104,10 +1104,18 @@ def _lower_apply(  # noqa: PLR0913
 
     Returns:
         Lowered AST expression.
+
+    Raises:
+        UnsupportedIRLoweringError: If ``expr`` has a shape not handled by
+            this lowerer.
     """
 
     def lower(child: Expr) -> ast.expr:
-        """Lower a child node with the same surrounding configuration."""
+        """Lower a child node with the same surrounding configuration.
+
+        Returns:
+            Lowered AST expression for ``child``.
+        """
         return lower_to_vector_ast(
             child,
             target_axes=target_axes,

@@ -158,9 +158,6 @@ def _kwarg_name(arg: Expr) -> str:
 
     Returns:
         The string key.
-
-    Raises:
-        InvalidExpressionError: If ``arg`` is not a string :class:`Literal`.
     """
     if isinstance(arg, Literal) and isinstance(arg.value, str):
         return arg.value
@@ -176,10 +173,6 @@ def _kwarg_value_as_binding(value: Expr, *, key: str) -> str:
 
     Returns:
         Bare identifier or stringified literal.
-
-    Raises:
-        InvalidExpressionError: If ``value`` is neither :class:`Sym` nor
-            :class:`Literal`.
     """
     if isinstance(value, Sym):
         return value.name
@@ -304,9 +297,6 @@ def _validate_reduce(reduce_node: Reduce) -> None:
 
     Args:
         reduce_node: The candidate node to validate.
-
-    Raises:
-        InvalidExpressionError: If ``reduce_node`` has no axis bindings.
     """
     if not reduce_node.bindings:
         _invalid(detail=(f"{reduce_node.kind} requires at least one axis=var binding"))
@@ -346,10 +336,6 @@ def _call_name(func: ast.AST) -> str:
 
     Returns:
         Dotted identifier (e.g. ``"np.sum"`` or ``"sum"``).
-
-    Raises:
-        InvalidExpressionError: If the call target is not a bare ``Name``
-            or a chain of ``Attribute`` over a ``Name``.
     """
     if isinstance(func, ast.Name):
         return func.id
@@ -376,9 +362,6 @@ def _axis_index_from_expr(node: ast.expr) -> AxisIndex:
 
     Returns:
         Parsed :class:`AxisIndex`.
-
-    Raises:
-        InvalidExpressionError: If the node shape is not supported.
     """
     if isinstance(node, ast.Name):
         return AxisIndex(axis=node.id)
@@ -397,10 +380,6 @@ def _bound_axis_index_from_slice(node: ast.Slice) -> AxisIndex:
 
     Returns:
         :class:`AxisIndex` carrying both ``axis`` and ``coord``.
-
-    Raises:
-        InvalidExpressionError: If the slice has a step or a side that is
-            missing or not a bare identifier.
     """
     if node.step is not None:
         _invalid(detail="bound-axis subscript axis:binding must not have a step")
@@ -628,9 +607,6 @@ def _binary_ast(op: str) -> ast.operator:
 
     Returns:
         Concrete :class:`ast.operator` subclass instance.
-
-    Raises:
-        InvalidExpressionError: If ``op`` is not a supported binary token.
     """
     if op == "+":
         return ast.Add()
@@ -655,9 +631,6 @@ def _compare_ast(op: str) -> ast.cmpop:
 
     Returns:
         Concrete :class:`ast.cmpop` subclass instance.
-
-    Raises:
-        InvalidExpressionError: If ``op`` is not a supported comparison.
     """
     if op == "==":
         return ast.Eq()

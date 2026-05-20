@@ -457,6 +457,9 @@ def _apply_template_substitutions(
         all other matches are rendered into the templated scalar name
         produced by :func:`_render_template_name`. Matches whose
         placeholders are not all bound by ``assignment`` are left intact.
+
+        Returns:
+            Replacement text, or the original match if not applicable.
         """
         inner_base = match.group(1)
         inner = match.group(2)
