@@ -9,18 +9,22 @@ All public entry points remain in ``_normalize.py``.
 from __future__ import annotations
 
 import contextlib
-import re
 import sys
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    import re
     from collections.abc import Iterable, Mapping, Sequence
 
 from op_system._axes import _normalize_bracket_key
 from op_system._errors import InvalidRhsSpecError
 from op_system._ir import Expr, free_symbols, parse_expr_to_ir, unparse_ir
-from op_system._ir_templates import _detect_alias_cycle, expand_inline_templates, inline_aliases
+from op_system._ir_templates import (
+    _detect_alias_cycle,
+    expand_inline_templates,
+    inline_aliases,
+)
 from op_system._templates import (
     _INLINE_TEMPLATE_RE,
     PinnedToken,
@@ -29,7 +33,6 @@ from op_system._templates import (
     expand_selector,
     parse_selector,
 )
-
 
 # ---------------------------------------------------------------------------
 # StateTemplate dataclass

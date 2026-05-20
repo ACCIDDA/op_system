@@ -32,7 +32,7 @@ from itertools import product
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Mapping, Sequence
+    from collections.abc import Iterable, Mapping
 
 from op_system._axes import _normalize_axes, _normalize_bracket_key
 from op_system._errors import InvalidRhsSpecError, UnsupportedFeatureError
@@ -60,8 +60,8 @@ from op_system._normalize_chains import (
 )
 from op_system._normalize_initial_state import _maybe_attach_initial_state
 from op_system._normalize_ir import (
-    StateTemplate,
     _SHAPED_PARAM_BUILTIN_NAMES,
+    StateTemplate,
     _build_alias_templates,
     _build_aliases_ir_from_raw,
     _build_equations_ir,
@@ -83,7 +83,6 @@ from op_system._normalize_kernels import (
     _normalize_state_axes,
 )
 from op_system._templates import (
-    PinnedToken,
     WildcardToken,
     _apply_template_substitutions,
     _extract_placeholders_from_expr,

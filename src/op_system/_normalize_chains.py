@@ -19,11 +19,9 @@ from op_system._helpers import _ensure_mapping, _get_required_str
 from op_system._templates import (
     PinnedToken,
     _sanitize_fragment,
-    build_axis_lookup,
     expand_apply_to,
     parse_selector,
 )
-
 
 # ---------------------------------------------------------------------------
 # Chain normalization helpers

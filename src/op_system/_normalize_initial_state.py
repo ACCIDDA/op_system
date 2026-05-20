@@ -15,7 +15,6 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
 
 from op_system._errors import InvalidRhsSpecError
-from op_system._helpers import _ensure_mapping
 from op_system._templates import (
     _apply_template_substitutions,
     build_axis_lookup,

@@ -18,11 +18,8 @@ from op_system._axes import _compute_axis_deltas
 from op_system._errors import InvalidRhsSpecError
 from op_system._helpers import _ensure_mapping, _get_required_str
 from op_system._templates import (
-    PinnedToken,
-    WildcardToken,
     build_axis_lookup,
     expand_apply_to,
-    parse_selector,
 )
 
 # ---------------------------------------------------------------------------
