@@ -56,7 +56,11 @@ _NUMERIC_DTYPE_KINDS = frozenset({"b", "i", "u", "f", "c"})
 
 
 class _Indexable(Protocol):
-    def __getitem__(self, idx: int | slice) -> object: ...
+    """Minimal indexable protocol used to type-check state-vector access."""
+
+    def __getitem__(self, idx: int | slice) -> object:
+        """Return the element at ``idx``."""
+        ...
 
 
 def _namespace_of(y: object) -> Any:  # noqa: ANN401
@@ -240,6 +244,7 @@ class CompiledRhs:
         params_dict = dict(params)
 
         def rhs(t: object, y: object) -> Float64Array:
+            """Two-argument RHS with parameters bound by the enclosing call."""
             return self.eval_fn(t, y, **params_dict)
 
         return rhs
@@ -365,6 +370,18 @@ def _parse_expr(expr: str) -> ast.Expression:
 
 
 def _validate_call(func: ast.AST, *, expr: str) -> None:
+    """Validate that an AST call target is on the safe-eval allowlist.
+
+    Permits attribute calls under whitelisted roots (currently ``np.``) and
+    bare names that match registered helper functions.
+
+    Args:
+        func: ``func`` slot of an ``ast.Call`` node.
+        expr: Original expression string, used in diagnostics.
+
+    Raises:
+        InvalidExpressionError: If the call shape or target is not allowed.
+    """
     if isinstance(func, ast.Attribute):
         if not isinstance(func.value, ast.Name):
             _raise_invalid_expression(detail=f"invalid call root in {expr!r}")
@@ -631,6 +648,12 @@ def _make_eval_fn(
     )
 
     def eval_fn(t: object, y: object, **params: object) -> Float64Array:
+        """Namespace-polymorphic compiled RHS body.
+
+        Infers the array namespace from ``y`` at call time, builds the
+        evaluation environment from state, parameters and aliases, and
+        returns the equation outputs stacked in ``y``'s namespace.
+        """
         xp = _namespace_of(y)
         _check_numeric_dtype(xp, getattr(y, "dtype", None))
         y_arr = _validate_state_vector(y, n_state=n_state)
@@ -642,12 +665,14 @@ def _make_eval_fn(
         env.update(params)
 
         def _sum_state() -> object:
+            """Return the sum of all state variables (``sum_state()`` helper)."""
             values = [v for k, v in env.items() if k in name_to_idx]
             if not values:
                 return xp.asarray(0.0)
             return xp.sum(xp.stack(values))
 
         def _sum_prefix(prefix: object) -> object:
+            """Return the sum of state variables whose names start with ``prefix``."""
             pfx = str(prefix)
             values = [
                 v for k, v in env.items() if k.startswith(pfx) and k in name_to_idx
@@ -782,6 +807,7 @@ def _wrap_eval_fn_for_time_varying(
     )
 
     def wrapped(t: object, y: object, **params: object) -> Float64Array:
+        """Interpolate each time-varying parameter at ``t`` then dispatch."""
         xp = _namespace_of(y)
         for name, axis_pos in plan:
             if name not in params:

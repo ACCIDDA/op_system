@@ -90,6 +90,14 @@ _CMPOP: dict[str, type[ast.cmpop]] = {
 
 
 def _name(ident: str) -> ast.Name:
+    """Build an ``ast.Name`` load node for ``ident``.
+
+    Args:
+        ident: Identifier text.
+
+    Returns:
+        ``ast.Name`` node with ``ctx=Load()``.
+    """
     return ast.Name(id=ident, ctx=ast.Load())
 
 
@@ -214,6 +222,15 @@ def lower_subscript_to_buffer(  # noqa: C901
 
 
 def _transpose(node: ast.expr, perm: tuple[int, ...]) -> ast.expr:
+    """Wrap ``node`` in a ``np.transpose(node, perm)`` call AST.
+
+    Args:
+        node: AST expression that evaluates to an array.
+        perm: Permutation tuple to pass as the second argument.
+
+    Returns:
+        ``ast.Call`` node representing ``np.transpose(node, perm)``.
+    """
     return ast.Call(
         func=ast.Attribute(value=_name("np"), attr="transpose", ctx=ast.Load()),
         args=[
@@ -1062,7 +1079,35 @@ def _lower_apply(  # noqa: PLR0913
     shaped_param_axes: Mapping[str, tuple[str, ...]] | None = None,
     axis_alias: Mapping[str, str] | None = None,
 ) -> ast.expr:
+    """Lower an :class:`Apply` IR node to its NumPy-AST equivalent.
+
+    Recursive worker for :func:`lower_to_vector_ast`. Handles unary,
+    binary, comparison, ternary and helper-call shapes by delegating to
+    :func:`lower_to_vector_ast` for each child.
+
+    The keyword arguments mirror :func:`lower_to_vector_ast` exactly; see
+    that function for full descriptions.
+
+    Args:
+        expr: Apply node to lower.
+        target_axes: Cell-layout axis order the result must broadcast in.
+        buffer_axes: Map from state-template name to its declared axes.
+        axis_names: Set of registered axis identifiers.
+        reducible_axes: Set of axis names that ``sum``/``integrate``
+            helpers may reduce over.
+        axis_weights: Per-axis trapezoidal-rule weights for ``integrate``.
+        axis_coords: Per-axis coord lists used by filter helpers.
+        axis_types: Per-axis type tags (``"categorical"``, ``"ordinal"``,
+            ``"continuous"``).
+        shaped_param_axes: Map from shaped-param name to its declared axes.
+        axis_alias: Optional alias from synthetic to real axis labels.
+
+    Returns:
+        Lowered AST expression.
+    """
+
     def lower(child: Expr) -> ast.expr:
+        """Lower a child node with the same surrounding configuration."""
         return lower_to_vector_ast(
             child,
             target_axes=target_axes,

@@ -25,6 +25,12 @@ class ExpressionString:
     names: frozenset[str] = field(init=False)
 
     def __post_init__(self) -> None:
+        """Parse ``source`` once and freeze the cached AST plus name set.
+
+        Raises:
+            InvalidExpressionError: If ``source`` is not a syntactically
+                valid Python expression.
+        """
         try:
             parsed = ast.parse(self.source, mode="eval")
         except SyntaxError as exc:

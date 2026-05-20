@@ -34,18 +34,26 @@ class Array(Protocol):
     """
 
     @property
-    def shape(self) -> tuple[int, ...]: ...
+    def shape(self) -> tuple[int, ...]:
+        """Return the array shape as a tuple of ``int``."""
+        ...
 
     @property
-    def dtype(self) -> object: ...
+    def dtype(self) -> object:
+        """Return the array dtype object (namespace-specific)."""
+        ...
 
     def __array_namespace__(  # noqa: PLW3201
         self,
         *,
         api_version: Any = None,  # noqa: ANN401
-    ) -> object: ...
+    ) -> object:
+        """Return the Array-API namespace that owns this array."""
+        ...
 
-    def item(self) -> Any: ...  # noqa: ANN401
+    def item(self) -> Any:  # noqa: ANN401
+        """Return the underlying scalar value (for 0-d arrays)."""
+        ...
 
 
 __all__ = ["Array"]

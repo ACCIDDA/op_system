@@ -91,6 +91,25 @@ def _expand_subscript(
     shaped_params: Mapping[str, tuple[str, ...]],
     axis_lookup: Mapping[str, Sequence[str]] | None,
 ) -> Expr:
+    """Expand one :class:`Subscript` against ``assignment``.
+
+    Shaped-parameter subscripts (those whose base name is in
+    ``shaped_params``) are rewritten to integer-coord :class:`AxisIndex`
+    entries; non-shaped subscripts collapse to a templated scalar
+    :class:`Sym` whose name is rendered from the base and assignment.
+
+    Args:
+        sub: Subscript node to expand.
+        assignment: Map from axis placeholder name to concrete coord.
+        shaped_params: Shaped-parameter axis registry.
+        axis_lookup: Map from axis name to ordered coord list, required to
+            resolve shaped indices.
+
+    Returns:
+        Either an updated :class:`Subscript` (shaped path), a scalar
+        :class:`Sym` (template path), or ``sub`` if expansion is not
+        applicable (e.g. literal-coord indices).
+    """
     axes = _expandable_axes(sub.indices)
     if axes is None or not axes:
         return sub
@@ -205,6 +224,17 @@ def _collect_subscript_axes(
     shaped: Mapping[str, tuple[str, ...]],
     out: dict[str, None],
 ) -> None:
+    """Record bare-axis names from one :class:`Subscript` into ``out``.
+
+    Skips shaped-parameter subscripts (their indices resolve to fixed
+    integer positions) and literal-coord indices.
+
+    Args:
+        sub: Subscript node to inspect.
+        shaped: Shaped-parameter registry.
+        out: Insertion-ordered set (modeled as ``dict[str, None]``);
+            updated in place.
+    """
     if sub.name in shaped:
         return
     for idx in sub.indices:
@@ -220,6 +250,17 @@ def _walk_for_axes(
     shaped: Mapping[str, tuple[str, ...]],
     seen: dict[str, None],
 ) -> None:
+    """Walk ``node`` and accumulate free axis names into ``seen``.
+
+    :class:`Reduce` bindings shadow outer names: any axis name bound by a
+    nested :class:`Reduce` is removed from ``seen`` after walking the
+    body, so the result reflects the *free* axes only.
+
+    Args:
+        node: IR expression to walk.
+        shaped: Shaped-parameter registry.
+        seen: Insertion-ordered set; updated in place.
+    """
     if isinstance(node, (Literal, Sym)):
         return
     if isinstance(node, Subscript):
@@ -323,6 +364,7 @@ def _detect_alias_cycle(aliases: Mapping[str, Expr]) -> list[str] | None:
     stack: list[str] = []
 
     def visit(node: str) -> list[str] | None:
+        """DFS visitor; returns the cycle path if a back edge is found."""
         color[node] = _CYCLE_GREY
         stack.append(node)
         for nxt in graph[node]:

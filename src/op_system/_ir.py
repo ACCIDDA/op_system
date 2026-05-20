@@ -139,16 +139,48 @@ _BINARY_OPS: frozenset[str] = frozenset({
 
 
 def _invalid(*, detail: str) -> NoReturn:
+    """Raise :class:`InvalidExpressionError` with ``detail``.
+
+    Args:
+        detail: Human-readable detail describing the violation.
+
+    Raises:
+        InvalidExpressionError: Always.
+    """
     raise InvalidExpressionError(detail=detail)
 
 
 def _kwarg_name(arg: Expr) -> str:
+    """Return the string key carried by a ``kwarg`` marker's first arg.
+
+    Args:
+        arg: First argument of an ``Apply(op="kwarg", ...)`` node.
+
+    Returns:
+        The string key.
+
+    Raises:
+        InvalidExpressionError: If ``arg`` is not a string :class:`Literal`.
+    """
     if isinstance(arg, Literal) and isinstance(arg.value, str):
         return arg.value
     _invalid(detail="kwarg marker must use a string key")
 
 
 def _kwarg_value_as_binding(value: Expr, *, key: str) -> str:
+    """Render an ``apply_along`` kwarg value as an axis-binding identifier.
+
+    Args:
+        value: IR value attached to the kwarg.
+        key: Kwarg key (used only for error reporting).
+
+    Returns:
+        Bare identifier or stringified literal.
+
+    Raises:
+        InvalidExpressionError: If ``value`` is neither :class:`Sym` nor
+            :class:`Literal`.
+    """
     if isinstance(value, Sym):
         return value.name
     if isinstance(value, Literal):
@@ -190,6 +222,22 @@ def _extract_filter_from_value(value: Expr) -> tuple[str, tuple[str, ...]] | Non
 
 
 def _lower_single_helper(node: Apply) -> Expr:  # noqa: C901, PLR0912
+    """Lower one helper :class:`Apply` node into a structured :class:`Reduce`.
+
+    Helper ops in :data:`_HELPER_REDUCE_OPS` (``sum``, ``integrate``,
+    ``apply_along``) carry positional bodies and ``kwarg`` markers. This
+    routine partitions the args, parses ``axis=binding`` and ``axis=var in
+    [...]`` filter forms, and returns a :class:`Reduce` node with
+    ``bindings``, ``filters`` and optional ``kernel`` populated.
+
+    Non-helper :class:`Apply` nodes are returned unchanged.
+
+    Args:
+        node: An :class:`Apply` node to lower.
+
+    Returns:
+        Lowered :class:`Reduce` node, or ``node`` if it is not a helper call.
+    """
     if node.op not in _HELPER_REDUCE_OPS:
         return node
 
@@ -252,6 +300,14 @@ def _lower_single_helper(node: Apply) -> Expr:  # noqa: C901, PLR0912
 
 
 def _validate_reduce(reduce_node: Reduce) -> None:
+    """Validate the structural invariants of a :class:`Reduce` node.
+
+    Args:
+        reduce_node: The candidate node to validate.
+
+    Raises:
+        InvalidExpressionError: If ``reduce_node`` has no axis bindings.
+    """
     if not reduce_node.bindings:
         _invalid(detail=(f"{reduce_node.kind} requires at least one axis=var binding"))
 
@@ -283,6 +339,18 @@ def lower_helper_calls(expr: Expr) -> Expr:
 
 
 def _call_name(func: ast.AST) -> str:
+    """Render a Python AST call target as a dotted name.
+
+    Args:
+        func: ``func`` slot of an :class:`ast.Call` node.
+
+    Returns:
+        Dotted identifier (e.g. ``"np.sum"`` or ``"sum"``).
+
+    Raises:
+        InvalidExpressionError: If the call target is not a bare ``Name``
+            or a chain of ``Attribute`` over a ``Name``.
+    """
     if isinstance(func, ast.Name):
         return func.id
     if isinstance(func, ast.Attribute):
@@ -298,6 +366,20 @@ def _call_name(func: ast.AST) -> str:
 
 
 def _axis_index_from_expr(node: ast.expr) -> AxisIndex:
+    """Build an :class:`AxisIndex` from a non-slice subscript element AST.
+
+    Bare names map to ``AxisIndex(axis=name)``; constants map to a
+    coord-only ``AxisIndex(axis="", coord=str(value))``.
+
+    Args:
+        node: Subscript element AST node.
+
+    Returns:
+        Parsed :class:`AxisIndex`.
+
+    Raises:
+        InvalidExpressionError: If the node shape is not supported.
+    """
     if isinstance(node, ast.Name):
         return AxisIndex(axis=node.id)
     if isinstance(node, ast.Constant) and isinstance(
@@ -308,6 +390,18 @@ def _axis_index_from_expr(node: ast.expr) -> AxisIndex:
 
 
 def _bound_axis_index_from_slice(node: ast.Slice) -> AxisIndex:
+    """Build an :class:`AxisIndex` from a ``axis:binding`` slice node.
+
+    Args:
+        node: ``ast.Slice`` of the form ``axis:binding``.
+
+    Returns:
+        :class:`AxisIndex` carrying both ``axis`` and ``coord``.
+
+    Raises:
+        InvalidExpressionError: If the slice has a step or a side that is
+            missing or not a bare identifier.
+    """
     if node.step is not None:
         _invalid(detail="bound-axis subscript axis:binding must not have a step")
     if node.lower is None or node.upper is None:
@@ -318,12 +412,30 @@ def _bound_axis_index_from_slice(node: ast.Slice) -> AxisIndex:
 
 
 def _parse_subscript_index_element(node: ast.expr) -> AxisIndex:
+    """Parse a single subscript element (slice or expression) to :class:`AxisIndex`.
+
+    Args:
+        node: Subscript element AST node.
+
+    Returns:
+        Parsed :class:`AxisIndex`.
+    """
     if isinstance(node, ast.Slice):
         return _bound_axis_index_from_slice(node)
     return _axis_index_from_expr(node)
 
 
 def _parse_subscript_indices(slc: ast.expr) -> tuple[AxisIndex, ...]:
+    """Parse a subscript slot into a tuple of :class:`AxisIndex` entries.
+
+    Handles both single-element (``a[i]``) and tuple (``a[i, j]``) forms.
+
+    Args:
+        slc: ``slice`` slot of an ``ast.Subscript`` node.
+
+    Returns:
+        Tuple of parsed :class:`AxisIndex` entries.
+    """
     if isinstance(slc, ast.Tuple):
         return tuple(_parse_subscript_index_element(elt) for elt in slc.elts)
     return (_parse_subscript_index_element(slc),)
@@ -458,6 +570,14 @@ def parse_expr_to_ir(expr: str, *, lower_helpers: bool = False) -> Expr:
 
 
 def _literal_coord_value(coord: str) -> int | float | str:
+    """Cast a coord token to ``int``/``float`` if numeric, else return the string.
+
+    Args:
+        coord: Coord token (string form).
+
+    Returns:
+        ``int``, ``float`` or ``str`` value depending on parseability.
+    """
     try:
         return int(coord)
     except ValueError:
@@ -468,12 +588,31 @@ def _literal_coord_value(coord: str) -> int | float | str:
 
 
 def _axis_index_to_ast(idx: AxisIndex) -> ast.expr:
+    """Render an :class:`AxisIndex` to a Python AST expression node.
+
+    Coord-bearing indices become typed ``ast.Constant`` nodes; bare-axis
+    indices become ``ast.Name`` nodes.
+
+    Args:
+        idx: Index to render.
+
+    Returns:
+        AST expression node.
+    """
     if idx.coord is not None:
         return ast.Constant(value=_literal_coord_value(idx.coord))
     return ast.Name(id=idx.axis, ctx=ast.Load())
 
 
 def _call_func_ast(name: str) -> ast.expr:
+    """Build the ``func`` slot of an ``ast.Call`` from a dotted name string.
+
+    Args:
+        name: Dotted identifier (e.g. ``"np.sum"``).
+
+    Returns:
+        AST expression node suitable for ``ast.Call.func``.
+    """
     parts = name.split(".")
     node: ast.expr = ast.Name(id=parts[0], ctx=ast.Load())
     for part in parts[1:]:
@@ -482,6 +621,17 @@ def _call_func_ast(name: str) -> ast.expr:
 
 
 def _binary_ast(op: str) -> ast.operator:
+    """Translate an IR binary op token to its ``ast.operator`` instance.
+
+    Args:
+        op: IR op string (``"+"``, ``"*"``, ``"pow"``, ...).
+
+    Returns:
+        Concrete :class:`ast.operator` subclass instance.
+
+    Raises:
+        InvalidExpressionError: If ``op`` is not a supported binary token.
+    """
     if op == "+":
         return ast.Add()
     if op == "-":
@@ -498,6 +648,17 @@ def _binary_ast(op: str) -> ast.operator:
 
 
 def _compare_ast(op: str) -> ast.cmpop:
+    """Translate an IR comparison op token to its ``ast.cmpop`` instance.
+
+    Args:
+        op: Comparison op string (``"=="``, ``"<"``, ...).
+
+    Returns:
+        Concrete :class:`ast.cmpop` subclass instance.
+
+    Raises:
+        InvalidExpressionError: If ``op`` is not a supported comparison.
+    """
     if op == "==":
         return ast.Eq()
     if op == "!=":
@@ -625,6 +786,15 @@ def _render_coord(coord: object) -> str:  # noqa: PLR0911
 
 
 def _unparse_axis_index(idx: AxisIndex) -> str:
+    """Render an :class:`AxisIndex` back to its source-string form.
+
+    Args:
+        idx: Index to render.
+
+    Returns:
+        ``"axis:coord"``, ``"coord"`` or ``"axis"`` depending on which
+        fields are populated.
+    """
     if idx.coord is not None:
         rendered = _render_coord(idx.coord)
         if idx.axis and idx.axis != idx.coord:
@@ -634,6 +804,16 @@ def _unparse_axis_index(idx: AxisIndex) -> str:
 
 
 def _unparse_call_args(args: tuple[Expr, ...]) -> str:
+    """Render the arg list of an :class:`Apply` (call) back to source form.
+
+    Handles ``kwarg`` marker nodes by emitting ``key=value`` syntax.
+
+    Args:
+        args: Apply argument tuple.
+
+    Returns:
+        Comma-separated argument source string.
+    """
     parts: list[str] = []
     for arg in args:
         if isinstance(arg, Apply) and arg.op == "kwarg":
@@ -691,6 +871,14 @@ _LEFT_ASSOC_NEEDS_RIGHT_PARENS: frozenset[str] = frozenset({"-", "/", "%"})
 
 
 def _expr_precedence(expr: Expr) -> int:
+    """Return the unparser precedence level for ``expr``.
+
+    Args:
+        expr: IR expression.
+
+    Returns:
+        Integer precedence used by the unparser to decide on parentheses.
+    """
     if isinstance(expr, Apply):
         if expr.op in {"neg", "pos"}:
             return _PREC_UNARY
@@ -705,6 +893,15 @@ def _expr_precedence(expr: Expr) -> int:
 
 
 def _wrap(text: str, *, need: bool) -> str:
+    """Optionally parenthesize ``text``.
+
+    Args:
+        text: Already-rendered source string.
+        need: Whether parentheses are required.
+
+    Returns:
+        Either ``"(text)"`` or ``text``.
+    """
     return f"({text})" if need else text
 
 
@@ -716,6 +913,18 @@ def _unparse_binary(
     parent_prec: int,
     is_right: bool,
 ) -> str:
+    """Render a binary-op :class:`Apply` to source, folding multi-arg chains.
+
+    Args:
+        expr: Apply node carrying two-or-more operands.
+        op: Operator token to render between operands.
+        prec: Precedence level of ``op``.
+        parent_prec: Precedence level of the enclosing context.
+        is_right: Whether this expression is the right operand of its parent.
+
+    Returns:
+        Source string for the binary expression, parenthesized if needed.
+    """
     sep = f" {op} "
     # Fold args left-associatively so multi-arg flatten still renders correctly.
     args = expr.args
@@ -736,6 +945,16 @@ def _unparse_ir(  # noqa: C901, PLR0911
     parent_prec: int,
     is_right: bool,
 ) -> str:
+    """Recursive worker for :func:`unparse_ir`.
+
+    Args:
+        expr: IR expression to render.
+        parent_prec: Precedence level of the enclosing context.
+        is_right: Whether ``expr`` sits on the right of its parent operator.
+
+    Returns:
+        Source string equivalent to ``expr``.
+    """
     if isinstance(expr, Literal):
         return repr(expr.value)
 
@@ -998,6 +1217,18 @@ def substitute(
 
 
 def _map_children(expr: Expr, fn: Callable[[Expr], Expr]) -> Expr:
+    """Apply ``fn`` to each immediate child and return a rebuilt node.
+
+    Returns the original ``expr`` if no child changed (preserving identity
+    so callers can use ``is`` checks for short-circuiting).
+
+    Args:
+        expr: IR expression.
+        fn: Per-child rewrite function.
+
+    Returns:
+        Possibly-rewritten IR expression.
+    """
     if isinstance(expr, Apply):
         new_args = tuple(fn(arg) for arg in expr.args)
         if new_args == expr.args:
@@ -1018,10 +1249,29 @@ def _map_children(expr: Expr, fn: Callable[[Expr], Expr]) -> Expr:
 
 
 def _is_cse_candidate(expr: Expr) -> bool:
+    """Return ``True`` when ``expr`` is eligible for CSE extraction.
+
+    Args:
+        expr: IR expression.
+
+    Returns:
+        ``True`` for :class:`Apply` and :class:`Reduce` nodes.
+    """
     return isinstance(expr, (Apply, Reduce))
 
 
 def _expr_cost(expr: Expr) -> int:
+    """Return a structural cost estimate for ``expr``.
+
+    The cost is simply ``1`` per node so that subtrees can be ranked by
+    size when deciding which repeated subtrees are worth extracting.
+
+    Args:
+        expr: IR expression.
+
+    Returns:
+        Integer node count.
+    """
     if isinstance(expr, Apply):
         return 1 + sum(_expr_cost(arg) for arg in expr.args)
     if isinstance(expr, Reduce):
@@ -1030,6 +1280,12 @@ def _expr_cost(expr: Expr) -> int:
 
 
 def _postorder(expr: Expr, out: dict[Expr, int]) -> None:
+    """Post-order walk that tallies subtree occurrences into ``out``.
+
+    Args:
+        expr: IR expression to walk.
+        out: Mutable counter mapping; incremented in-place per node.
+    """
     if isinstance(expr, Apply):
         for arg in expr.args:
             _postorder(arg, out)
@@ -1115,6 +1371,18 @@ def axis_kinds(expr: Expr, *, axis_names: frozenset[str]) -> tuple[AxisKind, ...
 
 
 def _resolve_index(idx: AxisIndex, *, axis_names: frozenset[str]) -> AxisIndex:
+    """Return ``idx`` with its ``kind`` field populated.
+
+    Reuses ``idx`` when its ``kind`` already matches the classification
+    against ``axis_names``, so resolved trees are idempotent.
+
+    Args:
+        idx: Subscript index.
+        axis_names: Set of registered axis identifier strings.
+
+    Returns:
+        :class:`AxisIndex` with ``kind`` populated.
+    """
     kind = classify_axis_index(idx, axis_names=axis_names)
     if idx.kind is kind:
         return idx

@@ -624,6 +624,12 @@ def _build_transition_equations_ir(  # noqa: C901, PLR0912, PLR0913, PLR0914, PL
             sys.setrecursionlimit(old_limit)
 
     def _sum_terms(terms: list[Expr]) -> Expr:
+        """Combine ``terms`` into a single :class:`Apply` (or a literal 0).
+
+        Returns ``Literal(0.0)`` for an empty list, the lone term unchanged
+        for a single-element list, and a flat ``Apply('+', ...)`` for two
+        or more terms.
+        """
         if not terms:
             return Literal(value=0.0)
         if len(terms) == 1:

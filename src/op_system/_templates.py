@@ -451,6 +451,13 @@ def _apply_template_substitutions(
 
     # Inline placeholder syntax without an explicit template map entry.
     def _inline_replacer(match: re.Match[str]) -> str:
+        """Rewrite one ``base[axis, ...]`` occurrence using ``assignment``.
+
+        Shaped-parameter subscripts get integer-coord indices substituted;
+        all other matches are rendered into the templated scalar name
+        produced by :func:`_render_template_name`. Matches whose
+        placeholders are not all bound by ``assignment`` are left intact.
+        """
         inner_base = match.group(1)
         inner = match.group(2)
         phs = [p.strip() for p in inner.split(",") if p.strip() and "=" not in p]
