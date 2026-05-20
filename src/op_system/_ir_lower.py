@@ -106,7 +106,71 @@ def _name(ident: str) -> ast.Name:
 # ---------------------------------------------------------------------------
 
 
-def lower_subscript_to_buffer(  # noqa: C901
+def _validate_wildcard_subscript_axes(
+    sub: Subscript,
+    *,
+    src_axes: tuple[str, ...],
+    target_axes: tuple[str, ...],
+    axis_names: frozenset[str],
+    axis_alias: Mapping[str, str],
+) -> tuple[list[str], list[str]]:
+    """Validate a wildcard subscript and return its (synthetic, real) axes.
+
+    Args:
+        sub: IR subscript whose indices must all be FREE.
+        src_axes: Declared source-buffer axis order.
+        target_axes: Cell-layout axis order.
+        axis_names: Registered axis identifiers.
+        axis_alias: Mapping from synthetic to real axis labels.
+
+    Returns:
+        Pair ``(sub_axes, real_sub_axes)`` of synthetic and real axis
+        labels in the order they appear in ``sub.indices``.
+
+    Raises:
+        UnsupportedIRLoweringError: If index/axis count mismatch, any
+            index is not FREE, the index axes don't match ``src_axes`` as
+            a set, or ``src_axes`` is not a subset of ``target_axes``.
+    """
+    if len(sub.indices) != len(src_axes):
+        msg = (
+            f"subscript {sub.name!r} has {len(sub.indices)} indices but "
+            f"buffer has {len(src_axes)} axes"
+        )
+        raise UnsupportedIRLoweringError(msg)
+
+    sub_axes: list[str] = []
+    real_sub_axes: list[str] = []
+    for idx in sub.indices:
+        kind = idx.kind or classify_axis_index(idx, axis_names=axis_names)
+        if kind is not AxisKind.FREE:
+            msg = (
+                f"subscript {sub.name!r} has non-FREE index "
+                f"({kind.value}) — v1 lowering supports only wildcard "
+                "axis references"
+            )
+            raise UnsupportedIRLoweringError(msg)
+        sub_axes.append(idx.axis)
+        real_sub_axes.append(axis_alias.get(idx.axis, idx.axis))
+
+    if set(real_sub_axes) != set(src_axes):
+        msg = (
+            f"subscript {sub.name!r} axes {tuple(sub_axes)} do not match "
+            f"buffer axes {tuple(src_axes)} as a set"
+        )
+        raise UnsupportedIRLoweringError(msg)
+
+    if not set(sub_axes).issubset(target_axes):
+        msg = (
+            f"buffer axes {tuple(src_axes)} (labels {tuple(sub_axes)}) not "
+            f"a subset of target axes {tuple(target_axes)}"
+        )
+        raise UnsupportedIRLoweringError(msg)
+
+    return sub_axes, real_sub_axes
+
+
+def lower_subscript_to_buffer(
     sub: Subscript,
     *,
     src_axes: tuple[str, ...],
@@ -140,47 +204,15 @@ def lower_subscript_to_buffer(  # noqa: C901
     Returns:
         An ``ast.expr`` accessing ``<sub.name>_buf`` with the necessary
         transpose / size-1 insertions to align with ``target_axes``.
-
-    Raises:
-        UnsupportedIRLoweringError: If any index is non-FREE, the index axis
-            set doesn't match ``src_axes``, or ``src_axes`` is not a
-            subset of ``target_axes``.
     """
     alias = axis_alias or {}
-    if len(sub.indices) != len(src_axes):
-        msg = (
-            f"subscript {sub.name!r} has {len(sub.indices)} indices but "
-            f"buffer has {len(src_axes)} axes"
-        )
-        raise UnsupportedIRLoweringError(msg)
-
-    sub_axes: list[str] = []
-    real_sub_axes: list[str] = []
-    for idx in sub.indices:
-        kind = idx.kind or classify_axis_index(idx, axis_names=axis_names)
-        if kind is not AxisKind.FREE:
-            msg = (
-                f"subscript {sub.name!r} has non-FREE index "
-                f"({kind.value}) — v1 lowering supports only wildcard "
-                "axis references"
-            )
-            raise UnsupportedIRLoweringError(msg)
-        sub_axes.append(idx.axis)
-        real_sub_axes.append(alias.get(idx.axis, idx.axis))
-
-    if set(real_sub_axes) != set(src_axes):
-        msg = (
-            f"subscript {sub.name!r} axes {tuple(sub_axes)} do not match "
-            f"buffer axes {tuple(src_axes)} as a set"
-        )
-        raise UnsupportedIRLoweringError(msg)
-
-    if not set(sub_axes).issubset(target_axes):
-        msg = (
-            f"buffer axes {tuple(src_axes)} (labels {tuple(sub_axes)}) not "
-            f"a subset of target axes {tuple(target_axes)}"
-        )
-        raise UnsupportedIRLoweringError(msg)
+    sub_axes, real_sub_axes = _validate_wildcard_subscript_axes(
+        sub,
+        src_axes=src_axes,
+        target_axes=target_axes,
+        axis_names=axis_names,
+        axis_alias=alias,
+    )
 
     buf: ast.expr = _name(f"{sub.name}_buf")
 
@@ -596,7 +628,49 @@ def _resolve_ordinal_range_filter(
     return tuple(range(lo_idx, hi_idx + 1))
 
 
-def _resolve_continuous_range_filter(  # noqa: C901
+def _trapezoidal_weights_or_raise(
+    sub_floats: list[float], *, axis: str
+) -> tuple[float, ...]:
+    """Compute trapezoidal weights for a strictly increasing coord list.
+
+    Args:
+        sub_floats: Numeric coords selected by a continuous-axis filter,
+            in declared order.
+        axis: Axis name, used in diagnostics.
+
+    Returns:
+        Per-coord trapezoidal weights as a tuple.
+
+    Raises:
+        UnsupportedIRLoweringError: If fewer than two coords are provided
+            or the coords are not strictly increasing.
+    """
+    if len(sub_floats) < 2:
+        msg = (
+            f"Reduce filter for continuous axis {axis!r} sub-interval needs "
+            "at least 2 coords for trapezoidal integration"
+        )
+        raise UnsupportedIRLoweringError(msg)
+    sub_weights: list[float] = []
+    for i in range(len(sub_floats)):
+        if i == 0:
+            width = (sub_floats[1] - sub_floats[0]) / 2.0
+        elif i == len(sub_floats) - 1:
+            width = (sub_floats[-1] - sub_floats[-2]) / 2.0
+        else:
+            width = (sub_floats[i + 1] - sub_floats[i - 1]) / 2.0
+        if width <= 0.0:
+            msg = (
+                f"Reduce filter for continuous axis {axis!r} sub-interval "
+                "coords must be strictly increasing for trapezoidal "
+                "integration"
+            )
+            raise UnsupportedIRLoweringError(msg)
+        sub_weights.append(width)
+    return tuple(sub_weights)
+
+
+def _resolve_continuous_range_filter(
     axis: str,
     declared: tuple[str, ...],
     filt: tuple[str, ...],
@@ -660,29 +734,7 @@ def _resolve_continuous_range_filter(  # noqa: C901
     if not recompute_trapezoidal:
         return indices, None
     sub_floats = [coord_floats[i] for i in indices]
-    if len(sub_floats) < 2:
-        msg = (
-            f"Reduce filter for continuous axis {axis!r} sub-interval needs "
-            "at least 2 coords for trapezoidal integration"
-        )
-        raise UnsupportedIRLoweringError(msg)
-    sub_weights: list[float] = []
-    for i in range(len(sub_floats)):
-        if i == 0:
-            width = (sub_floats[1] - sub_floats[0]) / 2.0
-        elif i == len(sub_floats) - 1:
-            width = (sub_floats[-1] - sub_floats[-2]) / 2.0
-        else:
-            width = (sub_floats[i + 1] - sub_floats[i - 1]) / 2.0
-        if width <= 0.0:
-            msg = (
-                f"Reduce filter for continuous axis {axis!r} sub-interval "
-                "coords must be strictly increasing for trapezoidal "
-                "integration"
-            )
-            raise UnsupportedIRLoweringError(msg)
-        sub_weights.append(width)
-    return indices, tuple(sub_weights)
+    return indices, _trapezoidal_weights_or_raise(sub_floats, axis=axis)
 
 
 def _lower_reduce(  # noqa: C901, PLR0912, PLR0913, PLR0914, PLR0915
