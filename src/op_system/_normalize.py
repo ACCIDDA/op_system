@@ -263,6 +263,18 @@ def normalize_rhs(spec: Mapping[str, Any] | None) -> NormalizedRhs:
     Raises:
         InvalidRhsSpecError: If validation fails.
         UnsupportedFeatureError: If validation fails.
+
+    Examples:
+        >>> spec = {
+        ...     "kind": "expr",
+        ...     "state": ["x"],
+        ...     "equations": {"x": "2.0 * x"},
+        ... }
+        >>> rhs = normalize_rhs(spec)
+        >>> isinstance(rhs, ExprRhs)
+        True
+        >>> rhs.state_names
+        ('x',)
     """
     if spec is None:
         raise InvalidRhsSpecError(detail="rhs specification is required")
@@ -292,6 +304,17 @@ def normalize_expr_rhs(spec: Mapping[str, Any]) -> ExprRhs:  # noqa: C901, PLR09
 
     Raises:
         InvalidRhsSpecError: If validation fails.
+
+    Examples:
+        >>> rhs = normalize_expr_rhs({
+        ...     "kind": "expr",
+        ...     "state": ["x", "y"],
+        ...     "equations": {"x": "-y", "y": "x"},
+        ... })
+        >>> rhs.state_names
+        ('x', 'y')
+        >>> len(rhs.equations)
+        2
     """
     state_raw = _ensure_str_list(spec.get("state"), name="state")
     if len(state_raw) != len(set(state_raw)):

@@ -85,6 +85,16 @@ def compile_spec(  # noqa: RUF067
 
     Returns:
         CompiledRhs: Runnable RHS callable container.
+
+    Examples:
+        >>> import numpy as np
+        >>> compiled = compile_spec({
+        ...     "kind": "expr",
+        ...     "state": ["x"],
+        ...     "equations": {"x": "-x"},
+        ... })
+        >>> compiled.eval_fn(0.0, np.array([1.0]))
+        array([-1.])
     """
     if xp is not None or backend != DEFAULT_ARRAY_BACKEND:
         warnings.warn(

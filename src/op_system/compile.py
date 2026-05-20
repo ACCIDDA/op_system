@@ -846,6 +846,19 @@ def compile_rhs(rhs: NormalizedRhs, *, xp: object | None = None) -> CompiledRhs:
 
     Returns:
         A `CompiledRhs` containing an `eval_fn(t, y, **params) -> dydt`.
+
+    Examples:
+        >>> import numpy as np
+        >>> from op_system.specs import normalize_rhs
+        >>> rhs = normalize_rhs({
+        ...     "kind": "expr",
+        ...     "state": ["x"],
+        ...     "equations": {"x": "2.0 * x"},
+        ... })
+        >>> compiled = compile_rhs(rhs)
+        >>> y = np.array([3.0])
+        >>> compiled.eval_fn(0.0, y)
+        array([6.])
     """
     if xp is not None:
         warnings.warn(
