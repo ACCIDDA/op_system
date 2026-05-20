@@ -39,6 +39,7 @@ from numpy.typing import NDArray
 
 from op_system._errors import InvalidExpressionError
 from op_system._ir import Expr, extract_common_subexpressions, ir_to_ast_expr
+from op_system._normalize import ExprRhs, TransitionsRhs
 from op_system._symbols import parse_expression_string
 
 if TYPE_CHECKING:
@@ -830,10 +831,10 @@ def compile_rhs(rhs: NormalizedRhs, *, xp: object | None = None) -> CompiledRhs:
             DeprecationWarning,
             stacklevel=2,
         )
-    if rhs.kind not in {"expr", "transitions"}:
+    if not isinstance(rhs, (ExprRhs, TransitionsRhs)):
         _raise_unsupported_feature(
-            feature=f"rhs.kind={rhs.kind}",
-            detail="Only 'expr' and 'transitions' are supported in v1.",
+            feature=f"rhs type={type(rhs).__name__}",
+            detail="Only ExprRhs and TransitionsRhs are supported in v1.",
         )
 
     # Lazy load via importlib to avoid a static circular import

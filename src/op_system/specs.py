@@ -17,8 +17,10 @@ See ``op_system._normalize`` for the full implementation.
 from __future__ import annotations
 
 from op_system._normalize import (
+    ExprRhs,
     NormalizedRhs,
     StateTemplate,
+    TransitionsRhs,
     normalize_expr_rhs,
     normalize_rhs,
     normalize_transitions_rhs,
@@ -27,11 +29,13 @@ from op_system._symbols import ExpressionString
 from op_system._templates import PinnedToken, SelectorToken, WildcardToken
 
 __all__ = [
+    "ExprRhs",
     "ExpressionString",
     "NormalizedRhs",
     "PinnedToken",
     "SelectorToken",
     "StateTemplate",
+    "TransitionsRhs",
     "WildcardToken",
     "normalize_expr_rhs",
     "normalize_rhs",

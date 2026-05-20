@@ -28,8 +28,10 @@ from op_system._ir import (
 )
 from op_system._normalize import _derive_alias_strings, _derive_equation_strings
 from op_system.specs import (
+    ExprRhs,
     NormalizedRhs,
     StateTemplate,
+    TransitionsRhs,
     normalize_expr_rhs,
     normalize_rhs,
     normalize_transitions_rhs,
@@ -50,8 +52,8 @@ def test_normalize_expr_rhs_happy_path() -> None:
     }
 
     out = normalize_expr_rhs(spec)
+    assert isinstance(out, ExprRhs)
     assert isinstance(out, NormalizedRhs)
-    assert out.kind == "expr"
     assert out.state_names == ("S", "I", "R")
     assert out.aliases["N"] == "S + I + R"
     assert out.equations[0].startswith("-(") or "beta" in out.equations[0]
@@ -89,7 +91,7 @@ def test_normalize_transitions_rhs_happy_path() -> None:
     }
 
     out = normalize_transitions_rhs(spec)
-    assert out.kind == "transitions"
+    assert isinstance(out, TransitionsRhs)
     assert out.state_names == ("S", "I", "R")
     assert out.param_names == ("beta", "gamma")
 
@@ -160,7 +162,7 @@ def test_normalize_rhs_preserves_reserved_blocks_in_meta() -> None:
     }
 
     out = normalize_rhs(spec)
-    assert out.kind == "transitions"
+    assert isinstance(out, TransitionsRhs)
     assert out.meta.get("operators") == {"default": {"scheme": "cn"}}
     assert out.meta.get("sources") == {"S": "0.0"}
 
@@ -2133,17 +2135,11 @@ def test_equations_ir_aligned_with_equations_expr_kind() -> None:
     }
     out = normalize_expr_rhs(spec)
     assert len(out.equations_ir) == len(out.equations)
-    assert len(out.equations_ir_raw) == len(out.equations)
     assert all(expr is not None for expr in out.equations_ir)
     # Aliases inlined: ``N`` should not appear in any equation IR.
     for expr in out.equations_ir:
         assert expr is not None
         assert "N" not in free_symbols(expr)
-    # Raw equation IR is available for consumers that still want alias-buffer
-    # references rather than inlined alias bodies.
-    assert any(
-        expr is not None and "N" in free_symbols(expr) for expr in out.equations_ir_raw
-    )
 
 
 def test_equations_ir_present_for_transitions_kind() -> None:
@@ -2159,7 +2155,6 @@ def test_equations_ir_present_for_transitions_kind() -> None:
     }
     out = normalize_transitions_rhs(spec)
     assert len(out.equations_ir) == len(out.equations)
-    assert len(out.equations_ir_raw) == len(out.equations)
     assert all(expr is not None for expr in out.equations_ir)
     for expr in out.equations_ir:
         assert expr is not None
@@ -2253,13 +2248,11 @@ def test_equations_ir_reduce_matches_equations_ir_for_transitions_without_helper
     }
     out = normalize_transitions_rhs(spec)
     assert out.aliases_ir_reduce == out.aliases_ir
-    assert len(out.equations_ir_reduce) == len(out.equations_ir_raw)
-    for ir_reduce, ir_raw in zip(
-        out.equations_ir_reduce,
-        out.equations_ir_raw,
-        strict=True,
-    ):
-        assert ir_reduce == ir_raw
+    assert len(out.equations_ir_reduce) == len(out.equations_ir)
+    # Without apply_along helpers there should be no Reduce nodes.
+    for expr in out.equations_ir_reduce:
+        if expr is not None:
+            assert not any(isinstance(node, Reduce) for node in walk(expr))
 
 
 def test_equations_ir_reduce_contains_reduce_nodes_for_transitions_helpers() -> None:
@@ -2302,10 +2295,10 @@ def test_equations_ir_reduce_matches_equations_ir_when_no_helpers() -> None:
     }
     out = normalize_expr_rhs(spec)
     assert len(out.equations_ir_reduce) == len(out.equations_ir)
-    for ir_reduce, ir_raw in zip(
-        out.equations_ir_reduce, out.equations_ir_raw, strict=True
-    ):
-        assert ir_reduce == ir_raw
+    # Without apply_along helpers there should be no Reduce nodes in either form.
+    for expr in out.equations_ir_reduce:
+        if expr is not None:
+            assert not any(isinstance(node, Reduce) for node in walk(expr))
 
 
 # ---------------------------------------------------------------------------
