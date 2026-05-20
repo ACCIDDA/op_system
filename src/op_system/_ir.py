@@ -47,7 +47,6 @@ class AxisIndex:
 
     axis: str
     coord: str | None = None
-    placeholder: str | None = None
     kind: AxisKind | None = None
 
 
@@ -300,9 +299,6 @@ def _call_name(func: ast.AST) -> str:
 
 def _axis_index_from_expr(node: ast.expr) -> AxisIndex:
     if isinstance(node, ast.Name):
-        if node.id.startswith("$"):
-            ph = node.id[1:]
-            return AxisIndex(axis=ph, placeholder=ph)
         return AxisIndex(axis=node.id)
     if isinstance(node, ast.Constant) and isinstance(
         node.value, (str, int, float, bool)
@@ -474,7 +470,7 @@ def _literal_coord_value(coord: str) -> int | float | str:
 def _axis_index_to_ast(idx: AxisIndex) -> ast.expr:
     if idx.coord is not None:
         return ast.Constant(value=_literal_coord_value(idx.coord))
-    return ast.Name(id=idx.placeholder or idx.axis, ctx=ast.Load())
+    return ast.Name(id=idx.axis, ctx=ast.Load())
 
 
 def _call_func_ast(name: str) -> ast.expr:
@@ -629,8 +625,6 @@ def _render_coord(coord: object) -> str:  # noqa: PLR0911
 
 
 def _unparse_axis_index(idx: AxisIndex) -> str:
-    if idx.placeholder is not None:
-        return f"${idx.placeholder}"
     if idx.coord is not None:
         rendered = _render_coord(idx.coord)
         if idx.axis and idx.axis != idx.coord:
@@ -797,10 +791,9 @@ class AxisKind(StrEnum):
     """Classification of an ``AxisIndex`` after axis resolution.
 
     Categories:
-        FREE: A known axis name with no coord or placeholder
+        FREE: A known axis name with no coord
             (e.g. ``K[age]`` where ``age`` is a registered axis).
         COORD: A literal coord value (e.g. ``K[0]`` or ``K['x']``).
-        PLACEHOLDER: A ``$``-prefixed independent placeholder (#88).
         COORD_SYMBOL: An identifier used in a subscript that is not a known
             axis - treated as a bound coord variable
             (e.g. the ``ap`` in ``K[age, ap]`` when only ``age`` is an axis).
@@ -808,7 +801,6 @@ class AxisKind(StrEnum):
 
     FREE = "free"
     COORD = "coord"
-    PLACEHOLDER = "placeholder"
     COORD_SYMBOL = "coord_symbol"
 
 
@@ -822,8 +814,6 @@ def classify_axis_index(idx: AxisIndex, *, axis_names: frozenset[str]) -> AxisKi
     Returns:
         The :class:`AxisKind` describing this index position.
     """
-    if idx.placeholder is not None:
-        return AxisKind.PLACEHOLDER
     if idx.coord is not None:
         return AxisKind.COORD
     if idx.axis in axis_names:
@@ -1128,9 +1118,7 @@ def _resolve_index(idx: AxisIndex, *, axis_names: frozenset[str]) -> AxisIndex:
     kind = classify_axis_index(idx, axis_names=axis_names)
     if idx.kind is kind:
         return idx
-    return AxisIndex(
-        axis=idx.axis, coord=idx.coord, placeholder=idx.placeholder, kind=kind
-    )
+    return AxisIndex(axis=idx.axis, coord=idx.coord, kind=kind)
 
 
 def resolve_axis_kinds(expr: Expr, *, axis_names: frozenset[str]) -> Expr:  # noqa: PLR0911

@@ -30,12 +30,6 @@ def test_classify_literal_coord() -> None:
     assert classify_axis_index(idx, axis_names=AXES) == AxisKind.COORD
 
 
-def test_classify_placeholder() -> None:
-    """A placeholder classifies as PLACEHOLDER and takes priority over axis."""
-    idx = AxisIndex(axis="age", placeholder="age")
-    assert classify_axis_index(idx, axis_names=AXES) == AxisKind.PLACEHOLDER
-
-
 def test_classify_unknown_symbol_is_coord_symbol() -> None:
     """An unknown identifier used as a subscript classifies as COORD_SYMBOL."""
     idx = AxisIndex(axis="ap")
@@ -66,22 +60,6 @@ def test_axis_kinds_for_parsed_expression() -> None:
         AxisKind.FREE,
         AxisKind.COORD_SYMBOL,
         AxisKind.FREE,
-    )
-
-
-def test_axis_kinds_handles_placeholder_dollar_syntax() -> None:
-    """``$``-prefixed indices are classified as PLACEHOLDER."""
-    expr = Subscript(
-        name="C",
-        indices=(
-            AxisIndex(axis="age"),
-            AxisIndex(axis="age", placeholder="age"),
-        ),
-    )
-
-    assert axis_kinds(expr, axis_names=AXES) == (
-        AxisKind.FREE,
-        AxisKind.PLACEHOLDER,
     )
 
 

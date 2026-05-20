@@ -67,22 +67,3 @@ def test_resolve_axis_kinds_does_not_change_unparse_output() -> None:
     out = resolve_axis_kinds(expr, axis_names=AXES)
 
     assert unparse_ir(expr) == unparse_ir(out)
-
-
-def test_resolve_axis_kinds_preserves_placeholder_classification() -> None:
-    """Placeholder indices stay PLACEHOLDER regardless of axis registry."""
-    expr = Subscript(
-        name="C",
-        indices=(
-            AxisIndex(axis="age"),
-            AxisIndex(axis="age", placeholder="age"),
-        ),
-    )
-
-    out = resolve_axis_kinds(expr, axis_names=AXES)
-
-    assert isinstance(out, Subscript)
-    assert tuple(i.kind for i in out.indices) == (
-        AxisKind.FREE,
-        AxisKind.PLACEHOLDER,
-    )
