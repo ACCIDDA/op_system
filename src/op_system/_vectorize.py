@@ -24,14 +24,12 @@ from __future__ import annotations
 
 import ast
 import math
-import sys
 from collections.abc import Mapping
 from dataclasses import dataclass
 from itertools import combinations as _comb
 from typing import TYPE_CHECKING, Any, cast
 
-import numpy as np
-
+from op_system._ir import Apply, Literal, Sym, extract_common_subexpressions
 from op_system._ir_lower import (
     UnsupportedIRLoweringError,
     lift_cell_ir_to_template,
@@ -118,6 +116,10 @@ class _VectorPlan:
     # ``(base, axes, shape)``; the eval_fn assembles ``<base>_buf`` from a
     # caller-supplied array passed under the bare base name.
     extra_param_buffers: tuple[tuple[str, tuple[str, ...], tuple[int, ...]], ...] = ()
+    # Plan-level CSE temporaries: computed once after alias buffers are
+    # assembled, before equation evaluation. Each entry is ``(name, code)``
+    # where ``code`` evaluates to an array shaped to the common template axes.
+    cse_codes: tuple[tuple[str, CodeType], ...] = ()
 
 
 def _try_ir_fast_path(  # noqa: PLR0913
@@ -187,6 +189,53 @@ _ARITH_OPS: dict[str, type[ast.operator]] = {
 }
 
 
+def _try_collapse_to_full_sum(
+    expr_ir: Expr,
+    *,
+    name_to_template: Mapping[str, _BufferTemplate],
+) -> ast.expr | None:
+    """If ``expr_ir`` is a flat sum of ALL cells of one buffer, emit ``np.sum(buf)``.
+
+    Walks a tree of binary/N-ary ``Apply("+", ...)`` nodes whose leaves are
+    all ``Sym`` nodes.  If every leaf maps to the same templated buffer and
+    the set of referenced cells exhausts the buffer's full cell list, emits a
+    compact ``np.sum(buf)`` call instead of constructing per-cell subscripts.
+
+    Returns:
+        An ``ast.expr`` for ``np.sum(<base>_buf)`` on a full-coverage match,
+        otherwise ``None``.
+    """
+    # Collect all leaf Sym names from the flat + chain.
+    syms: list[str] = []
+    stack: list[Expr] = [expr_ir]
+    while stack:
+        node = stack.pop()
+        if isinstance(node, Apply) and node.op == "+" and len(node.args) >= 2:
+            stack.extend(node.args)
+        elif isinstance(node, Sym):
+            syms.append(node.name)
+        else:
+            return None  # non-sum, non-sym leaf → not a simple flat sum
+    if not syms:
+        return None
+    first_tpl = name_to_template.get(syms[0])
+    if first_tpl is None or not first_tpl.axes:
+        return None
+    expected = set(first_tpl.expanded_names)
+    if set(syms) != expected:
+        return None
+    # All cells of one buffer are referenced exactly once → np.sum(buf).
+    return ast.Call(
+        func=ast.Attribute(
+            value=ast.Name(id="np", ctx=ast.Load()),
+            attr="sum",
+            ctx=ast.Load(),
+        ),
+        args=[ast.Name(id=f"{first_tpl.base}_buf", ctx=ast.Load())],
+        keywords=[],
+    )
+
+
 def _lower_multicell_sym_ir_to_ast(  # noqa: C901
     expr_ir: Expr,
     *,
@@ -201,15 +250,21 @@ def _lower_multicell_sym_ir_to_ast(  # noqa: C901
     can directly substitute each ``Sym(nm)`` with ``buf[i, j]`` using the
     integer indices from the template's coord_assignments.
 
-    Only handles ``Apply('+'/'-')`` trees of ``Sym`` and ``Literal`` nodes.
-    Returns ``None`` if any node cannot be lowered.
+    When all referenced cells belong to the same buffer and cover it fully,
+    emits ``np.sum(buf)`` directly (via :func:`_try_collapse_to_full_sum`)
+    rather than constructing per-cell subscript AST nodes.  For other
+    arithmetic ``Apply('+'/'-')`` trees of ``Sym`` and ``Literal`` nodes,
+    falls back to per-cell substitution.
 
     Returns:
         An ``ast.expr`` or ``None`` if any subnode cannot be lowered.
     """
-    from op_system._ir import Apply, Literal, Sym  # noqa: PLC0415
+    # Fast path: plain sum of all cells of one buffer → np.sum(buf).
+    collapsed = _try_collapse_to_full_sum(expr_ir, name_to_template=name_to_template)
+    if collapsed is not None:
+        return collapsed
 
-    # Build a coord-to-index map: {cell_name: ast.Subscript}
+    # Build a coord-to-index map: {cell_name: ast.Subscript(buf, (i, j))}
     cell_ast: dict[str, ast.expr] = {}
     for tpl in name_to_template.values():
         if not tpl.axes:
@@ -240,12 +295,16 @@ def _lower_multicell_sym_ir_to_ast(  # noqa: C901
             return cell_ast.get(node.name)
         if isinstance(node, Literal):
             return ast.Constant(value=node.value)
-        if isinstance(node, Apply) and node.op in _ARITH_OPS and len(node.args) == 2:
-            left = _lower(node.args[0])
-            right = _lower(node.args[1])
-            if left is None or right is None:
+        if isinstance(node, Apply) and node.op in _ARITH_OPS and len(node.args) >= 2:
+            result = _lower(node.args[0])
+            if result is None:
                 return None
-            return ast.BinOp(left=left, op=_ARITH_OPS[node.op](), right=right)
+            for arg in node.args[1:]:
+                right = _lower(arg)
+                if right is None:
+                    return None
+                result = ast.BinOp(left=result, op=_ARITH_OPS[node.op](), right=right)
+            return result
         return None
 
     return _lower(expr_ir)
@@ -307,9 +366,9 @@ def _rewrite_cell_to_vector(  # noqa: PLR0913
     # Final fallback for scalar aliases (target_axes == ()) whose expression
     # spans multiple cells of the same template (e.g. an explicit sum written
     # as ``I__age_y__loc_a + I__age_y__loc_b + ...``).  Directly substitute
-    # each expanded cell name with ``buf[i, j]``; the downstream
-    # ``_collapse_full_buffer_sums`` pass then collapses the result to
-    # ``np.sum(buf)`` when all cells are present.
+    # each expanded cell name with ``buf[i, j]``; when all cells of a buffer
+    # are present :func:`_lower_multicell_sym_ir_to_ast` collapses to
+    # ``np.sum(buf)`` directly.
     if not target_axes:
         ir_to_try = expr_ir_reduce if expr_ir_reduce is not None else expr_ir
         if ir_to_try is not None:
@@ -327,523 +386,164 @@ def _rewrite_cell_to_vector(  # noqa: PLR0913
 
 
 # ---------------------------------------------------------------------------
-# Sum-pattern recognizer
+# Template-level CSE
 # ---------------------------------------------------------------------------
 
 
-def _flatten_addsub(node: ast.expr) -> list[tuple[int, ast.expr]]:
-    """Flatten an Add/Sub tree into (sign, leaf-expr) terms (iterative).
+def _try_cse_eq_plan(  # noqa: C901, PLR0911, PLR0912, PLR0913, PLR0914
+    *,
+    state_buffers: list[_BufferTemplate],
+    rhs: NormalizedRhs,
+    name_to_template: Mapping[str, _BufferTemplate],
+    axis_index: Mapping[str, Mapping[str, int]],
+    reducible_axes: frozenset[str] = frozenset(),
+    axis_weights: Mapping[str, tuple[float, ...]] | None = None,
+    axis_coords: Mapping[str, tuple[str, ...]] | None = None,
+    axis_types: Mapping[str, str] | None = None,
+    shaped_param_axes: Mapping[str, tuple[str, ...]] | None = None,
+) -> tuple[tuple[tuple[str, CodeType], ...], list[_EqGroup]] | None:
+    """Build equation groups via template-level CSE across all state templates.
+
+    Lifts the representative (first-cell) IR for each state template into
+    template form, runs :func:`extract_common_subexpressions` across all
+    lifted IRs to find shared sub-expressions (e.g. ``beta * S_buf *
+    I_total_buf`` shared between the S and I equations of an SIR model), and
+    compiles the resulting CSE bindings and rewritten equation codes.
+
+    Requirements for CSE to apply:
+    * At least two state templates (nothing to share in a single-template model).
+    * All templates share the same ``axes`` tuple (so CSE temps have a single
+      well-defined shape).
+    * ``extract_common_subexpressions`` finds at least one common sub-expression
+      with cost ≥ 2.
 
     Returns:
-        A list of ``(sign, leaf_expr)`` pairs in the original left-to-right
-        order of the flattened tree.
+        ``(cse_codes, eq_groups)`` on success, or ``None`` if any guard fails
+        or any lift/lower/compile step raises an error.  ``None`` causes the
+        caller to fall back to the non-CSE :func:`_vectorize_template_equations`
+        path.
     """
-    terms: list[tuple[int, ast.expr]] = []
-    stack: list[tuple[ast.expr, int]] = [(node, 1)]
-    while stack:
-        n, sign = stack.pop()
-        if isinstance(n, ast.BinOp) and isinstance(n.op, ast.Add):
-            stack.extend(((n.right, sign), (n.left, sign)))
-        elif isinstance(n, ast.BinOp) and isinstance(n.op, ast.Sub):
-            stack.extend(((n.right, -sign), (n.left, sign)))
-        elif isinstance(n, ast.UnaryOp) and isinstance(n.op, ast.USub):
-            stack.append((n.operand, -sign))
-        elif isinstance(n, ast.UnaryOp) and isinstance(n.op, ast.UAdd):
-            stack.append((n.operand, sign))
-        else:
-            terms.append((sign, n))
-    return terms
-
-
-def _classify_buf_subscript(  # noqa: PLR0911
-    node: ast.expr,
-) -> tuple[str, tuple[int, ...]] | None:
-    """If ``node`` is ``<name>_buf[<int_tuple>]``, return (name, indices).
-
-    Returns:
-        ``(buffer_name, index_tuple)`` if the node matches the expected
-        constant-indexed buffer subscript pattern, otherwise ``None``.
-    """
-    if not isinstance(node, ast.Subscript):
+    if len(state_buffers) < 2:
         return None
-    if not isinstance(node.value, ast.Name):
+
+    # All templates must share the same axes for CSE temps to have a
+    # well-defined shape.  This is the common case in epidemic models where
+    # all compartments are defined over the same (age x loc) grid.
+    common_axes = state_buffers[0].axes
+    if any(buf.axes != common_axes for buf in state_buffers[1:]):
         return None
-    name = node.value.id
-    if not name.endswith("_buf"):
+    if not common_axes:
         return None
-    slc = node.slice
-    if isinstance(slc, ast.Constant) and isinstance(slc.value, int):
-        return name, (slc.value,)
-    if isinstance(slc, ast.Tuple):
-        idxs: list[int] = []
-        for elt in slc.elts:
-            if isinstance(elt, ast.Constant) and isinstance(elt.value, int):
-                idxs.append(elt.value)
-            else:
-                return None
-        return name, tuple(idxs)
-    return None
 
+    # Build the cell→template and buffer_axes dicts needed by lower_to_vector_ast.
+    cell_to_template: dict[str, tuple[str, tuple[str, ...]]] = {}
+    buffer_axes: dict[str, tuple[str, ...]] = {}
+    for cell_name, tpl in name_to_template.items():
+        cell_to_template[cell_name] = (tpl.base, tpl.axes)
+        if tpl.axes:
+            buffer_axes[tpl.base] = tpl.axes
 
-def _make_sum_call(buf_name: str) -> ast.expr:
-    return ast.Call(
-        func=ast.Attribute(
-            value=ast.Name(id="np", ctx=ast.Load()),
-            attr="sum",
-            ctx=ast.Load(),
-        ),
-        args=[ast.Name(id=buf_name, ctx=ast.Load())],
-        keywords=[],
-    )
+    axis_names = frozenset(axis_index.keys())
 
-
-def _extract_weighted_buf_subscript(
-    node: ast.expr,
-) -> tuple[float, str, tuple[int, ...]] | None:
-    """If ``node`` reduces to ``(prod-of-consts) * <name>_buf[<int_tuple>]``.
-
-    Walks an arbitrarily-nested ``Mult`` tree, accumulating numeric
-    ``Constant`` factors (with ``UnaryOp(USub|UAdd, Constant)`` allowed) and
-    matching exactly one buffer subscript leaf. Returns ``None`` if the leaf
-    isn't of this shape or contains non-constant non-buffer factors.
-
-    Returns:
-        ``(weight, buffer_name, index_tuple)`` on match, else ``None``.
-    """
-    weight = 1.0
-    buf_match: tuple[str, tuple[int, ...]] | None = None
-    stack: list[ast.expr] = [node]
-    while stack:
-        n = stack.pop()
-        if isinstance(n, ast.BinOp) and isinstance(n.op, ast.Mult):
-            stack.extend((n.left, n.right))
-            continue
-        if isinstance(n, ast.UnaryOp) and isinstance(n.op, ast.UAdd):
-            stack.append(n.operand)
-            continue
-        if isinstance(n, ast.UnaryOp) and isinstance(n.op, ast.USub):
-            inner = n.operand
-            if isinstance(inner, ast.Constant) and isinstance(
-                inner.value, (int, float)
-            ):
-                weight *= -float(inner.value)
-                continue
+    # Lift the first-cell IR for each template to template form.
+    # Prefer equations_ir_reduce (preserves Reduce helper structure) so that
+    # lowering can emit np.sum() directly for apply_along terms.
+    eq_ir_reduce = rhs.equations_ir_reduce
+    eq_ir_raw = rhs.equations_ir_raw
+    lifted_irs: list[Expr] = []
+    for buf in state_buffers:
+        first_idx = buf.offset
+        cell_ir: Expr | None = None
+        if eq_ir_reduce and len(eq_ir_reduce) > first_idx:
+            cell_ir = eq_ir_reduce[first_idx]
+        if cell_ir is None and eq_ir_raw and len(eq_ir_raw) > first_idx:
+            cell_ir = eq_ir_raw[first_idx]
+        if cell_ir is None:
             return None
-        if isinstance(n, ast.Constant) and isinstance(n.value, (int, float)):
-            weight *= float(n.value)
-            continue
-        cls = _classify_buf_subscript(n)
-        if cls is None or buf_match is not None:
-            return None
-        buf_match = cls
-    if buf_match is None:
-        return None
-    name, idx = buf_match
-    return weight, name, idx
-
-
-def _make_weighted_sum_call(
-    buf_name: str,
-    weights_in_index_order: list[float],
-    shape: tuple[int, ...],
-) -> ast.expr:
-    """Build ``np.sum(np.asarray([...]).reshape(shape) * buf)``.
-
-    ``weights_in_index_order`` is the flat list of per-cell weights in C-order
-    matching ``np.ndindex(*shape)``. For 1-D buffers the ``reshape`` is
-    omitted.
-
-    The generated ``np.asarray`` call deliberately omits an explicit
-    ``dtype=`` so that the weights adopt the calling backend's native float
-    dtype: ``float64`` for plain numpy and the configured default for
-    ``jax.numpy`` (which is ``float32`` unless ``jax_enable_x64`` is set).
-    Forcing ``np.float64`` here previously triggered a noisy
-    ``Explicitly requested dtype float64 ... will be truncated to dtype
-    float32`` warning at every JIT trace under JAX float32 mode.
-
-    Returns:
-        The constructed ``ast.expr`` for the fused weighted reduction.
-    """
-    weights_list = ast.List(
-        elts=[ast.Constant(value=float(w)) for w in weights_in_index_order],
-        ctx=ast.Load(),
-    )
-    asarray: ast.expr = ast.Call(
-        func=ast.Attribute(
-            value=ast.Name(id="np", ctx=ast.Load()),
-            attr="asarray",
-            ctx=ast.Load(),
-        ),
-        args=[weights_list],
-        keywords=[],
-    )
-    if len(shape) > 1:
-        asarray = ast.Call(
-            func=ast.Attribute(value=asarray, attr="reshape", ctx=ast.Load()),
-            args=[
-                ast.Tuple(
-                    elts=[ast.Constant(value=int(s)) for s in shape],
-                    ctx=ast.Load(),
-                ),
-            ],
-            keywords=[],
-        )
-    product = ast.BinOp(
-        left=asarray,
-        op=ast.Mult(),
-        right=ast.Name(id=buf_name, ctx=ast.Load()),
-    )
-    return ast.Call(
-        func=ast.Attribute(
-            value=ast.Name(id="np", ctx=ast.Load()),
-            attr="sum",
-            ctx=ast.Load(),
-        ),
-        args=[product],
-        keywords=[],
-    )
-
-
-def _reassemble_addsub(terms: list[tuple[int, ast.expr]]) -> ast.expr:
-    if not terms:
-        return ast.Constant(value=0.0)
-    sign, expr = terms[0]
-    out: ast.expr = expr if sign > 0 else ast.UnaryOp(op=ast.USub(), operand=expr)
-    for s, e in terms[1:]:
-        op: ast.operator = ast.Add() if s > 0 else ast.Sub()
-        out = ast.BinOp(left=out, op=op, right=e)
-    return out
-
-
-def _is_constant_expr(node: ast.expr) -> bool:
-    """Return ``True`` if ``node`` evaluates to a numeric constant.
-
-    Recognises numeric ``Constant`` literals, unary +/- on such literals, and
-    ``Mult``/``Div`` of constant subexpressions. Used by the constant-over-Add
-    distributor to decide whether ``c * (a + b)`` may be flattened to
-    ``c*a + c*b``.
-    """
-    if isinstance(node, ast.Constant):
-        return isinstance(node.value, (int, float))
-    if isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.UAdd, ast.USub)):
-        return _is_constant_expr(node.operand)
-    if isinstance(node, ast.BinOp) and isinstance(node.op, (ast.Mult, ast.Div)):
-        return _is_constant_expr(node.left) and _is_constant_expr(node.right)
-    return False
-
-
-def _distribute_const_over_add(tree: ast.Expression) -> ast.Expression:
-    """Rewrite ``c * (a + b)`` as ``c*a + c*b`` (and the symmetric form).
-
-    A pre-pass for the buffer-sum collapser: the normalize-time expansion of
-    nested ``apply_along`` calls produces structures like
-    ``w_age_i * (S_buf[i,0] + S_buf[i,1] + ...)`` where the weight is gated
-    behind a parenthesized inner sum, hiding the per-cell weighted leaves
-    from the leaf-classifier. Distributing constant factors over Add chains
-    flattens these into a single Add chain of ``w * S_buf[...]`` terms that
-    the collapser can fold into one fused reduction.
-
-    Iterative implementation: the top-level Add/Sub chain is flattened into a
-    term list (via :func:`_flatten_addsub`, itself iterative) and each leaf
-    is rewritten in isolation. This avoids the per-node Python frame that an
-    ``ast.NodeTransformer.visit`` would consume on right- or left-nested
-    Add chains thousands of nodes deep (e.g. aggregator aliases that sum
-    every cell of a templated state). Within each leaf we use a recursive
-    visitor; leaf depth is bounded by expression complexity (typically <=5),
-    not by chain length, so it is safe.
-
-    Distribution at a leaf may itself produce a new Add/Sub chain (when the
-    rewritten leaf is ``c*a + c*b``). Such leaves are folded back into the
-    outer term list with appropriate sign propagation, and the pass iterates
-    to a fixed point.
-
-    Only distributes when one side of the ``Mult`` is a numeric constant -
-    never distributes runtime-variable factors (which would change semantics
-    for backends with shaped operands).
-
-    Returns:
-        A possibly-rewritten ``ast.Expression`` semantically equal to
-        ``tree`` with constant-multipliers pushed inside Add/Sub chains.
-    """
-
-    class _Distributor(ast.NodeTransformer):
-        def visit_BinOp(self, node: ast.BinOp) -> ast.AST:
-            # Recurse first so inner distributions surface upward.
-            self.generic_visit(node)
-            if not isinstance(node.op, ast.Mult):
-                return node
-            # Identify the (constant, addsub) sides; either ordering is fine.
-            const_side: ast.expr | None = None
-            chain_side: ast.expr | None = None
-            if (
-                _is_constant_expr(node.left)
-                and isinstance(node.right, ast.BinOp)
-                and isinstance(node.right.op, (ast.Add, ast.Sub))
-            ):
-                const_side = node.left
-                chain_side = node.right
-            elif (
-                _is_constant_expr(node.right)
-                and isinstance(node.left, ast.BinOp)
-                and isinstance(node.left.op, (ast.Add, ast.Sub))
-            ):
-                const_side = node.right
-                chain_side = node.left
-            if const_side is None or chain_side is None:
-                return node
-            terms = _flatten_addsub(chain_side)
-            new_terms: list[tuple[int, ast.expr]] = [
-                (
-                    sign,
-                    ast.BinOp(left=const_side, op=ast.Mult(), right=leaf),
-                )
-                for sign, leaf in terms
-            ]
-            return _reassemble_addsub(new_terms)
-
-    transformer = _Distributor()
-    body = tree.body
-    if _is_addsub_binop(body):
-        body = _distribute_addsub_chain(body, transformer)
-    else:
-        # No top-level chain: the body itself is shallow enough to recurse.
-        body = cast("ast.expr", transformer.visit(body))
-    new_tree = ast.Expression(body=body)
-    ast.fix_missing_locations(new_tree)
-    return new_tree
-
-
-def _is_addsub_binop(n: ast.AST) -> bool:
-    """Return True iff ``n`` is an ``ast.BinOp`` with an Add/Sub operator."""
-    return isinstance(n, ast.BinOp) and isinstance(n.op, (ast.Add, ast.Sub))
-
-
-def _distribute_addsub_chain(
-    body: ast.expr, transformer: ast.NodeTransformer
-) -> ast.expr:
-    """Iteratively flatten an Add/Sub chain and rewrite each leaf in place.
-
-    Loops to a fixed point so that distribution which produces new sub-chains
-    (``c*(a+b) -> c*a + c*b``) is refolded into the outer chain. Each leaf is
-    visited via ``transformer`` independently; leaf depth is bounded by leaf
-    complexity (typically <=5), not by chain length, so the recursive visit
-    is safe even when the outer chain has thousands of terms.
-
-    Args:
-        body: A top-level Add/Sub binop to distribute over.
-        transformer: An ``ast.NodeTransformer`` (typically ``_Distributor``)
-            that rewrites a single leaf expression.
-
-    Returns:
-        A possibly-rewritten ``ast.expr`` semantically equal to ``body``.
-    """
-    max_passes = 64  # safety bound; convergence is typically immediate
-    for _ in range(max_passes):
-        terms = _flatten_addsub(body)
-        new_terms: list[tuple[int, ast.expr]] = []
-        any_changed = False
-        for sign, leaf in terms:
-            rewritten = cast("ast.expr", transformer.visit(leaf))
-            if _is_addsub_binop(rewritten):
-                for ssign, sleaf in _flatten_addsub(rewritten):
-                    new_terms.append((sign * ssign, sleaf))
-                any_changed = True
-            else:
-                if rewritten is not leaf:
-                    any_changed = True
-                new_terms.append((sign, rewritten))
-        body = _reassemble_addsub(new_terms)
-        if not any_changed:
-            break
-    return body
-
-
-def _collapse_full_buffer_sums(  # noqa: C901, PLR0915
-    tree: ast.Expression, buf_shapes: Mapping[str, tuple[int, ...]]
-) -> ast.Expression:
-    """Replace sums-over-all-cells of a buffer with ``np.sum(buf)``.
-
-    Operates iteratively to avoid blowing Python's recursion limit on the
-    very long Add chains produced by aggregator aliases (e.g. an alias that
-    sums every cell of a templated state). Within each Add/Sub chain found in
-    the tree, leaves of the form ``<name>_buf[<int_tuple>]`` (or that pattern
-    multiplied by a product of constant numeric factors) are grouped by
-    ``(name, sign)``; if the set of indices for a group exhausts the full
-    Cartesian product of the buffer's shape, those terms are collapsed into a
-    single fused reduction. Bare-subscript groups become ``np.sum(buf)``;
-    weighted groups become ``np.sum(weights * buf)`` where ``weights`` is a
-    constant array shaped to ``buf``. This collapses the long weighted-sum
-    expansion of ``apply_along(..., kernel=integrate)`` into a single fused
-    multiply+reduce. Other terms in the chain are left untouched.
-
-    Returns:
-        A possibly-rewritten ``ast.Expression`` equivalent to ``tree`` but
-        with full-buffer sums collapsed where detected.
-    """
-
-    def collapse_chain(node: ast.expr) -> ast.expr:  # noqa: C901, PLR0912, PLR0914, PLR0915
-        terms = _flatten_addsub(node)
-        # group key (buf_name, sign) -> list of (idx_tuple, weight); weight is
-        # 1.0 when the leaf was a bare buffer subscript, otherwise the product
-        # of constant factors multiplying the subscript.
-        groups: dict[tuple[str, int], list[tuple[tuple[int, ...], float]]] = {}
-        other: list[tuple[int, ast.expr]] = []
-        order: list[tuple[str, int]] = []
-        for sign, leaf in terms:
-            name: str
-            idx: tuple[int, ...]
-            weight: float
-            cls = _classify_buf_subscript(leaf)
-            if cls is not None and cls[0] in buf_shapes:
-                name, idx = cls
-                weight = 1.0
-            else:
-                wcls = _extract_weighted_buf_subscript(leaf)
-                if wcls is None or wcls[1] not in buf_shapes:
-                    other.append((sign, leaf))
-                    continue
-                weight, name, idx = wcls
-            key = (name, sign)
-            if key not in groups:
-                groups[key] = []
-                order.append(key)
-            groups[key].append((idx, weight))
-        collapsed: list[tuple[int, ast.expr]] = list(other)
-        changed = False
-        for key in order:
-            name, sign = key
-            items = groups[key]
-            idxs = [t for t, _w in items]
-            shape = buf_shapes[name]
-            expected = math.prod(shape) if shape else 1
-            full_cover = (
-                len(idxs) == expected
-                and len(set(idxs)) == expected
-                and all(
-                    len(t) == len(shape)
-                    and all(0 <= ti < si for ti, si in zip(t, shape, strict=True))
-                    for t in idxs
-                )
+        try:
+            lifted = lift_cell_ir_to_template(
+                cell_ir, cell_to_template=cell_to_template
             )
-            if full_cover:
-                # Three emission cases for a full-cover Add chain over ``buf``:
-                #
-                # 1. All weights exactly 1.0 (bare buffer subscripts) ->
-                #    ``np.sum(buf)``.
-                # 2. All weights equal to some constant ``c != 1.0`` (typical
-                #    when ``_distribute_const_over_add`` pushed an outer
-                #    constant factor like ``dt`` over a ``kernel=sum``
-                #    apply_along chain) -> ``c * np.sum(buf)``. Without this
-                #    branch we would emit ``np.sum(np.asarray([c,...]) * buf)``
-                #    with an inlined uniform weight array of length
-                #    ``prod(shape)``, which on large network/categorical
-                #    models bloats the JAX trace and balloons XLA compile
-                #    time (see op_system#103).
-                # 3. Heterogeneous weights (true ``kernel=integrate`` with
-                #    trapezoidal endpoints, or any non-uniform weight set)
-                #    -> ``np.sum(weights_arr * buf)`` via the fused-reduce
-                #    helper.
-                #
-                # Exact float equality is intentional: weights here come
-                # either from explicit literal coefficients in the source
-                # or from constant factors propagated by
-                # ``_distribute_const_over_add``. Near-1.0 weights from
-                # trapezoidal kernels (e.g. ``0.5``) take the weighted-sum
-                # path in case 3.
-                ws = [w for _t, w in items]
-                if all(w == 1.0 for w in ws):  # noqa: RUF069
-                    collapsed.append((sign, _make_sum_call(name)))
-                elif all(w == ws[0] for w in ws):
-                    collapsed.append((
-                        sign,
-                        ast.BinOp(
-                            left=ast.Constant(value=float(ws[0])),
-                            op=ast.Mult(),
-                            right=_make_sum_call(name),
-                        ),
-                    ))
-                else:
-                    weight_map = dict(items)
-                    flat_weights = (
-                        [
-                            weight_map[tuple(int(i) for i in t)]
-                            for t in np.ndindex(*shape)
-                        ]
-                        if shape
-                        else [weight_map[()]]
-                    )
-                    collapsed.append((
-                        sign,
-                        _make_weighted_sum_call(name, flat_weights, shape),
-                    ))
-                changed = True
-            else:
-                for t, w in items:
-                    slice_node: ast.expr
-                    if len(t) == 1:
-                        slice_node = ast.Constant(value=t[0])
-                    else:
-                        slice_node = ast.Tuple(
-                            elts=[ast.Constant(value=v) for v in t],
-                            ctx=ast.Load(),
-                        )
-                    sub = ast.Subscript(
-                        value=ast.Name(id=name, ctx=ast.Load()),
-                        slice=slice_node,
-                        ctx=ast.Load(),
-                    )
-                    leaf_expr: ast.expr
-                    # Same intent as above: only an exact 1.0 weight may be
-                    # dropped; any other value must be re-emitted as an
-                    # explicit ``Constant * Subscript`` factor.
-                    if w == 1.0:  # noqa: RUF069
-                        leaf_expr = sub
-                    else:
-                        leaf_expr = ast.BinOp(
-                            left=ast.Constant(value=float(w)),
-                            op=ast.Mult(),
-                            right=sub,
-                        )
-                    collapsed.append((sign, leaf_expr))
-        if not changed:
-            return node
-        return _reassemble_addsub(collapsed)
+        except UnsupportedIRLoweringError:
+            return None
+        lifted_irs.append(lifted)
 
-    def is_addsub(n: ast.AST) -> bool:
-        return isinstance(n, ast.BinOp) and isinstance(n.op, (ast.Add, ast.Sub))
+    # Reserve names that must not be used as CSE temp names.
+    reserved: set[str] = {buf.base for buf in state_buffers}
+    reserved.update(cell_to_template.keys())
 
-    # Collapse the root expression, then iteratively descend into the
-    # collapsed body's non-Add/Sub children to find embedded chains. We
-    # carefully avoid recursing into the original (uncollapsed) Add chain.
-    body = tree.body
-    if is_addsub(body):
-        body = collapse_chain(body)
-    new_tree = ast.Expression(body=body)
+    bindings, rewritten_irs = extract_common_subexpressions(
+        lifted_irs, prefix="_cse", min_cost=2, reserved_names=reserved
+    )
+    if not bindings:
+        return None  # No shared sub-expressions found — CSE is a no-op here.
 
-    stack: list[ast.AST] = [body]
-    while stack:
-        node = stack.pop()
-        for fld, val in ast.iter_fields(node):
-            if isinstance(val, list):
-                for i, child in enumerate(val):
-                    if not isinstance(child, ast.AST):
-                        continue
-                    if is_addsub(child):
-                        new_child = collapse_chain(cast("ast.expr", child))
-                        val[i] = new_child
-                        stack.append(new_child)
-                    else:
-                        stack.append(child)
-            elif isinstance(val, ast.AST):
-                if is_addsub(val):
-                    new_child = collapse_chain(cast("ast.expr", val))
-                    setattr(node, fld, new_child)
-                    stack.append(new_child)
-                else:
-                    stack.append(val)
+    # Compile CSE binding codes.  Each binding is computed once after alias
+    # buffers are assembled; its result is added to the eval env under the
+    # assigned name so rewritten equation codes can reference it by Sym.
+    cse_codes_list: list[tuple[str, CodeType]] = []
+    for name, binding_ir in bindings:
+        try:
+            body = lower_to_vector_ast(
+                binding_ir,
+                target_axes=common_axes,
+                buffer_axes=buffer_axes,
+                axis_names=axis_names,
+                reducible_axes=reducible_axes,
+                axis_weights=axis_weights,
+                axis_coords=axis_coords,
+                axis_types=axis_types,
+                shaped_param_axes=shaped_param_axes,
+            )
+        except UnsupportedIRLoweringError:
+            return None
+        tree = ast.Expression(body=body)
+        ast.fix_missing_locations(tree)
+        try:
+            code = compile(tree, filename="<op_system_cse>", mode="eval")
+        except (ValueError, TypeError, SyntaxError):
+            return None
+        cse_codes_list.append((name, code))
 
-    ast.fix_missing_locations(new_tree)
-    return new_tree
+    # Compile one rewritten equation code per state template.
+    eq_groups: list[_EqGroup] = []
+    for buf, rewritten_ir in zip(state_buffers, rewritten_irs, strict=True):
+        try:
+            body = lower_to_vector_ast(
+                rewritten_ir,
+                target_axes=buf.axes,
+                buffer_axes=buffer_axes,
+                axis_names=axis_names,
+                reducible_axes=reducible_axes,
+                axis_weights=axis_weights,
+                axis_coords=axis_coords,
+                axis_types=axis_types,
+                shaped_param_axes=shaped_param_axes,
+            )
+        except UnsupportedIRLoweringError:
+            return None
+        tree = ast.Expression(body=body)
+        ast.fix_missing_locations(tree)
+        try:
+            code = compile(tree, filename="<op_system_vec>", mode="eval")
+        except (ValueError, TypeError, SyntaxError):
+            return None
+        # CSE path always produces a fully-vectorized code (no unrolled axes).
+        assembly_perm = tuple(range(len(buf.axes)))
+        eq_groups.append(
+            _EqGroup(
+                base=buf.base,
+                codes=(code,),
+                vec_axes=buf.axes,
+                vec_shape=buf.shape,
+                unroll_axes=(),
+                unroll_shape=(),
+                assembly_perm=assembly_perm,
+                full_shape=buf.shape,
+            )
+        )
+
+    return tuple(cse_codes_list), eq_groups
 
 
 def _vectorize_template_equations(  # noqa: C901, PLR0912, PLR0913, PLR0914, PLR0915
@@ -1034,37 +734,7 @@ def build_vector_plan(rhs: NormalizedRhs) -> _VectorPlan | None:
         signal that the spec is unsupported and the caller should fall back
         to the scalar engine.
     """
-    # CPython's ``ast.fix_missing_locations`` and ``compile`` use recursive
-    # AST walks. On models whose normalize-time expansion produces long
-    # ``apply_along(kernel=sum)`` Add chains — e.g. aggregator aliases that
-    # sum every cell of a templated state — those walks consume one Python
-    # frame per chain node and blow the default 1000-frame recursion limit,
-    # silently dropping the model to the scalar fallback. Bump the limit
-    # for the duration of this call sized to a safe upper bound on the
-    # longest alias-or-equation expression. This is a temporary safety net
-    # while the recursive passes are migrated to iterative term-list form
-    # (op_system#103); it does not eliminate the underlying C-stack ceiling
-    # (~10-20k frames on typical builds), so it cannot rescue extreme
-    # workloads (e.g. continuum models with >50k-cell aggregators) — those
-    # require the structured-IR refactor tracked separately.
-    longest_expr = 0
-    for s in rhs.equations:
-        if isinstance(s, str) and len(s) > longest_expr:
-            longest_expr = len(s)
-    for s in rhs.aliases.values():
-        if isinstance(s, str) and len(s) > longest_expr:
-            longest_expr = len(s)
-    # Heuristic: each Add term in the expanded form is on the order of 8-16
-    # characters ("S__loc_l0001 + "), and the recursive walk depth roughly
-    # tracks term count plus a small constant for surrounding nodes.
-    needed = max(2000, longest_expr // 4 + 1000)
-    saved_limit = sys.getrecursionlimit()
-    if needed > saved_limit:
-        sys.setrecursionlimit(needed)
-    try:
-        return _build_vector_plan_inner(rhs)
-    finally:
-        sys.setrecursionlimit(saved_limit)
+    return _build_vector_plan_inner(rhs)
 
 
 def _build_vector_plan_inner(  # noqa: C901, PLR0911, PLR0912, PLR0914, PLR0915
@@ -1151,22 +821,12 @@ def _build_vector_plan_inner(  # noqa: C901, PLR0911, PLR0912, PLR0914, PLR0915
             name_to_template[nm] = buf
 
     # Shaped-param buffer map: base name → axes tuple.
-    # Used by _try_ir_fast_path (via lower_to_vector_ast) and buf_shapes.
+    # Used by _try_ir_fast_path (via lower_to_vector_ast).
     shaped_param_axes: dict[str, tuple[str, ...]] = {}
     for name, ax_tuple in rhs.shaped_params:
         ax_t = tuple(ax_tuple)
         if ax_t:
             shaped_param_axes[name] = ax_t
-
-    # Buffer-name → shape table, used by the sum-pattern collapser.
-    buf_shapes: dict[str, tuple[int, ...]] = {}
-    for buf in (*state_buffers, *alias_buffers):
-        if buf.axes:
-            buf_shapes[f"{buf.base}_buf"] = buf.shape
-    for base, ax_t in shaped_param_axes.items():
-        shape = tuple(len(axis_index[a]) for a in ax_t if a in axis_index)
-        if len(shape) == len(ax_t):
-            buf_shapes[f"{base}_buf"] = shape
 
     # Vectorize aliases (in declaration order — best-effort dependency order).
     alias_codes: list[tuple[str, CodeType, tuple[int, ...]]] = []
@@ -1217,44 +877,62 @@ def _build_vector_plan_inner(  # noqa: C901, PLR0911, PLR0912, PLR0914, PLR0915
                     axis_types=axis_types,
                     shaped_param_axes=shaped_param_axes,
                 )
-            tree = _distribute_const_over_add(tree)
-            tree = _collapse_full_buffer_sums(tree, buf_shapes)
             code = compile(tree, filename="<op_system_vec>", mode="eval")
         except (ValueError, RuntimeError, TypeError, SyntaxError):
             return None
         alias_codes.append((buf.base, code, buf.shape))
 
-    # Vectorize per-template equations.
-    eq_groups: list[_EqGroup] = []
-    for buf in state_buffers:
-        result = _vectorize_template_equations(
-            template=buf,
-            equations=rhs.equations,
-            equations_ir=rhs.equations_ir_raw,
-            equations_ir_reduce=rhs.equations_ir_reduce,
-            name_to_template=name_to_template,
-            axis_index=axis_index,
-            reducible_axes=reducible_axes,
-            axis_weights=axis_weights,
-            axis_coords=axis_coords,
-            axis_types=axis_types,
-            shaped_param_axes=shaped_param_axes,
-        )
-        if result is None:
-            return None
-        codes, vec_axes, vec_shape, unroll_axes, unroll_shape, assembly_perm = result
-        eq_groups.append(
-            _EqGroup(
-                base=buf.base,
-                codes=codes,
-                vec_axes=vec_axes,
-                vec_shape=vec_shape,
-                unroll_axes=unroll_axes,
-                unroll_shape=unroll_shape,
-                assembly_perm=assembly_perm,
-                full_shape=buf.shape,
+    # Try template-level IR CSE: finds shared sub-expressions across all
+    # state templates and compiles them once as plan-level temporaries.
+    cse_codes: tuple[tuple[str, CodeType], ...] = ()
+    cse_result = _try_cse_eq_plan(
+        state_buffers=state_buffers,
+        rhs=rhs,
+        name_to_template=name_to_template,
+        axis_index=axis_index,
+        reducible_axes=reducible_axes,
+        axis_weights=axis_weights,
+        axis_coords=axis_coords,
+        axis_types=axis_types,
+        shaped_param_axes=shaped_param_axes,
+    )
+
+    if cse_result is not None:
+        cse_codes, eq_groups = cse_result
+    else:
+        # Fall back to per-template vectorization without cross-template CSE.
+        eq_groups = []
+        for buf in state_buffers:
+            result = _vectorize_template_equations(
+                template=buf,
+                equations=rhs.equations,
+                equations_ir=rhs.equations_ir_raw,
+                equations_ir_reduce=rhs.equations_ir_reduce,
+                name_to_template=name_to_template,
+                axis_index=axis_index,
+                reducible_axes=reducible_axes,
+                axis_weights=axis_weights,
+                axis_coords=axis_coords,
+                axis_types=axis_types,
+                shaped_param_axes=shaped_param_axes,
             )
-        )
+            if result is None:
+                return None
+            codes, vec_axes, vec_shape, unroll_axes, unroll_shape, assembly_perm = (
+                result
+            )
+            eq_groups.append(
+                _EqGroup(
+                    base=buf.base,
+                    codes=codes,
+                    vec_axes=vec_axes,
+                    vec_shape=vec_shape,
+                    unroll_axes=unroll_axes,
+                    unroll_shape=unroll_shape,
+                    assembly_perm=assembly_perm,
+                    full_shape=buf.shape,
+                )
+            )
 
     return _VectorPlan(
         state_templates=tuple(state_buffers),
@@ -1267,6 +945,7 @@ def _build_vector_plan_inner(  # noqa: C901, PLR0911, PLR0912, PLR0914, PLR0915
             (base, axes, tuple(len(axis_index[a]) for a in axes))
             for base, axes in shaped_param_axes.items()
         ),
+        cse_codes=cse_codes,
     )
 
 
@@ -1286,6 +965,7 @@ def make_vectorized_eval_fn(plan: _VectorPlan) -> EvalFn:  # noqa: C901, PLR0915
     """
     state_templates = plan.state_templates
     alias_codes = plan.alias_codes
+    cse_codes = plan.cse_codes
     eq_groups = plan.eq_groups
     n_state = plan.n_state
 
@@ -1301,7 +981,7 @@ def make_vectorized_eval_fn(plan: _VectorPlan) -> EvalFn:  # noqa: C901, PLR0915
     # passed under the bare base name.
     extra_param_buffers = plan.extra_param_buffers
 
-    def eval_fn(t: object, y: object, **params: object) -> Float64Array:  # noqa: C901, PLR0912, PLR0914
+    def eval_fn(t: object, y: object, **params: object) -> Float64Array:  # noqa: C901, PLR0912, PLR0914, PLR0915
         xp = _namespace_of(y)
         _check_numeric_dtype(xp, getattr(y, "dtype", None))
         y_arr = _validate_state_vector(y, n_state=n_state)
@@ -1355,6 +1035,19 @@ def make_vectorized_eval_fn(plan: _VectorPlan) -> EvalFn:  # noqa: C901, PLR0915
             if shape:
                 val = xp.broadcast_to(val, shape)
             env[f"{base}_buf"] = val
+
+        # Eval plan-level CSE temporaries (shared sub-expressions extracted
+        # across state templates).  Computed after alias buffers so that
+        # expressions referencing alias buffers (e.g. I_total_buf) resolve.
+        for name, code in cse_codes:
+            try:
+                val = eval(  # noqa: S307
+                    code, {"__builtins__": _SAFE_BUILTINS}, env
+                )
+            except (NameError, ValueError, TypeError, ArithmeticError) as exc:
+                msg = f"CSE temp {name!r} evaluation failed: {exc!r}"
+                raise ValueError(msg) from exc
+            env[name] = val
 
         # Eval per-template equation buffers and concatenate.
         pieces: list[object] = []
