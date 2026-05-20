@@ -21,8 +21,10 @@ from types import MappingProxyType
 import numpy as np
 import pytest
 from flepimop2.axis import AxisCollection
+from flepimop2.module import PatchConflictMode
 from flepimop2.parameter.abc import ModelStateSpecification, ParameterRequest
 from flepimop2.typing import SystemProtocol
+from pydantic import ValidationError
 
 from flepimop2.system.op_system import OpSystemSystem
 
@@ -580,3 +582,37 @@ def test_requested_parameters_honours_time_axis_option() -> None:
     sys = OpSystemSystem(spec=spec)
     requested = sys.requested_parameters(AxisCollection())
     assert requested["beta"].axes == ("day",)
+
+
+def test_module_field_is_literal() -> None:
+    """The `module` discriminator is exposed as an explicit Literal field."""
+    field = OpSystemSystem.model_fields["module"]
+    assert field.default == "flepimop2.system.op_system"
+
+
+def test_extra_top_level_fields_rejected(sir_spec: dict[str, object]) -> None:
+    """Unknown top-level kwargs are rejected (``extra='forbid'``)."""
+    with pytest.raises(ValidationError):
+        OpSystemSystem(spec=sir_spec, bogus_field=1)  # type: ignore[call-arg]
+
+
+def test_patch_replace_recompiles(sir_spec: dict[str, object]) -> None:
+    """Patching with REPLACE swaps in the new spec and recompiles the RHS."""
+    sys_a = OpSystemSystem(spec=sir_spec)
+    si_spec: dict[str, object] = {
+        "kind": "expr",
+        "state": ["S", "I"],
+        "equations": {"S": "-beta * S * I", "I": "beta * S * I"},
+    }
+    sys_b = OpSystemSystem(spec=si_spec)
+    patched = sys_a.patch(sys_b, conflict=PatchConflictMode.REPLACE)
+    y0 = np.array([0.9, 0.1], dtype=np.float64)
+    out = patched.step(np.float64(0.0), y0, beta=1.0)
+    np.testing.assert_allclose(out, np.array([-0.09, 0.09]), rtol=1e-12)
+
+
+def test_patch_type_mismatch_raises(sir_spec: dict[str, object]) -> None:
+    """Patching against a non-matching concrete type raises ``TypeError``."""
+    sys = OpSystemSystem(spec=sir_spec)
+    with pytest.raises(TypeError, match="module patching requires matching"):
+        sys.patch("not a module", conflict=PatchConflictMode.REPLACE)  # type: ignore[arg-type]

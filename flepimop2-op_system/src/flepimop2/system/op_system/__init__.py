@@ -33,6 +33,7 @@ from types import MappingProxyType
 from typing import (
     TYPE_CHECKING,
     Any,
+    Literal,
     NamedTuple,
     cast,
 )
@@ -54,7 +55,7 @@ from pydantic import ConfigDict, Field
 
 from op_system import CompiledRhs, compile_spec
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -69,14 +70,30 @@ class _AxesMeta(NamedTuple):
     axis_coords: dict[str, np.ndarray]
 
 
-class OpSystemSystem(SystemABC, module="flepimop2.system.op_system"):  # noqa: D101
+class OpSystemSystem(SystemABC):
+    """flepimop2 System adapter that compiles an inline ``op_system`` spec.
+
+    The ``module`` discriminator is declared explicitly as a
+    ``Literal[...]`` field per the
+    ``flepimop2`` module-authoring guide; this is equivalent to the
+    ``module="..."`` class-keyword shortcut but makes the field visible
+    to static analyzers and to direct readers of the class.
+
+    The compiled RHS is built once during pydantic validation in
+    :meth:`model_post_init` and exposed through :meth:`step` /
+    :meth:`bind`. The connector accepts no extra top-level fields
+    (``extra="forbid"``); unknown keys must live inside ``spec`` itself.
+    """
+
+    module: Literal["flepimop2.system.op_system"] = "flepimop2.system.op_system"
+
     state_change: StateChangeEnum = StateChangeEnum.FLOW
 
     spec: dict[str, object] = Field(
         default=..., description="Inline op_system RHS specification (already loaded)"
     )
 
-    model_config = ConfigDict(extra="allow")
+    model_config = ConfigDict(extra="forbid")
 
     def model_post_init(self, context: Any) -> None:  # noqa: ANN401
         """Compile `op_system` specification and prepare stepper and shape helpers.
