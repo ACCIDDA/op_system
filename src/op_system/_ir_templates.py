@@ -144,39 +144,46 @@ def _free_axes_in(
     cached = memo.get(id(node))
     if cached is not None:
         return cached
-    if isinstance(node, (Literal, Sym)):
-        result = _EMPTY_AXES
-    elif isinstance(node, Subscript):
-        if node.name in shaped:
-            # Treat all registered axes as referenced so shaped rewrite
-            # still fires when ``assignment`` covers them.
-            result = frozenset(shaped[node.name])
-        else:
-            out: set[str] = set()
-            for idx in node.indices:
-                if idx.coord is None and idx.axis:
-                    out.add(idx.axis)
-            result = frozenset(out) if out else _EMPTY_AXES
-    elif isinstance(node, Apply):
-        if not node.args:
-            result = _EMPTY_AXES
-        else:
-            acc: set[str] = set()
-            for arg in node.args:
-                acc |= _free_axes_in(arg, shaped=shaped, memo=memo)
-            result = frozenset(acc) if acc else _EMPTY_AXES
-    elif isinstance(node, Reduce):
-        body_axes = _free_axes_in(node.body, shaped=shaped, memo=memo)
-        bound = {b for _, b in node.bindings}
-        if bound and body_axes:
-            remaining = body_axes - bound
-            result = remaining if remaining else _EMPTY_AXES
-        else:
-            result = body_axes
-    else:
-        result = _EMPTY_AXES
+    result = _compute_free_axes(node, shaped=shaped, memo=memo)
     memo[id(node)] = result
     return result
+
+
+def _free_axes_subscript(
+    node: Subscript, *, shaped: Mapping[str, tuple[str, ...]]
+) -> frozenset[str]:
+    if node.name in shaped:
+        # Treat all registered axes as referenced so shaped rewrite
+        # still fires when ``assignment`` covers them.
+        return frozenset(shaped[node.name])
+    out: set[str] = set()
+    for idx in node.indices:
+        if idx.coord is None and idx.axis:
+            out.add(idx.axis)
+    return frozenset(out) or _EMPTY_AXES
+
+
+def _compute_free_axes(
+    node: Expr,
+    *,
+    shaped: Mapping[str, tuple[str, ...]],
+    memo: dict[int, frozenset[str]],
+) -> frozenset[str]:
+    if isinstance(node, Subscript):
+        return _free_axes_subscript(node, shaped=shaped)
+    if isinstance(node, Apply):
+        acc: set[str] = set()
+        for arg in node.args:
+            acc |= _free_axes_in(arg, shaped=shaped, memo=memo)
+        return frozenset(acc) or _EMPTY_AXES
+    if isinstance(node, Reduce):
+        body_axes = _free_axes_in(node.body, shaped=shaped, memo=memo)
+        bound = {b for _, b in node.bindings}
+        if not (bound and body_axes):
+            return body_axes
+        return (body_axes - bound) or _EMPTY_AXES
+    # Literal, Sym, and any other leaf node carry no free axes.
+    return _EMPTY_AXES
 
 
 def expand_inline_templates(
@@ -240,40 +247,74 @@ def expand_inline_templates(
     ):
         return expr
     if isinstance(expr, Apply):
-        new_args = tuple(
-            expand_inline_templates(
-                arg,
-                assignment=assignment,
-                shaped_params=shaped,
-                axis_lookup=axis_lookup,
-                _free_axes_memo=_free_axes_memo,
-            )
-            for arg in expr.args
-        )
-        if new_args == expr.args:
-            return expr
-        return Apply(op=expr.op, args=new_args)
-    if isinstance(expr, Reduce):
-        # Reduce bindings shadow outer names: a bound name in this
-        # scope should not be substituted from the outer assignment.
-        bound = {bind for _, bind in expr.bindings}
-        inner_assignment = (
-            assignment
-            if not bound
-            else {k: v for k, v in assignment.items() if k not in bound}
-        )
-        new_body = expand_inline_templates(
-            expr.body,
-            assignment=inner_assignment,
+        return _expand_apply(
+            expr,
+            assignment=assignment,
             shaped_params=shaped,
             axis_lookup=axis_lookup,
-            _free_axes_memo=_free_axes_memo,
+            free_axes_memo=_free_axes_memo,
         )
-        if new_body is expr.body:
-            return expr
-        return Reduce(kind=expr.kind, bindings=expr.bindings, body=new_body)
+    if isinstance(expr, Reduce):
+        return _expand_reduce(
+            expr,
+            assignment=assignment,
+            shaped_params=shaped,
+            axis_lookup=axis_lookup,
+            free_axes_memo=_free_axes_memo,
+        )
     msg = f"unsupported IR node in expand_inline_templates: {type(expr).__name__}"
     raise TypeError(msg)
+
+
+def _expand_apply(
+    expr: Apply,
+    *,
+    assignment: Mapping[str, str],
+    shaped_params: Mapping[str, tuple[str, ...]],
+    axis_lookup: Mapping[str, Sequence[str]] | None,
+    free_axes_memo: dict[int, frozenset[str]] | None,
+) -> Expr:
+    new_args = tuple(
+        expand_inline_templates(
+            arg,
+            assignment=assignment,
+            shaped_params=shaped_params,
+            axis_lookup=axis_lookup,
+            _free_axes_memo=free_axes_memo,
+        )
+        for arg in expr.args
+    )
+    if new_args == expr.args:
+        return expr
+    return Apply(op=expr.op, args=new_args)
+
+
+def _expand_reduce(
+    expr: Reduce,
+    *,
+    assignment: Mapping[str, str],
+    shaped_params: Mapping[str, tuple[str, ...]],
+    axis_lookup: Mapping[str, Sequence[str]] | None,
+    free_axes_memo: dict[int, frozenset[str]] | None,
+) -> Expr:
+    # Reduce bindings shadow outer names: a bound name in this
+    # scope should not be substituted from the outer assignment.
+    bound = {bind for _, bind in expr.bindings}
+    inner_assignment = (
+        assignment
+        if not bound
+        else {k: v for k, v in assignment.items() if k not in bound}
+    )
+    new_body = expand_inline_templates(
+        expr.body,
+        assignment=inner_assignment,
+        shaped_params=shaped_params,
+        axis_lookup=axis_lookup,
+        _free_axes_memo=free_axes_memo,
+    )
+    if new_body is expr.body:
+        return expr
+    return Reduce(kind=expr.kind, bindings=expr.bindings, body=new_body)
 
 
 __all__ = [

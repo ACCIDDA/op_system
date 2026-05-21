@@ -60,7 +60,7 @@ _APPLY_TPL_PREPARSE_CACHE: dict[
     int,
     tuple[
         object,
-        tuple[tuple[str, str, tuple["WildcardToken", ...], "re.Pattern[str]"], ...],
+        tuple[tuple[str, str, tuple[WildcardToken, ...], re.Pattern[str]], ...],
     ],
 ] = {}
 # Matches any "[...]" fragment to extract placeholder names from rate exprs.
@@ -457,6 +457,59 @@ def _render_template_or_literal(name_s: str, assignment: Mapping[str, str]) -> s
     return _render_template_name(base, [wt.axis for wt in wildcards], assignment)
 
 
+def _prepare_template_substitutions(
+    template_map: Mapping[str, list[tuple[str, dict[str, str]]]],
+    *,
+    shaped: Mapping[str, tuple[str, ...]],
+) -> tuple[tuple[str, str, tuple[WildcardToken, ...], re.Pattern[str]], ...]:
+    """Build the per-``template_map`` prepared substitution table.
+
+    Filters out keys with no wildcards and keys whose base collides with
+    a shaped param, and precompiles the literal regex used by
+    ``_apply_template_substitutions``.
+
+    Returns:
+        Tuple of ``(template_key, base, wildcards, compiled_pattern)``
+        rows for every templatable key in ``template_map``.
+    """
+    prepared_list: list[
+        tuple[str, str, tuple[WildcardToken, ...], re.Pattern[str]]
+    ] = []
+    for template_key in template_map:
+        base, tokens = parse_selector(template_key)
+        if base in shaped:
+            continue
+        wildcards = tuple(t for t in tokens if isinstance(t, WildcardToken))
+        if not wildcards:
+            continue
+        prepared_list.append((
+            template_key,
+            base,
+            wildcards,
+            re.compile(re.escape(template_key)),
+        ))
+    return tuple(prepared_list)
+
+
+def _render_shaped_inline(  # noqa: PLR0913
+    inner_base: str,
+    phs: list[str],
+    *,
+    assignment: Mapping[str, str],
+    shaped: Mapping[str, tuple[str, ...]],
+    axis_lookup: Mapping[str, list[str]] | None,
+    fallback: str,
+) -> str:
+    registered = shaped[inner_base]
+    if tuple(phs) != registered or axis_lookup is None:
+        return fallback
+    try:
+        idxs = [axis_lookup[ax].index(assignment[ax]) for ax in registered]
+    except (KeyError, ValueError):
+        return fallback
+    return f"{inner_base}[{', '.join(str(i) for i in idxs)}]"
+
+
 def _apply_template_substitutions(
     expr_s: str,
     *,
@@ -483,33 +536,15 @@ def _apply_template_substitutions(
     expr_out = expr_s
     shaped = shaped_params or {}
 
-    # Pre-parse template keys once per ``template_map`` identity: we
-    # filter out keys with no wildcards and keys whose base collides
-    # with a shaped param, and precompile the literal regex used by
-    # ``re.sub`` below. This collapses O(cells * |template_map|)
-    # ``parse_selector`` calls to O(|template_map|) per normalize call
-    # (issue #145).
+    # Pre-parse template keys once per ``template_map`` identity (see
+    # ``_prepare_template_substitutions``). Collapses O(cells *
+    # |template_map|) ``parse_selector`` calls to O(|template_map|) per
+    # normalize call (issue #145).
     cache_entry = _APPLY_TPL_PREPARSE_CACHE.get(id(template_map))
     if cache_entry is not None and cache_entry[0] is template_map:
         prepared = cache_entry[1]
     else:
-        prepared_list: list[
-            tuple[str, str, tuple[WildcardToken, ...], re.Pattern[str]]
-        ] = []
-        for template_key in template_map:
-            base, tokens = parse_selector(template_key)
-            if base in shaped:
-                continue
-            wildcards = tuple(t for t in tokens if isinstance(t, WildcardToken))
-            if not wildcards:
-                continue
-            prepared_list.append((
-                template_key,
-                base,
-                wildcards,
-                re.compile(re.escape(template_key)),
-            ))
-        prepared = tuple(prepared_list)
+        prepared = _prepare_template_substitutions(template_map, shaped=shaped)
         _APPLY_TPL_PREPARSE_CACHE[id(template_map)] = (template_map, prepared)
 
     for template_key, base, wildcards, pat in prepared:
@@ -530,17 +565,14 @@ def _apply_template_substitutions(
         if not phs or any(ph not in assignment for ph in phs):
             return match.group(0)
         if inner_base in shaped:
-            registered = shaped[inner_base]
-            if tuple(phs) != registered:
-                # Different ordering or axes — leave for downstream to flag.
-                return match.group(0)
-            if axis_lookup is None:
-                return match.group(0)
-            try:
-                idxs = [axis_lookup[ax].index(assignment[ax]) for ax in registered]
-            except (KeyError, ValueError):
-                return match.group(0)
-            return f"{inner_base}[{', '.join(str(i) for i in idxs)}]"
+            return _render_shaped_inline(
+                inner_base,
+                phs,
+                assignment=assignment,
+                shaped=shaped,
+                axis_lookup=axis_lookup,
+                fallback=match.group(0),
+            )
         return _render_template_name(inner_base, phs, assignment)
 
     return _INLINE_TEMPLATE_RE.sub(_inline_replacer, expr_out)

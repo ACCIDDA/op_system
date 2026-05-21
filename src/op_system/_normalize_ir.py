@@ -535,7 +535,97 @@ def _build_equations_ir(
             sys.setrecursionlimit(old_limit)
 
 
-def _build_aliases_ir_from_raw(  # noqa: C901
+def _parse_alias_body(  # noqa: PLR0913
+    raw_name: str,
+    expr_str: object,
+    *,
+    axes: list[dict[str, Any]],
+    shaped: Mapping[str, tuple[str, ...]],
+    ax_lookup: Mapping[str, list[str]],
+    alias_template_map: Mapping[str, Sequence[tuple[str, Mapping[str, str]]]],
+    reduce_parsed: dict[str, Expr],
+    full_parsed: dict[str, Expr],
+) -> None:
+    """Parse and expand one alias entry into ``reduce_parsed``/``full_parsed``.
+
+    Splits the per-alias work out of :func:`_build_aliases_ir_from_raw` so
+    that function stays under Ruff's local-variable budget. The template
+    expansion logic (shared Reduce-expanded body + per-coord pin) is
+    documented inline below (issue #145).
+
+    Raises:
+        InvalidRhsSpecError: If ``expr_str`` is empty or fails to parse.
+    """
+    from op_system._ir_expand import expand_reduce_pointwise  # noqa: PLC0415
+
+    canonical_name = _normalize_bracket_key(raw_name)
+    expr_s = expr_str.strip() if isinstance(expr_str, str) else ""
+    if not expr_s:
+        raise InvalidRhsSpecError(
+            detail=f"aliases[{raw_name!r}] must be a non-empty string"
+        )
+    try:
+        ir_raw = parse_expr_to_ir(expr_s, lower_helpers=True)
+    except Exception as exc:
+        raise InvalidRhsSpecError(
+            detail=f"aliases[{raw_name!r}] has invalid expression: {exc}"
+        ) from exc
+
+    if canonical_name not in alias_template_map:
+        reduce_parsed[raw_name] = ir_raw
+        full_parsed[raw_name] = expand_reduce_pointwise(
+            ir_raw,
+            axes=list(axes),
+            shaped_params=shaped,
+            lhs_assignment={},
+            axis_coords=ax_lookup,
+        )
+        return
+
+    # Build the Reduce-expanded body ONCE with empty ``lhs_assignment``:
+    # every same-axis-twice subscript that needed the LHS pin would also
+    # have been bound by an enclosing Reduce (otherwise the construct is
+    # ill-formed), so the empty pass produces a template-form body whose
+    # only unresolved positions are the LHS free-axis
+    # ``AxisIndex(coord=None)`` slots. The per-coord pin step below
+    # collapses those slots via a cheap walk through
+    # :func:`expand_inline_templates`, replacing the previous
+    # O(coords * reduce-enumeration) cost with
+    # O(reduce-enumeration + coords * pin). For the COVID19_USA
+    # continuum (21 age coords * a 6500-node alias body) this is the
+    # dominant build cost (issue #145).
+    ir_full_root = expand_reduce_pointwise(
+        ir_raw,
+        axes=list(axes),
+        shaped_params=shaped,
+        lhs_assignment={},
+        axis_coords=ax_lookup,
+    )
+    # Shared per-subtree free-axes caches: each per-coord pin call would
+    # otherwise re-walk the full body even though most subtrees never
+    # reference the pinning axis. The memo lets
+    # ``expand_inline_templates`` short-circuit unaffected subtrees on
+    # every call except the first (issue #145).
+    fa_raw_memo: dict[int, frozenset[str]] = {}
+    fa_full_memo: dict[int, frozenset[str]] = {}
+    for expanded_name, assignment in alias_template_map[canonical_name]:
+        reduce_parsed[expanded_name] = expand_inline_templates(
+            ir_raw,
+            assignment=assignment,
+            shaped_params=shaped,
+            axis_lookup=ax_lookup,
+            _free_axes_memo=fa_raw_memo,
+        )
+        full_parsed[expanded_name] = expand_inline_templates(
+            ir_full_root,
+            assignment=assignment,
+            shaped_params=shaped,
+            axis_lookup=ax_lookup,
+            _free_axes_memo=fa_full_memo,
+        )
+
+
+def _build_aliases_ir_from_raw(
     aliases_raw: Mapping[str, str],
     *,
     axes: list[dict[str, Any]],
@@ -550,12 +640,7 @@ def _build_aliases_ir_from_raw(  # noqa: C901
 
     Returns:
         ``(aliases_ir, aliases_ir_reduce, alias_template_map)``.
-
-    Raises:
-        InvalidRhsSpecError: If any alias body is an invalid expression.
     """
-    from op_system._ir_expand import expand_reduce_pointwise  # noqa: PLC0415
-
     shaped = shaped_params or {}
     ax_lookup = dict(axis_lookup or {})
 
@@ -570,73 +655,16 @@ def _build_aliases_ir_from_raw(  # noqa: C901
             sys.setrecursionlimit(needed)
 
         for raw_name, expr_str in aliases_raw.items():
-            canonical_name = _normalize_bracket_key(raw_name)
-            expr_s = expr_str.strip() if isinstance(expr_str, str) else ""
-            if not expr_s:
-                raise InvalidRhsSpecError(
-                    detail=f"aliases[{raw_name!r}] must be a non-empty string"
-                )
-            try:
-                ir_raw = parse_expr_to_ir(expr_s, lower_helpers=True)
-            except Exception as exc:
-                raise InvalidRhsSpecError(
-                    detail=f"aliases[{raw_name!r}] has invalid expression: {exc}"
-                ) from exc
-
-            if canonical_name in alias_template_map:
-                # Build the Reduce-expanded body ONCE with empty
-                # ``lhs_assignment``: every same-axis-twice subscript
-                # that needed the LHS pin would also have been bound by
-                # an enclosing Reduce (otherwise the construct is
-                # ill-formed), so the empty pass produces a template-
-                # form body whose only unresolved positions are the
-                # LHS free-axis ``AxisIndex(coord=None)`` slots. The
-                # per-coord pin step below collapses those slots via a
-                # cheap walk through :func:`expand_inline_templates`,
-                # replacing the previous O(coords * reduce-enumeration)
-                # cost with O(reduce-enumeration + coords * pin). For
-                # the COVID19_USA continuum (21 age coords * a
-                # 6500-node alias body) this is the dominant build
-                # cost (issue #145).
-                ir_full_root = expand_reduce_pointwise(
-                    ir_raw,
-                    axes=list(axes),
-                    shaped_params=shaped,
-                    lhs_assignment={},
-                    axis_coords=ax_lookup,
-                )
-                # Shared per-subtree free-axes caches: each per-coord
-                # pin call would otherwise re-walk the full body even
-                # though most subtrees never reference the pinning
-                # axis. The memo lets ``expand_inline_templates``
-                # short-circuit unaffected subtrees on every call
-                # except the first (issue #145).
-                fa_raw_memo: dict[int, frozenset[str]] = {}
-                fa_full_memo: dict[int, frozenset[str]] = {}
-                for expanded_name, assignment in alias_template_map[canonical_name]:
-                    reduce_parsed[expanded_name] = expand_inline_templates(
-                        ir_raw,
-                        assignment=assignment,
-                        shaped_params=shaped,
-                        axis_lookup=ax_lookup,
-                        _free_axes_memo=fa_raw_memo,
-                    )
-                    full_parsed[expanded_name] = expand_inline_templates(
-                        ir_full_root,
-                        assignment=assignment,
-                        shaped_params=shaped,
-                        axis_lookup=ax_lookup,
-                        _free_axes_memo=fa_full_memo,
-                    )
-            else:
-                reduce_parsed[raw_name] = ir_raw
-                full_parsed[raw_name] = expand_reduce_pointwise(
-                    ir_raw,
-                    axes=list(axes),
-                    shaped_params=shaped,
-                    lhs_assignment={},
-                    axis_coords=ax_lookup,
-                )
+            _parse_alias_body(
+                raw_name,
+                expr_str,
+                axes=axes,
+                shaped=shaped,
+                ax_lookup=ax_lookup,
+                alias_template_map=alias_template_map,
+                reduce_parsed=reduce_parsed,
+                full_parsed=full_parsed,
+            )
 
         def _inline_all(parsed: dict[str, Expr], *, cycle_ok: bool) -> dict[str, Expr]:
             memo: dict[int, frozenset[str]] = {}
