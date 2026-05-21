@@ -302,12 +302,20 @@ def test_shaped_param_in_transitions_rate() -> None:
     out = normalize_rhs(spec)
     assert dict(out.shaped_params) == {"theta": ("imm",)}
     expanded = out.meta["transitions"]
+    # Alias-free template-uniform transitions emit a single shared
+    # template-form rate IR for every combo (issue #145). The per-cell
+    # ``from`` / ``to`` are still pinned, but the ``rate`` string is the
+    # template body with the shaped-param index left symbolic
+    # (``theta[imm]``); the vectorizer evaluates it at each cell's
+    # ``imm`` coord at runtime.
     rates = sorted(tr["rate"] for tr in expanded)
     assert rates == [
-        "theta[0] * I__imm_x0",
-        "theta[1] * I__imm_x1",
-        "theta[2] * I__imm_x2",
+        "theta[imm] * I[imm]",
+        "theta[imm] * I[imm]",
+        "theta[imm] * I[imm]",
     ]
+    froms = sorted(tr["from"] for tr in expanded)
+    assert froms == ["S__imm_x0", "S__imm_x1", "S__imm_x2"]
 
 
 def test_shaped_param_eval_end_to_end_scalar_backend() -> None:

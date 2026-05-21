@@ -54,6 +54,7 @@ from op_system._ir import (
     free_symbols,
     parse_expr_to_ir,
     unparse_ir,
+    walk,
 )
 from op_system._ir_templates import (
     expand_inline_templates,
@@ -538,6 +539,7 @@ def _build_transition_equations_ir(  # noqa: C901, PLR0912, PLR0913, PLR0914, PL
     shaped_params: Mapping[str, tuple[str, ...]] | None = None,
     mask_names: Mapping[tuple[str, str], str] | None = None,
     time_axis_name: str | None = None,
+    alias_bases: set[str] | None = None,
 ) -> tuple[
     tuple[Expr | None, ...],
     tuple[Expr | None, ...],
@@ -557,6 +559,7 @@ def _build_transition_equations_ir(  # noqa: C901, PLR0912, PLR0913, PLR0914, PL
     shaped = shaped_params or {}
     masks = mask_names or {}
     ax_lookup_dict = dict(axis_lookup)
+    alias_base_set: set[str] = set(alias_bases or ())
     d_ir_full: dict[str, list[Expr]] = {s: [] for s in state_expanded}
     d_ir_reduce: dict[str, list[Expr]] = {s: [] for s in state_expanded}
     all_syms: set[str] = set()
@@ -671,6 +674,76 @@ def _build_transition_equations_ir(  # noqa: C901, PLR0912, PLR0913, PLR0914, PL
             )
             to_names_for_synthesis: set[str] = set()
             from_names_for_synthesis: set[str] = set()
+            # Template-uniform non-synth fast-path. When the from-template
+            # and the to-template have the same wildcard axis set and
+            # there are no pinned tokens, no destination-only axes, and
+            # no rate-only axes, every (from_cell, to_cell) combo of this
+            # transition contributes the SAME ``rate * from_state``
+            # template-form flow to its respective cell. Building that
+            # IR once at the template level (``assignment={}``, with the
+            # ``from`` reference as a ``Subscript`` carrying symbolic
+            # ``AxisIndex(coord=None)`` slots) lets every cell of both
+            # templates share the same IR by object identity, which
+            # collapses the dominant per-cell ``inline_aliases`` /
+            # ``unparse_ir`` / ``free_symbols`` work from O(n_state) to
+            # O(n_template) on continuum specs (issue #145).
+            tpl_uniform = (
+                not synthesize
+                and bool(frm_wc_axes)
+                and frm_wc_set == to_wc_set
+                and not from_only_axes
+                and not to_only_axes
+                and not expr_only_axes
+                and not has_pinned
+            )
+            if tpl_uniform and alias_base_set:
+                # Disable the fast-path when the rate references an
+                # alias. The downstream alias-inline pass keys on
+                # fully-pinned ``Sym("alias__axis_coord")`` references
+                # (produced by per-combo ``expand_inline_templates`` with
+                # a non-empty ``assignment``); a template-form
+                # ``Subscript("alias", (AxisIndex(coord=None), ...))``
+                # would slip through unresolved and break compilation.
+                for node in walk(ir_rate_raw):
+                    if (
+                        isinstance(node, (Sym, Subscript))
+                        and node.name in alias_base_set
+                    ):
+                        tpl_uniform = False
+                        break
+            tpl_neg_flow_full: Expr | None = None
+            tpl_flow_full: Expr | None = None
+            tpl_neg_flow_reduce: Expr | None = None
+            tpl_flow_reduce: Expr | None = None
+            tpl_ir_rate_full: Expr | None = None
+            tpl_rate_string: str | None = None
+            if tpl_uniform:
+                # Build template-form (axes symbolic) rate IR once.
+                tpl_ir_rate_reduce = expand_inline_templates(
+                    ir_rate_raw,
+                    assignment={},
+                    shaped_params=shaped,
+                    axis_lookup=ax_lookup_dict,
+                )
+                tpl_ir_rate_full = expand_reduce_pointwise(
+                    tpl_ir_rate_reduce,
+                    axes=list(axes),
+                    shaped_params=shaped,
+                    lhs_assignment={},
+                    axis_coords=ax_lookup_dict,
+                )
+                # ``from`` reference as a template-form Subscript over the
+                # from-template's wildcard axes.
+                tpl_from_sub = Subscript(
+                    name=frm_base,
+                    indices=tuple(AxisIndex(axis=ax, coord=None) for ax in frm_wc_axes),
+                )
+                tpl_flow_full = Apply(op="*", args=(tpl_ir_rate_full, tpl_from_sub))
+                tpl_flow_reduce = Apply(op="*", args=(tpl_ir_rate_reduce, tpl_from_sub))
+                tpl_neg_flow_full = Apply(op="neg", args=(tpl_flow_full,))
+                tpl_neg_flow_reduce = Apply(op="neg", args=(tpl_flow_reduce,))
+                all_syms |= free_symbols(tpl_ir_rate_full)
+                tpl_rate_string = unparse_ir(tpl_ir_rate_full)
             # Reduce bindings: from-template axes that need to be summed
             # away when evaluating the to-side. Always include from-pinned
             # axes (the mask inside the reduce filters to the pinned
@@ -704,26 +777,48 @@ def _build_transition_equations_ir(  # noqa: C901, PLR0912, PLR0913, PLR0914, PL
                         detail=f"transitions[{tr_idx}].to={to_name!r} not in state"
                     )
 
-                # Rate IR: template-substituted, Reduce nodes preserved
-                ir_rate_reduce = expand_inline_templates(
-                    ir_rate_raw,
-                    assignment=assignment,
-                    shaped_params=shaped,
-                    axis_lookup=ax_lookup_dict,
-                )
-                # Rate IR: fully expanded, no Reduce nodes
-                ir_rate_full = expand_reduce_pointwise(
-                    ir_rate_reduce,
-                    axes=list(axes),
-                    shaped_params=shaped,
-                    lhs_assignment=assignment,
-                    axis_coords=ax_lookup_dict,
-                )
+                # Rate IR: template-substituted, Reduce nodes preserved.
+                # In the ``tpl_uniform`` fast-path the template-form
+                # rate IR was built once before the combo loop and is
+                # shared by identity across all combos via
+                # ``tpl_neg_flow_full`` / ``tpl_flow_full`` (etc.); we
+                # therefore skip per-combo rate construction entirely.
+                if tpl_uniform:
+                    ir_rate_reduce: Expr = tpl_ir_rate_reduce
+                    ir_rate_full: Expr = tpl_ir_rate_full  # type: ignore[assignment]
+                else:
+                    ir_rate_reduce = expand_inline_templates(
+                        ir_rate_raw,
+                        assignment=assignment,
+                        shaped_params=shaped,
+                        axis_lookup=ax_lookup_dict,
+                    )
+                    # Rate IR: fully expanded, no Reduce nodes
+                    ir_rate_full = expand_reduce_pointwise(
+                        ir_rate_reduce,
+                        axes=list(axes),
+                        shaped_params=shaped,
+                        lhs_assignment=assignment,
+                        axis_coords=ax_lookup_dict,
+                    )
 
-                # Build flow IR: rate * from_state
-                from_sym = Sym(name=from_name)
-                flow_full = Apply(op="*", args=(ir_rate_full, from_sym))
-                flow_reduce = Apply(op="*", args=(ir_rate_reduce, from_sym))
+                # Build flow IR: rate * from_state. In the tpl_uniform
+                # fast-path the per-cell ``Sym(from_name)`` reference is
+                # replaced by a single shared ``Subscript`` over the
+                # from-template's wildcard axes, and the resulting
+                # ``flow_full`` / ``flow_reduce`` / negated forms are the
+                # SAME IR object for every combo of this transition.
+                if tpl_uniform:
+                    flow_full: Expr = tpl_flow_full  # type: ignore[assignment]
+                    flow_reduce: Expr = tpl_flow_reduce  # type: ignore[assignment]
+                    neg_flow_full: Expr = tpl_neg_flow_full  # type: ignore[assignment]
+                    neg_flow_reduce: Expr = tpl_neg_flow_reduce  # type: ignore[assignment]
+                else:
+                    from_sym = Sym(name=from_name)
+                    flow_full = Apply(op="*", args=(ir_rate_full, from_sym))
+                    flow_reduce = Apply(op="*", args=(ir_rate_reduce, from_sym))
+                    neg_flow_full = Apply(op="neg", args=(flow_full,))
+                    neg_flow_reduce = Apply(op="neg", args=(flow_reduce,))
 
                 # Accumulate: from_state gets -flow, to_state gets +flow.
                 # When synthesizing template-uniform IR for this transition
@@ -743,19 +838,28 @@ def _build_transition_equations_ir(  # noqa: C901, PLR0912, PLR0913, PLR0914, PL
                     # whose mask-multiplied contribution is 0.
                     pass
                 else:
-                    d_ir_full[from_name].append(Apply(op="neg", args=(flow_full,)))
+                    d_ir_full[from_name].append(neg_flow_full)
                     d_ir_full[to_name].append(flow_full)
-                    d_ir_reduce[from_name].append(Apply(op="neg", args=(flow_reduce,)))
+                    d_ir_reduce[from_name].append(neg_flow_reduce)
                     d_ir_reduce[to_name].append(flow_reduce)
 
-                # Collect rate symbols (alias Syms kept unresolved)
-                all_syms |= free_symbols(ir_rate_full)
+                # Collect rate symbols (alias Syms kept unresolved). Skip
+                # in the tpl_uniform fast-path where this was hoisted out
+                # of the combo loop.
+                if not tpl_uniform:
+                    all_syms |= free_symbols(ir_rate_full)
 
-                # Build expanded transition dict for meta["transitions"]
+                # Build expanded transition dict for meta["transitions"].
+                # In the tpl_uniform fast-path the rate string is the
+                # same for every combo (axes symbolic), so reuse the
+                # pre-rendered ``tpl_rate_string`` instead of unparsing
+                # per combo.
                 tr_out: dict[str, Any] = dict(tr_valid)
                 tr_out["from"] = from_name
                 tr_out["to"] = to_name
-                tr_out["rate"] = unparse_ir(ir_rate_full)
+                tr_out["rate"] = (
+                    tpl_rate_string if tpl_uniform else unparse_ir(ir_rate_full)
+                )
                 if name_s:
                     tr_out["name"] = _apply_template_substitutions(
                         name_s,
@@ -1092,6 +1196,9 @@ def normalize_transitions_rhs(  # noqa: C901, PLR0912, PLR0914, PLR0915
             shaped_params=shaped_params,
             mask_names=pinned_mask_names,
             time_axis_name=time_axis_name,
+            alias_bases={
+                parse_selector(_normalize_bracket_key(k))[0] for k in aliases_raw_map
+            },
         )
     )
     all_syms |= rate_syms
