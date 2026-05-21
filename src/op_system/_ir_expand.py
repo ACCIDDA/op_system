@@ -102,19 +102,19 @@ def _expand_children(
     if isinstance(expr, (Literal, Sym, Subscript)):
         return expr
     if isinstance(expr, Apply):
-        return Apply(
-            op=expr.op,
-            args=tuple(
-                expand_reduce_pointwise(
-                    a,
-                    axes=axes,
-                    shaped_params=shaped_params,
-                    lhs_assignment=lhs_assignment,
-                    axis_coords=axis_coords,
-                )
-                for a in expr.args
-            ),
+        new_args = tuple(
+            expand_reduce_pointwise(
+                a,
+                axes=axes,
+                shaped_params=shaped_params,
+                lhs_assignment=lhs_assignment,
+                axis_coords=axis_coords,
+            )
+            for a in expr.args
         )
+        if all(n is o for n, o in zip(new_args, expr.args, strict=True)):
+            return expr
+        return Apply(op=expr.op, args=new_args)
     if isinstance(expr, Reduce):
         new_body = expand_reduce_pointwise(
             expr.body,
@@ -123,6 +123,8 @@ def _expand_children(
             lhs_assignment=lhs_assignment,
             axis_coords=axis_coords,
         )
+        if new_body is expr.body:
+            return expr
         return Reduce(
             kind=expr.kind,
             bindings=expr.bindings,
@@ -242,21 +244,21 @@ def _substitute_in_body(  # noqa: PLR0911, PLR0913
             return Sym(name=var_to_coord[body.name])
         return body
     if isinstance(body, Apply):
-        return Apply(
-            op=body.op,
-            args=tuple(
-                _substitute_in_body(
-                    a,
-                    var_to_coord=var_to_coord,
-                    bound=bound,
-                    axis_order=axis_order,
-                    shaped_params=shaped_params,
-                    lhs_assignment=lhs_assignment,
-                    axis_coords=axis_coords,
-                )
-                for a in body.args
-            ),
+        new_args = tuple(
+            _substitute_in_body(
+                a,
+                var_to_coord=var_to_coord,
+                bound=bound,
+                axis_order=axis_order,
+                shaped_params=shaped_params,
+                lhs_assignment=lhs_assignment,
+                axis_coords=axis_coords,
+            )
+            for a in body.args
         )
+        if all(n is o for n, o in zip(new_args, body.args, strict=True)):
+            return body
+        return Apply(op=body.op, args=new_args)
     if isinstance(body, Subscript):
         return _rewrite_subscript(
             body,
@@ -281,6 +283,8 @@ def _substitute_in_body(  # noqa: PLR0911, PLR0913
             lhs_assignment=lhs_assignment,
             axis_coords=axis_coords,
         )
+        if new_inner is body.body:
+            return body
         return Reduce(
             kind=body.kind,
             bindings=body.bindings,
