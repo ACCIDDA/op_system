@@ -842,9 +842,7 @@ def _build_transition_equations_ir(  # noqa: C901, PLR0912, PLR0913, PLR0914, PL
                 # ``assignment`` is only required on memo misses or for
                 # the optional ``name`` template; lazy-build it.
                 assignment: dict[str, str] | None = (
-                    dict(zip(wildcard_axes, combo, strict=True))
-                    if name_s
-                    else None
+                    dict(zip(wildcard_axes, combo, strict=True)) if name_s else None
                 )
                 if from_name is None:
                     if assignment is None:
@@ -883,9 +881,7 @@ def _build_transition_equations_ir(  # noqa: C901, PLR0912, PLR0913, PLR0914, PL
                     cached_rate_reduce = rate_ir_reduce_memo.get(rate_key)
                     if cached_rate_reduce is None:
                         if assignment is None:
-                            assignment = dict(
-                                zip(wildcard_axes, combo, strict=True)
-                            )
+                            assignment = dict(zip(wildcard_axes, combo, strict=True))
                         cached_rate_reduce = expand_inline_templates(
                             ir_rate_raw,
                             assignment=assignment,
@@ -897,9 +893,7 @@ def _build_transition_equations_ir(  # noqa: C901, PLR0912, PLR0913, PLR0914, PL
                     cached_rate_full = rate_ir_full_memo.get(rate_key)
                     if cached_rate_full is None:
                         if assignment is None:
-                            assignment = dict(
-                                zip(wildcard_axes, combo, strict=True)
-                            )
+                            assignment = dict(zip(wildcard_axes, combo, strict=True))
                         cached_rate_full = expand_reduce_pointwise(
                             ir_rate_reduce,
                             axes=list(axes),

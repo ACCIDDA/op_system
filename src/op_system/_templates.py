@@ -477,9 +477,12 @@ def _apply_template_substitutions(
             wildcards = tuple(t for t in tokens if isinstance(t, WildcardToken))
             if not wildcards:
                 continue
-            prepared_list.append(
-                (template_key, base, wildcards, re.compile(re.escape(template_key)))
-            )
+            prepared_list.append((
+                template_key,
+                base,
+                wildcards,
+                re.compile(re.escape(template_key)),
+            ))
         prepared = tuple(prepared_list)
         _APPLY_TPL_PREPARSE_CACHE[id(template_map)] = (template_map, prepared)
 
