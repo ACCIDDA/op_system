@@ -52,6 +52,7 @@ from op_system._ir import (
     Subscript,
     Sym,
     free_symbols,
+    iter_subscripts,
     parse_expr_to_ir,
     unparse_ir,
     walk,
@@ -779,6 +780,31 @@ def _build_transition_equations_ir(  # noqa: C901, PLR0912, PLR0913, PLR0914, PL
                 coords_lists = [ax_lookup_dict[ph] for ph in wildcard_axes]
                 combos = product(*coords_lists)
 
+            # For the non-fast-path combo loop, the per-combo rate IR
+            # only depends on the wildcard axes that actually appear in
+            # ``ir_rate_raw``'s subscripts; combos differing only on
+            # irrelevant axes yield identical rate IR (and identical
+            # unparsed strings). Project the assignment onto those axes
+            # and memoize ``expand_inline_templates`` /
+            # ``expand_reduce_pointwise`` / ``unparse_ir`` /
+            # ``free_symbols`` results so each unique projection pays the
+            # cost once. For alias-bearing transitions on the COVID19_USA
+            # continuum this collapses ~50k combos to a few hundred
+            # unique keys (issue #145).
+            rate_axes_used: list[str] = []
+            if wildcard_axes and not tpl_uniform:
+                wc_set_local = set(wildcard_axes)
+                seen_axes: set[str] = set()
+                for sub in iter_subscripts(ir_rate_raw):
+                    for ix in sub.indices:
+                        if ix.axis in wc_set_local and ix.axis not in seen_axes:
+                            seen_axes.add(ix.axis)
+                rate_axes_used = [a for a in wildcard_axes if a in seen_axes]
+            rate_ir_reduce_memo: dict[tuple[str, ...], Expr] = {}
+            rate_ir_full_memo: dict[tuple[str, ...], Expr] = {}
+            rate_str_memo: dict[tuple[str, ...], str] = {}
+            rate_syms_seen: set[tuple[str, ...]] = set()
+
             for combo in combos:
                 assignment = dict(zip(wildcard_axes, combo, strict=True))
                 from_name = render_selector(
@@ -806,20 +832,28 @@ def _build_transition_equations_ir(  # noqa: C901, PLR0912, PLR0913, PLR0914, PL
                     ir_rate_reduce: Expr = tpl_ir_rate_reduce
                     ir_rate_full: Expr = tpl_ir_rate_full  # type: ignore[assignment]
                 else:
-                    ir_rate_reduce = expand_inline_templates(
-                        ir_rate_raw,
-                        assignment=assignment,
-                        shaped_params=shaped,
-                        axis_lookup=ax_lookup_dict,
-                    )
-                    # Rate IR: fully expanded, no Reduce nodes
-                    ir_rate_full = expand_reduce_pointwise(
-                        ir_rate_reduce,
-                        axes=list(axes),
-                        shaped_params=shaped,
-                        lhs_assignment=assignment,
-                        axis_coords=ax_lookup_dict,
-                    )
+                    rate_key = tuple(assignment[a] for a in rate_axes_used)
+                    cached_rate_reduce = rate_ir_reduce_memo.get(rate_key)
+                    if cached_rate_reduce is None:
+                        cached_rate_reduce = expand_inline_templates(
+                            ir_rate_raw,
+                            assignment=assignment,
+                            shaped_params=shaped,
+                            axis_lookup=ax_lookup_dict,
+                        )
+                        rate_ir_reduce_memo[rate_key] = cached_rate_reduce
+                    ir_rate_reduce = cached_rate_reduce
+                    cached_rate_full = rate_ir_full_memo.get(rate_key)
+                    if cached_rate_full is None:
+                        cached_rate_full = expand_reduce_pointwise(
+                            ir_rate_reduce,
+                            axes=list(axes),
+                            shaped_params=shaped,
+                            lhs_assignment=assignment,
+                            axis_coords=ax_lookup_dict,
+                        )
+                        rate_ir_full_memo[rate_key] = cached_rate_full
+                    ir_rate_full = cached_rate_full
 
                 # Build flow IR: rate * from_state. In the tpl_uniform
                 # fast-path the per-cell ``Sym(from_name)`` reference is
@@ -864,21 +898,32 @@ def _build_transition_equations_ir(  # noqa: C901, PLR0912, PLR0913, PLR0914, PL
 
                 # Collect rate symbols (alias Syms kept unresolved). Skip
                 # in the tpl_uniform fast-path where this was hoisted out
-                # of the combo loop.
-                if not tpl_uniform:
+                # of the combo loop. The set of free symbols of
+                # ``ir_rate_full`` depends only on the projected rate
+                # assignment, so visit each unique key once.
+                if not tpl_uniform and rate_key not in rate_syms_seen:
+                    rate_syms_seen.add(rate_key)
                     all_syms |= free_symbols(ir_rate_full)
 
                 # Build expanded transition dict for meta["transitions"].
                 # In the tpl_uniform fast-path the rate string is the
                 # same for every combo (axes symbolic), so reuse the
                 # pre-rendered ``tpl_rate_string`` instead of unparsing
-                # per combo.
+                # per combo. Otherwise, memoize unparsing by the rate
+                # projection key (same projected assignment -> same
+                # rate IR -> same string).
+                if tpl_uniform:
+                    rate_string: str = tpl_rate_string  # type: ignore[assignment]
+                else:
+                    cached_str = rate_str_memo.get(rate_key)
+                    if cached_str is None:
+                        cached_str = unparse_ir(ir_rate_full)
+                        rate_str_memo[rate_key] = cached_str
+                    rate_string = cached_str
                 tr_out: dict[str, Any] = dict(tr_valid)
                 tr_out["from"] = from_name
                 tr_out["to"] = to_name
-                tr_out["rate"] = (
-                    tpl_rate_string if tpl_uniform else unparse_ir(ir_rate_full)
-                )
+                tr_out["rate"] = rate_string
                 if name_s:
                     tr_out["name"] = _apply_template_substitutions(
                         name_s,
