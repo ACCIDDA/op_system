@@ -414,9 +414,15 @@ def normalize_expr_rhs(spec: Mapping[str, Any]) -> ExprRhs:  # noqa: C901, PLR09
         aliases_ir=aliases_ir_map,
     )
     # Collect free symbols from alias bodies (alias bodies may reference
-    # params not appearing in any equation directly).
-    for alias_ir_val in aliases_ir_map.values():
-        all_syms |= free_symbols(alias_ir_val)
+    # params not appearing in any equation directly). Walk the *reduce*
+    # map (Reduce nodes still folded) rather than the fully expanded
+    # map: alias inlining is identical between the two, but the reduce
+    # form is orders of magnitude smaller for continuum specs. Share a
+    # single id-keyed memo across the per-cell entries so common
+    # subtrees are visited at most once (issue #145).
+    fs_memo: dict[int, frozenset[str]] = {}
+    for alias_ir_val in aliases_ir_reduce_map.values():
+        all_syms |= free_symbols(alias_ir_val, memo=fs_memo)
 
     _maybe_attach_initial_state(
         meta,
@@ -1156,10 +1162,14 @@ def normalize_transitions_rhs(  # noqa: C901, PLR0912, PLR0914, PLR0915
     template_map_all = {**state_template_map, **alias_template_map}
 
     state_set = set(state_expanded)
-    # Collect alias symbols from IR
+    # Collect alias symbols from IR. Walk the Reduce-folded map (same
+    # inlined symbol set as the full-expansion map but vastly smaller
+    # on continuum specs) and share an id-keyed memo across per-cell
+    # entries that share subtrees by identity (issue #145).
     all_syms: set[str] = set()
-    for alias_expr in aliases_ir_map.values():
-        all_syms |= free_symbols(alias_expr)
+    fs_memo: dict[int, frozenset[str]] = {}
+    for alias_expr in aliases_ir_reduce_map.values():
+        all_syms |= free_symbols(alias_expr, memo=fs_memo)
 
     _apply_coord_shifts(
         transitions_raw=transitions_raw,
