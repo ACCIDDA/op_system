@@ -267,6 +267,18 @@ def normalize_rhs(spec: Mapping[str, Any] | None) -> NormalizedRhs:
     Raises:
         InvalidRhsSpecError: If validation fails.
         UnsupportedFeatureError: If validation fails.
+
+    Examples:
+        >>> spec = {
+        ...     "kind": "expr",
+        ...     "state": ["x"],
+        ...     "equations": {"x": "2.0 * x"},
+        ... }
+        >>> rhs = normalize_rhs(spec)
+        >>> isinstance(rhs, ExprRhs)
+        True
+        >>> rhs.state_names
+        ('x',)
     """
     if spec is None:
         raise InvalidRhsSpecError(detail="rhs specification is required")
@@ -296,6 +308,17 @@ def normalize_expr_rhs(spec: Mapping[str, Any]) -> ExprRhs:  # noqa: C901, PLR09
 
     Raises:
         InvalidRhsSpecError: If validation fails.
+
+    Examples:
+        >>> rhs = normalize_expr_rhs({
+        ...     "kind": "expr",
+        ...     "state": ["x", "y"],
+        ...     "equations": {"x": "-y", "y": "x"},
+        ... })
+        >>> rhs.state_names
+        ('x', 'y')
+        >>> len(rhs.equations)
+        2
     """
     state_raw = _ensure_str_list(spec.get("state"), name="state")
     if len(state_raw) != len(set(state_raw)):
@@ -863,6 +886,15 @@ def _build_transition_equations_ir(  # noqa: C901, PLR0912, PLR0913, PLR0914, PL
             sys.setrecursionlimit(old_limit)
 
     def _sum_terms(terms: list[Expr]) -> Expr:
+        """Combine ``terms`` into a single :class:`Apply` (or a literal 0).
+
+        Returns ``Literal(0.0)`` for an empty list, the lone term unchanged
+        for a single-element list, and a flat ``Apply('+', ...)`` for two
+        or more terms.
+
+        Returns:
+            Combined IR expression.
+        """
         if not terms:
             return Literal(value=0.0)
         if len(terms) == 1:

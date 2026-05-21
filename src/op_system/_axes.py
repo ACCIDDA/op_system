@@ -53,6 +53,20 @@ def _normalize_bracket_key(key: str) -> str:
 
 
 def _normalize_axis_name(ax_map: Mapping[str, Any], *, idx: int, seen: set[str]) -> str:
+    """Validate and return the ``name`` field of one axis definition.
+
+    Args:
+        ax_map: Raw axis mapping.
+        idx: Position in the surrounding ``axes`` list (for diagnostics).
+        seen: Mutable set of already-registered axis names; updated in place.
+
+    Returns:
+        The validated, stripped axis name.
+
+    Raises:
+        InvalidRhsSpecError: If ``name`` is missing, not a string, empty, or
+            duplicates an earlier axis.
+    """
     name_val = ax_map.get("name")
     if not isinstance(name_val, str) or not name_val.strip():
         raise InvalidRhsSpecError(detail=f"axes[{idx}].name must be a non-empty string")
@@ -64,6 +78,18 @@ def _normalize_axis_name(ax_map: Mapping[str, Any], *, idx: int, seen: set[str])
 
 
 def _normalize_axis_type(ax_map: Mapping[str, Any], *, idx: int) -> str:
+    """Validate and return the ``type`` field of one axis (default categorical).
+
+    Args:
+        ax_map: Raw axis mapping.
+        idx: Position in the surrounding ``axes`` list (for diagnostics).
+
+    Returns:
+        One of ``"categorical"``, ``"ordinal"``, or ``"continuous"``.
+
+    Raises:
+        InvalidRhsSpecError: If ``type`` is set to anything else.
+    """
     ax_type = str(ax_map.get("type", "categorical")).strip().lower()
     if ax_type not in {"categorical", "ordinal", "continuous"}:
         raise InvalidRhsSpecError(
@@ -75,6 +101,19 @@ def _normalize_axis_type(ax_map: Mapping[str, Any], *, idx: int) -> str:
 
 
 def _normalize_axis_units(ax_map: Mapping[str, Any], *, idx: int) -> str | None:
+    """Validate and return the optional ``units`` field of one axis.
+
+    Args:
+        ax_map: Raw axis mapping.
+        idx: Position in the surrounding ``axes`` list (for diagnostics).
+
+    Returns:
+        Stripped units string or ``None`` when absent.
+
+    Raises:
+        InvalidRhsSpecError: If ``units`` is provided but is not a non-empty
+            string.
+    """
     units_obj = ax_map.get("units")
     if units_obj is None:
         return None
@@ -91,6 +130,23 @@ def _normalize_axis_coords(
     idx: int,
     ax_type: str,
 ) -> tuple[list[Any], int]:
+    """Validate explicit ``coords`` for one axis.
+
+    Categorical and ordinal axes must have non-empty unique string coords;
+    continuous axes coerce values to numbers and require monotonic
+    non-decreasing order.
+
+    Args:
+        coords_obj: Raw value of ``coords``.
+        idx: Position in the surrounding ``axes`` list (for diagnostics).
+        ax_type: Already-validated axis type.
+
+    Returns:
+        ``(coords, size)`` pair.
+
+    Raises:
+        InvalidRhsSpecError: If validation fails.
+    """
     if not isinstance(coords_obj, (list, tuple)) or not coords_obj:
         raise InvalidRhsSpecError(detail=f"axes[{idx}].coords must be a non-empty list")
     coords = list(coords_obj)
@@ -164,6 +220,20 @@ def _compute_axis_deltas(coords: list[float], *, idx: int) -> list[float]:
 def _generate_continuous_coords(
     *, domain: object, size_obj: object, spacing: str, idx: int
 ) -> tuple[list[float], int]:
+    """Generate ``coords`` for a continuous axis from ``domain``/``size``/``spacing``.
+
+    Args:
+        domain: Raw ``domain`` mapping with ``lb``/``ub``.
+        size_obj: Raw ``size`` value (must be an integer >= 2).
+        spacing: One of ``"linear"``, ``"log"``, ``"geom"``.
+        idx: Position in the surrounding ``axes`` list (for diagnostics).
+
+    Returns:
+        ``(coords, size)`` pair where ``coords`` has length ``size``.
+
+    Raises:
+        InvalidRhsSpecError: On invalid bounds, size, or spacing.
+    """
     domain_map = (
         _ensure_mapping(domain, name=f"axes[{idx}].domain")
         if domain is not None
@@ -221,6 +291,21 @@ def _generate_continuous_coords(
 def _normalize_single_axis(
     ax_map: Mapping[str, Any], *, idx: int, seen: set[str]
 ) -> dict[str, Any]:
+    """Normalize one axis mapping into the canonical record.
+
+    Args:
+        ax_map: Raw axis mapping.
+        idx: Position in the surrounding ``axes`` list (for diagnostics).
+        seen: Mutable set of already-registered axis names; updated in place.
+
+    Returns:
+        Canonical axis dict (``name``, ``type``, ``coords``, ``size``,
+        and optionally ``deltas``, ``domain``, ``spacing``, ``units``).
+
+    Raises:
+        InvalidRhsSpecError: If the axis is categorical or ordinal but
+            has no ``coords`` field.
+    """
     name = _normalize_axis_name(ax_map, idx=idx, seen=seen)
     ax_type = _normalize_axis_type(ax_map, idx=idx)
     spacing = str(ax_map.get("spacing", "linear")).strip().lower()

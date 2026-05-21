@@ -11,7 +11,7 @@ from __future__ import annotations
 import contextlib
 import sys
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 if TYPE_CHECKING:
     import re
@@ -228,6 +228,11 @@ def _strip_time_axis_in_expr(
         return expr
 
     def _rewrite(match: re.Match[str]) -> str:
+        """Rewrite one ``base[time, ...]`` match by dropping the time axis.
+
+        Returns:
+            Replacement text, or the original match if no rewrite applies.
+        """
         base = match.group(1)
         full = tv_full_axes.get(base)
         if full is None:
@@ -535,7 +540,105 @@ def _build_equations_ir(
             sys.setrecursionlimit(old_limit)
 
 
-def _build_aliases_ir_from_raw(  # noqa: C901
+def _parse_alias_body_to_ir(raw_name: str, expr_str: object) -> Expr:
+    """Parse a single alias body string into IR with diagnostics.
+
+    Args:
+        raw_name: Original alias key, used in error messages.
+        expr_str: Raw alias body. Must be a non-empty string.
+
+    Returns:
+        Parsed alias IR (helpers already lowered).
+
+    Raises:
+        InvalidRhsSpecError: If ``expr_str`` is not a non-empty string or
+            cannot be parsed as a valid expression.
+    """
+    expr_s = expr_str.strip() if isinstance(expr_str, str) else ""
+    if not expr_s:
+        raise InvalidRhsSpecError(
+            detail=f"aliases[{raw_name!r}] must be a non-empty string"
+        )
+    try:
+        return parse_expr_to_ir(expr_s, lower_helpers=True)
+    except Exception as exc:
+        raise InvalidRhsSpecError(
+            detail=f"aliases[{raw_name!r}] has invalid expression: {exc}"
+        ) from exc
+
+
+class _AliasExpansionContext(NamedTuple):
+    """Bundled context for per-alias IR expansion.
+
+    Attributes:
+        alias_template_map: Map from canonical alias name to expansion
+            assignments.
+        axes: Resolved axes list passed through to expansion helpers.
+        shaped: Shaped-parameter axis declarations.
+        ax_lookup: Axis-coord lookup dictionary.
+    """
+
+    alias_template_map: Mapping[str, list[tuple[str, dict[str, str]]]]
+    axes: list[dict[str, Any]]
+    shaped: Mapping[str, tuple[str, ...]]
+    ax_lookup: Mapping[str, list[str]]
+
+
+def _populate_alias_parsed_maps(
+    raw_name: str,
+    canonical_name: str,
+    ir_raw: Expr,
+    ctx: _AliasExpansionContext,
+    parsed_maps: tuple[dict[str, Expr], dict[str, Expr]],
+) -> None:
+    """Expand one parsed alias and write entries into the parsed maps.
+
+    Branches on whether the alias is templated (i.e. has a non-empty
+    expansion in ``ctx.alias_template_map``): templated aliases are
+    expanded once per assignment; bare aliases are stored under
+    ``raw_name``.
+
+    Args:
+        raw_name: Original alias key (used as the dict key for
+            non-templated aliases).
+        canonical_name: Bracket-normalized form of ``raw_name`` (used to
+            look up template expansions).
+        ir_raw: Parsed alias body.
+        ctx: Bundled expansion context.
+        parsed_maps: Pair ``(reduce_parsed, full_parsed)`` of output maps
+            populated with reduce-form and point-expanded IRs.
+    """
+    from op_system._ir_expand import expand_reduce_pointwise  # noqa: PLC0415
+
+    reduce_parsed, full_parsed = parsed_maps
+    if canonical_name in ctx.alias_template_map:
+        for expanded_name, assignment in ctx.alias_template_map[canonical_name]:
+            ir_tmpl = expand_inline_templates(
+                ir_raw,
+                assignment=assignment,
+                shaped_params=ctx.shaped,
+                axis_lookup=ctx.ax_lookup,
+            )
+            reduce_parsed[expanded_name] = ir_tmpl
+            full_parsed[expanded_name] = expand_reduce_pointwise(
+                ir_tmpl,
+                axes=list(ctx.axes),
+                shaped_params=ctx.shaped,
+                lhs_assignment=assignment,
+                axis_coords=ctx.ax_lookup,
+            )
+        return
+    reduce_parsed[raw_name] = ir_raw
+    full_parsed[raw_name] = expand_reduce_pointwise(
+        ir_raw,
+        axes=list(ctx.axes),
+        shaped_params=ctx.shaped,
+        lhs_assignment={},
+        axis_coords=ctx.ax_lookup,
+    )
+
+
+def _build_aliases_ir_from_raw(
     aliases_raw: Mapping[str, str],
     *,
     axes: list[dict[str, Any]],
@@ -550,12 +653,7 @@ def _build_aliases_ir_from_raw(  # noqa: C901
 
     Returns:
         ``(aliases_ir, aliases_ir_reduce, alias_template_map)``.
-
-    Raises:
-        InvalidRhsSpecError: If any alias body is an invalid expression.
     """
-    from op_system._ir_expand import expand_reduce_pointwise  # noqa: PLC0415
-
     shaped = shaped_params or {}
     ax_lookup = dict(axis_lookup or {})
 
@@ -571,45 +669,26 @@ def _build_aliases_ir_from_raw(  # noqa: C901
 
         for raw_name, expr_str in aliases_raw.items():
             canonical_name = _normalize_bracket_key(raw_name)
-            expr_s = expr_str.strip() if isinstance(expr_str, str) else ""
-            if not expr_s:
-                raise InvalidRhsSpecError(
-                    detail=f"aliases[{raw_name!r}] must be a non-empty string"
-                )
-            try:
-                ir_raw = parse_expr_to_ir(expr_s, lower_helpers=True)
-            except Exception as exc:
-                raise InvalidRhsSpecError(
-                    detail=f"aliases[{raw_name!r}] has invalid expression: {exc}"
-                ) from exc
-
-            if canonical_name in alias_template_map:
-                for expanded_name, assignment in alias_template_map[canonical_name]:
-                    ir_tmpl = expand_inline_templates(
-                        ir_raw,
-                        assignment=assignment,
-                        shaped_params=shaped,
-                        axis_lookup=ax_lookup,
-                    )
-                    reduce_parsed[expanded_name] = ir_tmpl
-                    full_parsed[expanded_name] = expand_reduce_pointwise(
-                        ir_tmpl,
-                        axes=list(axes),
-                        shaped_params=shaped,
-                        lhs_assignment=assignment,
-                        axis_coords=ax_lookup,
-                    )
-            else:
-                reduce_parsed[raw_name] = ir_raw
-                full_parsed[raw_name] = expand_reduce_pointwise(
-                    ir_raw,
-                    axes=list(axes),
-                    shaped_params=shaped,
-                    lhs_assignment={},
-                    axis_coords=ax_lookup,
-                )
+            ir_raw = _parse_alias_body_to_ir(raw_name, expr_str)
+            _populate_alias_parsed_maps(
+                raw_name,
+                canonical_name,
+                ir_raw,
+                _AliasExpansionContext(
+                    alias_template_map=alias_template_map,
+                    axes=axes,
+                    shaped=shaped,
+                    ax_lookup=ax_lookup,
+                ),
+                (reduce_parsed, full_parsed),
+            )
 
         def _inline_all(parsed: dict[str, Expr]) -> dict[str, Expr]:
+            """Inline alias references through the alias map (cycle-safe).
+
+            Returns:
+                Map from alias name to fully-inlined IR.
+            """
             memo: dict[int, frozenset[str]] = {}
             cycle_ok = False
             with contextlib.suppress(ValueError, RecursionError):

@@ -29,6 +29,13 @@ class InvalidRhsSpecError(ValueError):
         missing: list[str] | None = None,
         detail: str | None = None,
     ) -> None:
+        """Initialize the error.
+
+        Args:
+            missing: Optional list of missing required field names.
+            detail: Optional human-readable detail describing the
+                violation.
+        """
         self.missing = list(missing) if missing else None
         self.detail = detail
         parts: list[str] = [_INVALID_RHS_SPEC_PREFIX]
@@ -47,6 +54,12 @@ class InvalidExpressionError(ValueError):
     """
 
     def __init__(self, *, detail: str) -> None:
+        """Initialize the error.
+
+        Args:
+            detail: Human-readable detail describing the parse or
+                validation failure.
+        """
         self.detail = detail
         super().__init__(f"{_INVALID_EXPRESSION_PREFIX} Detail: {detail}")
 
@@ -60,6 +73,12 @@ class UnsupportedFeatureError(NotImplementedError):
     """
 
     def __init__(self, *, feature: str, detail: str | None = None) -> None:
+        """Initialize the error.
+
+        Args:
+            feature: Identifier for the unsupported feature.
+            detail: Optional additional detail.
+        """
         self.feature = feature
         self.detail = detail
         msg = f"{_UNSUPPORTED_FEATURE_PREFIX} Feature {feature!r} is not supported."

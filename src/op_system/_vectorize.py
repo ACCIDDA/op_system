@@ -340,6 +340,15 @@ def _lower_multicell_sym_ir_to_ast(  # noqa: C901
                 )
 
     def _lower(node: Expr) -> ast.expr | None:
+        """Best-effort IR -> AST lowering for the cell-equation rewriter.
+
+        Returns ``None`` (rather than raising) for any node shape outside
+        the supported subset, which lets the caller fall back to the
+        generic per-cell lowering.
+
+        Returns:
+            Lowered AST expression, or ``None`` if unsupported.
+        """
         if isinstance(node, Sym):
             return cell_ast.get(node.name)
         if isinstance(node, Literal):
@@ -696,6 +705,7 @@ def _vectorize_template_equations(  # noqa: C901, PLR0912, PLR0913, PLR0914, PLR
                 base_flat: int = base_flat,
                 vec_idx: tuple[int, ...] = vec_idx,
             ) -> int:
+                """Return the flat cell index for a vec-axis coord position."""
                 f = base_flat
                 for k_pos, ax_pos in enumerate(vec_idx):
                     f += vec_coord_idx[k_pos] * strides[ax_pos]
@@ -1056,6 +1066,19 @@ def make_vectorized_eval_fn(plan: _VectorPlan) -> EvalFn:  # noqa: C901, PLR0915
     extra_param_buffers = plan.extra_param_buffers
 
     def eval_fn(t: object, y: object, **params: object) -> Float64Array:  # noqa: C901, PLR0912, PLR0914, PLR0915
+        """Vectorized evaluation closure produced by :func:`build_eval_fn`.
+
+        Computes the RHS for the entire state vector at once using the
+        compiled per-bin AST callables, gathered into a single output
+        array in ``y``'s array namespace.
+
+        Returns:
+            ``dydt`` array of shape ``(n_state,)`` in ``y``'s namespace.
+
+        Raises:
+            ValueError: If a required parameter is missing or has the
+                wrong shape.
+        """
         xp = _namespace_of(y)
         _check_numeric_dtype(xp, getattr(y, "dtype", None))
         y_arr = _validate_state_vector(y, n_state=n_state)
