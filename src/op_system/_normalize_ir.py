@@ -584,20 +584,39 @@ def _build_aliases_ir_from_raw(  # noqa: C901
                 ) from exc
 
             if canonical_name in alias_template_map:
+                # Build the Reduce-expanded body ONCE with empty
+                # ``lhs_assignment``: every same-axis-twice subscript
+                # that needed the LHS pin would also have been bound by
+                # an enclosing Reduce (otherwise the construct is
+                # ill-formed), so the empty pass produces a template-
+                # form body whose only unresolved positions are the
+                # LHS free-axis ``AxisIndex(coord=None)`` slots. The
+                # per-coord pin step below collapses those slots via a
+                # cheap walk through :func:`expand_inline_templates`,
+                # replacing the previous O(coords * reduce-enumeration)
+                # cost with O(reduce-enumeration + coords * pin). For
+                # the COVID19_USA continuum (21 age coords * a
+                # 6500-node alias body) this is the dominant build
+                # cost (issue #145).
+                ir_full_root = expand_reduce_pointwise(
+                    ir_raw,
+                    axes=list(axes),
+                    shaped_params=shaped,
+                    lhs_assignment={},
+                    axis_coords=ax_lookup,
+                )
                 for expanded_name, assignment in alias_template_map[canonical_name]:
-                    ir_tmpl = expand_inline_templates(
+                    reduce_parsed[expanded_name] = expand_inline_templates(
                         ir_raw,
                         assignment=assignment,
                         shaped_params=shaped,
                         axis_lookup=ax_lookup,
                     )
-                    reduce_parsed[expanded_name] = ir_tmpl
-                    full_parsed[expanded_name] = expand_reduce_pointwise(
-                        ir_tmpl,
-                        axes=list(axes),
+                    full_parsed[expanded_name] = expand_inline_templates(
+                        ir_full_root,
+                        assignment=assignment,
                         shaped_params=shaped,
-                        lhs_assignment=assignment,
-                        axis_coords=ax_lookup,
+                        axis_lookup=ax_lookup,
                     )
             else:
                 reduce_parsed[raw_name] = ir_raw
