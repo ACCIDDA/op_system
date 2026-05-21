@@ -780,6 +780,11 @@ def _derive_equation_strings(
     old_limit = sys.getrecursionlimit()
     sys.setrecursionlimit(max(old_limit, 10_000))
     try:
+        # Identity-keyed memo so rendering shared sub-IR (e.g. one
+        # template's synthesized ``synth_to`` / ``synth_neg`` IR object
+        # installed into every cell's equation; issue #145) runs once
+        # rather than once per cell.
+        unparse_memo: dict[tuple[int, int, bool], str] = {}
         rendered: list[str] = []
         for idx, ir in enumerate(equations_ir):
             if ir is None:
@@ -787,7 +792,7 @@ def _derive_equation_strings(
                     detail=f"equations[{idx}] is missing typed IR during rendering"
                 )
             try:
-                rendered.append(unparse_ir(ir))
+                rendered.append(unparse_ir(ir, _memo=unparse_memo))
             except (ValueError, RecursionError) as exc:
                 raise InvalidRhsSpecError(
                     detail=f"equations[{idx}] could not be rendered from typed IR"

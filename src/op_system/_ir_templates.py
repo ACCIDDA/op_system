@@ -367,13 +367,14 @@ def _detect_alias_cycle(
     return None
 
 
-def inline_aliases(
+def inline_aliases(  # noqa: C901, PLR0913
     expr: Expr,
     aliases: Mapping[str, Expr],
     *,
     max_depth: int = 64,
     memo: dict[int, frozenset[str]] | None = None,
     skip_cycle_check: bool = False,
+    result_memo: dict[int, Expr] | None = None,
 ) -> Expr:
     """Fixed-point inline ``Sym`` references that match ``aliases`` keys.
 
@@ -398,6 +399,11 @@ def inline_aliases(
             Callers that batch-inline many expressions against the same
             ``aliases`` mapping should validate once and set this flag on
             subsequent calls.
+        result_memo: Optional identity-keyed cache mapping ``id(expr)`` to
+            the fully-inlined result. When the same IR object is inlined
+            many times against the same ``aliases`` (e.g. one template's
+            synthesized IR shared across many state cells), pass a
+            single dict to amortize the substitution work across calls.
 
     Returns:
         A new IR expression with all alias references resolved.
@@ -408,6 +414,10 @@ def inline_aliases(
     """
     if not aliases:
         return expr
+    if result_memo is not None:
+        cached_result = result_memo.get(id(expr))
+        if cached_result is not None:
+            return cached_result
 
     if not skip_cycle_check:
         cycle = _detect_alias_cycle(aliases)
@@ -447,6 +457,8 @@ def inline_aliases(
     live = free_symbols(current, memo) & keys
     for _ in range(max_depth):
         if not live:
+            if result_memo is not None:
+                result_memo[id(expr)] = current
             return current
         mapping = {name: aliases[name] for name in live}
         current = substitute(current, mapping, memo)

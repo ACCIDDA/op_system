@@ -727,12 +727,14 @@ def _build_transition_equations_ir(  # noqa: C901, PLR0912, PLR0913, PLR0914, PL
 
                 # Accumulate: from_state gets -flow, to_state gets +flow.
                 # When synthesizing template-uniform IR for this transition
-                # (see post-loop block below), skip the per-combo append
-                # into ``d_ir_reduce[from_name]`` and ``d_ir_reduce[to_name]``
-                # — the synthesized nodes carry the same total contribution
-                # in a form the vectorizer can template-lift.
-                d_ir_full[from_name].append(Apply(op="neg", args=(flow_full,)))
-                d_ir_full[to_name].append(flow_full)
+                # (see post-loop block below), skip the per-combo appends
+                # into BOTH ``d_ir_full`` and ``d_ir_reduce``. The synthesized
+                # nodes installed after the combo loop carry the same total
+                # contribution but are SHARED across all cells of the
+                # template. Sharing collapses per-cell ``inline_aliases``
+                # work from O(n_state) to O(n_template) when the per-cell
+                # inline loop is passed a ``result_memo`` keyed on
+                # ``id(expr)`` (issue #145).
                 if synthesize:
                     # Synthesis installs template-uniform IR into ALL
                     # cells of both templates after the combo loop; the
@@ -741,6 +743,8 @@ def _build_transition_equations_ir(  # noqa: C901, PLR0912, PLR0913, PLR0914, PL
                     # whose mask-multiplied contribution is 0.
                     pass
                 else:
+                    d_ir_full[from_name].append(Apply(op="neg", args=(flow_full,)))
+                    d_ir_full[to_name].append(flow_full)
                     d_ir_reduce[from_name].append(Apply(op="neg", args=(flow_reduce,)))
                     d_ir_reduce[to_name].append(flow_reduce)
 
@@ -871,10 +875,38 @@ def _build_transition_equations_ir(  # noqa: C901, PLR0912, PLR0913, PLR0914, PL
                 synth_neg = Apply(op="neg", args=(from_body,))
 
                 all_syms |= free_symbols(synth_to)
+                # Pointwise-expand the synthesized IR ONCE at the template
+                # level so ``d_ir_full`` (the per-cell equation IR consumed
+                # by downstream code via ``ir_to_ast_expr``) stays Reduce-
+                # free. With ``lhs_assignment={}``, only the explicit
+                # reduce bindings are enumerated; wildcard template axes
+                # remain symbolic (``AxisIndex(coord=None)``) so the
+                # resulting IR is identical across every cell of the
+                # template and can be shared by object identity (issue
+                # #145). Without this, every cell of a synthesized
+                # transition would need its own per-cell pointwise
+                # expansion and the per-cell ``inline_aliases`` would not
+                # hit the shared ``result_memo``.
+                synth_to_full = expand_reduce_pointwise(
+                    synth_to,
+                    axes=list(axes),
+                    shaped_params=shaped,
+                    lhs_assignment={},
+                    axis_coords=ax_lookup_dict,
+                )
+                synth_neg_full = expand_reduce_pointwise(
+                    synth_neg,
+                    axes=list(axes),
+                    shaped_params=shaped,
+                    lhs_assignment={},
+                    axis_coords=ax_lookup_dict,
+                )
                 for to_name in to_names_for_synthesis:
                     d_ir_reduce[to_name].append(synth_to)
+                    d_ir_full[to_name].append(synth_to_full)
                 for from_name in from_names_for_synthesis:
                     d_ir_reduce[from_name].append(synth_neg)
+                    d_ir_full[from_name].append(synth_neg_full)
     finally:
         if needed > old_limit:
             sys.setrecursionlimit(old_limit)
@@ -1086,7 +1118,27 @@ def normalize_transitions_rhs(  # noqa: C901, PLR0912, PLR0914, PLR0915
     # plus a redundant IR rebuild on large continuum specs (issue #145).
     # ``aliases_ir_map`` is already fully alias-inlined inside
     # ``_build_aliases_ir_from_raw`` so cycle detection is redundant here.
+    #
+    # The dominant cost on large specs is the per-cell ``inline_aliases``
+    # call. Because synthesized transitions install the SAME ``synth_to`` /
+    # ``synth_neg`` IR object into every cell of a template, the *terms*
+    # of the per-cell sum are shared across many cells even though the
+    # outer ``Apply(op="+", ...)`` wrapper is unique per cell. Inlining
+    # term-by-term with a shared ``result_memo`` keyed on ``id(term)``
+    # collapses the alias-substitution work from O(n_state) to
+    # O(n_unique_terms) (issue #145).
     alias_inline_memo: dict[int, frozenset[str]] = {}
+    alias_inline_result_memo: dict[int, Expr] = {}
+
+    def _inline_one(expr: Expr) -> Expr:
+        return inline_aliases(
+            expr,
+            aliases_ir_map,
+            memo=alias_inline_memo,
+            skip_cycle_check=True,
+            result_memo=alias_inline_result_memo,
+        )
+
     equations_ir_built_list: list[Expr | None] = []
     for expr in equations_ir_pre_inline:
         if expr is None:
@@ -1096,14 +1148,14 @@ def normalize_transitions_rhs(  # noqa: C901, PLR0912, PLR0914, PLR0915
             equations_ir_built_list.append(expr)
             continue
         try:
-            equations_ir_built_list.append(
-                inline_aliases(
-                    expr,
-                    aliases_ir_map,
-                    memo=alias_inline_memo,
-                    skip_cycle_check=True,
-                )
-            )
+            if isinstance(expr, Apply) and expr.op == "+":
+                new_args = tuple(_inline_one(a) for a in expr.args)
+                if all(n is o for n, o in zip(new_args, expr.args, strict=True)):
+                    equations_ir_built_list.append(expr)
+                else:
+                    equations_ir_built_list.append(Apply(op="+", args=new_args))
+            else:
+                equations_ir_built_list.append(_inline_one(expr))
         except (ValueError, RecursionError):
             equations_ir_built_list.append(expr)
     equations_ir_built = tuple(equations_ir_built_list)
