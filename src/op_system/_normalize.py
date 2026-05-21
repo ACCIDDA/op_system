@@ -820,19 +820,42 @@ def _build_transition_equations_ir(  # noqa: C901, PLR0912, PLR0913, PLR0914, PL
             # share a single render (issue #145).
             from_name_memo: dict[tuple[str, ...], str] = {}
             to_name_memo: dict[tuple[str, ...], str] = {}
+            # Precompute positions in ``combo`` for each axis subset
+            # used downstream so we can build per-subset key tuples
+            # directly from ``combo`` (indexing into the iterator
+            # tuple) and avoid the per-combo ``dict(zip(...))`` cost
+            # entirely on the hot path. The full ``assignment`` dict
+            # is only materialized on memo misses or when the
+            # transition has a ``name`` template (issue #145).
+            _wc_pos = {a: i for i, a in enumerate(wildcard_axes)}
+            from_key_idx = tuple(_wc_pos[a] for a in frm_wc_axes)
+            to_key_idx = tuple(_wc_pos[a] for a in to_wc_axes)
+            rate_key_idx = tuple(_wc_pos[a] for a in rate_axes_used)
 
             for combo in combos:
-                assignment = dict(zip(wildcard_axes, combo, strict=True))
-                from_key = tuple(assignment[a] for a in frm_wc_axes)
+                # Build per-axis-subset keys directly from the combo
+                # tuple without materializing an ``assignment`` dict.
+                from_key = tuple(combo[i] for i in from_key_idx)
                 from_name = from_name_memo.get(from_key)
+                to_key = tuple(combo[i] for i in to_key_idx)
+                to_name = to_name_memo.get(to_key)
+                # ``assignment`` is only required on memo misses or for
+                # the optional ``name`` template; lazy-build it.
+                assignment: dict[str, str] | None = (
+                    dict(zip(wildcard_axes, combo, strict=True))
+                    if name_s
+                    else None
+                )
                 if from_name is None:
+                    if assignment is None:
+                        assignment = dict(zip(wildcard_axes, combo, strict=True))
                     from_name = render_selector(
                         frm_base, frm_tokens, assignment, axis_lookup=None
                     )
                     from_name_memo[from_key] = from_name
-                to_key = tuple(assignment[a] for a in to_wc_axes)
-                to_name = to_name_memo.get(to_key)
                 if to_name is None:
+                    if assignment is None:
+                        assignment = dict(zip(wildcard_axes, combo, strict=True))
                     to_name = render_selector(
                         to_base, to_tokens, assignment, axis_lookup=None
                     )
@@ -856,9 +879,13 @@ def _build_transition_equations_ir(  # noqa: C901, PLR0912, PLR0913, PLR0914, PL
                     ir_rate_reduce: Expr = tpl_ir_rate_reduce
                     ir_rate_full: Expr = tpl_ir_rate_full  # type: ignore[assignment]
                 else:
-                    rate_key = tuple(assignment[a] for a in rate_axes_used)
+                    rate_key = tuple(combo[i] for i in rate_key_idx)
                     cached_rate_reduce = rate_ir_reduce_memo.get(rate_key)
                     if cached_rate_reduce is None:
+                        if assignment is None:
+                            assignment = dict(
+                                zip(wildcard_axes, combo, strict=True)
+                            )
                         cached_rate_reduce = expand_inline_templates(
                             ir_rate_raw,
                             assignment=assignment,
@@ -869,6 +896,10 @@ def _build_transition_equations_ir(  # noqa: C901, PLR0912, PLR0913, PLR0914, PL
                     ir_rate_reduce = cached_rate_reduce
                     cached_rate_full = rate_ir_full_memo.get(rate_key)
                     if cached_rate_full is None:
+                        if assignment is None:
+                            assignment = dict(
+                                zip(wildcard_axes, combo, strict=True)
+                            )
                         cached_rate_full = expand_reduce_pointwise(
                             ir_rate_reduce,
                             axes=list(axes),

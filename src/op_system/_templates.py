@@ -50,6 +50,19 @@ from op_system._errors import InvalidRhsSpecError
 _STATE_TEMPLATE_RE = re.compile(r"\s*([A-Za-z_][A-Za-z0-9_]*)\[(.+)\]\s*")
 # Matches any "Name[...]" token inside an expression string.
 _INLINE_TEMPLATE_RE = re.compile(r"([A-Za-z_][A-Za-z0-9_]*)\[(.*?)\]")
+
+# Per-``template_map`` cache of pre-parsed, filtered, regex-compiled
+# template keys used by ``_apply_template_substitutions``. Built lazily
+# on first use and keyed by ``id(template_map)`` so batch substitution
+# over many cells against the same mapping pays the parse cost once
+# rather than per cell (issue #145).
+_APPLY_TPL_PREPARSE_CACHE: dict[
+    int,
+    tuple[
+        object,
+        tuple[tuple[str, str, tuple["WildcardToken", ...], "re.Pattern[str]"], ...],
+    ],
+] = {}
 # Matches any "[...]" fragment to extract placeholder names from rate exprs.
 _PLACEHOLDER_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\[(.*?)\]")
 
@@ -444,20 +457,41 @@ def _apply_template_substitutions(
     expr_out = expr_s
     shaped = shaped_params or {}
 
-    # Explicit template keys from the template map. Skip any whose base
-    # collides with a registered shaped parameter — those are rewritten by
-    # the inline replacer below.
-    for template_key in template_map:
-        base, tokens = parse_selector(template_key)
-        if base in shaped:
+    # Pre-parse template keys once per ``template_map`` identity: we
+    # filter out keys with no wildcards and keys whose base collides
+    # with a shaped param, and precompile the literal regex used by
+    # ``re.sub`` below. This collapses O(cells * |template_map|)
+    # ``parse_selector`` calls to O(|template_map|) per normalize call
+    # (issue #145).
+    cache_entry = _APPLY_TPL_PREPARSE_CACHE.get(id(template_map))
+    if cache_entry is not None and cache_entry[0] is template_map:
+        prepared = cache_entry[1]
+    else:
+        prepared_list: list[
+            tuple[str, str, tuple[WildcardToken, ...], re.Pattern[str]]
+        ] = []
+        for template_key in template_map:
+            base, tokens = parse_selector(template_key)
+            if base in shaped:
+                continue
+            wildcards = tuple(t for t in tokens if isinstance(t, WildcardToken))
+            if not wildcards:
+                continue
+            prepared_list.append(
+                (template_key, base, wildcards, re.compile(re.escape(template_key)))
+            )
+        prepared = tuple(prepared_list)
+        _APPLY_TPL_PREPARSE_CACHE[id(template_map)] = (template_map, prepared)
+
+    for template_key, base, wildcards, pat in prepared:
+        if any(wt.axis not in assignment for wt in wildcards):
             continue
-        wildcards = [t for t in tokens if isinstance(t, WildcardToken)]
-        if not wildcards or any(wt.axis not in assignment for wt in wildcards):
+        if template_key not in expr_out:
             continue
         rendered = _render_template_name(
             base, [wt.axis for wt in wildcards], assignment
         )
-        expr_out = re.sub(re.escape(template_key), rendered, expr_out)
+        expr_out = pat.sub(rendered, expr_out)
 
     # Inline placeholder syntax without an explicit template map entry.
     def _inline_replacer(match: re.Match[str]) -> str:
