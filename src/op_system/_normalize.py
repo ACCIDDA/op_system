@@ -1510,6 +1510,25 @@ def normalize_transitions_rhs(  # noqa: C901, PLR0912, PLR0914, PLR0915
     # plus 72k dict lookups (issue #145).
     outer_inline_memo: dict[int, Expr] = {}
 
+    def _inline_outer(expr: Expr) -> Expr:
+        """Run alias-inlining for one outer equation expression.
+
+        Returns:
+            The inlined expression (possibly the original ``expr`` when no
+            inlining was needed).
+        """
+        if isinstance(expr, Apply) and expr.op == "+":
+            new_args = tuple(_inline_one(a) for a in expr.args)
+            if all(n is o for n, o in zip(new_args, expr.args, strict=True)):
+                return expr
+            dedup_key = tuple(id(a) for a in new_args)
+            cached_apply = apply_plus_dedup.get(dedup_key)
+            if cached_apply is None:
+                cached_apply = Apply(op="+", args=new_args)
+                apply_plus_dedup[dedup_key] = cached_apply
+            return cached_apply
+        return _inline_one(expr)
+
     equations_ir_built_list: list[Expr | None] = []
     for expr in equations_ir_pre_inline:
         if expr is None:
@@ -1523,19 +1542,7 @@ def normalize_transitions_rhs(  # noqa: C901, PLR0912, PLR0914, PLR0915
             equations_ir_built_list.append(cached_outer)
             continue
         try:
-            if isinstance(expr, Apply) and expr.op == "+":
-                new_args = tuple(_inline_one(a) for a in expr.args)
-                if all(n is o for n, o in zip(new_args, expr.args, strict=True)):
-                    result_expr: Expr = expr
-                else:
-                    dedup_key = tuple(id(a) for a in new_args)
-                    cached_apply = apply_plus_dedup.get(dedup_key)
-                    if cached_apply is None:
-                        cached_apply = Apply(op="+", args=new_args)
-                        apply_plus_dedup[dedup_key] = cached_apply
-                    result_expr = cached_apply
-            else:
-                result_expr = _inline_one(expr)
+            result_expr = _inline_outer(expr)
         except (ValueError, RecursionError):
             result_expr = expr
         outer_inline_memo[id(expr)] = result_expr

@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     import re
-    from collections.abc import Iterable, Mapping, Sequence
+    from collections.abc import Iterable, Iterator, Mapping, Sequence
 
 from op_system._axes import _normalize_bracket_key
 from op_system._errors import InvalidRhsSpecError
@@ -33,6 +33,23 @@ from op_system._templates import (
     expand_selector,
     parse_selector,
 )
+
+# ---------------------------------------------------------------------------
+# Internal helpers
+# ---------------------------------------------------------------------------
+
+
+@contextlib.contextmanager
+def _raise_recursion_limit(needed: int, old_limit: int) -> Iterator[None]:
+    """Temporarily raise ``sys.setrecursionlimit`` to ``needed``."""
+    if needed > old_limit:
+        sys.setrecursionlimit(needed)
+    try:
+        yield
+    finally:
+        if needed > old_limit:
+            sys.setrecursionlimit(old_limit)
+
 
 # ---------------------------------------------------------------------------
 # StateTemplate dataclass
@@ -458,9 +475,7 @@ def _build_aliases_ir(
     """
     old_limit = sys.getrecursionlimit()
     needed = max(old_limit, 10_000)
-    try:
-        if needed > old_limit:
-            sys.setrecursionlimit(needed)
+    with _raise_recursion_limit(needed, old_limit):
         parsed: dict[str, Expr] = {}
         for name, body in aliases.items():
             parsed[name] = parse_expr_to_ir(body, lower_helpers=lower_helpers)
@@ -483,9 +498,6 @@ def _build_aliases_ir(
             except (ValueError, RecursionError):
                 inlined[name] = expr
         return inlined
-    finally:
-        if needed > old_limit:
-            sys.setrecursionlimit(old_limit)
 
 
 def _build_equations_ir(
@@ -501,9 +513,7 @@ def _build_equations_ir(
     """
     old_limit = sys.getrecursionlimit()
     needed = max(old_limit, 10_000)
-    try:
-        if needed > old_limit:
-            sys.setrecursionlimit(needed)
+    with _raise_recursion_limit(needed, old_limit):
         memo: dict[int, frozenset[str]] = {}
         cycle_validated = False
         if aliases_ir:
@@ -530,9 +540,6 @@ def _build_equations_ir(
             except (ValueError, RecursionError):
                 out.append(expr)
         return tuple(out)
-    finally:
-        if needed > old_limit:
-            sys.setrecursionlimit(old_limit)
 
 
 def _parse_alias_body(  # noqa: PLR0913
@@ -650,10 +657,7 @@ def _build_aliases_ir_from_raw(
     full_parsed: dict[str, Expr] = {}
     old_limit = sys.getrecursionlimit()
     needed = max(old_limit, 10_000)
-    try:
-        if needed > old_limit:
-            sys.setrecursionlimit(needed)
-
+    with _raise_recursion_limit(needed, old_limit):
         for raw_name, expr_str in aliases_raw.items():
             _parse_alias_body(
                 raw_name,
@@ -705,9 +709,6 @@ def _build_aliases_ir_from_raw(
             _inline_all(reduce_parsed, cycle_ok=cycle_ok),
             alias_template_map,
         )
-    finally:
-        if needed > old_limit:
-            sys.setrecursionlimit(old_limit)
 
 
 def _lookup_cell_expr(
@@ -786,9 +787,7 @@ def _build_equations_ir_from_raw(  # noqa: PLR0913
     all_syms: set[str] = set()
     old_limit = sys.getrecursionlimit()
     needed = max(old_limit, 10_000)
-    try:
-        if needed > old_limit:
-            sys.setrecursionlimit(needed)
+    with _raise_recursion_limit(needed, old_limit):
         for cell in state_expanded:
             raw_expr = cell_to_expr[cell]
             assignment = cell_to_assignment.get(cell, {})
@@ -822,9 +821,6 @@ def _build_equations_ir_from_raw(  # noqa: PLR0913
             all_syms |= free_symbols(ir_inlined)
             out_full.append(ir_inlined)
         return tuple(out_full), tuple(out_reduce), all_syms
-    finally:
-        if needed > old_limit:
-            sys.setrecursionlimit(old_limit)
 
 
 # ---------------------------------------------------------------------------
@@ -853,8 +849,8 @@ def _derive_equation_strings(
             rendered back to source.
     """
     old_limit = sys.getrecursionlimit()
-    sys.setrecursionlimit(max(old_limit, 10_000))
-    try:
+    needed = max(old_limit, 10_000)
+    with _raise_recursion_limit(needed, old_limit):
         # Identity-keyed memo so rendering shared sub-IR (e.g. one
         # template's synthesized ``synth_to`` / ``synth_neg`` IR object
         # installed into every cell's equation; issue #145) runs once
@@ -875,9 +871,6 @@ def _derive_equation_strings(
                     detail=f"equations[{idx}] could not be rendered from typed IR"
                 ) from exc
         return tuple(rendered)
-    finally:
-        with contextlib.suppress(ValueError, RecursionError):
-            sys.setrecursionlimit(old_limit)
 
 
 def _derive_alias_strings(
@@ -904,8 +897,8 @@ def _derive_alias_strings(
             back to source.
     """
     old_limit = sys.getrecursionlimit()
-    sys.setrecursionlimit(max(old_limit, 10_000))
-    try:
+    needed = max(old_limit, 10_000)
+    with _raise_recursion_limit(needed, old_limit):
         out: dict[str, str] = {}
         for name in alias_order:
             ir = aliases_ir.get(name)
@@ -920,6 +913,3 @@ def _derive_alias_strings(
                     detail=f"alias {name!r} could not be rendered from typed IR"
                 ) from exc
         return out
-    finally:
-        with contextlib.suppress(ValueError, RecursionError):
-            sys.setrecursionlimit(old_limit)
