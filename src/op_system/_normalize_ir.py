@@ -613,8 +613,21 @@ def _parse_alias_body(  # noqa: PLR0913
     # reference the pinning axis. The memo lets
     # ``expand_inline_templates`` short-circuit unaffected subtrees on
     # every call except the first (issue #145).
+    #
+    # Result caches: when a multi-axis alias has LHS axes that appear in
+    # DISJOINT parts of the body (e.g. ``foi[age, loc]`` where ``age``
+    # drives a heavy 21-term sum and ``loc`` only touches ``r0_loc[loc]``),
+    # expanding with the FULL assignment rebuilds the heavy subtree once
+    # per cell even though its result depends only on ``age``.  By
+    # projecting each subtree's cache key onto its actual free axes,
+    # ``_expand_result_memo`` returns the cached object for the heavy
+    # subtree on every loc-variant of the same age value, reducing
+    # O(n_age * n_loc * body_size) allocations to O(n_age * body_size)
+    # (issue #147).
     fa_raw_memo: dict[int, frozenset[str]] = {}
     fa_full_memo: dict[int, frozenset[str]] = {}
+    fa_raw_result_memo: dict[tuple[object, ...], Expr] = {}
+    fa_full_result_memo: dict[tuple[object, ...], Expr] = {}
     for expanded_name, assignment in alias_template_map[canonical_name]:
         reduce_parsed[expanded_name] = expand_inline_templates(
             ir_raw,
@@ -622,6 +635,7 @@ def _parse_alias_body(  # noqa: PLR0913
             shaped_params=shaped,
             axis_lookup=ax_lookup,
             _free_axes_memo=fa_raw_memo,
+            _expand_result_memo=fa_raw_result_memo,
         )
         full_parsed[expanded_name] = expand_inline_templates(
             ir_full_root,
@@ -629,6 +643,7 @@ def _parse_alias_body(  # noqa: PLR0913
             shaped_params=shaped,
             axis_lookup=ax_lookup,
             _free_axes_memo=fa_full_memo,
+            _expand_result_memo=fa_full_result_memo,
         )
 
 

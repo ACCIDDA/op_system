@@ -193,6 +193,7 @@ def expand_inline_templates(
     shaped_params: Mapping[str, tuple[str, ...]] | None = None,
     axis_lookup: Mapping[str, Sequence[str]] | None = None,
     _free_axes_memo: dict[int, frozenset[str]] | None = None,
+    _expand_result_memo: dict[tuple[object, ...], Expr] | None = None,
 ) -> Expr:
     """Expand placeholder subscripts in ``expr`` using ``assignment``.
 
@@ -214,6 +215,16 @@ def expand_inline_templates(
             with the same root (e.g. per-coord alias pinning) should
             share one dict to avoid recomputing the cache. Caller-owned
             so callers control lifetime; pass an empty dict to enable.
+        _expand_result_memo: Optional result cache keyed by
+            ``(id(node), *sorted_projected_assignment_items)`` where the
+            projected assignment contains only the axes actually free in
+            the subtree.  Two calls that agree on the axes a subtree
+            references but differ on irrelevant axes return the same
+            expanded object, eliminating redundant rebuilds of heavy
+            subtrees when only a "thin" LHS axis (e.g. ``loc`` in
+            ``foi[age, loc]``) changes between cells (issue #147).
+            Caller-owned; pass an empty dict to enable.  Must NOT be
+            shared across calls with a different root template.
 
     Returns:
         A new IR expression with templated subscripts expanded. Subscripts
@@ -246,33 +257,63 @@ def expand_inline_templates(
         )
     ):
         return expr
+    # Result cache: for compound nodes whose free-axis set is a STRICT
+    # SUBSET of ``assignment.keys()``, two assignments that agree on the
+    # relevant axes but differ on irrelevant ones produce the same
+    # expanded subtree.  By projecting the assignment onto the free-axis
+    # set before building the cache key we share that result instead of
+    # rebuilding.  For ``foi[age, loc]`` the heavy 21-term sum only
+    # references ``age``; its cache key omits ``loc``, so all 51 loc
+    # variants of the same age value hit the same entry (issue #147).
+    if _expand_result_memo is not None and assignment:
+        fa_memo_used: dict[int, frozenset[str]] = (
+            _free_axes_memo if _free_axes_memo is not None else {}
+        )
+        node_free = _free_axes_in(expr, shaped=shaped, memo=fa_memo_used)
+        relevant = node_free & frozenset(assignment)
+        cache_key: tuple[object, ...] = (
+            id(expr),
+            *sorted((k, assignment[k]) for k in relevant),
+        )
+        cached_result = _expand_result_memo.get(cache_key)
+        if cached_result is not None:
+            return cached_result
+    else:
+        cache_key = ()
     if isinstance(expr, Apply):
-        return _expand_apply(
+        result = _expand_apply(
             expr,
             assignment=assignment,
             shaped_params=shaped,
             axis_lookup=axis_lookup,
             free_axes_memo=_free_axes_memo,
+            expand_result_memo=_expand_result_memo,
         )
-    if isinstance(expr, Reduce):
-        return _expand_reduce(
+    elif isinstance(expr, Reduce):
+        result = _expand_reduce(
             expr,
             assignment=assignment,
             shaped_params=shaped,
             axis_lookup=axis_lookup,
             free_axes_memo=_free_axes_memo,
+            expand_result_memo=_expand_result_memo,
         )
-    msg = f"unsupported IR node in expand_inline_templates: {type(expr).__name__}"
-    raise TypeError(msg)
+    else:
+        msg = f"unsupported IR node in expand_inline_templates: {type(expr).__name__}"
+        raise TypeError(msg)
+    if _expand_result_memo is not None and cache_key:
+        _expand_result_memo[cache_key] = result
+    return result
 
 
-def _expand_apply(
+def _expand_apply(  # noqa: PLR0913
     expr: Apply,
     *,
     assignment: Mapping[str, str],
     shaped_params: Mapping[str, tuple[str, ...]],
     axis_lookup: Mapping[str, Sequence[str]] | None,
     free_axes_memo: dict[int, frozenset[str]] | None,
+    expand_result_memo: dict[tuple[object, ...], Expr] | None = None,
 ) -> Expr:
     new_args = tuple(
         expand_inline_templates(
@@ -281,6 +322,7 @@ def _expand_apply(
             shaped_params=shaped_params,
             axis_lookup=axis_lookup,
             _free_axes_memo=free_axes_memo,
+            _expand_result_memo=expand_result_memo,
         )
         for arg in expr.args
     )
@@ -289,13 +331,14 @@ def _expand_apply(
     return Apply(op=expr.op, args=new_args)
 
 
-def _expand_reduce(
+def _expand_reduce(  # noqa: PLR0913
     expr: Reduce,
     *,
     assignment: Mapping[str, str],
     shaped_params: Mapping[str, tuple[str, ...]],
     axis_lookup: Mapping[str, Sequence[str]] | None,
     free_axes_memo: dict[int, frozenset[str]] | None,
+    expand_result_memo: dict[tuple[object, ...], Expr] | None = None,
 ) -> Expr:
     # Reduce bindings shadow outer names: a bound name in this
     # scope should not be substituted from the outer assignment.
@@ -311,6 +354,7 @@ def _expand_reduce(
         shaped_params=shaped_params,
         axis_lookup=axis_lookup,
         _free_axes_memo=free_axes_memo,
+        _expand_result_memo=expand_result_memo,
     )
     if new_body is expr.body:
         return expr
