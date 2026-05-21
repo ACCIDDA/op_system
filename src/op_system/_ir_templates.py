@@ -121,12 +121,71 @@ def _expand_subscript(
     return Sym(name=rendered)
 
 
+_EMPTY_AXES: frozenset[str] = frozenset()
+
+
+def _free_axes_in(
+    node: Expr,
+    *,
+    shaped: Mapping[str, tuple[str, ...]],
+    memo: dict[int, frozenset[str]],
+) -> frozenset[str]:
+    """Return the set of placeholder axis names referenced under ``node``.
+
+    Walks the IR subtree counting any unbound axis appearing inside a
+    ``Subscript``. For shaped-parameter subscripts (whose axes are rewritten
+    to literal integer coords by ``_rewrite_shaped_indices``), the
+    registered axis tuple is included so callers using this set for
+    disjoint-check pruning still descend when ``assignment`` covers them.
+    ``Reduce`` bindings shadow outer names and are subtracted from the body
+    set. Memoized by ``id(node)`` so repeated calls with the same memo
+    visit each unique subtree at most once (issue #145).
+    """
+    cached = memo.get(id(node))
+    if cached is not None:
+        return cached
+    if isinstance(node, (Literal, Sym)):
+        result = _EMPTY_AXES
+    elif isinstance(node, Subscript):
+        if node.name in shaped:
+            # Treat all registered axes as referenced so shaped rewrite
+            # still fires when ``assignment`` covers them.
+            result = frozenset(shaped[node.name])
+        else:
+            out: set[str] = set()
+            for idx in node.indices:
+                if idx.coord is None and idx.axis:
+                    out.add(idx.axis)
+            result = frozenset(out) if out else _EMPTY_AXES
+    elif isinstance(node, Apply):
+        if not node.args:
+            result = _EMPTY_AXES
+        else:
+            acc: set[str] = set()
+            for arg in node.args:
+                acc |= _free_axes_in(arg, shaped=shaped, memo=memo)
+            result = frozenset(acc) if acc else _EMPTY_AXES
+    elif isinstance(node, Reduce):
+        body_axes = _free_axes_in(node.body, shaped=shaped, memo=memo)
+        bound = {b for _, b in node.bindings}
+        if bound and body_axes:
+            remaining = body_axes - bound
+            result = remaining if remaining else _EMPTY_AXES
+        else:
+            result = body_axes
+    else:
+        result = _EMPTY_AXES
+    memo[id(node)] = result
+    return result
+
+
 def expand_inline_templates(
     expr: Expr,
     *,
     assignment: Mapping[str, str],
     shaped_params: Mapping[str, tuple[str, ...]] | None = None,
     axis_lookup: Mapping[str, Sequence[str]] | None = None,
+    _free_axes_memo: dict[int, frozenset[str]] | None = None,
 ) -> Expr:
     """Expand placeholder subscripts in ``expr`` using ``assignment``.
 
@@ -141,6 +200,13 @@ def expand_inline_templates(
             symbols.
         axis_lookup: Optional mapping from axis name to its coord list,
             used to resolve shaped-parameter indices.
+        _free_axes_memo: Optional id-keyed cache of the per-subtree
+            unbound-axis set. When supplied, the walk short-circuits at
+            compound nodes whose free-axis set is disjoint from
+            ``assignment``. Callers that invoke this function repeatedly
+            with the same root (e.g. per-coord alias pinning) should
+            share one dict to avoid recomputing the cache. Caller-owned
+            so callers control lifetime; pass an empty dict to enable.
 
     Returns:
         A new IR expression with templated subscripts expanded. Subscripts
@@ -161,6 +227,18 @@ def expand_inline_templates(
             shaped_params=shaped,
             axis_lookup=axis_lookup,
         )
+    # Compound nodes (Apply / Reduce): skip the recursion entirely when
+    # the cached free-axis set is disjoint from ``assignment``. This is
+    # the dominant win for per-coord alias pinning where ``assignment``
+    # is ``{<one-axis>: ...}`` but the body spans many axes (issue #145).
+    if (
+        _free_axes_memo is not None
+        and assignment
+        and _free_axes_in(expr, shaped=shaped, memo=_free_axes_memo).isdisjoint(
+            assignment
+        )
+    ):
+        return expr
     if isinstance(expr, Apply):
         new_args = tuple(
             expand_inline_templates(
@@ -168,6 +246,7 @@ def expand_inline_templates(
                 assignment=assignment,
                 shaped_params=shaped,
                 axis_lookup=axis_lookup,
+                _free_axes_memo=_free_axes_memo,
             )
             for arg in expr.args
         )
@@ -188,6 +267,7 @@ def expand_inline_templates(
             assignment=inner_assignment,
             shaped_params=shaped,
             axis_lookup=axis_lookup,
+            _free_axes_memo=_free_axes_memo,
         )
         if new_body is expr.body:
             return expr

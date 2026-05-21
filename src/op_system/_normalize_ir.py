@@ -605,18 +605,28 @@ def _build_aliases_ir_from_raw(  # noqa: C901
                     lhs_assignment={},
                     axis_coords=ax_lookup,
                 )
+                # Shared per-subtree free-axes caches: each per-coord
+                # pin call would otherwise re-walk the full body even
+                # though most subtrees never reference the pinning
+                # axis. The memo lets ``expand_inline_templates``
+                # short-circuit unaffected subtrees on every call
+                # except the first (issue #145).
+                fa_raw_memo: dict[int, frozenset[str]] = {}
+                fa_full_memo: dict[int, frozenset[str]] = {}
                 for expanded_name, assignment in alias_template_map[canonical_name]:
                     reduce_parsed[expanded_name] = expand_inline_templates(
                         ir_raw,
                         assignment=assignment,
                         shaped_params=shaped,
                         axis_lookup=ax_lookup,
+                        _free_axes_memo=fa_raw_memo,
                     )
                     full_parsed[expanded_name] = expand_inline_templates(
                         ir_full_root,
                         assignment=assignment,
                         shaped_params=shaped,
                         axis_lookup=ax_lookup,
+                        _free_axes_memo=fa_full_memo,
                     )
             else:
                 reduce_parsed[raw_name] = ir_raw
