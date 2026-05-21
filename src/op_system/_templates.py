@@ -114,6 +114,32 @@ def _sanitize_fragment(val: object) -> str:
 
 _SANITIZE_RE = re.compile(r"[^A-Za-z0-9_]")
 _SANITIZE_CACHE: dict[str, str] = {}
+# Cache for the full ``f"{axis}_{sanitize(coord)}"`` fragment used by
+# ``render_selector``. The hot loop renders the same (axis, coord) pair
+# millions of times during the per-cell transition build, so caching the
+# already-formatted fragment removes a function call, a cache lookup,
+# and an f-string format per render (issue #145).
+_TOKEN_FRAGMENT_CACHE: dict[tuple[str, str], str] = {}
+
+
+def _token_fragment(axis: str, coord: object) -> str:
+    """Return cached ``"{axis}_{sanitize(coord)}"`` for selector rendering.
+
+    Returns:
+        Identifier-safe ``axis_coord`` fragment.
+    """
+    s = coord if type(coord) is str else str(coord)
+    key = (axis, s)
+    cached = _TOKEN_FRAGMENT_CACHE.get(key)
+    if cached is not None:
+        return cached
+    sanitized = _SANITIZE_CACHE.get(s)
+    if sanitized is None:
+        sanitized = _SANITIZE_RE.sub("_", s)
+        _SANITIZE_CACHE[s] = sanitized
+    fragment = f"{axis}_{sanitized}"
+    _TOKEN_FRAGMENT_CACHE[key] = fragment
+    return fragment
 
 
 def build_axis_lookup(axes: list[dict[str, Any]]) -> dict[str, list[str]]:
@@ -251,7 +277,7 @@ def render_selector(
                     )
                     + "]"
                 )
-            parts.append(f"{tok.axis}_{_sanitize_fragment(assignment[tok.axis])}")
+            parts.append(_token_fragment(tok.axis, assignment[tok.axis]))
         else:  # PinnedToken
             if axis_lookup is not None:
                 if tok.axis not in axis_lookup:
@@ -267,7 +293,7 @@ def render_selector(
                             f"axis {tok.axis!r} coords"
                         )
                     )
-            parts.append(f"{tok.axis}_{_sanitize_fragment(tok.coord)}")
+            parts.append(_token_fragment(tok.axis, tok.coord))
 
     return base + "__" + "__".join(parts)
 
