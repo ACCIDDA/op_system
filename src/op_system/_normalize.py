@@ -564,6 +564,19 @@ def _build_transition_equations_ir(  # noqa: C901, PLR0912, PLR0913, PLR0914, PL
     d_ir_reduce: dict[str, list[Expr]] = {s: [] for s in state_expanded}
     all_syms: set[str] = set()
     transitions_expanded_out: list[dict[str, Any]] = []
+    # Group ``state_expanded`` by base name once so the per-transition
+    # synthesis step can look up "all cells of this template" via a
+    # dict access instead of re-rendering every coord combo through
+    # ``render_selector`` (which dominated 3+ s on the COVID19_USA
+    # continuum spec). Every cell name is ``{base}__{axis_suffix}``
+    # (or just ``{base}`` for axis-less templates) and the transition
+    # ``state_set`` check below guarantees tokens are in the canonical
+    # state-template order, so the grouped lookup matches the result
+    # of enumerating the template's wildcard combos. Issue #145.
+    cells_by_base: dict[str, list[str]] = {}
+    for _name in state_expanded:
+        _base = _name.split("__", 1)[0]
+        cells_by_base.setdefault(_base, []).append(_name)
     # Cache: ``(base, template_tokens) -> list[str]`` for
     # ``_enumerate_template_cell_names``. The same (base, tokens) pair is
     # queried once per (from, to) side per combo expansion, so caching cuts
@@ -887,6 +900,16 @@ def _build_transition_equations_ir(  # noqa: C901, PLR0912, PLR0913, PLR0914, PL
                 # template-uniform synthesized IR is installed in every
                 # cell. Pinned-coord selection lives inside the body via
                 # the one-hot mask multiplications below.
+                #
+                # ``cells_by_base`` (built once at the top of this function)
+                # already holds every concrete cell name grouped by base
+                # in the canonical state-template ordering, so the set
+                # of cells matching a wildcard-only template is just the
+                # bucket for that base. We only fall back to the previous
+                # ``render_selector`` enumeration when a template has no
+                # axis tokens at all (the lookup would then equal
+                # ``[base]`` anyway, but the empty/no-axes case is rare
+                # and not on the hot path). Issue #145.
                 enum_cache = enumerate_template_cell_names_cache
 
                 def _enumerate_template_cell_names(
@@ -894,39 +917,17 @@ def _build_transition_equations_ir(  # noqa: C901, PLR0912, PLR0913, PLR0914, PL
                     template_tokens: tuple[Any, ...],
                     _cache: dict[tuple[str, tuple[Any, ...]], list[str]] = enum_cache,
                 ) -> list[str]:
-                    cache_key = (base, template_tokens)
-                    cached = _cache.get(cache_key)
-                    if cached is not None:
-                        return cached
-                    axes_and_coords = [
-                        (tok.axis, ax_lookup_dict[tok.axis])
-                        for tok in template_tokens
-                        if isinstance(tok, (WildcardToken, PinnedToken))
-                    ]
-                    if not axes_and_coords:
+                    if template_tokens:
+                        cached = cells_by_base.get(base)
+                        if cached is not None:
+                            return cached
                         return [base]
-                    tokens_as_wc = tuple(
-                        WildcardToken(axis=tok.axis)
-                        if isinstance(tok, PinnedToken)
-                        else tok
-                        for tok in template_tokens
-                    )
-                    out: list[str] = []
-                    for combo in product(*(coords for _, coords in axes_and_coords)):
-                        assign = {
-                            axis: c
-                            for (axis, _), c in zip(axes_and_coords, combo, strict=True)
-                        }
-                        out.append(
-                            render_selector(
-                                base,
-                                tokens_as_wc,
-                                assign,
-                                axis_lookup=ax_lookup_dict,
-                            )
-                        )
-                    _cache[cache_key] = out
-                    return out
+                    cache_key = (base, template_tokens)
+                    cached_full = _cache.get(cache_key)
+                    if cached_full is not None:
+                        return cached_full
+                    _cache[cache_key] = [base]
+                    return [base]
 
                 to_names_for_synthesis = set(
                     _enumerate_template_cell_names(to_base, tuple(to_tokens))
