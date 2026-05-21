@@ -1022,15 +1022,37 @@ def _build_transition_equations_ir(  # noqa: C901, PLR0912, PLR0913, PLR0914, PL
         if needed > old_limit:
             sys.setrecursionlimit(old_limit)
 
-    def _sum_terms(terms: list[Expr]) -> Expr:
+    # Cells whose transition participation is identical end up with
+    # identical term lists by identity (same shared synth_to /
+    # synth_neg / flow IR objects). Dedup the outer Apply by the tuple
+    # of term ids so downstream identity-keyed memos (unparse_ir,
+    # free_symbols, inline_aliases) see one wrapper instead of one
+    # per cell. Issue #145.
+    _sum_dedup_full: dict[tuple[int, ...], Expr] = {}
+    _sum_dedup_reduce: dict[tuple[int, ...], Expr] = {}
+
+    def _sum_terms(
+        terms: list[Expr],
+        _dedup: dict[tuple[int, ...], Expr],
+    ) -> Expr:
         if not terms:
             return Literal(value=0.0)
         if len(terms) == 1:
             return terms[0]
-        return Apply(op="+", args=tuple(terms))
+        key = tuple(id(t) for t in terms)
+        cached = _dedup.get(key)
+        if cached is not None:
+            return cached
+        node: Expr = Apply(op="+", args=tuple(terms))
+        _dedup[key] = node
+        return node
 
-    equations_ir_pre = tuple(_sum_terms(d_ir_full[s]) for s in state_expanded)
-    equations_ir_reduce_pre = tuple(_sum_terms(d_ir_reduce[s]) for s in state_expanded)
+    equations_ir_pre = tuple(
+        _sum_terms(d_ir_full[s], _sum_dedup_full) for s in state_expanded
+    )
+    equations_ir_reduce_pre = tuple(
+        _sum_terms(d_ir_reduce[s], _sum_dedup_reduce) for s in state_expanded
+    )
     return equations_ir_pre, equations_ir_reduce_pre, transitions_expanded_out, all_syms
 
 
@@ -1257,6 +1279,12 @@ def normalize_transitions_rhs(  # noqa: C901, PLR0912, PLR0914, PLR0915
             result_memo=alias_inline_result_memo,
         )
 
+    # Dedup the post-inline outer Apply by tuple of arg ids so cells
+    # whose inlined-term tuple is identical share one wrapper, letting
+    # downstream identity-keyed memos (e.g. unparse_ir) cache the
+    # rendered string once per unique equation. Issue #145.
+    apply_plus_dedup: dict[tuple[int, ...], Expr] = {}
+
     equations_ir_built_list: list[Expr | None] = []
     for expr in equations_ir_pre_inline:
         if expr is None:
@@ -1271,7 +1299,12 @@ def normalize_transitions_rhs(  # noqa: C901, PLR0912, PLR0914, PLR0915
                 if all(n is o for n, o in zip(new_args, expr.args, strict=True)):
                     equations_ir_built_list.append(expr)
                 else:
-                    equations_ir_built_list.append(Apply(op="+", args=new_args))
+                    dedup_key = tuple(id(a) for a in new_args)
+                    cached_apply = apply_plus_dedup.get(dedup_key)
+                    if cached_apply is None:
+                        cached_apply = Apply(op="+", args=new_args)
+                        apply_plus_dedup[dedup_key] = cached_apply
+                    equations_ir_built_list.append(cached_apply)
             else:
                 equations_ir_built_list.append(_inline_one(expr))
         except (ValueError, RecursionError):
