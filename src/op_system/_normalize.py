@@ -440,8 +440,17 @@ def normalize_expr_rhs(spec: Mapping[str, Any]) -> ExprRhs:  # noqa: C901, PLR09
     time_varying_set = set(time_varying_full)
     axis_name_set = set(axis_lookup_dict)
     template_base_set = {parse_selector(k)[0] for k in template_map_all}
-    equations_strings = _derive_equation_strings(equations_ir_built)
-    aliases_strings = _derive_alias_strings(aliases_ir_map, aliases_ir_map)
+    # Share an identity-keyed unparse memo between the equation and
+    # alias rendering passes so subexpressions that recur across alias
+    # bodies and equations (e.g. coord-pinned copies of the same
+    # alias template body) are rendered only once (issue #145).
+    _unparse_memo: dict[tuple[int, int, bool], str] = {}
+    equations_strings = _derive_equation_strings(
+        equations_ir_built, _unparse_memo=_unparse_memo
+    )
+    aliases_strings = _derive_alias_strings(
+        aliases_ir_map, aliases_ir_map, _unparse_memo=_unparse_memo
+    )
 
     return ExprRhs(
         state_names=tuple(state_expanded),
@@ -1311,7 +1320,13 @@ def normalize_transitions_rhs(  # noqa: C901, PLR0912, PLR0914, PLR0915
     time_varying_set = set(time_varying_full)
     axis_name_set = set(axis_lookup_dict)
     template_base_set = {parse_selector(k)[0] for k in template_map_all}
-    eqs_tuple = _derive_equation_strings(equations_ir_pre_inline)
+    # Share an identity-keyed unparse memo between the equation and
+    # alias rendering passes so subexpressions that recur across alias
+    # bodies and equations are rendered only once (issue #145).
+    _unparse_memo_final: dict[tuple[int, int, bool], str] = {}
+    eqs_tuple = _derive_equation_strings(
+        equations_ir_pre_inline, _unparse_memo=_unparse_memo_final
+    )
     # Inline aliases directly into the per-cell IR we already built in
     # ``_build_transition_equations_ir`` rather than re-parsing the
     # round-tripped equation strings. Avoids 73k x ``parse_expr_to_ir``
@@ -1387,7 +1402,9 @@ def normalize_transitions_rhs(  # noqa: C901, PLR0912, PLR0914, PLR0915
     return TransitionsRhs(
         state_names=tuple(state_expanded),
         equations=eqs_tuple,
-        aliases=_derive_alias_strings(aliases_ir_map, aliases_ir_map),
+        aliases=_derive_alias_strings(
+            aliases_ir_map, aliases_ir_map, _unparse_memo=_unparse_memo_final
+        ),
         param_names=_sorted_unique(
             sym
             for sym in all_syms

@@ -796,8 +796,16 @@ def _build_equations_ir_from_raw(  # noqa: PLR0913
 
 def _derive_equation_strings(
     equations_ir: tuple[Expr | None, ...],
+    *,
+    _unparse_memo: dict[tuple[int, int, bool], str] | None = None,
 ) -> tuple[str, ...]:
     """Render each equation's RHS directly from typed IR.
+
+    Args:
+        equations_ir: Tuple of equation IR expressions.
+        _unparse_memo: Optional identity-keyed cache to share with
+            other ``unparse_ir`` calls (e.g. alias-body rendering).
+            When omitted, a fresh dict is used internally.
 
     Returns:
         Tuple of equation strings aligned with ``equations_ir``.
@@ -813,7 +821,9 @@ def _derive_equation_strings(
         # template's synthesized ``synth_to`` / ``synth_neg`` IR object
         # installed into every cell's equation; issue #145) runs once
         # rather than once per cell.
-        unparse_memo: dict[tuple[int, int, bool], str] = {}
+        unparse_memo: dict[tuple[int, int, bool], str] = (
+            _unparse_memo if _unparse_memo is not None else {}
+        )
         rendered: list[str] = []
         for idx, ir in enumerate(equations_ir):
             if ir is None:
@@ -835,8 +845,18 @@ def _derive_equation_strings(
 def _derive_alias_strings(
     aliases_ir: Mapping[str, Expr],
     alias_order: Iterable[str],
+    *,
+    _unparse_memo: dict[tuple[int, int, bool], str] | None = None,
 ) -> dict[str, str]:
     """Render each alias body directly from typed IR.
+
+    Args:
+        aliases_ir: Mapping of alias name to typed IR body.
+        alias_order: Iterable of alias names defining output order.
+        _unparse_memo: Optional identity-keyed cache shared across
+            multiple ``unparse_ir`` calls so substructure repeated
+            across alias bodies (e.g. coord-pinned copies of the same
+            template body) is rendered once (issue #145).
 
     Returns:
         New alias mapping with IR-derived bodies.
@@ -856,7 +876,7 @@ def _derive_alias_strings(
                     detail=f"alias {name!r} is missing typed IR during rendering"
                 )
             try:
-                out[name] = unparse_ir(ir)
+                out[name] = unparse_ir(ir, _memo=_unparse_memo)
             except (ValueError, RecursionError) as exc:
                 raise InvalidRhsSpecError(
                     detail=f"alias {name!r} could not be rendered from typed IR"
