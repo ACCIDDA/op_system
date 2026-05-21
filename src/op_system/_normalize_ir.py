@@ -611,11 +611,21 @@ def _build_aliases_ir_from_raw(  # noqa: C901
 
         def _inline_all(parsed: dict[str, Expr], *, cycle_ok: bool) -> dict[str, Expr]:
             memo: dict[int, frozenset[str]] = {}
+            # ``result_memo`` keyed on ``id(expr)`` lets ``inline_aliases``
+            # share the final substituted IR across alias entries that pass
+            # the same sub-IR object (e.g. the 21 per-age expansions of one
+            # templated alias share many internal Subscript subtrees by
+            # identity after ``expand_inline_templates``). Issue #145.
+            result_memo: dict[int, Expr] = {}
             inlined: dict[str, Expr] = {}
             for name, expr in parsed.items():
                 try:
                     inlined[name] = inline_aliases(
-                        expr, parsed, memo=memo, skip_cycle_check=cycle_ok
+                        expr,
+                        parsed,
+                        memo=memo,
+                        skip_cycle_check=cycle_ok,
+                        result_memo=result_memo,
                     )
                 except (ValueError, RecursionError):
                     inlined[name] = expr
