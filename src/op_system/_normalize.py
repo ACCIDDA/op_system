@@ -804,15 +804,30 @@ def _build_transition_equations_ir(  # noqa: C901, PLR0912, PLR0913, PLR0914, PL
             rate_ir_full_memo: dict[tuple[str, ...], Expr] = {}
             rate_str_memo: dict[tuple[str, ...], str] = {}
             rate_syms_seen: set[tuple[str, ...]] = set()
+            # ``render_selector`` is deterministic in the wildcard-token
+            # coords for a given (base, tokens) pair; memoize by the
+            # tuple of wildcard coords from the current assignment so
+            # combos differing only on the *other* template's wildcards
+            # share a single render (issue #145).
+            from_name_memo: dict[tuple[str, ...], str] = {}
+            to_name_memo: dict[tuple[str, ...], str] = {}
 
             for combo in combos:
                 assignment = dict(zip(wildcard_axes, combo, strict=True))
-                from_name = render_selector(
-                    frm_base, frm_tokens, assignment, axis_lookup=ax_lookup_dict
-                )
-                to_name = render_selector(
-                    to_base, to_tokens, assignment, axis_lookup=ax_lookup_dict
-                )
+                from_key = tuple(assignment[a] for a in frm_wc_axes)
+                from_name = from_name_memo.get(from_key)
+                if from_name is None:
+                    from_name = render_selector(
+                        frm_base, frm_tokens, assignment, axis_lookup=None
+                    )
+                    from_name_memo[from_key] = from_name
+                to_key = tuple(assignment[a] for a in to_wc_axes)
+                to_name = to_name_memo.get(to_key)
+                if to_name is None:
+                    to_name = render_selector(
+                        to_base, to_tokens, assignment, axis_lookup=None
+                    )
+                    to_name_memo[to_key] = to_name
                 if from_name not in state_set:
                     raise InvalidRhsSpecError(
                         detail=f"transitions[{tr_idx}].from={from_name!r} not in state"
@@ -1329,6 +1344,14 @@ def normalize_transitions_rhs(  # noqa: C901, PLR0912, PLR0914, PLR0915
     # downstream identity-keyed memos (e.g. unparse_ir) cache the
     # rendered string once per unique equation. Issue #145.
     apply_plus_dedup: dict[tuple[int, ...], Expr] = {}
+    # The upstream ``_sum_dedup_full`` collapses ``equations_ir_pre_inline``
+    # to a handful of unique outer Apply objects shared across many
+    # cells (e.g. 7 unique exprs across 72,828 cells on the COVID19_USA
+    # continuum spec). Cache the per-expr inlined result by ``id(expr)``
+    # so we skip the per-term ``_inline_one`` calls entirely on cache
+    # hits -- this collapses ~1.9M memo-hit calls to ~7 real inlines
+    # plus 72k dict lookups (issue #145).
+    outer_inline_memo: dict[int, Expr] = {}
 
     equations_ir_built_list: list[Expr | None] = []
     for expr in equations_ir_pre_inline:
@@ -1338,22 +1361,28 @@ def normalize_transitions_rhs(  # noqa: C901, PLR0912, PLR0914, PLR0915
         if not aliases_ir_map:
             equations_ir_built_list.append(expr)
             continue
+        cached_outer = outer_inline_memo.get(id(expr))
+        if cached_outer is not None:
+            equations_ir_built_list.append(cached_outer)
+            continue
         try:
             if isinstance(expr, Apply) and expr.op == "+":
                 new_args = tuple(_inline_one(a) for a in expr.args)
                 if all(n is o for n, o in zip(new_args, expr.args, strict=True)):
-                    equations_ir_built_list.append(expr)
+                    result_expr: Expr = expr
                 else:
                     dedup_key = tuple(id(a) for a in new_args)
                     cached_apply = apply_plus_dedup.get(dedup_key)
                     if cached_apply is None:
                         cached_apply = Apply(op="+", args=new_args)
                         apply_plus_dedup[dedup_key] = cached_apply
-                    equations_ir_built_list.append(cached_apply)
+                    result_expr = cached_apply
             else:
-                equations_ir_built_list.append(_inline_one(expr))
+                result_expr = _inline_one(expr)
         except (ValueError, RecursionError):
-            equations_ir_built_list.append(expr)
+            result_expr = expr
+        outer_inline_memo[id(expr)] = result_expr
+        equations_ir_built_list.append(result_expr)
     equations_ir_built = tuple(equations_ir_built_list)
     return TransitionsRhs(
         state_names=tuple(state_expanded),
