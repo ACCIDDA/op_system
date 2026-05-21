@@ -41,6 +41,15 @@ if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping, Sequence
 
 
+# Identity-keyed cache mapping ``id(aliases)`` -> ``(aliases, body_refs)``.
+# Many ``inline_aliases`` calls in batch passes share the same ``aliases``
+# mapping, and the ``body_refs`` precomputation is the dominant non-substitute
+# cost (free_symbols over each large alias body). Cache by identity but also
+# store the dict object so we can defensively guard against ``id()`` reuse
+# across distinct ``aliases`` instances (issue #145).
+_BODY_REFS_CACHE: dict[int, tuple[Mapping[str, Expr], dict[str, frozenset[str]]]] = {}
+
+
 def _expandable_axes(indices: Sequence[AxisIndex]) -> list[str] | None:
     """Return the list of bare-identifier axis names from ``indices``.
 
@@ -112,12 +121,78 @@ def _expand_subscript(
     return Sym(name=rendered)
 
 
+_EMPTY_AXES: frozenset[str] = frozenset()
+
+
+def _free_axes_in(
+    node: Expr,
+    *,
+    shaped: Mapping[str, tuple[str, ...]],
+    memo: dict[int, frozenset[str]],
+) -> frozenset[str]:
+    """Return the set of placeholder axis names referenced under ``node``.
+
+    Walks the IR subtree counting any unbound axis appearing inside a
+    ``Subscript``. For shaped-parameter subscripts (whose axes are rewritten
+    to literal integer coords by ``_rewrite_shaped_indices``), the
+    registered axis tuple is included so callers using this set for
+    disjoint-check pruning still descend when ``assignment`` covers them.
+    ``Reduce`` bindings shadow outer names and are subtracted from the body
+    set. Memoized by ``id(node)`` so repeated calls with the same memo
+    visit each unique subtree at most once (issue #145).
+    """
+    cached = memo.get(id(node))
+    if cached is not None:
+        return cached
+    result = _compute_free_axes(node, shaped=shaped, memo=memo)
+    memo[id(node)] = result
+    return result
+
+
+def _free_axes_subscript(
+    node: Subscript, *, shaped: Mapping[str, tuple[str, ...]]
+) -> frozenset[str]:
+    if node.name in shaped:
+        # Treat all registered axes as referenced so shaped rewrite
+        # still fires when ``assignment`` covers them.
+        return frozenset(shaped[node.name])
+    out: set[str] = set()
+    for idx in node.indices:
+        if idx.coord is None and idx.axis:
+            out.add(idx.axis)
+    return frozenset(out) or _EMPTY_AXES
+
+
+def _compute_free_axes(
+    node: Expr,
+    *,
+    shaped: Mapping[str, tuple[str, ...]],
+    memo: dict[int, frozenset[str]],
+) -> frozenset[str]:
+    if isinstance(node, Subscript):
+        return _free_axes_subscript(node, shaped=shaped)
+    if isinstance(node, Apply):
+        acc: set[str] = set()
+        for arg in node.args:
+            acc |= _free_axes_in(arg, shaped=shaped, memo=memo)
+        return frozenset(acc) or _EMPTY_AXES
+    if isinstance(node, Reduce):
+        body_axes = _free_axes_in(node.body, shaped=shaped, memo=memo)
+        bound = {b for _, b in node.bindings}
+        if not (bound and body_axes):
+            return body_axes
+        return (body_axes - bound) or _EMPTY_AXES
+    # Literal, Sym, and any other leaf node carry no free axes.
+    return _EMPTY_AXES
+
+
 def expand_inline_templates(
     expr: Expr,
     *,
     assignment: Mapping[str, str],
     shaped_params: Mapping[str, tuple[str, ...]] | None = None,
     axis_lookup: Mapping[str, Sequence[str]] | None = None,
+    _free_axes_memo: dict[int, frozenset[str]] | None = None,
 ) -> Expr:
     """Expand placeholder subscripts in ``expr`` using ``assignment``.
 
@@ -132,6 +207,13 @@ def expand_inline_templates(
             symbols.
         axis_lookup: Optional mapping from axis name to its coord list,
             used to resolve shaped-parameter indices.
+        _free_axes_memo: Optional id-keyed cache of the per-subtree
+            unbound-axis set. When supplied, the walk short-circuits at
+            compound nodes whose free-axis set is disjoint from
+            ``assignment``. Callers that invoke this function repeatedly
+            with the same root (e.g. per-coord alias pinning) should
+            share one dict to avoid recomputing the cache. Caller-owned
+            so callers control lifetime; pass an empty dict to enable.
 
     Returns:
         A new IR expression with templated subscripts expanded. Subscripts
@@ -152,39 +234,87 @@ def expand_inline_templates(
             shaped_params=shaped,
             axis_lookup=axis_lookup,
         )
-    if isinstance(expr, Apply):
-        new_args = tuple(
-            expand_inline_templates(
-                arg,
-                assignment=assignment,
-                shaped_params=shaped,
-                axis_lookup=axis_lookup,
-            )
-            for arg in expr.args
-        )
-        if new_args == expr.args:
-            return expr
-        return Apply(op=expr.op, args=new_args)
-    if isinstance(expr, Reduce):
-        # Reduce bindings shadow outer names: a bound name in this
-        # scope should not be substituted from the outer assignment.
-        bound = {bind for _, bind in expr.bindings}
-        inner_assignment = (
+    # Compound nodes (Apply / Reduce): skip the recursion entirely when
+    # the cached free-axis set is disjoint from ``assignment``. This is
+    # the dominant win for per-coord alias pinning where ``assignment``
+    # is ``{<one-axis>: ...}`` but the body spans many axes (issue #145).
+    if (
+        _free_axes_memo is not None
+        and assignment
+        and _free_axes_in(expr, shaped=shaped, memo=_free_axes_memo).isdisjoint(
             assignment
-            if not bound
-            else {k: v for k, v in assignment.items() if k not in bound}
         )
-        new_body = expand_inline_templates(
-            expr.body,
-            assignment=inner_assignment,
+    ):
+        return expr
+    if isinstance(expr, Apply):
+        return _expand_apply(
+            expr,
+            assignment=assignment,
             shaped_params=shaped,
             axis_lookup=axis_lookup,
+            free_axes_memo=_free_axes_memo,
         )
-        if new_body is expr.body:
-            return expr
-        return Reduce(kind=expr.kind, bindings=expr.bindings, body=new_body)
+    if isinstance(expr, Reduce):
+        return _expand_reduce(
+            expr,
+            assignment=assignment,
+            shaped_params=shaped,
+            axis_lookup=axis_lookup,
+            free_axes_memo=_free_axes_memo,
+        )
     msg = f"unsupported IR node in expand_inline_templates: {type(expr).__name__}"
     raise TypeError(msg)
+
+
+def _expand_apply(
+    expr: Apply,
+    *,
+    assignment: Mapping[str, str],
+    shaped_params: Mapping[str, tuple[str, ...]],
+    axis_lookup: Mapping[str, Sequence[str]] | None,
+    free_axes_memo: dict[int, frozenset[str]] | None,
+) -> Expr:
+    new_args = tuple(
+        expand_inline_templates(
+            arg,
+            assignment=assignment,
+            shaped_params=shaped_params,
+            axis_lookup=axis_lookup,
+            _free_axes_memo=free_axes_memo,
+        )
+        for arg in expr.args
+    )
+    if new_args == expr.args:
+        return expr
+    return Apply(op=expr.op, args=new_args)
+
+
+def _expand_reduce(
+    expr: Reduce,
+    *,
+    assignment: Mapping[str, str],
+    shaped_params: Mapping[str, tuple[str, ...]],
+    axis_lookup: Mapping[str, Sequence[str]] | None,
+    free_axes_memo: dict[int, frozenset[str]] | None,
+) -> Expr:
+    # Reduce bindings shadow outer names: a bound name in this
+    # scope should not be substituted from the outer assignment.
+    bound = {bind for _, bind in expr.bindings}
+    inner_assignment = (
+        assignment
+        if not bound
+        else {k: v for k, v in assignment.items() if k not in bound}
+    )
+    new_body = expand_inline_templates(
+        expr.body,
+        assignment=inner_assignment,
+        shaped_params=shaped_params,
+        axis_lookup=axis_lookup,
+        _free_axes_memo=free_axes_memo,
+    )
+    if new_body is expr.body:
+        return expr
+    return Reduce(kind=expr.kind, bindings=expr.bindings, body=new_body)
 
 
 __all__ = [
@@ -308,15 +438,28 @@ def expand_over_axes(
     return out
 
 
-def _detect_alias_cycle(aliases: Mapping[str, Expr]) -> list[str] | None:
+def _detect_alias_cycle(
+    aliases: Mapping[str, Expr],
+    *,
+    memo: dict[int, frozenset[str]] | None = None,
+) -> list[str] | None:
     """Return a cycle of alias names if one exists, else ``None``.
 
     Builds a name -> referenced-alias-names graph (only edges into the
     alias namespace itself count) and DFS-checks for a back edge.
+
+    Args:
+        aliases: Mapping of alias name to IR body.
+        memo: Optional identity-keyed ``free_symbols`` cache (shared
+            with downstream ``inline_aliases`` calls to avoid
+            recomputing per-body free-symbol sets).
     """
     keys = set(aliases)
+    if memo is None:
+        memo = {}
     graph: dict[str, frozenset[str]] = {
-        name: frozenset(free_symbols(body) & keys) for name, body in aliases.items()
+        name: frozenset(free_symbols(body, memo=memo) & keys)
+        for name, body in aliases.items()
     }
 
     color: dict[str, int] = dict.fromkeys(graph, _CYCLE_WHITE)
@@ -345,13 +488,14 @@ def _detect_alias_cycle(aliases: Mapping[str, Expr]) -> list[str] | None:
     return None
 
 
-def inline_aliases(
+def inline_aliases(  # noqa: C901, PLR0913
     expr: Expr,
     aliases: Mapping[str, Expr],
     *,
     max_depth: int = 64,
     memo: dict[int, frozenset[str]] | None = None,
     skip_cycle_check: bool = False,
+    result_memo: dict[int, Expr] | None = None,
 ) -> Expr:
     """Fixed-point inline ``Sym`` references that match ``aliases`` keys.
 
@@ -376,6 +520,11 @@ def inline_aliases(
             Callers that batch-inline many expressions against the same
             ``aliases`` mapping should validate once and set this flag on
             subsequent calls.
+        result_memo: Optional identity-keyed cache mapping ``id(expr)`` to
+            the fully-inlined result. When the same IR object is inlined
+            many times against the same ``aliases`` (e.g. one template's
+            synthesized IR shared across many state cells), pass a
+            single dict to amortize the substitution work across calls.
 
     Returns:
         A new IR expression with all alias references resolved.
@@ -386,6 +535,10 @@ def inline_aliases(
     """
     if not aliases:
         return expr
+    if result_memo is not None:
+        cached_result = result_memo.get(id(expr))
+        if cached_result is not None:
+            return cached_result
 
     if not skip_cycle_check:
         cycle = _detect_alias_cycle(aliases)
@@ -401,13 +554,32 @@ def inline_aliases(
     # entries over the just-inlined names, so we never need to re-walk the
     # substituted expression with ``free_symbols`` (which on large inlined
     # bodies dominates inline cost when many equations share one alias).
-    body_refs: dict[str, frozenset[str]] = {
-        name: free_symbols(body, memo) & keys for name, body in aliases.items()
-    }
+    # Cache by ``id(aliases)`` so batch-inlining many expressions against the
+    # same alias mapping pays this O(|aliases| * body_size) cost only once
+    # rather than once per call (issue #145).
+    cached_refs = _BODY_REFS_CACHE.get(id(aliases))
+    if cached_refs is None:
+        body_refs: dict[str, frozenset[str]] = {
+            name: free_symbols(body, memo) & keys for name, body in aliases.items()
+        }
+        _BODY_REFS_CACHE[id(aliases)] = (aliases, body_refs)
+    else:
+        # Guard against id() reuse: only trust the cache when the mapping
+        # object is the same instance.
+        cached_obj, cached_body_refs = cached_refs
+        body_refs = (
+            cached_body_refs
+            if cached_obj is aliases
+            else {
+                name: free_symbols(body, memo) & keys for name, body in aliases.items()
+            }
+        )
     current = expr
     live = free_symbols(current, memo) & keys
     for _ in range(max_depth):
         if not live:
+            if result_memo is not None:
+                result_memo[id(expr)] = current
             return current
         mapping = {name: aliases[name] for name in live}
         current = substitute(current, mapping, memo)

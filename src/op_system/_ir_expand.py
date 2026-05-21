@@ -102,19 +102,19 @@ def _expand_children(
     if isinstance(expr, (Literal, Sym, Subscript)):
         return expr
     if isinstance(expr, Apply):
-        return Apply(
-            op=expr.op,
-            args=tuple(
-                expand_reduce_pointwise(
-                    a,
-                    axes=axes,
-                    shaped_params=shaped_params,
-                    lhs_assignment=lhs_assignment,
-                    axis_coords=axis_coords,
-                )
-                for a in expr.args
-            ),
+        new_args = tuple(
+            expand_reduce_pointwise(
+                a,
+                axes=axes,
+                shaped_params=shaped_params,
+                lhs_assignment=lhs_assignment,
+                axis_coords=axis_coords,
+            )
+            for a in expr.args
         )
+        if all(n is o for n, o in zip(new_args, expr.args, strict=True)):
+            return expr
+        return Apply(op=expr.op, args=new_args)
     if isinstance(expr, Reduce):
         new_body = expand_reduce_pointwise(
             expr.body,
@@ -123,6 +123,8 @@ def _expand_children(
             lhs_assignment=lhs_assignment,
             axis_coords=axis_coords,
         )
+        if new_body is expr.body:
+            return expr
         return Reduce(
             kind=expr.kind,
             bindings=expr.bindings,
@@ -242,21 +244,21 @@ def _substitute_in_body(  # noqa: PLR0911, PLR0913
             return Sym(name=var_to_coord[body.name])
         return body
     if isinstance(body, Apply):
-        return Apply(
-            op=body.op,
-            args=tuple(
-                _substitute_in_body(
-                    a,
-                    var_to_coord=var_to_coord,
-                    bound=bound,
-                    axis_order=axis_order,
-                    shaped_params=shaped_params,
-                    lhs_assignment=lhs_assignment,
-                    axis_coords=axis_coords,
-                )
-                for a in body.args
-            ),
+        new_args = tuple(
+            _substitute_in_body(
+                a,
+                var_to_coord=var_to_coord,
+                bound=bound,
+                axis_order=axis_order,
+                shaped_params=shaped_params,
+                lhs_assignment=lhs_assignment,
+                axis_coords=axis_coords,
+            )
+            for a in body.args
         )
+        if all(n is o for n, o in zip(new_args, body.args, strict=True)):
+            return body
+        return Apply(op=body.op, args=new_args)
     if isinstance(body, Subscript):
         return _rewrite_subscript(
             body,
@@ -281,6 +283,8 @@ def _substitute_in_body(  # noqa: PLR0911, PLR0913
             lhs_assignment=lhs_assignment,
             axis_coords=axis_coords,
         )
+        if new_inner is body.body:
+            return body
         return Reduce(
             kind=body.kind,
             bindings=body.bindings,
@@ -419,6 +423,25 @@ def _split_name_suffix(
         ``(base_name, [(axis, coord), ...])`` where pairs are in left-to-
         right order as they appeared in ``name``.
     """
+    ao = tuple(axis_order)
+    key = (name, ao)
+    cached = _SPLIT_SUFFIX_CACHE.get(key)
+    if cached is not None:
+        base, pairs = cached
+        return base, list(pairs)
+    base, pairs_list = _split_name_suffix_impl(name, ao)
+    _SPLIT_SUFFIX_CACHE[key] = (base, tuple(pairs_list))
+    return base, pairs_list
+
+
+_SPLIT_SUFFIX_CACHE: dict[
+    tuple[str, tuple[str, ...]], tuple[str, tuple[tuple[str, str], ...]]
+] = {}
+
+
+def _split_name_suffix_impl(
+    name: str, axis_order: Sequence[str]
+) -> tuple[str, list[tuple[str, str]]]:
     if not axis_order:
         return name, []
     parts = name.split("__")
@@ -454,12 +477,23 @@ def _emit_suffix(pairs: list[tuple[str, str]], axis_order: Sequence[str]) -> str
     Returns:
         The concatenated suffix string (empty when ``pairs`` is empty).
     """
-    priority = {ax: i for i, ax in enumerate(axis_order)}
+    ao = tuple(axis_order)
+    key = (tuple(pairs), ao)
+    cached = _EMIT_SUFFIX_CACHE.get(key)
+    if cached is not None:
+        return cached
+    priority = {ax: i for i, ax in enumerate(ao)}
     if not priority:
-        return "".join(f"__{ax}_{_sanitize_fragment(c)}" for ax, c in pairs)
-    known = sorted(
-        (p for p in pairs if p[0] in priority),
-        key=lambda p: priority[p[0]],
-    )
-    unknown = [p for p in pairs if p[0] not in priority]
-    return "".join(f"__{ax}_{_sanitize_fragment(c)}" for ax, c in known + unknown)
+        result = "".join(f"__{ax}_{_sanitize_fragment(c)}" for ax, c in pairs)
+    else:
+        known = sorted(
+            (p for p in pairs if p[0] in priority),
+            key=lambda p: priority[p[0]],
+        )
+        unknown = [p for p in pairs if p[0] not in priority]
+        result = "".join(f"__{ax}_{_sanitize_fragment(c)}" for ax, c in known + unknown)
+    _EMIT_SUFFIX_CACHE[key] = result
+    return result
+
+
+_EMIT_SUFFIX_CACHE: dict[tuple[tuple[tuple[str, str], ...], tuple[str, ...]], str] = {}

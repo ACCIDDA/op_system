@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     import re
-    from collections.abc import Iterable, Mapping, Sequence
+    from collections.abc import Iterable, Iterator, Mapping, Sequence
 
 from op_system._axes import _normalize_bracket_key
 from op_system._errors import InvalidRhsSpecError
@@ -33,6 +33,23 @@ from op_system._templates import (
     expand_selector,
     parse_selector,
 )
+
+# ---------------------------------------------------------------------------
+# Internal helpers
+# ---------------------------------------------------------------------------
+
+
+@contextlib.contextmanager
+def _raise_recursion_limit(needed: int, old_limit: int) -> Iterator[None]:
+    """Temporarily raise ``sys.setrecursionlimit`` to ``needed``."""
+    if needed > old_limit:
+        sys.setrecursionlimit(needed)
+    try:
+        yield
+    finally:
+        if needed > old_limit:
+            sys.setrecursionlimit(old_limit)
+
 
 # ---------------------------------------------------------------------------
 # StateTemplate dataclass
@@ -458,16 +475,14 @@ def _build_aliases_ir(
     """
     old_limit = sys.getrecursionlimit()
     needed = max(old_limit, 10_000)
-    try:
-        if needed > old_limit:
-            sys.setrecursionlimit(needed)
+    with _raise_recursion_limit(needed, old_limit):
         parsed: dict[str, Expr] = {}
         for name, body in aliases.items():
             parsed[name] = parse_expr_to_ir(body, lower_helpers=lower_helpers)
         memo: dict[int, frozenset[str]] = {}
         cycle_validated = False
         try:
-            cycle = _detect_alias_cycle(parsed)
+            cycle = _detect_alias_cycle(parsed, memo=memo)
             cycle_validated = cycle is None
         except (ValueError, RecursionError):
             cycle_validated = False
@@ -483,9 +498,6 @@ def _build_aliases_ir(
             except (ValueError, RecursionError):
                 inlined[name] = expr
         return inlined
-    finally:
-        if needed > old_limit:
-            sys.setrecursionlimit(old_limit)
 
 
 def _build_equations_ir(
@@ -501,14 +513,12 @@ def _build_equations_ir(
     """
     old_limit = sys.getrecursionlimit()
     needed = max(old_limit, 10_000)
-    try:
-        if needed > old_limit:
-            sys.setrecursionlimit(needed)
+    with _raise_recursion_limit(needed, old_limit):
         memo: dict[int, frozenset[str]] = {}
         cycle_validated = False
         if aliases_ir:
             try:
-                cycle = _detect_alias_cycle(aliases_ir)
+                cycle = _detect_alias_cycle(aliases_ir, memo=memo)
                 cycle_validated = cycle is None
             except (ValueError, RecursionError):
                 cycle_validated = False
@@ -530,12 +540,99 @@ def _build_equations_ir(
             except (ValueError, RecursionError):
                 out.append(expr)
         return tuple(out)
-    finally:
-        if needed > old_limit:
-            sys.setrecursionlimit(old_limit)
 
 
-def _build_aliases_ir_from_raw(  # noqa: C901
+def _parse_alias_body(  # noqa: PLR0913
+    raw_name: str,
+    expr_str: object,
+    *,
+    axes: list[dict[str, Any]],
+    shaped: Mapping[str, tuple[str, ...]],
+    ax_lookup: Mapping[str, list[str]],
+    alias_template_map: Mapping[str, Sequence[tuple[str, Mapping[str, str]]]],
+    reduce_parsed: dict[str, Expr],
+    full_parsed: dict[str, Expr],
+) -> None:
+    """Parse and expand one alias entry into ``reduce_parsed``/``full_parsed``.
+
+    Splits the per-alias work out of :func:`_build_aliases_ir_from_raw` so
+    that function stays under Ruff's local-variable budget. The template
+    expansion logic (shared Reduce-expanded body + per-coord pin) is
+    documented inline below (issue #145).
+
+    Raises:
+        InvalidRhsSpecError: If ``expr_str`` is empty or fails to parse.
+    """
+    from op_system._ir_expand import expand_reduce_pointwise  # noqa: PLC0415
+
+    canonical_name = _normalize_bracket_key(raw_name)
+    expr_s = expr_str.strip() if isinstance(expr_str, str) else ""
+    if not expr_s:
+        raise InvalidRhsSpecError(
+            detail=f"aliases[{raw_name!r}] must be a non-empty string"
+        )
+    try:
+        ir_raw = parse_expr_to_ir(expr_s, lower_helpers=True)
+    except Exception as exc:
+        raise InvalidRhsSpecError(
+            detail=f"aliases[{raw_name!r}] has invalid expression: {exc}"
+        ) from exc
+
+    if canonical_name not in alias_template_map:
+        reduce_parsed[raw_name] = ir_raw
+        full_parsed[raw_name] = expand_reduce_pointwise(
+            ir_raw,
+            axes=list(axes),
+            shaped_params=shaped,
+            lhs_assignment={},
+            axis_coords=ax_lookup,
+        )
+        return
+
+    # Build the Reduce-expanded body ONCE with empty ``lhs_assignment``:
+    # every same-axis-twice subscript that needed the LHS pin would also
+    # have been bound by an enclosing Reduce (otherwise the construct is
+    # ill-formed), so the empty pass produces a template-form body whose
+    # only unresolved positions are the LHS free-axis
+    # ``AxisIndex(coord=None)`` slots. The per-coord pin step below
+    # collapses those slots via a cheap walk through
+    # :func:`expand_inline_templates`, replacing the previous
+    # O(coords * reduce-enumeration) cost with
+    # O(reduce-enumeration + coords * pin). For the COVID19_USA
+    # continuum (21 age coords * a 6500-node alias body) this is the
+    # dominant build cost (issue #145).
+    ir_full_root = expand_reduce_pointwise(
+        ir_raw,
+        axes=list(axes),
+        shaped_params=shaped,
+        lhs_assignment={},
+        axis_coords=ax_lookup,
+    )
+    # Shared per-subtree free-axes caches: each per-coord pin call would
+    # otherwise re-walk the full body even though most subtrees never
+    # reference the pinning axis. The memo lets
+    # ``expand_inline_templates`` short-circuit unaffected subtrees on
+    # every call except the first (issue #145).
+    fa_raw_memo: dict[int, frozenset[str]] = {}
+    fa_full_memo: dict[int, frozenset[str]] = {}
+    for expanded_name, assignment in alias_template_map[canonical_name]:
+        reduce_parsed[expanded_name] = expand_inline_templates(
+            ir_raw,
+            assignment=assignment,
+            shaped_params=shaped,
+            axis_lookup=ax_lookup,
+            _free_axes_memo=fa_raw_memo,
+        )
+        full_parsed[expanded_name] = expand_inline_templates(
+            ir_full_root,
+            assignment=assignment,
+            shaped_params=shaped,
+            axis_lookup=ax_lookup,
+            _free_axes_memo=fa_full_memo,
+        )
+
+
+def _build_aliases_ir_from_raw(
     aliases_raw: Mapping[str, str],
     *,
     axes: list[dict[str, Any]],
@@ -550,12 +647,7 @@ def _build_aliases_ir_from_raw(  # noqa: C901
 
     Returns:
         ``(aliases_ir, aliases_ir_reduce, alias_template_map)``.
-
-    Raises:
-        InvalidRhsSpecError: If any alias body is an invalid expression.
     """
-    from op_system._ir_expand import expand_reduce_pointwise  # noqa: PLC0415
-
     shaped = shaped_params or {}
     ax_lookup = dict(axis_lookup or {})
 
@@ -565,69 +657,58 @@ def _build_aliases_ir_from_raw(  # noqa: C901
     full_parsed: dict[str, Expr] = {}
     old_limit = sys.getrecursionlimit()
     needed = max(old_limit, 10_000)
-    try:
-        if needed > old_limit:
-            sys.setrecursionlimit(needed)
-
+    with _raise_recursion_limit(needed, old_limit):
         for raw_name, expr_str in aliases_raw.items():
-            canonical_name = _normalize_bracket_key(raw_name)
-            expr_s = expr_str.strip() if isinstance(expr_str, str) else ""
-            if not expr_s:
-                raise InvalidRhsSpecError(
-                    detail=f"aliases[{raw_name!r}] must be a non-empty string"
-                )
-            try:
-                ir_raw = parse_expr_to_ir(expr_s, lower_helpers=True)
-            except Exception as exc:
-                raise InvalidRhsSpecError(
-                    detail=f"aliases[{raw_name!r}] has invalid expression: {exc}"
-                ) from exc
+            _parse_alias_body(
+                raw_name,
+                expr_str,
+                axes=axes,
+                shaped=shaped,
+                ax_lookup=ax_lookup,
+                alias_template_map=alias_template_map,
+                reduce_parsed=reduce_parsed,
+                full_parsed=full_parsed,
+            )
 
-            if canonical_name in alias_template_map:
-                for expanded_name, assignment in alias_template_map[canonical_name]:
-                    ir_tmpl = expand_inline_templates(
-                        ir_raw,
-                        assignment=assignment,
-                        shaped_params=shaped,
-                        axis_lookup=ax_lookup,
-                    )
-                    reduce_parsed[expanded_name] = ir_tmpl
-                    full_parsed[expanded_name] = expand_reduce_pointwise(
-                        ir_tmpl,
-                        axes=list(axes),
-                        shaped_params=shaped,
-                        lhs_assignment=assignment,
-                        axis_coords=ax_lookup,
-                    )
-            else:
-                reduce_parsed[raw_name] = ir_raw
-                full_parsed[raw_name] = expand_reduce_pointwise(
-                    ir_raw,
-                    axes=list(axes),
-                    shaped_params=shaped,
-                    lhs_assignment={},
-                    axis_coords=ax_lookup,
-                )
-
-        def _inline_all(parsed: dict[str, Expr]) -> dict[str, Expr]:
+        def _inline_all(parsed: dict[str, Expr], *, cycle_ok: bool) -> dict[str, Expr]:
             memo: dict[int, frozenset[str]] = {}
-            cycle_ok = False
-            with contextlib.suppress(ValueError, RecursionError):
-                cycle_ok = _detect_alias_cycle(parsed) is None
+            # ``result_memo`` keyed on ``id(expr)`` lets ``inline_aliases``
+            # share the final substituted IR across alias entries that pass
+            # the same sub-IR object (e.g. the 21 per-age expansions of one
+            # templated alias share many internal Subscript subtrees by
+            # identity after ``expand_inline_templates``). Issue #145.
+            result_memo: dict[int, Expr] = {}
             inlined: dict[str, Expr] = {}
             for name, expr in parsed.items():
                 try:
                     inlined[name] = inline_aliases(
-                        expr, parsed, memo=memo, skip_cycle_check=cycle_ok
+                        expr,
+                        parsed,
+                        memo=memo,
+                        skip_cycle_check=cycle_ok,
+                        result_memo=result_memo,
                     )
                 except (ValueError, RecursionError):
                     inlined[name] = expr
             return inlined
 
-        return _inline_all(full_parsed), _inline_all(reduce_parsed), alias_template_map
-    finally:
-        if needed > old_limit:
-            sys.setrecursionlimit(old_limit)
+        # Cycle topology between aliases depends only on the alias names a body
+        # references, not on the coordinate substitutions performed by
+        # ``expand_inline_templates`` / ``expand_reduce_pointwise``. Detect the
+        # cycle once on the cheaper ``reduce_parsed`` map (which preserves the
+        # ``Reduce`` aggregator nodes verbatim) and reuse the result when
+        # inlining the larger ``full_parsed`` bodies. This avoids walking the
+        # 6500-node continuum alias bodies twice (issue #145).
+        cycle_memo: dict[int, frozenset[str]] = {}
+        cycle_ok = False
+        with contextlib.suppress(ValueError, RecursionError):
+            cycle_ok = _detect_alias_cycle(reduce_parsed, memo=cycle_memo) is None
+
+        return (
+            _inline_all(full_parsed, cycle_ok=cycle_ok),
+            _inline_all(reduce_parsed, cycle_ok=cycle_ok),
+            alias_template_map,
+        )
 
 
 def _lookup_cell_expr(
@@ -699,16 +780,14 @@ def _build_equations_ir_from_raw(  # noqa: PLR0913
     alias_cycle_ok = False
     if aliases_ir:
         with contextlib.suppress(ValueError, RecursionError):
-            alias_cycle_ok = _detect_alias_cycle(aliases_ir) is None
+            alias_cycle_ok = _detect_alias_cycle(aliases_ir, memo=alias_memo) is None
 
     out_reduce: list[Expr | None] = []
     out_full: list[Expr | None] = []
     all_syms: set[str] = set()
     old_limit = sys.getrecursionlimit()
     needed = max(old_limit, 10_000)
-    try:
-        if needed > old_limit:
-            sys.setrecursionlimit(needed)
+    with _raise_recursion_limit(needed, old_limit):
         for cell in state_expanded:
             raw_expr = cell_to_expr[cell]
             assignment = cell_to_assignment.get(cell, {})
@@ -742,9 +821,6 @@ def _build_equations_ir_from_raw(  # noqa: PLR0913
             all_syms |= free_symbols(ir_inlined)
             out_full.append(ir_inlined)
         return tuple(out_full), tuple(out_reduce), all_syms
-    finally:
-        if needed > old_limit:
-            sys.setrecursionlimit(old_limit)
 
 
 # ---------------------------------------------------------------------------
@@ -754,8 +830,16 @@ def _build_equations_ir_from_raw(  # noqa: PLR0913
 
 def _derive_equation_strings(
     equations_ir: tuple[Expr | None, ...],
+    *,
+    _unparse_memo: dict[tuple[int, int, bool], str] | None = None,
 ) -> tuple[str, ...]:
     """Render each equation's RHS directly from typed IR.
+
+    Args:
+        equations_ir: Tuple of equation IR expressions.
+        _unparse_memo: Optional identity-keyed cache to share with
+            other ``unparse_ir`` calls (e.g. alias-body rendering).
+            When omitted, a fresh dict is used internally.
 
     Returns:
         Tuple of equation strings aligned with ``equations_ir``.
@@ -765,8 +849,15 @@ def _derive_equation_strings(
             rendered back to source.
     """
     old_limit = sys.getrecursionlimit()
-    sys.setrecursionlimit(max(old_limit, 10_000))
-    try:
+    needed = max(old_limit, 10_000)
+    with _raise_recursion_limit(needed, old_limit):
+        # Identity-keyed memo so rendering shared sub-IR (e.g. one
+        # template's synthesized ``synth_to`` / ``synth_neg`` IR object
+        # installed into every cell's equation; issue #145) runs once
+        # rather than once per cell.
+        unparse_memo: dict[tuple[int, int, bool], str] = (
+            _unparse_memo if _unparse_memo is not None else {}
+        )
         rendered: list[str] = []
         for idx, ir in enumerate(equations_ir):
             if ir is None:
@@ -774,22 +865,29 @@ def _derive_equation_strings(
                     detail=f"equations[{idx}] is missing typed IR during rendering"
                 )
             try:
-                rendered.append(unparse_ir(ir))
+                rendered.append(unparse_ir(ir, _memo=unparse_memo))
             except (ValueError, RecursionError) as exc:
                 raise InvalidRhsSpecError(
                     detail=f"equations[{idx}] could not be rendered from typed IR"
                 ) from exc
         return tuple(rendered)
-    finally:
-        with contextlib.suppress(ValueError, RecursionError):
-            sys.setrecursionlimit(old_limit)
 
 
 def _derive_alias_strings(
     aliases_ir: Mapping[str, Expr],
     alias_order: Iterable[str],
+    *,
+    _unparse_memo: dict[tuple[int, int, bool], str] | None = None,
 ) -> dict[str, str]:
     """Render each alias body directly from typed IR.
+
+    Args:
+        aliases_ir: Mapping of alias name to typed IR body.
+        alias_order: Iterable of alias names defining output order.
+        _unparse_memo: Optional identity-keyed cache shared across
+            multiple ``unparse_ir`` calls so substructure repeated
+            across alias bodies (e.g. coord-pinned copies of the same
+            template body) is rendered once (issue #145).
 
     Returns:
         New alias mapping with IR-derived bodies.
@@ -799,8 +897,8 @@ def _derive_alias_strings(
             back to source.
     """
     old_limit = sys.getrecursionlimit()
-    sys.setrecursionlimit(max(old_limit, 10_000))
-    try:
+    needed = max(old_limit, 10_000)
+    with _raise_recursion_limit(needed, old_limit):
         out: dict[str, str] = {}
         for name in alias_order:
             ir = aliases_ir.get(name)
@@ -809,12 +907,9 @@ def _derive_alias_strings(
                     detail=f"alias {name!r} is missing typed IR during rendering"
                 )
             try:
-                out[name] = unparse_ir(ir)
+                out[name] = unparse_ir(ir, _memo=_unparse_memo)
             except (ValueError, RecursionError) as exc:
                 raise InvalidRhsSpecError(
                     detail=f"alias {name!r} could not be rendered from typed IR"
                 ) from exc
         return out
-    finally:
-        with contextlib.suppress(ValueError, RecursionError):
-            sys.setrecursionlimit(old_limit)

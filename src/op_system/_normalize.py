@@ -25,6 +25,7 @@ compatibility.
 
 from __future__ import annotations
 
+import contextlib
 import sys
 from collections.abc import Mapping as _MappingABC
 from dataclasses import dataclass, field
@@ -32,7 +33,7 @@ from itertools import product
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Mapping
+    from collections.abc import Collection, Iterable, Iterator, Mapping, Sequence
 
 from op_system._axes import _normalize_axes, _normalize_bracket_key
 from op_system._errors import InvalidRhsSpecError, UnsupportedFeatureError
@@ -52,10 +53,15 @@ from op_system._ir import (
     Subscript,
     Sym,
     free_symbols,
+    iter_subscripts,
     parse_expr_to_ir,
     unparse_ir,
+    walk,
 )
-from op_system._ir_templates import expand_inline_templates
+from op_system._ir_templates import (
+    expand_inline_templates,
+    inline_aliases,
+)
 from op_system._normalize_chains import (
     _apply_coord_shifts,
     _apply_expr_chains,
@@ -67,7 +73,6 @@ from op_system._normalize_ir import (
     StateTemplate,
     _build_alias_templates,
     _build_aliases_ir_from_raw,
-    _build_equations_ir,
     _build_equations_ir_from_raw,
     _build_state_templates,
     _derive_alias_strings,
@@ -411,9 +416,15 @@ def normalize_expr_rhs(spec: Mapping[str, Any]) -> ExprRhs:  # noqa: C901, PLR09
         aliases_ir=aliases_ir_map,
     )
     # Collect free symbols from alias bodies (alias bodies may reference
-    # params not appearing in any equation directly).
-    for alias_ir_val in aliases_ir_map.values():
-        all_syms |= free_symbols(alias_ir_val)
+    # params not appearing in any equation directly). Walk the *reduce*
+    # map (Reduce nodes still folded) rather than the fully expanded
+    # map: alias inlining is identical between the two, but the reduce
+    # form is orders of magnitude smaller for continuum specs. Share a
+    # single id-keyed memo across the per-cell entries so common
+    # subtrees are visited at most once (issue #145).
+    fs_memo: dict[int, frozenset[str]] = {}
+    for alias_ir_val in aliases_ir_reduce_map.values():
+        all_syms |= free_symbols(alias_ir_val, memo=fs_memo)
 
     _maybe_attach_initial_state(
         meta,
@@ -430,8 +441,17 @@ def normalize_expr_rhs(spec: Mapping[str, Any]) -> ExprRhs:  # noqa: C901, PLR09
     time_varying_set = set(time_varying_full)
     axis_name_set = set(axis_lookup_dict)
     template_base_set = {parse_selector(k)[0] for k in template_map_all}
-    equations_strings = _derive_equation_strings(equations_ir_built)
-    aliases_strings = _derive_alias_strings(aliases_ir_map, aliases_ir_map)
+    # Share an identity-keyed unparse memo between the equation and
+    # alias rendering passes so subexpressions that recur across alias
+    # bodies and equations (e.g. coord-pinned copies of the same
+    # alias template body) are rendered only once (issue #145).
+    unparse_memo: dict[tuple[int, int, bool], str] = {}
+    equations_strings = _derive_equation_strings(
+        equations_ir_built, _unparse_memo=unparse_memo
+    )
+    aliases_strings = _derive_alias_strings(
+        aliases_ir_map, aliases_ir_map, _unparse_memo=unparse_memo
+    )
 
     return ExprRhs(
         state_names=tuple(state_expanded),
@@ -525,6 +545,249 @@ def _discover_pinned_token_masks(  # noqa: C901
     return mask_names, mask_values
 
 
+@contextlib.contextmanager
+def _raise_recursion_limit(needed: int, old_limit: int) -> Iterator[None]:
+    """Temporarily raise ``sys.setrecursionlimit`` to ``needed``.
+
+    Restores ``old_limit`` on exit. Extracted as a context manager so
+    callers can use ``with`` instead of an extra ``try`` nesting level
+    around their hot loops.
+    """
+    if needed > old_limit:
+        sys.setrecursionlimit(needed)
+    try:
+        yield
+    finally:
+        if needed > old_limit:
+            sys.setrecursionlimit(old_limit)
+
+
+def _enumerate_template_cell_names(
+    base: str,
+    template_tokens: tuple[Any, ...],
+    *,
+    cells_by_base: Mapping[str, list[str]],
+    enum_cache: dict[tuple[str, tuple[Any, ...]], list[str]],
+) -> list[str]:
+    """Return all concrete cell names matching a template.
+
+    ``cells_by_base`` (built once per call to
+    ``_build_transition_equations_ir``) already holds every concrete cell
+    name grouped by base in the canonical state-template ordering, so the
+    set of cells matching a wildcard-only template is just the bucket for
+    that base. Falls back to ``[base]`` when the template has no axis
+    tokens at all (the lookup would then equal ``[base]`` anyway, but the
+    empty/no-axes case is rare and not on the hot path). Issue #145.
+    """
+    if template_tokens:
+        cached = cells_by_base.get(base)
+        if cached is not None:
+            return cached
+        return [base]
+    cache_key = (base, template_tokens)
+    cached_full = enum_cache.get(cache_key)
+    if cached_full is not None:
+        return cached_full
+    enum_cache[cache_key] = [base]
+    return [base]
+
+
+def _memoize_unparse(
+    rate_key: tuple[str, ...],
+    memo: dict[tuple[str, ...], str],
+    ir_rate_full: Expr,
+) -> str:
+    """Return ``unparse_ir(ir_rate_full)`` caching the result by ``rate_key``."""
+    cached = memo.get(rate_key)
+    if cached is None:
+        cached = unparse_ir(ir_rate_full)
+        memo[rate_key] = cached
+    return cached
+
+
+def _rate_references_alias(ir_rate_raw: Expr, alias_base_set: Collection[str]) -> bool:
+    """Return True if any ``Sym``/``Subscript`` in ``ir_rate_raw`` names an alias."""
+    return any(
+        isinstance(node, (Sym, Subscript)) and node.name in alias_base_set
+        for node in walk(ir_rate_raw)
+    )
+
+
+def _rate_ir_for_combo(  # noqa: PLR0913
+    *,
+    rate_key: tuple[str, ...],
+    combo: tuple[str, ...],
+    wildcard_axes: Sequence[str],
+    assignment: dict[str, str] | None,
+    ir_rate_raw: Expr,
+    axes: list[dict[str, Any]],
+    shaped: Mapping[str, tuple[str, ...]],
+    ax_lookup_dict: Mapping[str, list[str]],
+    rate_ir_reduce_memo: dict[tuple[str, ...], Expr],
+    rate_ir_full_memo: dict[tuple[str, ...], Expr],
+) -> tuple[Expr, Expr, dict[str, str] | None]:
+    """Look up or build the per-combo rate IR (Reduce and full forms).
+
+    Returns:
+        ``(ir_rate_reduce, ir_rate_full, assignment)`` where ``assignment``
+        is materialized lazily on memo miss and threaded back to the caller
+        so it can be reused for subsequent renderings.
+    """
+    from op_system._ir_expand import expand_reduce_pointwise  # noqa: PLC0415
+
+    cached_rate_reduce = rate_ir_reduce_memo.get(rate_key)
+    if cached_rate_reduce is None:
+        assignment = assignment or dict(zip(wildcard_axes, combo, strict=True))
+        cached_rate_reduce = expand_inline_templates(
+            ir_rate_raw,
+            assignment=assignment,
+            shaped_params=shaped,
+            axis_lookup=ax_lookup_dict,
+        )
+        rate_ir_reduce_memo[rate_key] = cached_rate_reduce
+    cached_rate_full = rate_ir_full_memo.get(rate_key)
+    if cached_rate_full is None:
+        assignment = assignment or dict(zip(wildcard_axes, combo, strict=True))
+        cached_rate_full = expand_reduce_pointwise(
+            cached_rate_reduce,
+            axes=list(axes),
+            shaped_params=shaped,
+            lhs_assignment=assignment,
+            axis_coords=ax_lookup_dict,
+        )
+        rate_ir_full_memo[rate_key] = cached_rate_full
+    return cached_rate_reduce, cached_rate_full, assignment
+
+
+def _synthesize_template_uniform(  # noqa: PLR0913
+    *,
+    frm_base: str,
+    frm_tokens: list[Any],
+    to_base: str,
+    to_tokens: list[Any],
+    pinned_tokens_from: list[PinnedToken],
+    pinned_tokens_to: list[PinnedToken],
+    ir_rate_raw: Expr,
+    masks: Mapping[tuple[str, str], str],
+    reduce_bindings_axes: list[str],
+    axes: list[dict[str, Any]],
+    shaped: Mapping[str, tuple[str, ...]],
+    ax_lookup_dict: dict[str, list[str]],
+    cells_by_base: Mapping[str, list[str]],
+    enum_cache: dict[tuple[str, tuple[Any, ...]], list[str]],
+    d_ir_reduce: dict[str, list[Expr]],
+    d_ir_full: dict[str, list[Expr]],
+    all_syms: set[str],
+) -> None:
+    """Synthesize the template-uniform IR for one transition.
+
+    The source side installs a ``-flow`` body in every cell of the
+    from-template; the destination side installs a
+    ``Reduce(sum_over, ...)`` (or just the body when there are no
+    from-template-only axes) in every cell of the to-template. Each
+    pinned ``(axis, coord)`` selector multiplies the body by a one-hot
+    mask shaped param so that only the pinned slab contributes; the
+    mask zeroes out the non-pinned slabs before the surrounding Reduce
+    sums them away.
+
+    Mutates ``d_ir_reduce``, ``d_ir_full``, and ``all_syms`` in place.
+    """
+    from op_system._ir_expand import expand_reduce_pointwise  # noqa: PLC0415
+
+    to_names_for_synthesis = set(
+        _enumerate_template_cell_names(
+            to_base,
+            tuple(to_tokens),
+            cells_by_base=cells_by_base,
+            enum_cache=enum_cache,
+        )
+    )
+    from_names_for_synthesis = set(
+        _enumerate_template_cell_names(
+            frm_base,
+            tuple(frm_tokens),
+            cells_by_base=cells_by_base,
+            enum_cache=enum_cache,
+        )
+    )
+
+    from_subscript = Subscript(
+        name=frm_base,
+        indices=tuple(
+            AxisIndex(axis=tok.axis, coord=None)
+            for tok in frm_tokens
+            if isinstance(tok, (WildcardToken, PinnedToken))
+        ),
+    )
+
+    def _mask_sub(tok: PinnedToken) -> Subscript:
+        return Subscript(
+            name=masks[tok.axis, tok.coord],
+            indices=(AxisIndex(axis=tok.axis, coord=None),),
+        )
+
+    # To-side body: rate * from-state * from-pinned masks, all summed
+    # over reduce bindings; then multiplied by to-side pinned masks
+    # (which use to-cell coords). Rate lives inside the reduce so
+    # per-axis terms such as ``theta[imm]`` correctly bind to the
+    # reduce loop.
+    inner_to: Expr = Apply(op="*", args=(ir_rate_raw, from_subscript))
+    for tok in pinned_tokens_from:
+        inner_to = Apply(op="*", args=(inner_to, _mask_sub(tok)))
+    synth_to: Expr
+    if reduce_bindings_axes:
+        synth_to = Reduce(
+            kind="sum_over",
+            bindings=tuple((ax, ax) for ax in reduce_bindings_axes),
+            body=inner_to,
+        )
+    else:
+        synth_to = inner_to
+    for tok in pinned_tokens_to:
+        synth_to = Apply(op="*", args=(synth_to, _mask_sub(tok)))
+
+    # From-side body: rate * from-state * masks for FROM-side pinned
+    # tokens only (to-side pinned axes may not be in the from-template
+    # and would broadcast incorrectly).
+    from_body: Expr = Apply(op="*", args=(ir_rate_raw, from_subscript))
+    for tok in pinned_tokens_from:
+        from_body = Apply(op="*", args=(from_body, _mask_sub(tok)))
+    synth_neg = Apply(op="neg", args=(from_body,))
+
+    all_syms |= free_symbols(synth_to)
+    # Pointwise-expand the synthesized IR ONCE at the template level so
+    # ``d_ir_full`` (the per-cell equation IR consumed by downstream
+    # code via ``ir_to_ast_expr``) stays Reduce-free. With
+    # ``lhs_assignment={}``, only the explicit reduce bindings are
+    # enumerated; wildcard template axes remain symbolic
+    # (``AxisIndex(coord=None)``) so the resulting IR is identical
+    # across every cell of the template and can be shared by object
+    # identity (issue #145). Without this, every cell of a synthesized
+    # transition would need its own per-cell pointwise expansion and
+    # the per-cell ``inline_aliases`` would not hit the shared
+    # ``result_memo``.
+    synth_to_full = expand_reduce_pointwise(
+        synth_to,
+        axes=list(axes),
+        shaped_params=shaped,
+        lhs_assignment={},
+        axis_coords=ax_lookup_dict,
+    )
+    synth_neg_full = expand_reduce_pointwise(
+        synth_neg,
+        axes=list(axes),
+        shaped_params=shaped,
+        lhs_assignment={},
+        axis_coords=ax_lookup_dict,
+    )
+    for to_name in to_names_for_synthesis:
+        d_ir_reduce[to_name].append(synth_to)
+        d_ir_full[to_name].append(synth_to_full)
+    for from_name in from_names_for_synthesis:
+        d_ir_reduce[from_name].append(synth_neg)
+        d_ir_full[from_name].append(synth_neg_full)
+
+
 def _build_transition_equations_ir(  # noqa: C901, PLR0912, PLR0913, PLR0914, PLR0915
     transitions_raw: list[Mapping[str, Any]],
     *,
@@ -536,6 +799,7 @@ def _build_transition_equations_ir(  # noqa: C901, PLR0912, PLR0913, PLR0914, PL
     shaped_params: Mapping[str, tuple[str, ...]] | None = None,
     mask_names: Mapping[tuple[str, str], str] | None = None,
     time_axis_name: str | None = None,
+    alias_bases: set[str] | None = None,
 ) -> tuple[
     tuple[Expr | None, ...],
     tuple[Expr | None, ...],
@@ -555,16 +819,35 @@ def _build_transition_equations_ir(  # noqa: C901, PLR0912, PLR0913, PLR0914, PL
     shaped = shaped_params or {}
     masks = mask_names or {}
     ax_lookup_dict = dict(axis_lookup)
+    alias_base_set: set[str] = set(alias_bases or ())
     d_ir_full: dict[str, list[Expr]] = {s: [] for s in state_expanded}
     d_ir_reduce: dict[str, list[Expr]] = {s: [] for s in state_expanded}
     all_syms: set[str] = set()
     transitions_expanded_out: list[dict[str, Any]] = []
+    # Group ``state_expanded`` by base name once so the per-transition
+    # synthesis step can look up "all cells of this template" via a
+    # dict access instead of re-rendering every coord combo through
+    # ``render_selector`` (which dominated 3+ s on the COVID19_USA
+    # continuum spec). Every cell name is ``{base}__{axis_suffix}``
+    # (or just ``{base}`` for axis-less templates) and the transition
+    # ``state_set`` check below guarantees tokens are in the canonical
+    # state-template order, so the grouped lookup matches the result
+    # of enumerating the template's wildcard combos. Issue #145.
+    cells_by_base: dict[str, list[str]] = {}
+    for cell_name in state_expanded:
+        cell_base = cell_name.split("__", 1)[0]
+        cells_by_base.setdefault(cell_base, []).append(cell_name)
+    # Cache: ``(base, template_tokens) -> list[str]`` for
+    # ``_enumerate_template_cell_names``. The same (base, tokens) pair is
+    # queried once per (from, to) side per combo expansion, so caching cuts
+    # the dominant ``render_selector`` walk on continuum specs (issue #145).
+    enumerate_template_cell_names_cache: dict[
+        tuple[str, tuple[Any, ...]], list[str]
+    ] = {}
 
     old_limit = sys.getrecursionlimit()
     needed = max(old_limit, 10_000)
-    try:
-        if needed > old_limit:
-            sys.setrecursionlimit(needed)
+    with _raise_recursion_limit(needed, old_limit):
         for tr_idx, tr_map in enumerate(transitions_raw):
             tr_valid = _validate_transition_mapping(dict(tr_map), idx=tr_idx)
             frm_s = _get_required_str(tr_valid, idx=tr_idx, key="from")
@@ -593,17 +876,16 @@ def _build_transition_equations_ir(  # noqa: C901, PLR0912, PLR0913, PLR0914, PL
                     name_s, shaped_param_names=skip_shaped
                 )
             for ph in sorted(expr_phs):
-                if ":" in ph or "=" in ph:
+                if ":" in ph or "=" in ph or ph in seen_wc:
                     continue
-                if ph not in seen_wc:
-                    if ph not in ax_lookup_dict:
-                        raise InvalidRhsSpecError(
-                            detail=(
-                                f"transition placeholder {ph!r} references unknown axis"
-                            )
+                if ph not in ax_lookup_dict:
+                    raise InvalidRhsSpecError(
+                        detail=(
+                            f"transition placeholder {ph!r} references unknown axis"
                         )
-                    wildcard_axes.append(ph)
-                    seen_wc.add(ph)
+                    )
+                wildcard_axes.append(ph)
+                seen_wc.add(ph)
 
             # Parse rate to IR once (Reduce nodes preserved for apply_along)
             ir_rate_raw = parse_expr_to_ir(rate_s, lower_helpers=True)
@@ -660,8 +942,74 @@ def _build_transition_equations_ir(  # noqa: C901, PLR0912, PLR0913, PLR0914, PL
                 and pinned_masks_ok
                 and (bool(from_only_axes) or has_pinned)
             )
-            to_names_for_synthesis: set[str] = set()
-            from_names_for_synthesis: set[str] = set()
+            # Template-uniform non-synth fast-path. When the from-template
+            # and the to-template have the same wildcard axis set and
+            # there are no pinned tokens, no destination-only axes, and
+            # no rate-only axes, every (from_cell, to_cell) combo of this
+            # transition contributes the SAME ``rate * from_state``
+            # template-form flow to its respective cell. Building that
+            # IR once at the template level (``assignment={}``, with the
+            # ``from`` reference as a ``Subscript`` carrying symbolic
+            # ``AxisIndex(coord=None)`` slots) lets every cell of both
+            # templates share the same IR by object identity, which
+            # collapses the dominant per-cell ``inline_aliases`` /
+            # ``unparse_ir`` / ``free_symbols`` work from O(n_state) to
+            # O(n_template) on continuum specs (issue #145).
+            tpl_uniform = (
+                not synthesize
+                and bool(frm_wc_axes)
+                and frm_wc_set == to_wc_set
+                and not from_only_axes
+                and not to_only_axes
+                and not expr_only_axes
+                and not has_pinned
+            )
+            if (
+                tpl_uniform
+                and alias_base_set
+                and _rate_references_alias(ir_rate_raw, alias_base_set)
+            ):
+                # Disable the fast-path when the rate references an
+                # alias. The downstream alias-inline pass keys on
+                # fully-pinned ``Sym("alias__axis_coord")`` references
+                # (produced by per-combo ``expand_inline_templates`` with
+                # a non-empty ``assignment``); a template-form
+                # ``Subscript("alias", (AxisIndex(coord=None), ...))``
+                # would slip through unresolved and break compilation.
+                tpl_uniform = False
+            tpl_neg_flow_full: Expr | None = None
+            tpl_flow_full: Expr | None = None
+            tpl_neg_flow_reduce: Expr | None = None
+            tpl_flow_reduce: Expr | None = None
+            tpl_ir_rate_full: Expr | None = None
+            tpl_rate_string: str | None = None
+            if tpl_uniform:
+                # Build template-form (axes symbolic) rate IR once.
+                tpl_ir_rate_reduce = expand_inline_templates(
+                    ir_rate_raw,
+                    assignment={},
+                    shaped_params=shaped,
+                    axis_lookup=ax_lookup_dict,
+                )
+                tpl_ir_rate_full = expand_reduce_pointwise(
+                    tpl_ir_rate_reduce,
+                    axes=list(axes),
+                    shaped_params=shaped,
+                    lhs_assignment={},
+                    axis_coords=ax_lookup_dict,
+                )
+                # ``from`` reference as a template-form Subscript over the
+                # from-template's wildcard axes.
+                tpl_from_sub = Subscript(
+                    name=frm_base,
+                    indices=tuple(AxisIndex(axis=ax, coord=None) for ax in frm_wc_axes),
+                )
+                tpl_flow_full = Apply(op="*", args=(tpl_ir_rate_full, tpl_from_sub))
+                tpl_flow_reduce = Apply(op="*", args=(tpl_ir_rate_reduce, tpl_from_sub))
+                tpl_neg_flow_full = Apply(op="neg", args=(tpl_flow_full,))
+                tpl_neg_flow_reduce = Apply(op="neg", args=(tpl_flow_reduce,))
+                all_syms |= free_symbols(tpl_ir_rate_full)
+                tpl_rate_string = unparse_ir(tpl_ir_rate_full)
             # Reduce bindings: from-template axes that need to be summed
             # away when evaluating the to-side. Always include from-pinned
             # axes (the mask inside the reduce filters to the pinned
@@ -678,14 +1026,78 @@ def _build_transition_equations_ir(  # noqa: C901, PLR0912, PLR0913, PLR0914, PL
                 coords_lists = [ax_lookup_dict[ph] for ph in wildcard_axes]
                 combos = product(*coords_lists)
 
+            # For the non-fast-path combo loop, the per-combo rate IR
+            # only depends on the wildcard axes that actually appear in
+            # ``ir_rate_raw``'s subscripts; combos differing only on
+            # irrelevant axes yield identical rate IR (and identical
+            # unparsed strings). Project the assignment onto those axes
+            # and memoize ``expand_inline_templates`` /
+            # ``expand_reduce_pointwise`` / ``unparse_ir`` /
+            # ``free_symbols`` results so each unique projection pays the
+            # cost once. For alias-bearing transitions on the COVID19_USA
+            # continuum this collapses ~50k combos to a few hundred
+            # unique keys (issue #145).
+            rate_axes_used: list[str] = []
+            if wildcard_axes and not tpl_uniform:
+                wc_set_local = set(wildcard_axes)
+                seen_axes = {
+                    ix.axis
+                    for sub in iter_subscripts(ir_rate_raw)
+                    for ix in sub.indices
+                    if ix.axis in wc_set_local
+                }
+                rate_axes_used = [a for a in wildcard_axes if a in seen_axes]
+            rate_ir_reduce_memo: dict[tuple[str, ...], Expr] = {}
+            rate_ir_full_memo: dict[tuple[str, ...], Expr] = {}
+            rate_str_memo: dict[tuple[str, ...], str] = {}
+            rate_syms_seen: set[tuple[str, ...]] = set()
+            # ``render_selector`` is deterministic in the wildcard-token
+            # coords for a given (base, tokens) pair; memoize by the
+            # tuple of wildcard coords from the current assignment so
+            # combos differing only on the *other* template's wildcards
+            # share a single render (issue #145).
+            from_name_memo: dict[tuple[str, ...], str] = {}
+            to_name_memo: dict[tuple[str, ...], str] = {}
+            # Precompute positions in ``combo`` for each axis subset
+            # used downstream so we can build per-subset key tuples
+            # directly from ``combo`` (indexing into the iterator
+            # tuple) and avoid the per-combo ``dict(zip(...))`` cost
+            # entirely on the hot path. The full ``assignment`` dict
+            # is only materialized on memo misses or when the
+            # transition has a ``name`` template (issue #145).
+            wc_pos = {a: i for i, a in enumerate(wildcard_axes)}
+            from_key_idx = tuple(wc_pos[a] for a in frm_wc_axes)
+            to_key_idx = tuple(wc_pos[a] for a in to_wc_axes)
+            rate_key_idx = tuple(wc_pos[a] for a in rate_axes_used)
+
             for combo in combos:
-                assignment = dict(zip(wildcard_axes, combo, strict=True))
-                from_name = render_selector(
-                    frm_base, frm_tokens, assignment, axis_lookup=ax_lookup_dict
+                # Build per-axis-subset keys directly from the combo
+                # tuple without materializing an ``assignment`` dict.
+                from_key = tuple(combo[i] for i in from_key_idx)
+                from_name = from_name_memo.get(from_key)
+                to_key = tuple(combo[i] for i in to_key_idx)
+                to_name = to_name_memo.get(to_key)
+                # ``assignment`` is only required on memo misses or for
+                # the optional ``name`` template; lazy-build it.
+                assignment: dict[str, str] | None = (
+                    dict(zip(wildcard_axes, combo, strict=True)) if name_s else None
                 )
-                to_name = render_selector(
-                    to_base, to_tokens, assignment, axis_lookup=ax_lookup_dict
-                )
+                if from_name is None:
+                    assignment = assignment or dict(
+                        zip(wildcard_axes, combo, strict=True)
+                    )
+                    from_name = render_selector(
+                        frm_base, frm_tokens, assignment, axis_lookup=None
+                    )
+                    from_name_memo[from_key] = from_name
+                if to_name is None:
+                    assignment = assignment or dict(
+                        zip(wildcard_axes, combo, strict=True)
+                    )
+                    to_name = render_selector(
+                        to_base, to_tokens, assignment, axis_lookup=None
+                    )
+                    to_name_memo[to_key] = to_name
                 if from_name not in state_set:
                     raise InvalidRhsSpecError(
                         detail=f"transitions[{tr_idx}].from={from_name!r} not in state"
@@ -695,35 +1107,58 @@ def _build_transition_equations_ir(  # noqa: C901, PLR0912, PLR0913, PLR0914, PL
                         detail=f"transitions[{tr_idx}].to={to_name!r} not in state"
                     )
 
-                # Rate IR: template-substituted, Reduce nodes preserved
-                ir_rate_reduce = expand_inline_templates(
-                    ir_rate_raw,
-                    assignment=assignment,
-                    shaped_params=shaped,
-                    axis_lookup=ax_lookup_dict,
-                )
-                # Rate IR: fully expanded, no Reduce nodes
-                ir_rate_full = expand_reduce_pointwise(
-                    ir_rate_reduce,
-                    axes=list(axes),
-                    shaped_params=shaped,
-                    lhs_assignment=assignment,
-                    axis_coords=ax_lookup_dict,
-                )
+                # Rate IR: template-substituted, Reduce nodes preserved.
+                # In the ``tpl_uniform`` fast-path the template-form
+                # rate IR was built once before the combo loop and is
+                # shared by identity across all combos via
+                # ``tpl_neg_flow_full`` / ``tpl_flow_full`` (etc.); we
+                # therefore skip per-combo rate construction entirely.
+                if tpl_uniform:
+                    ir_rate_reduce: Expr = tpl_ir_rate_reduce
+                    ir_rate_full: Expr = tpl_ir_rate_full  # type: ignore[assignment]
+                else:
+                    rate_key = tuple(combo[i] for i in rate_key_idx)
+                    ir_rate_reduce, ir_rate_full, assignment = _rate_ir_for_combo(
+                        rate_key=rate_key,
+                        combo=combo,
+                        wildcard_axes=wildcard_axes,
+                        assignment=assignment,
+                        ir_rate_raw=ir_rate_raw,
+                        axes=axes,
+                        shaped=shaped,
+                        ax_lookup_dict=ax_lookup_dict,
+                        rate_ir_reduce_memo=rate_ir_reduce_memo,
+                        rate_ir_full_memo=rate_ir_full_memo,
+                    )
 
-                # Build flow IR: rate * from_state
-                from_sym = Sym(name=from_name)
-                flow_full = Apply(op="*", args=(ir_rate_full, from_sym))
-                flow_reduce = Apply(op="*", args=(ir_rate_reduce, from_sym))
+                # Build flow IR: rate * from_state. In the tpl_uniform
+                # fast-path the per-cell ``Sym(from_name)`` reference is
+                # replaced by a single shared ``Subscript`` over the
+                # from-template's wildcard axes, and the resulting
+                # ``flow_full`` / ``flow_reduce`` / negated forms are the
+                # SAME IR object for every combo of this transition.
+                if tpl_uniform:
+                    flow_full: Expr = tpl_flow_full  # type: ignore[assignment]
+                    flow_reduce: Expr = tpl_flow_reduce  # type: ignore[assignment]
+                    neg_flow_full: Expr = tpl_neg_flow_full  # type: ignore[assignment]
+                    neg_flow_reduce: Expr = tpl_neg_flow_reduce  # type: ignore[assignment]
+                else:
+                    from_sym = Sym(name=from_name)
+                    flow_full = Apply(op="*", args=(ir_rate_full, from_sym))
+                    flow_reduce = Apply(op="*", args=(ir_rate_reduce, from_sym))
+                    neg_flow_full = Apply(op="neg", args=(flow_full,))
+                    neg_flow_reduce = Apply(op="neg", args=(flow_reduce,))
 
                 # Accumulate: from_state gets -flow, to_state gets +flow.
                 # When synthesizing template-uniform IR for this transition
-                # (see post-loop block below), skip the per-combo append
-                # into ``d_ir_reduce[from_name]`` and ``d_ir_reduce[to_name]``
-                # — the synthesized nodes carry the same total contribution
-                # in a form the vectorizer can template-lift.
-                d_ir_full[from_name].append(Apply(op="neg", args=(flow_full,)))
-                d_ir_full[to_name].append(flow_full)
+                # (see post-loop block below), skip the per-combo appends
+                # into BOTH ``d_ir_full`` and ``d_ir_reduce``. The synthesized
+                # nodes installed after the combo loop carry the same total
+                # contribution but are SHARED across all cells of the
+                # template. Sharing collapses per-cell ``inline_aliases``
+                # work from O(n_state) to O(n_template) when the per-cell
+                # inline loop is passed a ``result_memo`` keyed on
+                # ``id(expr)`` (issue #145).
                 if synthesize:
                     # Synthesis installs template-uniform IR into ALL
                     # cells of both templates after the combo loop; the
@@ -732,21 +1167,41 @@ def _build_transition_equations_ir(  # noqa: C901, PLR0912, PLR0913, PLR0914, PL
                     # whose mask-multiplied contribution is 0.
                     pass
                 else:
-                    d_ir_reduce[from_name].append(Apply(op="neg", args=(flow_reduce,)))
+                    d_ir_full[from_name].append(neg_flow_full)
+                    d_ir_full[to_name].append(flow_full)
+                    d_ir_reduce[from_name].append(neg_flow_reduce)
                     d_ir_reduce[to_name].append(flow_reduce)
 
-                # Collect rate symbols (alias Syms kept unresolved)
-                all_syms |= free_symbols(ir_rate_full)
+                # Collect rate symbols (alias Syms kept unresolved). Skip
+                # in the tpl_uniform fast-path where this was hoisted out
+                # of the combo loop. The set of free symbols of
+                # ``ir_rate_full`` depends only on the projected rate
+                # assignment, so visit each unique key once.
+                if not tpl_uniform and rate_key not in rate_syms_seen:
+                    rate_syms_seen.add(rate_key)
+                    all_syms |= free_symbols(ir_rate_full)
 
-                # Build expanded transition dict for meta["transitions"]
+                # Build expanded transition dict for meta["transitions"].
+                # In the tpl_uniform fast-path the rate string is the
+                # same for every combo (axes symbolic), so reuse the
+                # pre-rendered ``tpl_rate_string`` instead of unparsing
+                # per combo. Otherwise, memoize unparsing by the rate
+                # projection key (same projected assignment -> same
+                # rate IR -> same string).
+                if tpl_uniform:
+                    rate_string: str = tpl_rate_string  # type: ignore[assignment]
+                else:
+                    rate_string = _memoize_unparse(
+                        rate_key, rate_str_memo, ir_rate_full
+                    )
                 tr_out: dict[str, Any] = dict(tr_valid)
                 tr_out["from"] = from_name
                 tr_out["to"] = to_name
-                tr_out["rate"] = unparse_ir(ir_rate_full)
+                tr_out["rate"] = rate_string
                 if name_s:
                     tr_out["name"] = _apply_template_substitutions(
                         name_s,
-                        assignment=assignment,
+                        assignment=assignment or {},
                         template_map=template_map,
                         shaped_params=shaped,
                         axis_lookup=ax_lookup_dict,
@@ -756,121 +1211,59 @@ def _build_transition_equations_ir(  # noqa: C901, PLR0912, PLR0913, PLR0914, PL
             # Synthesize template-uniform IR for this transition when the
             # source-template's wildcard axes (possibly with pinned-coord
             # selectors handled by one-hot masks) admit a uniform
-            # representation. The source side installs a ``-flow`` body in
-            # every cell of the from-template; the destination side installs
-            # a ``Reduce(sum_over, ...)`` (or just the body when there are
-            # no from-template-only axes) in every cell of the to-template.
-            # Each pinned (axis, coord) selector multiplies the body by a
-            # one-hot mask shaped param so that only the pinned slab
-            # contributes; the mask zeroes out the non-pinned slabs before
-            # the surrounding Reduce sums them away.
+            # representation. See ``_synthesize_template_uniform``.
             if synthesize:
-                # Enumerate ALL cells of both templates (treating pinned
-                # axes as wildcards over their full coord ranges) so the
-                # template-uniform synthesized IR is installed in every
-                # cell. Pinned-coord selection lives inside the body via
-                # the one-hot mask multiplications below.
-                def _enumerate_template_cell_names(
-                    base: str,
-                    template_tokens: tuple[Any, ...],
-                ) -> list[str]:
-                    axes_and_coords = [
-                        (tok.axis, ax_lookup_dict[tok.axis])
-                        for tok in template_tokens
-                        if isinstance(tok, (WildcardToken, PinnedToken))
-                    ]
-                    if not axes_and_coords:
-                        return [base]
-                    tokens_as_wc = tuple(
-                        WildcardToken(axis=tok.axis)
-                        if isinstance(tok, PinnedToken)
-                        else tok
-                        for tok in template_tokens
-                    )
-                    out: list[str] = []
-                    for combo in product(*(coords for _, coords in axes_and_coords)):
-                        assign = {
-                            axis: c
-                            for (axis, _), c in zip(axes_and_coords, combo, strict=True)
-                        }
-                        out.append(
-                            render_selector(
-                                base,
-                                tokens_as_wc,
-                                assign,
-                                axis_lookup=ax_lookup_dict,
-                            )
-                        )
-                    return out
-
-                to_names_for_synthesis = set(
-                    _enumerate_template_cell_names(to_base, tuple(to_tokens))
-                )
-                from_names_for_synthesis = set(
-                    _enumerate_template_cell_names(frm_base, tuple(frm_tokens))
+                _synthesize_template_uniform(
+                    frm_base=frm_base,
+                    frm_tokens=frm_tokens,
+                    to_base=to_base,
+                    to_tokens=to_tokens,
+                    pinned_tokens_from=pinned_tokens_from,
+                    pinned_tokens_to=pinned_tokens_to,
+                    ir_rate_raw=ir_rate_raw,
+                    masks=masks,
+                    reduce_bindings_axes=reduce_bindings_axes,
+                    axes=axes,
+                    shaped=shaped,
+                    ax_lookup_dict=ax_lookup_dict,
+                    cells_by_base=cells_by_base,
+                    enum_cache=enumerate_template_cell_names_cache,
+                    d_ir_reduce=d_ir_reduce,
+                    d_ir_full=d_ir_full,
+                    all_syms=all_syms,
                 )
 
-                from_subscript = Subscript(
-                    name=frm_base,
-                    indices=tuple(
-                        AxisIndex(axis=tok.axis, coord=None)
-                        for tok in frm_tokens
-                        if isinstance(tok, (WildcardToken, PinnedToken))
-                    ),
-                )
+    # Cells whose transition participation is identical end up with
+    # identical term lists by identity (same shared synth_to /
+    # synth_neg / flow IR objects). Dedup the outer Apply by the tuple
+    # of term ids so downstream identity-keyed memos (unparse_ir,
+    # free_symbols, inline_aliases) see one wrapper instead of one
+    # per cell. Issue #145.
+    sum_dedup_full: dict[tuple[int, ...], Expr] = {}
+    sum_dedup_reduce: dict[tuple[int, ...], Expr] = {}
 
-                def _mask_sub(tok: PinnedToken) -> Subscript:
-                    return Subscript(
-                        name=masks[tok.axis, tok.coord],
-                        indices=(AxisIndex(axis=tok.axis, coord=None),),
-                    )
-
-                # To-side body: rate * from-state * from-pinned masks,
-                # all summed over reduce bindings; then multiplied by
-                # to-side pinned masks (which use to-cell coords). Rate
-                # lives inside the reduce so per-axis terms such as
-                # ``theta[imm]`` correctly bind to the reduce loop.
-                inner_to: Expr = Apply(op="*", args=(ir_rate_raw, from_subscript))
-                for tok in pinned_tokens_from:
-                    inner_to = Apply(op="*", args=(inner_to, _mask_sub(tok)))
-                synth_to: Expr
-                if reduce_bindings_axes:
-                    synth_to = Reduce(
-                        kind="sum_over",
-                        bindings=tuple((ax, ax) for ax in reduce_bindings_axes),
-                        body=inner_to,
-                    )
-                else:
-                    synth_to = inner_to
-                for tok in pinned_tokens_to:
-                    synth_to = Apply(op="*", args=(synth_to, _mask_sub(tok)))
-
-                # From-side body: rate * from-state * masks for FROM-side
-                # pinned tokens only (to-side pinned axes may not be in
-                # the from-template and would broadcast incorrectly).
-                from_body: Expr = Apply(op="*", args=(ir_rate_raw, from_subscript))
-                for tok in pinned_tokens_from:
-                    from_body = Apply(op="*", args=(from_body, _mask_sub(tok)))
-                synth_neg = Apply(op="neg", args=(from_body,))
-
-                all_syms |= free_symbols(synth_to)
-                for to_name in to_names_for_synthesis:
-                    d_ir_reduce[to_name].append(synth_to)
-                for from_name in from_names_for_synthesis:
-                    d_ir_reduce[from_name].append(synth_neg)
-    finally:
-        if needed > old_limit:
-            sys.setrecursionlimit(old_limit)
-
-    def _sum_terms(terms: list[Expr]) -> Expr:
+    def _sum_terms(
+        terms: list[Expr],
+        dedup: dict[tuple[int, ...], Expr],
+    ) -> Expr:
         if not terms:
             return Literal(value=0.0)
         if len(terms) == 1:
             return terms[0]
-        return Apply(op="+", args=tuple(terms))
+        key = tuple(id(t) for t in terms)
+        cached = dedup.get(key)
+        if cached is not None:
+            return cached
+        node: Expr = Apply(op="+", args=tuple(terms))
+        dedup[key] = node
+        return node
 
-    equations_ir_pre = tuple(_sum_terms(d_ir_full[s]) for s in state_expanded)
-    equations_ir_reduce_pre = tuple(_sum_terms(d_ir_reduce[s]) for s in state_expanded)
+    equations_ir_pre = tuple(
+        _sum_terms(d_ir_full[s], sum_dedup_full) for s in state_expanded
+    )
+    equations_ir_reduce_pre = tuple(
+        _sum_terms(d_ir_reduce[s], sum_dedup_reduce) for s in state_expanded
+    )
     return equations_ir_pre, equations_ir_reduce_pre, transitions_expanded_out, all_syms
 
 
@@ -1002,10 +1395,14 @@ def normalize_transitions_rhs(  # noqa: C901, PLR0912, PLR0914, PLR0915
     template_map_all = {**state_template_map, **alias_template_map}
 
     state_set = set(state_expanded)
-    # Collect alias symbols from IR
+    # Collect alias symbols from IR. Walk the Reduce-folded map (same
+    # inlined symbol set as the full-expansion map but vastly smaller
+    # on continuum specs) and share an id-keyed memo across per-cell
+    # entries that share subtrees by identity (issue #145).
     all_syms: set[str] = set()
-    for alias_expr in aliases_ir_map.values():
-        all_syms |= free_symbols(alias_expr)
+    fs_memo: dict[int, frozenset[str]] = {}
+    for alias_expr in aliases_ir_reduce_map.values():
+        all_syms |= free_symbols(alias_expr, memo=fs_memo)
 
     _apply_coord_shifts(
         transitions_raw=transitions_raw,
@@ -1043,6 +1440,9 @@ def normalize_transitions_rhs(  # noqa: C901, PLR0912, PLR0914, PLR0915
             shaped_params=shaped_params,
             mask_names=pinned_mask_names,
             time_axis_name=time_axis_name,
+            alias_bases={
+                parse_selector(_normalize_bracket_key(k))[0] for k in aliases_raw_map
+            },
         )
     )
     all_syms |= rate_syms
@@ -1062,12 +1462,98 @@ def normalize_transitions_rhs(  # noqa: C901, PLR0912, PLR0914, PLR0915
     time_varying_set = set(time_varying_full)
     axis_name_set = set(axis_lookup_dict)
     template_base_set = {parse_selector(k)[0] for k in template_map_all}
-    eqs_tuple = _derive_equation_strings(equations_ir_pre_inline)
-    equations_ir_built = _build_equations_ir(eqs_tuple, aliases_ir_map)
+    # Share an identity-keyed unparse memo between the equation and
+    # alias rendering passes so subexpressions that recur across alias
+    # bodies and equations are rendered only once (issue #145).
+    unparse_memo_final: dict[tuple[int, int, bool], str] = {}
+    eqs_tuple = _derive_equation_strings(
+        equations_ir_pre_inline, _unparse_memo=unparse_memo_final
+    )
+    # Inline aliases directly into the per-cell IR we already built in
+    # ``_build_transition_equations_ir`` rather than re-parsing the
+    # round-tripped equation strings. Avoids 73k x ``parse_expr_to_ir``
+    # plus a redundant IR rebuild on large continuum specs (issue #145).
+    # ``aliases_ir_map`` is already fully alias-inlined inside
+    # ``_build_aliases_ir_from_raw`` so cycle detection is redundant here.
+    #
+    # The dominant cost on large specs is the per-cell ``inline_aliases``
+    # call. Because synthesized transitions install the SAME ``synth_to`` /
+    # ``synth_neg`` IR object into every cell of a template, the *terms*
+    # of the per-cell sum are shared across many cells even though the
+    # outer ``Apply(op="+", ...)`` wrapper is unique per cell. Inlining
+    # term-by-term with a shared ``result_memo`` keyed on ``id(term)``
+    # collapses the alias-substitution work from O(n_state) to
+    # O(n_unique_terms) (issue #145).
+    alias_inline_memo: dict[int, frozenset[str]] = {}
+    alias_inline_result_memo: dict[int, Expr] = {}
+
+    def _inline_one(expr: Expr) -> Expr:
+        return inline_aliases(
+            expr,
+            aliases_ir_map,
+            memo=alias_inline_memo,
+            skip_cycle_check=True,
+            result_memo=alias_inline_result_memo,
+        )
+
+    # Dedup the post-inline outer Apply by tuple of arg ids so cells
+    # whose inlined-term tuple is identical share one wrapper, letting
+    # downstream identity-keyed memos (e.g. unparse_ir) cache the
+    # rendered string once per unique equation. Issue #145.
+    apply_plus_dedup: dict[tuple[int, ...], Expr] = {}
+    # The upstream ``sum_dedup_full`` collapses ``equations_ir_pre_inline``
+    # to a handful of unique outer Apply objects shared across many
+    # cells (e.g. 7 unique exprs across 72,828 cells on the COVID19_USA
+    # continuum spec). Cache the per-expr inlined result by ``id(expr)``
+    # so we skip the per-term ``_inline_one`` calls entirely on cache
+    # hits -- this collapses ~1.9M memo-hit calls to ~7 real inlines
+    # plus 72k dict lookups (issue #145).
+    outer_inline_memo: dict[int, Expr] = {}
+
+    def _inline_outer(expr: Expr) -> Expr:
+        """Run alias-inlining for one outer equation expression.
+
+        Returns:
+            The inlined expression (possibly the original ``expr`` when no
+            inlining was needed).
+        """
+        if isinstance(expr, Apply) and expr.op == "+":
+            new_args = tuple(_inline_one(a) for a in expr.args)
+            if all(n is o for n, o in zip(new_args, expr.args, strict=True)):
+                return expr
+            dedup_key = tuple(id(a) for a in new_args)
+            cached_apply = apply_plus_dedup.get(dedup_key)
+            if cached_apply is None:
+                cached_apply = Apply(op="+", args=new_args)
+                apply_plus_dedup[dedup_key] = cached_apply
+            return cached_apply
+        return _inline_one(expr)
+
+    equations_ir_built_list: list[Expr | None] = []
+    for expr in equations_ir_pre_inline:
+        if expr is None:
+            equations_ir_built_list.append(None)
+            continue
+        if not aliases_ir_map:
+            equations_ir_built_list.append(expr)
+            continue
+        cached_outer = outer_inline_memo.get(id(expr))
+        if cached_outer is not None:
+            equations_ir_built_list.append(cached_outer)
+            continue
+        try:
+            result_expr = _inline_outer(expr)
+        except (ValueError, RecursionError):
+            result_expr = expr
+        outer_inline_memo[id(expr)] = result_expr
+        equations_ir_built_list.append(result_expr)
+    equations_ir_built = tuple(equations_ir_built_list)
     return TransitionsRhs(
         state_names=tuple(state_expanded),
         equations=eqs_tuple,
-        aliases=_derive_alias_strings(aliases_ir_map, aliases_ir_map),
+        aliases=_derive_alias_strings(
+            aliases_ir_map, aliases_ir_map, _unparse_memo=unparse_memo_final
+        ),
         param_names=_sorted_unique(
             sym
             for sym in all_syms

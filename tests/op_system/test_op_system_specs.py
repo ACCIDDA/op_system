@@ -302,12 +302,20 @@ def test_shaped_param_in_transitions_rate() -> None:
     out = normalize_rhs(spec)
     assert dict(out.shaped_params) == {"theta": ("imm",)}
     expanded = out.meta["transitions"]
+    # Alias-free template-uniform transitions emit a single shared
+    # template-form rate IR for every combo (issue #145). The per-cell
+    # ``from`` / ``to`` are still pinned, but the ``rate`` string is the
+    # template body with the shaped-param index left symbolic
+    # (``theta[imm]``); the vectorizer evaluates it at each cell's
+    # ``imm`` coord at runtime.
     rates = sorted(tr["rate"] for tr in expanded)
     assert rates == [
-        "theta[0] * I__imm_x0",
-        "theta[1] * I__imm_x1",
-        "theta[2] * I__imm_x2",
+        "theta[imm] * I[imm]",
+        "theta[imm] * I[imm]",
+        "theta[imm] * I[imm]",
     ]
+    froms = sorted(tr["from"] for tr in expanded)
+    assert froms == ["S__imm_x0", "S__imm_x1", "S__imm_x2"]
 
 
 def test_shaped_param_eval_end_to_end_scalar_backend() -> None:
@@ -1052,7 +1060,15 @@ def test_transitions_template_expansion_over_axes() -> None:
 
 
 def test_transitions_template_endpoint_pinning_expands_correctly() -> None:
-    """Endpoint pinning keeps pinned axis fixed while expanding other axes."""
+    """Endpoint pinning keeps pinned axis fixed while expanding other axes.
+
+    Synthesized transitions emit *template-uniform* IR for every cell of
+    the from/to templates (issue #145). The per-cell ``equations`` string
+    is therefore the same template body for every cell of the same
+    template, with template axis names (``[age, imm]``) rather than
+    cell-pinned coordinates. The vectorizer / compiler consume this
+    shared IR per template rather than per-cell.
+    """
     spec = {
         "kind": "transitions",
         "axes": [
@@ -1073,11 +1089,35 @@ def test_transitions_template_endpoint_pinning_expands_correctly() -> None:
 
     assert "X__age_u65__imm_X1" in out.state_names
     assert "X__age_o65__imm_X1" in out.state_names
-    assert any("-" in eq and "I__age_u65__imm_X0" in eq for eq in out.equations)
-    assert any(
-        "I__age_u65__imm_X0" in eq and "I__age_u65__imm_X1" in eq
-        for eq in out.equations
-    )
+
+    eqs = dict(zip(out.state_names, out.equations, strict=True))
+
+    # Every from-cell carries the template-form negative flow.
+    for cell in (
+        "I__age_u65__imm_X0",
+        "I__age_u65__imm_X1",
+        "I__age_o65__imm_X0",
+        "I__age_o65__imm_X1",
+    ):
+        assert "-" in eqs[cell]
+        assert "waning[imm]" in eqs[cell]
+        assert "I[age, imm]" in eqs[cell]
+
+    # Every to-cell carries the same template-form pointwise-expanded
+    # flow times the endpoint-pinned mask (``imm=X1``). The mask zeros
+    # the contribution for cells not on the pinned slab; the IR itself
+    # is shared. The Reduce over ``imm`` is pointwise-expanded into a
+    # sum over the imm coords (``waning__imm_X0 * I__imm_X0[age] + ...``).
+    for cell in (
+        "X__age_u65__imm_X0",
+        "X__age_u65__imm_X1",
+        "X__age_o65__imm_X0",
+        "X__age_o65__imm_X1",
+    ):
+        eq = eqs[cell]
+        assert "waning__imm_X0 * I__imm_X0[age]" in eq
+        assert "waning__imm_X1 * I__imm_X1[age]" in eq
+        assert "__op_system_mask__imm__" in eq
 
 
 def test_transitions_chain_helper_supports_templated_chain_names() -> None:

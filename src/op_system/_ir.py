@@ -436,6 +436,9 @@ def to_ir(node: ast.AST) -> Expr:  # noqa: C901, PLR0911, PLR0912
     _invalid(detail=f"unsupported AST node in IR parser: {type(node).__name__}")
 
 
+_PARSE_IR_CACHE: dict[tuple[str, bool], Expr] = {}
+
+
 def parse_expr_to_ir(expr: str, *, lower_helpers: bool = False) -> Expr:
     """Parse an expression string and convert it to typed IR.
 
@@ -447,13 +450,18 @@ def parse_expr_to_ir(expr: str, *, lower_helpers: bool = False) -> Expr:
         Parsed IR tree.
 
     """
+    key = (expr, lower_helpers)
+    cached = _PARSE_IR_CACHE.get(key)
+    if cached is not None:
+        return cached
     try:
         tree = ast.parse(expr, mode="eval")
     except SyntaxError as exc:
         _invalid(detail=f"invalid expression syntax: {exc.msg}")
     ir = to_ir(tree)
     if lower_helpers:
-        return lower_helper_calls(ir)
+        ir = lower_helper_calls(ir)
+    _PARSE_IR_CACHE[key] = ir
     return ir
 
 
@@ -633,29 +641,47 @@ def _unparse_axis_index(idx: AxisIndex) -> str:
     return idx.axis
 
 
-def _unparse_call_args(args: tuple[Expr, ...]) -> str:
+def _unparse_call_args(
+    args: tuple[Expr, ...],
+    *,
+    _memo: dict[tuple[int, int, bool], str] | None = None,
+) -> str:
     parts: list[str] = []
     for arg in args:
         if isinstance(arg, Apply) and arg.op == "kwarg":
             key_node, value_node = arg.args
             if not isinstance(key_node, Literal) or not isinstance(key_node.value, str):
                 _invalid(detail="malformed kwarg node in IR unparser")
-            parts.append(f"{key_node.value}={unparse_ir(value_node)}")
+            parts.append(
+                f"{key_node.value}="
+                f"{_unparse_ir(value_node, parent_prec=0, is_right=False, _memo=_memo)}"
+            )
         else:
-            parts.append(unparse_ir(arg))
+            parts.append(_unparse_ir(arg, parent_prec=0, is_right=False, _memo=_memo))
     return ", ".join(parts)
 
 
-def unparse_ir(expr: Expr) -> str:
+def unparse_ir(
+    expr: Expr,
+    *,
+    _memo: dict[tuple[int, int, bool], str] | None = None,
+) -> str:
     """Render a typed IR expression back to its Python source string.
 
     Args:
         expr: Typed IR expression.
+        _memo: Optional identity-keyed cache of already-rendered
+            subexpressions, used to amortize rendering of structurally
+            shared IR across many top-level expressions (e.g. when many
+            cells of one template share the same synthesized IR object;
+            issue #145). When provided, the cache must not be reused
+            across IR trees built with different ``parse_expr_to_ir``
+            options.
 
     Returns:
         Python expression source string equivalent to ``expr``.
     """
-    return _unparse_ir(expr, parent_prec=0, is_right=False)
+    return _unparse_ir(expr, parent_prec=0, is_right=False, _memo=_memo)
 
 
 # Operator precedence (higher binds tighter). Mirrors Python's grammar for
@@ -715,14 +741,15 @@ def _unparse_binary(
     prec: int,
     parent_prec: int,
     is_right: bool,
+    _memo: dict[tuple[int, int, bool], str] | None = None,
 ) -> str:
     sep = f" {op} "
     # Fold args left-associatively so multi-arg flatten still renders correctly.
     args = expr.args
-    left_str = _unparse_ir(args[0], parent_prec=prec, is_right=False)
+    left_str = _unparse_ir(args[0], parent_prec=prec, is_right=False, _memo=_memo)
     rendered = left_str
     for nxt in args[1:]:
-        right_str = _unparse_ir(nxt, parent_prec=prec, is_right=True)
+        right_str = _unparse_ir(nxt, parent_prec=prec, is_right=True, _memo=_memo)
         rendered = f"{rendered}{sep}{right_str}"
     need_parens = prec < parent_prec or (
         prec == parent_prec and is_right and op in _LEFT_ASSOC_NEEDS_RIGHT_PARENS
@@ -730,59 +757,92 @@ def _unparse_binary(
     return _wrap(rendered, need=need_parens)
 
 
-def _unparse_ir(  # noqa: C901, PLR0911
+def _unparse_ir(  # noqa: C901, PLR0912
     expr: Expr,
     *,
     parent_prec: int,
     is_right: bool,
+    _memo: dict[tuple[int, int, bool], str] | None = None,
 ) -> str:
+    key: tuple[int, int, bool] | None = None
+    if _memo is not None:
+        key = (id(expr), parent_prec, is_right)
+        cached = _memo.get(key)
+        if cached is not None:
+            return cached
+
+    result: str
     if isinstance(expr, Literal):
-        return repr(expr.value)
+        result = repr(expr.value)
+        if _memo is not None and key is not None:
+            _memo[key] = result
+        return result
 
     if isinstance(expr, Sym):
+        if _memo is not None and key is not None:
+            _memo[key] = expr.name
         return expr.name
 
     if isinstance(expr, Subscript):
         idx_str = ", ".join(_unparse_axis_index(i) for i in expr.indices)
-        return f"{expr.name}[{idx_str}]"
+        result = f"{expr.name}[{idx_str}]"
+        if _memo is not None and key is not None:
+            _memo[key] = result
+        return result
 
     if isinstance(expr, Apply):
         if expr.op == "neg" and len(expr.args) == 1:
-            inner = _unparse_ir(expr.args[0], parent_prec=_PREC_UNARY, is_right=False)
+            inner = _unparse_ir(
+                expr.args[0], parent_prec=_PREC_UNARY, is_right=False, _memo=_memo
+            )
             need = parent_prec > _PREC_UNARY
-            return _wrap(f"-{inner}", need=need)
-        if expr.op == "pos" and len(expr.args) == 1:
-            inner = _unparse_ir(expr.args[0], parent_prec=_PREC_UNARY, is_right=False)
+            result = _wrap(f"-{inner}", need=need)
+        elif expr.op == "pos" and len(expr.args) == 1:
+            inner = _unparse_ir(
+                expr.args[0], parent_prec=_PREC_UNARY, is_right=False, _memo=_memo
+            )
             need = parent_prec > _PREC_UNARY
-            return _wrap(f"+{inner}", need=need)
-        if expr.op == "pow" and len(expr.args) == 2:
-            left = _unparse_ir(expr.args[0], parent_prec=_PREC_POW + 1, is_right=False)
-            right = _unparse_ir(expr.args[1], parent_prec=_PREC_POW, is_right=True)
+            result = _wrap(f"+{inner}", need=need)
+        elif expr.op == "pow" and len(expr.args) == 2:
+            left = _unparse_ir(
+                expr.args[0], parent_prec=_PREC_POW + 1, is_right=False, _memo=_memo
+            )
+            right = _unparse_ir(
+                expr.args[1], parent_prec=_PREC_POW, is_right=True, _memo=_memo
+            )
             need = parent_prec > _PREC_POW
-            return _wrap(f"{left} ** {right}", need=need)
-        if expr.op == "ifelse" and len(expr.args) == 3:
+            result = _wrap(f"{left} ** {right}", need=need)
+        elif expr.op == "ifelse" and len(expr.args) == 3:
             test, body, orelse = expr.args
             rendered = (
-                f"{_unparse_ir(body, parent_prec=1, is_right=False)} if "
-                f"{_unparse_ir(test, parent_prec=1, is_right=False)} else "
-                f"{_unparse_ir(orelse, parent_prec=0, is_right=False)}"
+                f"{_unparse_ir(body, parent_prec=1, is_right=False, _memo=_memo)} if "
+                f"{_unparse_ir(test, parent_prec=1, is_right=False, _memo=_memo)} else "
+                f"{_unparse_ir(orelse, parent_prec=0, is_right=False, _memo=_memo)}"
             )
-            return _wrap(rendered, need=parent_prec > 0)
-        if expr.op in _BINARY_PREC and len(expr.args) >= 2:
-            return _unparse_binary(
+            result = _wrap(rendered, need=parent_prec > 0)
+        elif expr.op in _BINARY_PREC and len(expr.args) >= 2:
+            result = _unparse_binary(
                 expr,
                 op=expr.op,
                 prec=_BINARY_PREC[expr.op],
                 parent_prec=parent_prec,
                 is_right=is_right,
+                _memo=_memo,
             )
-        return f"{expr.op}({_unparse_call_args(expr.args)})"
+        else:
+            result = f"{expr.op}({_unparse_call_args(expr.args, _memo=_memo)})"
+        if _memo is not None and key is not None:
+            _memo[key] = result
+        return result
 
     if isinstance(expr, Reduce):
         binding_str = ", ".join(f"{k}={v}" for k, v in expr.bindings)
         suffix = f", {binding_str}" if binding_str else ""
-        body_str = _unparse_ir(expr.body, parent_prec=0, is_right=False)
-        return f"{expr.kind}({body_str}{suffix})"
+        body_str = _unparse_ir(expr.body, parent_prec=0, is_right=False, _memo=_memo)
+        result = f"{expr.kind}({body_str}{suffix})"
+        if _memo is not None and key is not None:
+            _memo[key] = result
+        return result
 
     _invalid(detail=f"unsupported IR node in unparser: {type(expr).__name__}")
 

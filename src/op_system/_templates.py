@@ -50,6 +50,19 @@ from op_system._errors import InvalidRhsSpecError
 _STATE_TEMPLATE_RE = re.compile(r"\s*([A-Za-z_][A-Za-z0-9_]*)\[(.+)\]\s*")
 # Matches any "Name[...]" token inside an expression string.
 _INLINE_TEMPLATE_RE = re.compile(r"([A-Za-z_][A-Za-z0-9_]*)\[(.*?)\]")
+
+# Per-``template_map`` cache of pre-parsed, filtered, regex-compiled
+# template keys used by ``_apply_template_substitutions``. Built lazily
+# on first use and keyed by ``id(template_map)`` so batch substitution
+# over many cells against the same mapping pays the parse cost once
+# rather than per cell (issue #145).
+_APPLY_TPL_PREPARSE_CACHE: dict[
+    int,
+    tuple[
+        object,
+        tuple[tuple[str, str, tuple[WildcardToken, ...], re.Pattern[str]], ...],
+    ],
+] = {}
 # Matches any "[...]" fragment to extract placeholder names from rate exprs.
 _PLACEHOLDER_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\[(.*?)\]")
 
@@ -90,7 +103,43 @@ def _sanitize_fragment(val: object) -> str:
     Returns:
         Identifier-safe string fragment.
     """
-    return re.sub(r"[^A-Za-z0-9_]", "_", str(val))
+    s = val if type(val) is str else str(val)
+    cached = _SANITIZE_CACHE.get(s)
+    if cached is not None:
+        return cached
+    result = _SANITIZE_RE.sub("_", s)
+    _SANITIZE_CACHE[s] = result
+    return result
+
+
+_SANITIZE_RE = re.compile(r"[^A-Za-z0-9_]")
+_SANITIZE_CACHE: dict[str, str] = {}
+# Cache for the full ``f"{axis}_{sanitize(coord)}"`` fragment used by
+# ``render_selector``. The hot loop renders the same (axis, coord) pair
+# millions of times during the per-cell transition build, so caching the
+# already-formatted fragment removes a function call, a cache lookup,
+# and an f-string format per render (issue #145).
+_TOKEN_FRAGMENT_CACHE: dict[tuple[str, str], str] = {}
+
+
+def _token_fragment(axis: str, coord: object) -> str:
+    """Return cached ``"{axis}_{sanitize(coord)}"`` for selector rendering.
+
+    Returns:
+        Identifier-safe ``axis_coord`` fragment.
+    """
+    s = coord if type(coord) is str else str(coord)
+    key = (axis, s)
+    cached = _TOKEN_FRAGMENT_CACHE.get(key)
+    if cached is not None:
+        return cached
+    sanitized = _SANITIZE_CACHE.get(s)
+    if sanitized is None:
+        sanitized = _SANITIZE_RE.sub("_", s)
+        _SANITIZE_CACHE[s] = sanitized
+    fragment = f"{axis}_{sanitized}"
+    _TOKEN_FRAGMENT_CACHE[key] = fragment
+    return fragment
 
 
 def build_axis_lookup(axes: list[dict[str, Any]]) -> dict[str, list[str]]:
@@ -228,7 +277,7 @@ def render_selector(
                     )
                     + "]"
                 )
-            parts.append(f"{tok.axis}_{_sanitize_fragment(assignment[tok.axis])}")
+            parts.append(_token_fragment(tok.axis, assignment[tok.axis]))
         else:  # PinnedToken
             if axis_lookup is not None:
                 if tok.axis not in axis_lookup:
@@ -244,7 +293,7 @@ def render_selector(
                             f"axis {tok.axis!r} coords"
                         )
                     )
-            parts.append(f"{tok.axis}_{_sanitize_fragment(tok.coord)}")
+            parts.append(_token_fragment(tok.axis, tok.coord))
 
     return base + "__" + "__".join(parts)
 
@@ -408,6 +457,59 @@ def _render_template_or_literal(name_s: str, assignment: Mapping[str, str]) -> s
     return _render_template_name(base, [wt.axis for wt in wildcards], assignment)
 
 
+def _prepare_template_substitutions(
+    template_map: Mapping[str, list[tuple[str, dict[str, str]]]],
+    *,
+    shaped: Mapping[str, tuple[str, ...]],
+) -> tuple[tuple[str, str, tuple[WildcardToken, ...], re.Pattern[str]], ...]:
+    """Build the per-``template_map`` prepared substitution table.
+
+    Filters out keys with no wildcards and keys whose base collides with
+    a shaped param, and precompiles the literal regex used by
+    ``_apply_template_substitutions``.
+
+    Returns:
+        Tuple of ``(template_key, base, wildcards, compiled_pattern)``
+        rows for every templatable key in ``template_map``.
+    """
+    prepared_list: list[
+        tuple[str, str, tuple[WildcardToken, ...], re.Pattern[str]]
+    ] = []
+    for template_key in template_map:
+        base, tokens = parse_selector(template_key)
+        if base in shaped:
+            continue
+        wildcards = tuple(t for t in tokens if isinstance(t, WildcardToken))
+        if not wildcards:
+            continue
+        prepared_list.append((
+            template_key,
+            base,
+            wildcards,
+            re.compile(re.escape(template_key)),
+        ))
+    return tuple(prepared_list)
+
+
+def _render_shaped_inline(  # noqa: PLR0913
+    inner_base: str,
+    phs: list[str],
+    *,
+    assignment: Mapping[str, str],
+    shaped: Mapping[str, tuple[str, ...]],
+    axis_lookup: Mapping[str, list[str]] | None,
+    fallback: str,
+) -> str:
+    registered = shaped[inner_base]
+    if tuple(phs) != registered or axis_lookup is None:
+        return fallback
+    try:
+        idxs = [axis_lookup[ax].index(assignment[ax]) for ax in registered]
+    except (KeyError, ValueError):
+        return fallback
+    return f"{inner_base}[{', '.join(str(i) for i in idxs)}]"
+
+
 def _apply_template_substitutions(
     expr_s: str,
     *,
@@ -434,20 +536,26 @@ def _apply_template_substitutions(
     expr_out = expr_s
     shaped = shaped_params or {}
 
-    # Explicit template keys from the template map. Skip any whose base
-    # collides with a registered shaped parameter — those are rewritten by
-    # the inline replacer below.
-    for template_key in template_map:
-        base, tokens = parse_selector(template_key)
-        if base in shaped:
+    # Pre-parse template keys once per ``template_map`` identity (see
+    # ``_prepare_template_substitutions``). Collapses O(cells *
+    # |template_map|) ``parse_selector`` calls to O(|template_map|) per
+    # normalize call (issue #145).
+    cache_entry = _APPLY_TPL_PREPARSE_CACHE.get(id(template_map))
+    if cache_entry is not None and cache_entry[0] is template_map:
+        prepared = cache_entry[1]
+    else:
+        prepared = _prepare_template_substitutions(template_map, shaped=shaped)
+        _APPLY_TPL_PREPARSE_CACHE[id(template_map)] = (template_map, prepared)
+
+    for template_key, base, wildcards, pat in prepared:
+        if any(wt.axis not in assignment for wt in wildcards):
             continue
-        wildcards = [t for t in tokens if isinstance(t, WildcardToken)]
-        if not wildcards or any(wt.axis not in assignment for wt in wildcards):
+        if template_key not in expr_out:
             continue
         rendered = _render_template_name(
             base, [wt.axis for wt in wildcards], assignment
         )
-        expr_out = re.sub(re.escape(template_key), rendered, expr_out)
+        expr_out = pat.sub(rendered, expr_out)
 
     # Inline placeholder syntax without an explicit template map entry.
     def _inline_replacer(match: re.Match[str]) -> str:
@@ -457,17 +565,14 @@ def _apply_template_substitutions(
         if not phs or any(ph not in assignment for ph in phs):
             return match.group(0)
         if inner_base in shaped:
-            registered = shaped[inner_base]
-            if tuple(phs) != registered:
-                # Different ordering or axes — leave for downstream to flag.
-                return match.group(0)
-            if axis_lookup is None:
-                return match.group(0)
-            try:
-                idxs = [axis_lookup[ax].index(assignment[ax]) for ax in registered]
-            except (KeyError, ValueError):
-                return match.group(0)
-            return f"{inner_base}[{', '.join(str(i) for i in idxs)}]"
+            return _render_shaped_inline(
+                inner_base,
+                phs,
+                assignment=assignment,
+                shaped=shaped,
+                axis_lookup=axis_lookup,
+                fallback=match.group(0),
+            )
         return _render_template_name(inner_base, phs, assignment)
 
     return _INLINE_TEMPLATE_RE.sub(_inline_replacer, expr_out)

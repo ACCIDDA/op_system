@@ -891,12 +891,31 @@ def _build_vector_plan_inner(  # noqa: C901, PLR0911, PLR0912, PLR0914, PLR0915
 
     # Vectorize aliases (in declaration order — best-effort dependency order).
     alias_codes: list[tuple[str, CodeType, tuple[int, ...]]] = []
-    for buf in alias_buffers:
-        try:
-            if buf.axes:
-                tree = _rewrite_cell_to_vector(
-                    expr_ir=rhs.aliases_ir.get(buf.expanded_names[0]),
-                    expr_ir_reduce=rhs.aliases_ir_reduce.get(buf.expanded_names[0]),
+
+    def _build_alias_tree(buf: _BufferTemplate) -> ast.Expression | None:
+        """Rewrite an alias buffer into a single AST or ``None`` on mismatch.
+
+        Returns:
+            The rewritten AST for the buffer, or ``None`` when the
+            first/last cell trees disagree.
+        """
+        if buf.axes:
+            tree = _rewrite_cell_to_vector(
+                expr_ir=rhs.aliases_ir.get(buf.expanded_names[0]),
+                expr_ir_reduce=rhs.aliases_ir_reduce.get(buf.expanded_names[0]),
+                target_axes=buf.axes,
+                name_to_template=name_to_template,
+                axis_index=axis_index,
+                reducible_axes=reducible_axes,
+                axis_weights=axis_weights,
+                axis_coords=axis_coords,
+                axis_types=axis_types,
+                shaped_param_axes=shaped_param_axes,
+            )
+            if len(buf.expanded_names) > 1:
+                last_tree = _rewrite_cell_to_vector(
+                    expr_ir=rhs.aliases_ir.get(buf.expanded_names[-1]),
+                    expr_ir_reduce=rhs.aliases_ir_reduce.get(buf.expanded_names[-1]),
                     target_axes=buf.axes,
                     name_to_template=name_to_template,
                     axis_index=axis_index,
@@ -906,42 +925,32 @@ def _build_vector_plan_inner(  # noqa: C901, PLR0911, PLR0912, PLR0914, PLR0915
                     axis_types=axis_types,
                     shaped_param_axes=shaped_param_axes,
                 )
-                if len(buf.expanded_names) > 1:
-                    last_tree = _rewrite_cell_to_vector(
-                        expr_ir=rhs.aliases_ir.get(buf.expanded_names[-1]),
-                        expr_ir_reduce=rhs.aliases_ir_reduce.get(
-                            buf.expanded_names[-1]
-                        ),
-                        target_axes=buf.axes,
-                        name_to_template=name_to_template,
-                        axis_index=axis_index,
-                        reducible_axes=reducible_axes,
-                        axis_weights=axis_weights,
-                        axis_coords=axis_coords,
-                        axis_types=axis_types,
-                        shaped_param_axes=shaped_param_axes,
-                    )
-                    if ast.dump(tree) != ast.dump(last_tree):
-                        _bail(
-                            f"alias {buf.base!r}: first/last cell trees differ"
-                            " after rewriting"
-                        )
-                        return None
-            else:
-                # Scalar alias: rewrite so referenced templated state cells
-                # become buffer-index accesses.
-                tree = _rewrite_cell_to_vector(
-                    expr_ir=rhs.aliases_ir.get(buf.expanded_names[0]),
-                    expr_ir_reduce=rhs.aliases_ir_reduce.get(buf.expanded_names[0]),
-                    target_axes=(),
-                    name_to_template=name_to_template,
-                    axis_index=axis_index,
-                    reducible_axes=reducible_axes,
-                    axis_weights=axis_weights,
-                    axis_coords=axis_coords,
-                    axis_types=axis_types,
-                    shaped_param_axes=shaped_param_axes,
+                if ast.dump(tree) != ast.dump(last_tree):
+                    return None
+            return tree
+        # Scalar alias: rewrite so referenced templated state cells
+        # become buffer-index accesses.
+        return _rewrite_cell_to_vector(
+            expr_ir=rhs.aliases_ir.get(buf.expanded_names[0]),
+            expr_ir_reduce=rhs.aliases_ir_reduce.get(buf.expanded_names[0]),
+            target_axes=(),
+            name_to_template=name_to_template,
+            axis_index=axis_index,
+            reducible_axes=reducible_axes,
+            axis_weights=axis_weights,
+            axis_coords=axis_coords,
+            axis_types=axis_types,
+            shaped_param_axes=shaped_param_axes,
+        )
+
+    for buf in alias_buffers:
+        try:
+            tree = _build_alias_tree(buf)
+            if tree is None:
+                _bail(
+                    f"alias {buf.base!r}: first/last cell trees differ after rewriting"
                 )
+                return None
             code = compile(tree, filename="<op_system_vec>", mode="eval")
         except (ValueError, RuntimeError, TypeError, SyntaxError) as exc:
             _bail(
