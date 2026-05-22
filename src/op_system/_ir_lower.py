@@ -898,14 +898,30 @@ def _lower_reduce(  # noqa: C901, PLR0912, PLR0913, PLR0914, PLR0915
             elts=[ast.Constant(value=p) for p in reduce_positions],
             ctx=ast.Load(),
         )
-    # Use ``keepdims=True`` so any reduced axis that also appears in
-    # ``target_axes`` (e.g. ``sum_over(... vax=vax) * mask[vax]`` emitted
-    # by the pinned-token mask synthesis in ``_normalize``) stays as a
-    # size-1 broadcast slot rather than collapsing the rank below
-    # ``len(target_axes)``. Reduced axes that are *not* in ``target_axes``
-    # (purely-bound extras appended to ``extended_target``) are then
-    # squeezed back out so the result rank matches ``target_axes``
-    # exactly.
+    # Fast path: when none of the bound axes also appear in
+    # ``target_axes``, every reduced dim is a trailing "extra" position
+    # that ``np.sum`` (``keepdims=False``) collapses for free, leaving a
+    # result whose rank already matches ``target_axes``. This is the
+    # common case (every ordinary ``apply_along``/``sum_over``) and
+    # avoids two extra reshape ops per reduction in the lowered XLA.
+    #
+    # Slow path (``keepdims=True`` + ``squeeze``) is reserved for the
+    # pinned-token mask synthesis emitted by ``_normalize``, where a
+    # reduced axis also appears in ``target_axes`` (e.g.
+    # ``sum_over(... * mask_from[vax], vax=vax) * mask_to[vax]``). In
+    # that case ``keepdims=True`` preserves the in-target reduced axis
+    # as a size-1 broadcast slot, and the trailing purely-bound
+    # "extras" are squeezed off so the result rank matches
+    # ``target_axes``.
+    n_extra = len(extended_target) - len(target_axes)
+    target_axis_collapsed = n_extra < len(bound_labels)
+    if not target_axis_collapsed:
+        sum_call = ast.Call(
+            func=ast.Attribute(value=_name("np"), attr="sum", ctx=ast.Load()),
+            args=[body_ast],
+            keywords=[ast.keyword(arg="axis", value=axis_arg)],
+        )
+        return sum_call
     sum_call = ast.Call(
         func=ast.Attribute(value=_name("np"), attr="sum", ctx=ast.Load()),
         args=[body_ast],
@@ -914,7 +930,6 @@ def _lower_reduce(  # noqa: C901, PLR0912, PLR0913, PLR0914, PLR0915
             ast.keyword(arg="keepdims", value=ast.Constant(value=True)),
         ],
     )
-    n_extra = len(extended_target) - len(target_axes)
     if n_extra == 0:
         return sum_call
     squeeze_positions = tuple(range(len(target_axes), len(extended_target)))
