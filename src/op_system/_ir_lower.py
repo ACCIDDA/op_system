@@ -898,10 +898,37 @@ def _lower_reduce(  # noqa: C901, PLR0912, PLR0913, PLR0914, PLR0915
             elts=[ast.Constant(value=p) for p in reduce_positions],
             ctx=ast.Load(),
         )
-    return ast.Call(
+    # Use ``keepdims=True`` so any reduced axis that also appears in
+    # ``target_axes`` (e.g. ``sum_over(... vax=vax) * mask[vax]`` emitted
+    # by the pinned-token mask synthesis in ``_normalize``) stays as a
+    # size-1 broadcast slot rather than collapsing the rank below
+    # ``len(target_axes)``. Reduced axes that are *not* in ``target_axes``
+    # (purely-bound extras appended to ``extended_target``) are then
+    # squeezed back out so the result rank matches ``target_axes``
+    # exactly.
+    sum_call = ast.Call(
         func=ast.Attribute(value=_name("np"), attr="sum", ctx=ast.Load()),
         args=[body_ast],
-        keywords=[ast.keyword(arg="axis", value=axis_arg)],
+        keywords=[
+            ast.keyword(arg="axis", value=axis_arg),
+            ast.keyword(arg="keepdims", value=ast.Constant(value=True)),
+        ],
+    )
+    n_extra = len(extended_target) - len(target_axes)
+    if n_extra == 0:
+        return sum_call
+    squeeze_positions = tuple(range(len(target_axes), len(extended_target)))
+    if len(squeeze_positions) == 1:
+        squeeze_axis_arg: ast.expr = ast.Constant(value=squeeze_positions[0])
+    else:
+        squeeze_axis_arg = ast.Tuple(
+            elts=[ast.Constant(value=p) for p in squeeze_positions],
+            ctx=ast.Load(),
+        )
+    return ast.Call(
+        func=ast.Attribute(value=_name("np"), attr="squeeze", ctx=ast.Load()),
+        args=[sum_call],
+        keywords=[ast.keyword(arg="axis", value=squeeze_axis_arg)],
     )
 
 

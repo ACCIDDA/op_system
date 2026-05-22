@@ -504,6 +504,34 @@ def test_requested_parameters_excludes_mixing_kernels() -> None:
     assert "contact" not in requested
 
 
+def test_requested_parameters_excludes_synth_mask_constants() -> None:
+    """Synth-constant masks (e.g. pinned-coord one-hot masks) are not config inputs.
+
+    ``compile_rhs`` injects values for any name listed in
+    ``meta['op_system_synth_constants']`` at eval time, so the provider must
+    not declare them in ``requested_parameters`` — otherwise the simulator
+    would error trying to resolve them from configuration.
+    """
+    spec: dict[str, object] = {
+        "kind": "transitions",
+        "axes": [{"name": "vax", "coords": ["u", "v"]}],
+        "state": ["S[vax]", "I[vax]"],
+        # A pinned-coord selector on the destination side triggers mask synthesis.
+        "transitions": [
+            {"from": "S[vax=u]", "to": "I[vax=u]", "rate": "beta"},
+        ],
+    }
+    sys = OpSystemSystem(spec=spec)
+    # Sanity: the compiled spec actually synthesized at least one mask.
+    synth = sys._compiled_rhs.meta.get("op_system_synth_constants") or {}  # type: ignore[attr-defined]  # noqa: SLF001
+    assert synth, "expected pinned-coord mask synthesis for this spec"
+    requested = set(sys.requested_parameters(AxisCollection()).keys())
+    for name in synth:
+        assert name not in requested, (
+            f"synth-injected constant {name!r} must not appear in requested_parameters"
+        )
+
+
 def test_model_state_is_empty_specification(sir_spec: dict[str, object]) -> None:
     """model_state returns an empty ModelStateSpecification (engine assembles state)."""
     sys = OpSystemSystem(spec=sir_spec)

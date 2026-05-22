@@ -440,6 +440,71 @@ def test_lower_uniform_apply_along_unchanged_when_weights_absent() -> None:
     assert got == pytest.approx(6.0)
 
 
+def test_lower_reduce_keeps_target_axis_dim_for_outer_broadcast() -> None:
+    """Reduced axis that remains in ``target_axes`` is preserved as size 1.
+
+    Regression: the pinned-token mask synthesis in
+    :func:`op_system._normalize._synthesize_template_uniform` emits
+    ``sum_over(... * mask_from[vax], vax=vax) * mask_to[vax]`` whose
+    ``target_axes`` still include the reduced ``vax``. Without
+    ``keepdims=True`` on the lowered ``np.sum``, the result drops the
+    ``vax`` dim and broadcasting against the outer ``mask_to[vax]``
+    fails (rank mismatch). The lowerer must therefore keep reduced
+    target-axis dims as size-1 broadcast slots.
+    """
+    inner = Apply(
+        op="*",
+        args=(
+            Subscript(
+                name="X",
+                indices=(
+                    AxisIndex(axis="age", kind=AxisKind.FREE),
+                    AxisIndex(axis="vax", kind=AxisKind.FREE),
+                ),
+            ),
+            Subscript(
+                name="mask_from",
+                indices=(AxisIndex(axis="vax", kind=AxisKind.FREE),),
+            ),
+        ),
+    )
+    reduce_node = Reduce(kind="sum_over", bindings=(("vax", "vax"),), body=inner)
+    expr = Apply(
+        op="*",
+        args=(
+            reduce_node,
+            Subscript(
+                name="mask_to",
+                indices=(AxisIndex(axis="vax", kind=AxisKind.FREE),),
+            ),
+        ),
+    )
+    node = lower_to_vector_ast(
+        expr,
+        target_axes=("age", "vax"),
+        buffer_axes={"X": ("age", "vax"), "mask_from": ("vax",), "mask_to": ("vax",)},
+        axis_names=frozenset({"age", "vax"}),
+        reducible_axes=frozenset({"age", "vax"}),
+    )
+    x_buf = np.array([[1.0, 10.0], [2.0, 20.0], [3.0, 30.0]])  # (age=3, vax=2)
+    mask_from_buf = np.array([1.0, 0.0])  # pin from-coord vax=0
+    mask_to_buf = np.array([0.0, 1.0])  # pin to-coord vax=1
+    got = _eval(
+        node,
+        {
+            "X_buf": x_buf,
+            "mask_from_buf": mask_from_buf,
+            "mask_to_buf": mask_to_buf,
+            "np": np,
+        },
+    )
+    # Per (age,): inner sum picks x_buf[:, 0]; outer scatter places it at vax=1.
+    expected = np.zeros_like(x_buf)
+    expected[:, 1] = x_buf[:, 0]
+    assert got.shape == expected.shape
+    assert np.array_equal(got, expected)
+
+
 def test_lower_apply_along_with_categorical_filter() -> None:
     """A categorical filter restricts the sum to the listed coords."""
     body = Subscript(

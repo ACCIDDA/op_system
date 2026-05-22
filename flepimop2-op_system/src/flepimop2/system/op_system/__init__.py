@@ -194,6 +194,12 @@ class OpSystemSystem(SystemABC, module="flepimop2.system.op_system"):  # noqa: D
         # Names provided by the compiled-RHS runtime environment, not by config
         # (numpy/jax namespace, simulation time, and built-in summation helpers).
         builtin_names = {"np", "t", "sum_state", "sum_prefix"}
+        # Normalize-time synthesized constants (e.g. one-hot masks for pinned
+        # transition selectors) are injected into ``params`` by ``compile_rhs``
+        # and must not be requested from configuration.
+        synth_const_names = set(
+            (self._compiled_rhs.meta.get("op_system_synth_constants") or {}).keys()
+        )
 
         # Non-time-varying shaped parameters first.  ``shaped_params`` in
         # meta carries reduced (non-time) axes for tv params, but tv names
@@ -203,6 +209,8 @@ class OpSystemSystem(SystemABC, module="flepimop2.system.op_system"):  # noqa: D
         time_varying_names = {name for name, _ in time_varying_meta}
         for shaped_name, shaped_axes in shaped_meta:
             if shaped_name in mixing_kernel_names or shaped_name in builtin_names:
+                continue
+            if shaped_name in synth_const_names:
                 continue
             if shaped_name in time_varying_names:
                 continue
@@ -221,7 +229,12 @@ class OpSystemSystem(SystemABC, module="flepimop2.system.op_system"):  # noqa: D
             requests[tv_name] = ParameterRequest(name=tv_name, axes=tuple(tv_axes))
 
         for name in self._compiled_rhs.param_names:
-            if name in mixing_kernel_names or name in builtin_names or name in requests:
+            if (
+                name in mixing_kernel_names
+                or name in builtin_names
+                or name in synth_const_names
+                or name in requests
+            ):
                 continue
             requests[name] = ParameterRequest(name=name)
         init_map = (self.options or {}).get("initial_state") or {}
