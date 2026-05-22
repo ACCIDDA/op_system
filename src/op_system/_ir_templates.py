@@ -601,23 +601,28 @@ def inline_aliases(  # noqa: C901, PLR0913
     # Cache by ``id(aliases)`` so batch-inlining many expressions against the
     # same alias mapping pays this O(|aliases| * body_size) cost only once
     # rather than once per call (issue #145).
+    #
+    # The precompute is LAZY: ``body_refs`` is built one alias at a time,
+    # only for aliases that actually appear in the expression being inlined
+    # (and transitively in their bodies). Eagerly precomputing for every
+    # alias OOMs on continuum specs where ``aliases`` has O(thousands) of
+    # per-cell entries, even when the expression being inlined references
+    # only one of them (issue #147 followup).
     cached_refs = _BODY_REFS_CACHE.get(id(aliases))
-    if cached_refs is None:
-        body_refs: dict[str, frozenset[str]] = {
-            name: free_symbols(body, memo) & keys for name, body in aliases.items()
-        }
+    if cached_refs is None or cached_refs[0] is not aliases:
+        body_refs: dict[str, frozenset[str]] = {}
         _BODY_REFS_CACHE[id(aliases)] = (aliases, body_refs)
     else:
-        # Guard against id() reuse: only trust the cache when the mapping
-        # object is the same instance.
-        cached_obj, cached_body_refs = cached_refs
-        body_refs = (
-            cached_body_refs
-            if cached_obj is aliases
-            else {
-                name: free_symbols(body, memo) & keys for name, body in aliases.items()
-            }
-        )
+        body_refs = cached_refs[1]
+
+    def _refs_for(name: str) -> frozenset[str]:
+        cached = body_refs.get(name)
+        if cached is not None:
+            return cached
+        refs = free_symbols(aliases[name], memo) & keys
+        body_refs[name] = refs
+        return refs
+
     current = expr
     live = free_symbols(current, memo) & keys
     for _ in range(max_depth):
@@ -629,7 +634,7 @@ def inline_aliases(  # noqa: C901, PLR0913
         current = substitute(current, mapping, memo)
         next_live: set[str] = set()
         for name in live:
-            next_live |= body_refs[name]
+            next_live |= _refs_for(name)
         live = frozenset(next_live)
 
     msg = f"alias inlining did not converge within {max_depth} iterations"
