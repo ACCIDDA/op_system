@@ -1015,7 +1015,7 @@ class _LazyAliasStrings(Mapping[str, str]):
     repeated across alias bodies are stringified once.
     """
 
-    __slots__ = ("_ir", "_order", "_memo", "_cache")
+    __slots__ = ("_cache", "_ir", "_memo", "_order")
 
     def __init__(
         self,
