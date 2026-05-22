@@ -871,8 +871,21 @@ def compile_rhs(rhs: NormalizedRhs, *, xp: object | None = None) -> CompiledRhs:
         inner_eval_fn = eval_fn
 
         def eval_fn(t: object, y: object, **params: object) -> Float64Array:
+            # Cast synth-mask values to ``y``'s namespace and dtype so they
+            # don't promote a float32 state buffer to float64 (or vice
+            # versa). Downstream shaped-param assembly does
+            # ``xp.asarray(bare)`` without a dtype, which would otherwise
+            # pick the namespace's default float and trigger
+            # incompatible-dtype scatter errors in JAX integrators.
+            xp = _namespace_of(y)
+            y_dtype = getattr(y, "dtype", None)
             for k, v in synth_const_values.items():
-                params.setdefault(k, v)
+                if k in params:
+                    continue
+                if y_dtype is not None:
+                    params[k] = xp.asarray(v, dtype=y_dtype)
+                else:
+                    params[k] = xp.asarray(v)
             return inner_eval_fn(t, y, **params)
 
     return CompiledRhs(
