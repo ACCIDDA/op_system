@@ -10,12 +10,13 @@ from __future__ import annotations
 
 import contextlib
 import sys
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     import re
-    from collections.abc import Iterable, Iterator, Mapping, Sequence
+    from collections.abc import Iterable, Sequence
 
 from op_system._axes import _normalize_bracket_key
 from op_system._errors import InvalidRhsSpecError
@@ -542,6 +543,54 @@ def _build_equations_ir(
         return tuple(out)
 
 
+def _alias_stem(canonical_name: str) -> str:
+    """Return the bare name portion of a canonical alias key.
+
+    Raw-IR ``Sym``/``Subscript`` nodes carry only the bare identifier
+    (e.g. ``Subscript(name='k', ...)`` for ``k[age]``), so the canonical
+    bracket-key ``'k[age]'`` cannot be matched directly against IR
+    ``.name`` attributes. Strip everything from the first ``[`` to get
+    the stem used for reference detection.
+    """
+    idx = canonical_name.find("[")
+    return canonical_name if idx < 0 else canonical_name[:idx]
+
+
+def _collect_template_refs(
+    node: Expr, names: set[str], alias_stems: frozenset[str]
+) -> None:
+    """Collect alias stems referenced by ``node`` into ``names``.
+
+    Walks the raw (pre-expansion) IR looking for ``Sym``/``Subscript``
+    nodes whose bare name matches an alias stem. Used by
+    :func:`_build_aliases_ir_from_raw` to detect cross-alias references
+    cheaply at the template level (one walk per canonical alias) so that
+    the per-cell ``_inline_all`` pass can be skipped when no alias body
+    references another. Matching on stems is intentionally conservative:
+    a raw Sym/Subscript with the same bare name as some alias is treated
+    as a possible cross-reference even when its axis assignment would
+    not actually resolve to that alias - this only disables the
+    short-circuit (forcing the existing inline pass to run) and is
+    always safe. Issue #147 (followup): pre-#147, ``_inline_all`` walked
+    all O(n_cells) bodies via ``free_symbols`` even when no inlining was
+    needed, which OOM'd on continuum specs whose templated aliases
+    expand into thousands of cells.
+    """
+    # Local import to avoid module-level cycles.
+    from op_system._ir import Apply, Reduce, Subscript, Sym  # noqa: PLC0415
+
+    stack: list[Expr] = [node]
+    while stack:
+        cur = stack.pop()
+        if isinstance(cur, (Sym, Subscript)):
+            if cur.name in alias_stems:
+                names.add(cur.name)
+        elif isinstance(cur, Apply):
+            stack.extend(cur.args)
+        elif isinstance(cur, Reduce):
+            stack.append(cur.body)
+
+
 def _parse_alias_body(  # noqa: PLR0913
     raw_name: str,
     expr_str: object,
@@ -552,6 +601,8 @@ def _parse_alias_body(  # noqa: PLR0913
     alias_template_map: Mapping[str, Sequence[tuple[str, Mapping[str, str]]]],
     reduce_parsed: dict[str, Expr],
     full_parsed: dict[str, Expr],
+    template_refs: dict[str, set[str]] | None = None,
+    alias_stems: frozenset[str] | None = None,
 ) -> None:
     """Parse and expand one alias entry into ``reduce_parsed``/``full_parsed``.
 
@@ -577,6 +628,12 @@ def _parse_alias_body(  # noqa: PLR0913
         raise InvalidRhsSpecError(
             detail=f"aliases[{raw_name!r}] has invalid expression: {exc}"
         ) from exc
+
+    if template_refs is not None and alias_stems is not None:
+        refs: set[str] = set()
+        _collect_template_refs(ir_raw, refs, alias_stems)
+        refs.discard(_alias_stem(canonical_name))
+        template_refs[canonical_name] = refs
 
     if canonical_name not in alias_template_map:
         reduce_parsed[raw_name] = ir_raw
@@ -670,6 +727,19 @@ def _build_aliases_ir_from_raw(
 
     reduce_parsed: dict[str, Expr] = {}
     full_parsed: dict[str, Expr] = {}
+    # Collect cross-alias reference set at the raw (pre-expansion) IR
+    # level. Each alias body is walked once here, regardless of how
+    # many cells the LHS template expands into. If no body references
+    # another alias by canonical name, the per-cell ``_inline_all``
+    # pass is a guaranteed no-op and can be skipped entirely - on the
+    # COVID19_USA continuum hierarchical specs that pass turned into
+    # the dominant cost (it walked ~600k unique IR nodes across 5000+
+    # ``foi`` cells just to confirm there was nothing to inline) and
+    # OOM'd the build. Issue #147 (followup).
+    alias_stems = frozenset(
+        _alias_stem(_normalize_bracket_key(raw_name)) for raw_name in aliases_raw
+    )
+    template_refs: dict[str, set[str]] = {}
     old_limit = sys.getrecursionlimit()
     needed = max(old_limit, 10_000)
     with _raise_recursion_limit(needed, old_limit):
@@ -683,7 +753,11 @@ def _build_aliases_ir_from_raw(
                 alias_template_map=alias_template_map,
                 reduce_parsed=reduce_parsed,
                 full_parsed=full_parsed,
+                template_refs=template_refs,
+                alias_stems=alias_stems,
             )
+
+        has_cross_refs = any(refs for refs in template_refs.values())
 
         def _inline_all(parsed: dict[str, Expr], *, cycle_ok: bool) -> dict[str, Expr]:
             memo: dict[int, frozenset[str]] = {}
@@ -718,6 +792,13 @@ def _build_aliases_ir_from_raw(
         cycle_ok = False
         with contextlib.suppress(ValueError, RecursionError):
             cycle_ok = _detect_alias_cycle(reduce_parsed, memo=cycle_memo) is None
+
+        if not has_cross_refs:
+            # No alias body references another alias - the per-cell
+            # ``_inline_all`` pass would be a no-op but would still walk
+            # every cell body via ``free_symbols`` to prove it. Skip it.
+            # Issue #147 (followup).
+            return (full_parsed, reduce_parsed, alias_template_map)
 
         return (
             _inline_all(full_parsed, cycle_ok=cycle_ok),
@@ -893,8 +974,8 @@ def _derive_alias_strings(
     alias_order: Iterable[str],
     *,
     _unparse_memo: dict[tuple[int, int, bool], str] | None = None,
-) -> dict[str, str]:
-    """Render each alias body directly from typed IR.
+) -> Mapping[str, str]:
+    """Return a lazy ``Mapping[str, str]`` of alias source for each cell.
 
     Args:
         aliases_ir: Mapping of alias name to typed IR body.
@@ -905,26 +986,74 @@ def _derive_alias_strings(
             template body) is rendered once (issue #145).
 
     Returns:
-        New alias mapping with IR-derived bodies.
+        Lazy mapping; each value is rendered on first ``__getitem__``.
+        Pre-#147 this eagerly materialized strings for every cell, but
+        on continuum hierarchical specs that meant building 5000+ multi-MB
+        strings for the vectorized eval-fn path that never reads them
+        (issue #147 followup). The vectorized eval-fn ignores the string
+        bodies; only the string-based fallback in ``_make_eval_fn`` pulls
+        values, and it does so only for the cells it actually evaluates.
 
     Raises:
-        InvalidRhsSpecError: If any alias IR is missing or cannot be rendered
-            back to source.
+        InvalidRhsSpecError: If an alias IR entry is missing (raised at
+            iteration time, not on first access).
     """
-    old_limit = sys.getrecursionlimit()
-    needed = max(old_limit, 10_000)
-    with _raise_recursion_limit(needed, old_limit):
-        out: dict[str, str] = {}
-        for name in alias_order:
-            ir = aliases_ir.get(name)
-            if ir is None:
-                raise InvalidRhsSpecError(
-                    detail=f"alias {name!r} is missing typed IR during rendering"
-                )
+    order: tuple[str, ...] = tuple(alias_order)
+    for name in order:
+        if aliases_ir.get(name) is None:
+            raise InvalidRhsSpecError(
+                detail=f"alias {name!r} is missing typed IR during rendering"
+            )
+    return _LazyAliasStrings(aliases_ir, order, _unparse_memo)
+
+
+class _LazyAliasStrings(Mapping[str, str]):
+    """Mapping[str, str] that calls ``unparse_ir`` on demand per key.
+
+    Stores rendered strings in an internal cache so repeated lookups are
+    O(1). Shares ``_unparse_memo`` with sibling renderers so subtrees
+    repeated across alias bodies are stringified once.
+    """
+
+    __slots__ = ("_ir", "_order", "_memo", "_cache")
+
+    def __init__(
+        self,
+        aliases_ir: Mapping[str, Expr],
+        order: tuple[str, ...],
+        unparse_memo: dict[tuple[int, int, bool], str] | None,
+    ) -> None:
+        self._ir = aliases_ir
+        self._order = order
+        self._memo: dict[tuple[int, int, bool], str] = (
+            unparse_memo if unparse_memo is not None else {}
+        )
+        self._cache: dict[str, str] = {}
+
+    def __getitem__(self, key: str) -> str:
+        cached = self._cache.get(key)
+        if cached is not None:
+            return cached
+        ir = self._ir.get(key)
+        if ir is None:
+            raise KeyError(key)
+        old_limit = sys.getrecursionlimit()
+        needed = max(old_limit, 10_000)
+        with _raise_recursion_limit(needed, old_limit):
             try:
-                out[name] = unparse_ir(ir, _memo=_unparse_memo)
+                rendered = unparse_ir(ir, _memo=self._memo)
             except (ValueError, RecursionError) as exc:
                 raise InvalidRhsSpecError(
-                    detail=f"alias {name!r} could not be rendered from typed IR"
+                    detail=f"alias {key!r} could not be rendered from typed IR"
                 ) from exc
-        return out
+        self._cache[key] = rendered
+        return rendered
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self._order)
+
+    def __len__(self) -> int:
+        return len(self._order)
+
+    def __contains__(self, key: object) -> bool:
+        return isinstance(key, str) and key in self._ir
