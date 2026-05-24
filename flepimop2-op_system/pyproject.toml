@@ -1,6 +1,6 @@
 [project]
 name = "flepimop2-op_system"
-version = "0.2.0"
+version = "0.3.0"
 description = "flepimop2 system provider package for op_system"
 readme = "README.md"
 requires-python = ">=3.11,<3.15"
@@ -12,7 +12,7 @@ authors = [
 license = { file = "LICENSE" }
 dependencies = [
   "op-system>=0.1.0",
-  "flepimop2>=0.2.0",
+  "flepimop2>=0.3.0.dev0",
   "pydantic>=2.0,<3",
   "numpy>=1.26",
   "PyYAML>=6.0",
