@@ -21,8 +21,7 @@ jobs:
           persist-credentials: false
       - name: 'install just'
         run: |
-          sudo apt-get update
-          sudo apt-get install -y just
+          curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | sudo bash -s -- --to /usr/local/bin
       - name: 'setup uv'
         uses: 'astral-sh/setup-uv@v7'
         with:
@@ -43,8 +42,7 @@ jobs:
           persist-credentials: false
       - name: 'install just'
         run: |
-          sudo apt-get update
-          sudo apt-get install -y just
+          curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | sudo bash -s -- --to /usr/local/bin
       - name: 'setup uv'
         uses: 'astral-sh/setup-uv@v7'
         with:
@@ -65,8 +63,7 @@ jobs:
           persist-credentials: false
       - name: 'install just'
         run: |
-          sudo apt-get update
-          sudo apt-get install -y just
+          curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | sudo bash -s -- --to /usr/local/bin
       - name: 'setup uv'
         uses: 'astral-sh/setup-uv@v7'
         with:
@@ -97,8 +94,7 @@ jobs:
           persist-credentials: false
       - name: 'install just'
         run: |
-          sudo apt-get update
-          sudo apt-get install -y just
+          curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | sudo bash -s -- --to /usr/local/bin
       - name: 'setup uv with python ${{ matrix.python-version }}'
         uses: 'astral-sh/setup-uv@v7'
         with:
