@@ -916,12 +916,11 @@ def _lower_reduce(  # noqa: C901, PLR0912, PLR0913, PLR0914, PLR0915
     n_extra = len(extended_target) - len(target_axes)
     target_axis_collapsed = n_extra < len(bound_labels)
     if not target_axis_collapsed:
-        sum_call = ast.Call(
+        return ast.Call(
             func=ast.Attribute(value=_name("np"), attr="sum", ctx=ast.Load()),
             args=[body_ast],
             keywords=[ast.keyword(arg="axis", value=axis_arg)],
         )
-        return sum_call
     sum_call = ast.Call(
         func=ast.Attribute(value=_name("np"), attr="sum", ctx=ast.Load()),
         args=[body_ast],

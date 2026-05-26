@@ -234,21 +234,23 @@ def test_synth_mask_constants_match_y_dtype() -> None:
     assert compiled.meta["op_system_synth_constants"]
 
     prev_x64 = jax.config.read("jax_enable_x64")
-    jax.config.update("jax_enable_x64", True)
+    enable_x64 = True
+    jax.config.update("jax_enable_x64", enable_x64)
     try:
         # Float32 y0 with x64 ENABLED is the bug-surfacing case: the
         # default ``jnp.asarray((1.0, 0.0))`` would yield float64 and
         # promote the float32 state to float64 in the eval output.
-        y0 = jnp.asarray([0.9, 0.5, 0.05, 0.0], dtype=jnp.float32)
-        out = compiled.eval_fn(0.0, y0)
+        out = compiled.eval_fn(
+            0.0, jnp.asarray([0.9, 0.5, 0.05, 0.0], dtype=jnp.float32)
+        )
         assert out.dtype == jnp.float32, (
             f"eval output dtype {out.dtype} should match input dtype "
             "float32: synth-mask constants must not promote precision."
         )
-
         # And the float64 path still works.
-        y0_64 = jnp.asarray([0.9, 0.5, 0.05, 0.0], dtype=jnp.float64)
-        out_64 = compiled.eval_fn(0.0, y0_64)
+        out_64 = compiled.eval_fn(
+            0.0, jnp.asarray([0.9, 0.5, 0.05, 0.0], dtype=jnp.float64)
+        )
         assert out_64.dtype == jnp.float64
     finally:
         jax.config.update("jax_enable_x64", prev_x64)
