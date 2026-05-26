@@ -195,3 +195,62 @@ def test_vectorized_path_is_jax_native_too() -> None:
     out = jax.jit(lambda y: compiled.eval_fn(0.0, y, beta=1.0, gamma=0.2))(y0)
     assert out.__array_namespace__() is jnp
     assert out.shape == (6,)
+
+
+def test_synth_mask_constants_match_y_dtype() -> None:
+    """Synth-mask constants must be cast to ``y``'s dtype, not promoted.
+
+    Regression: pinned-coord transition selectors trigger
+    ``_discover_pinned_token_masks`` which stashes one-hot mask values
+    as ``tuple[float, ...]`` under ``meta["op_system_synth_constants"]``.
+    The compile-time auto-inject closure must cast those tuples to
+    ``y``'s dtype at call time so a float32 state buffer doesn't get
+    promoted to float64 — otherwise downstream diffrax integrators see
+    a scatter-dtype mismatch (float64 stage value into a float32
+    accumulator buffer).
+
+    The mixed-precision case (``jax_enable_x64=True`` + float32 ``y0``)
+    is exercised explicitly here because that is the configuration that
+    triggers the original failure in COVID19_USA's diffrax engine
+    plugin: the harness enables x64 (so the default ``jnp.asarray``
+    promotes Python-float tuples to float64), but the plugin keeps the
+    state vector in float32 for memory/throughput.
+    """
+    jax = pytest.importorskip("jax")
+    jnp = pytest.importorskip("jax.numpy")
+
+    spec: dict[str, object] = {
+        "kind": "transitions",
+        "axes": [{"name": "vax", "coords": ["v0", "v1"]}],
+        "state": ["S[vax]", "I[vax]"],
+        "transitions": [
+            # Pinned ``to`` selector triggers synth-mask creation.
+            {"from": "S[vax]", "to": "I[vax=v0]", "rate": "0.1"},
+        ],
+    }
+    compiled = compile_spec(spec)
+    # Compiled metadata advertises a synth-mask payload.
+    assert "op_system_synth_constants" in compiled.meta
+    assert compiled.meta["op_system_synth_constants"]
+
+    prev_x64 = jax.config.read("jax_enable_x64")
+    enable_x64 = True
+    jax.config.update("jax_enable_x64", enable_x64)
+    try:
+        # Float32 y0 with x64 ENABLED is the bug-surfacing case: the
+        # default ``jnp.asarray((1.0, 0.0))`` would yield float64 and
+        # promote the float32 state to float64 in the eval output.
+        out = compiled.eval_fn(
+            0.0, jnp.asarray([0.9, 0.5, 0.05, 0.0], dtype=jnp.float32)
+        )
+        assert out.dtype == jnp.float32, (
+            f"eval output dtype {out.dtype} should match input dtype "
+            "float32: synth-mask constants must not promote precision."
+        )
+        # And the float64 path still works.
+        out_64 = compiled.eval_fn(
+            0.0, jnp.asarray([0.9, 0.5, 0.05, 0.0], dtype=jnp.float64)
+        )
+        assert out_64.dtype == jnp.float64
+    finally:
+        jax.config.update("jax_enable_x64", prev_x64)

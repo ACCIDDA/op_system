@@ -20,7 +20,8 @@ jobs:
         with:
           persist-credentials: false
       - name: 'install just'
-        uses: 'extractions/setup-just@v3'
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | sudo bash -s -- --to /usr/local/bin
       - name: 'setup uv'
         uses: 'astral-sh/setup-uv@v7'
         with:
@@ -40,7 +41,8 @@ jobs:
         with:
           persist-credentials: false
       - name: 'install just'
-        uses: 'extractions/setup-just@v3'
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | sudo bash -s -- --to /usr/local/bin
       - name: 'setup uv'
         uses: 'astral-sh/setup-uv@v7'
         with:
@@ -60,7 +62,8 @@ jobs:
         with:
           persist-credentials: false
       - name: 'install just'
-        uses: 'extractions/setup-just@v3'
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | sudo bash -s -- --to /usr/local/bin
       - name: 'setup uv'
         uses: 'astral-sh/setup-uv@v7'
         with:
@@ -90,7 +93,8 @@ jobs:
         with:
           persist-credentials: false
       - name: 'install just'
-        uses: 'extractions/setup-just@v3'
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | sudo bash -s -- --to /usr/local/bin
       - name: 'setup uv with python ${{ matrix.python-version }}'
         uses: 'astral-sh/setup-uv@v7'
         with:
