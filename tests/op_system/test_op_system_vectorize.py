@@ -944,3 +944,120 @@ def test_same_axis_twice_bare_label_numerical_parity() -> None:
     spec = _same_axis_twice_bare_label_spec()
     k_mat = np.array([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0], [7.0, 8.0, 9.0]])
     _eval_equal(spec, beta=0.3, gamma=0.1, K=k_mat)
+
+
+# ---------------------------------------------------------------------------
+# Low-rank factored kernel with bare binding label (issue #152)
+#
+# A separable contact kernel  K[age, ap] = sum_r F[r, age] * H[r, ap]  can
+# be expressed as nested ``apply_along`` with factor arrays F and H and a
+# non-state ``rank`` axis.  The inner apply_along body uses ``I[ap]`` (bare
+# binding-variable label) rather than ``I[age:ap]`` (coord form).  Without
+# the extension to ``_binding_collides_with_free_index``, the binding
+# variable ``ap`` never enters ``body_axis_names``, causing it to classify
+# as COORD_SYMBOL → ``UnsupportedIRLoweringError`` → scalar fallback.
+# ---------------------------------------------------------------------------
+
+
+def _low_rank_bare_label_spec() -> dict[str, object]:
+    """Low-rank factored SIR using bare-label ``I[ap]`` (no same-axis-twice).
+
+    The force-of-infection is ``sum_r F[r, age] * (sum_ap H[r, ap] * I[ap])``
+    — a rank-R approximation to a dense contact kernel.  The inner
+    ``apply_along`` uses the binding variable ``ap`` as a bare axis label on
+    ``I`` (rather than the ``coord=`` form ``I[age:ap]``), which is the
+    natural way to write a pure summation index.
+
+    Returns:
+        A spec dict suitable for ``normalize_rhs``.
+    """
+    return {
+        "kind": "expr",
+        "axes": [
+            {"name": "age", "coords": ["a1", "a2", "a3"]},
+            {"name": "rank", "coords": ["r1", "r2"]},
+        ],
+        "state": ["S[age]", "I[age]"],
+        "params": [
+            {"name": "F", "axes": ["rank", "age"]},
+            {"name": "H", "axes": ["rank", "age"]},
+            "beta",
+            "gamma",
+        ],
+        "equations": {
+            "S[age]": (
+                "-beta * S[age] * apply_along("
+                "F[rank, age]"
+                " * apply_along(H[rank, age:ap] * I[ap], age=ap, kernel=sum),"
+                " rank=c, kernel=sum)"
+            ),
+            "I[age]": (
+                "beta * S[age] * apply_along("
+                "F[rank, age]"
+                " * apply_along(H[rank, age:ap] * I[ap], age=ap, kernel=sum),"
+                " rank=c, kernel=sum)"
+                " - gamma * I[age]"
+            ),
+        },
+    }
+
+
+def test_low_rank_bare_label_ir_fast_path() -> None:
+    """Low-rank bare-label ``I[ap]`` nested apply_along uses the IR fast path.
+
+    Regression for issue #152: without the ``has_bare_binding`` extension to
+    ``_binding_collides_with_free_index``, the binding variable ``ap`` is
+    never added to ``body_axis_names`` in the no-same-axis-twice case, so
+    ``I[ap]`` classifies as COORD_SYMBOL and the vectorizer falls back to the
+    scalar path.  Post-fix the plan must be non-None and must not contain any
+    per-cell ``__`` names.
+    """
+    rhs = normalize_rhs(_low_rank_bare_label_spec())
+    plan = build_vector_plan(rhs)
+    assert plan is not None, (
+        f"vectorizer fell back to scalar path; bail reason: "
+        f"{last_vector_plan_bail_reason()}"
+    )
+    all_codes: list[CodeType] = [c for _, c in plan.cse_codes]
+    for grp in plan.eq_groups:
+        all_codes.extend(grp.codes)
+    all_names: set[str] = set()
+    for code in all_codes:
+        all_names.update(code.co_names)
+    assert not any("__" in n for n in all_names), (
+        f"per-cell names leaked into vectorized code: "
+        f"{sorted(n for n in all_names if '__' in n)}"
+    )
+    assert "F_buf" in all_names, f"expected F_buf in {sorted(all_names)}"
+    assert "H_buf" in all_names, f"expected H_buf in {sorted(all_names)}"
+    assert "I_buf" in all_names, f"expected I_buf in {sorted(all_names)}"
+    assert "sum" in all_names, f"expected np.sum in {sorted(all_names)}"
+
+
+def test_low_rank_bare_label_numerical_parity() -> None:
+    """Low-rank bare-label ``I[ap]`` vectorized output matches numpy reference.
+
+    The scalar-path eval cannot resolve ``F__rank_r1[age]``-style partial
+    expansions for non-state shaped axes, so the parity check is performed
+    against a direct numpy reference computation instead of ``_eval_equal``.
+    The reference collapses the low-rank factored kernel to a dense matrix
+    ``K[i, j] = sum_r F[r, i] * H[r, j]`` (i.e. ``F.T @ H``), then
+    evaluates the standard force-of-infection matvec.
+    """
+    rhs = normalize_rhs(_low_rank_bare_label_spec())
+    c = compile_rhs(rhs)
+    rng = np.random.RandomState(0)
+    y = rng.rand(len(rhs.state_names))
+    f_mat = np.array([[1.0, 2.0, 0.5], [0.3, 0.7, 1.2]])
+    h_mat = np.array([[0.6, 0.4, 0.8], [1.1, 0.9, 0.2]])
+    out = c.eval_fn(0.0, y, beta=0.3, gamma=0.1, F=f_mat, H=h_mat)
+    s_vec, i_vec = y[:3], y[3:]
+    k_dense = f_mat.T @ h_mat  # (n_age, n_age)
+    foi = k_dense @ i_vec
+    expected = np.concatenate([
+        -0.3 * s_vec * foi,
+        0.3 * s_vec * foi - 0.1 * i_vec,
+    ])
+    assert np.allclose(out, expected, atol=1e-12, rtol=0.0), (
+        f"max abs diff = {np.max(np.abs(out - expected))}"
+    )

@@ -995,21 +995,34 @@ def _weight_constant_for_axis(
 def _binding_collides_with_free_index(
     expr: Expr, *, axis: str, binding_var: str
 ) -> bool:
-    """Return ``True`` if Subscript has FREE + coord=var both on ``axis``.
+    """Return ``True`` if a synthetic axis label is needed for ``binding_var``.
 
-    This identifies the same-axis-twice case where the binding's coord
-    occupies one position of a duplicate-axis shaped param (e.g.
-    ``K[age, age:ap]``) while another position on the same axis is
-    free-broadcast. In that case :func:`_lower_reduce` must synthesize
-    a distinct axis label for the bound position so the broadcast
-    pipeline can carry the two slots as separate dimensions.
+    Two cases require the binding variable to become a synthetic axis label
+    in :func:`_lower_reduce`:
+
+    1. **Same-axis-twice**: a ``Subscript`` has both a FREE index and a
+       ``coord=binding_var`` index on the same ``axis`` (e.g.
+       ``K[age, age:ap]`` inside ``apply_along(..., age=ap)``).  The bound
+       position must be renamed so the broadcast pipeline can carry both
+       the outer-free and inner-bound slots as distinct dimensions.
+
+    2. **Bare binding label**: a ``Subscript`` uses ``binding_var`` itself
+       as a bare axis label (e.g. ``I[ap]``) rather than the ``coord=``
+       form.  This appears in low-rank factored specs such as
+       ``apply_along(H[rank, age:ap] * I[ap], age=ap)`` where there is no
+       same-axis-twice collision but the binding variable still needs to be
+       a recognized axis name in ``body_axis_names`` for the index to
+       classify as FREE.
     """
     if isinstance(expr, Subscript):
         has_free = any(idx.axis == axis and idx.coord is None for idx in expr.indices)
         has_bound = any(
             idx.axis == axis and idx.coord == binding_var for idx in expr.indices
         )
-        return has_free and has_bound
+        has_bare_binding = any(
+            idx.axis == binding_var and idx.coord is None for idx in expr.indices
+        )
+        return (has_free and has_bound) or has_bare_binding
     if isinstance(expr, Apply):
         return any(
             _binding_collides_with_free_index(a, axis=axis, binding_var=binding_var)
