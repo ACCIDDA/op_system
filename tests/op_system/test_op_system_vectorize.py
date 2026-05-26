@@ -817,10 +817,10 @@ def _same_axis_twice_apply_along_spec() -> dict[str, object]:
     The S-equation contains ``apply_along(K[age, age:ap] * I[age:ap],
     age=ap)`` — a same-axis-twice contraction representing
     ``sum_{ap} K[age, ap] * I[ap]`` (an age-structured force-of-infection
-    matvec). Stage 1c lowers this via the IR fast path by synthesizing a
-    ``age#ap`` axis label for the bound iteration so ``K_buf``
-    broadcasts as ``(N_age, N_age#ap)`` while ``I_buf`` broadcasts as
-    ``(1, N_age#ap)``.
+    matvec). Stage 1c lowers this via the IR fast path by using the
+    binding variable ``ap`` itself as a synthetic axis label so ``K_buf``
+    broadcasts as ``(N_age, N_ap)`` while ``I_buf`` broadcasts as
+    ``(1, N_ap)``.
 
     Returns:
         A spec dict suitable for ``normalize_rhs``.
@@ -873,5 +873,74 @@ def test_same_axis_twice_apply_along_ir_fast_path() -> None:
 def test_same_axis_twice_apply_along_numerical_parity() -> None:
     """Same-axis-twice apply_along eval matches the scalar reference."""
     spec = _same_axis_twice_apply_along_spec()
+    k_mat = np.array([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0], [7.0, 8.0, 9.0]])
+    _eval_equal(spec, beta=0.3, gamma=0.1, K=k_mat)
+
+
+def _same_axis_twice_bare_label_spec() -> dict[str, object]:
+    """Same-axis-twice spec using the binding variable as a bare axis label.
+
+    Identical semantics to :func:`_same_axis_twice_apply_along_spec` but
+    writes ``I[ap]`` (bare axis-label form) instead of ``I[age:ap]``
+    (coord form) inside the ``apply_along`` body.  This exercises the
+    branch added in issue #153: a ``Subscript`` index with ``coord=None``
+    whose ``axis`` is a binding variable must be treated as a FREE axis
+    reference once the binding variable is added to ``body_axis_names``.
+
+    Returns:
+        A spec dict suitable for ``normalize_rhs``.
+    """
+    return {
+        "kind": "expr",
+        "axes": [{"name": "age", "coords": ["a1", "a2", "a3"]}],
+        "state": ["S[age]", "I[age]", "R[age]"],
+        "params": [
+            "beta",
+            "gamma",
+            {"name": "K", "axes": ["age", "age"]},
+        ],
+        "equations": {
+            "S[age]": ("-beta * S[age] * apply_along(K[age, age:ap] * I[ap], age=ap)"),
+            "I[age]": (
+                "beta * S[age] * apply_along(K[age, age:ap] * I[ap], age=ap)"
+                " - gamma * I[age]"
+            ),
+            "R[age]": "gamma * I[age]",
+        },
+    }
+
+
+def test_same_axis_twice_bare_label_ir_fast_path() -> None:
+    """Bare-label ``I[ap]`` same-axis-twice contraction uses the IR fast path.
+
+    Regression for issue #153: when the spec uses the binding variable
+    as a bare axis label (``I[ap]``) rather than the ``coord=`` form
+    (``I[age:ap]``), the vectorizer must still succeed and must not fall
+    back to per-cell scalar expansion.
+    """
+    rhs = normalize_rhs(_same_axis_twice_bare_label_spec())
+    plan = build_vector_plan(rhs)
+    assert plan is not None, (
+        f"vectorizer fell back to scalar path; bail reason: "
+        f"{last_vector_plan_bail_reason()}"
+    )
+    s_group = next(g for g in plan.eq_groups if g.base == "S")
+    code = s_group.codes[0]
+    names = set(code.co_names)
+    assert not any("__" in n for n in names), (
+        f"per-cell names leaked into reduce-lowered code: "
+        f"{sorted(n for n in names if '__' in n)}"
+    )
+    assert "K_buf" in names, f"expected K_buf in {sorted(names)}"
+    assert "I_buf" in names, f"expected I_buf in {sorted(names)}"
+    assert "sum" in names, f"expected np.sum in {sorted(names)}"
+
+
+def test_same_axis_twice_bare_label_numerical_parity() -> None:
+    """Bare-label ``I[ap]`` same-axis-twice eval matches the scalar reference.
+
+    Regression for issue #153.
+    """
+    spec = _same_axis_twice_bare_label_spec()
     k_mat = np.array([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0], [7.0, 8.0, 9.0]])
     _eval_equal(spec, beta=0.3, gamma=0.1, K=k_mat)

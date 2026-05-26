@@ -185,6 +185,7 @@ def _expand_one_reduce(
         for ax_name, _var, filt in bindings
     ]
 
+    var_to_axis: dict[str, str] = {var: ax for ax, var, _ in bindings}
     terms: list[Expr] = []
     for combo in product(*axis_options):
         var_to_coord: dict[str, str] = {}
@@ -197,6 +198,7 @@ def _expand_one_reduce(
         replaced = _substitute_in_body(
             expr.body,
             var_to_coord=var_to_coord,
+            var_to_axis=var_to_axis,
             bound=bound,
             axis_order=axis_order,
             shaped_params=shaped_params,
@@ -219,6 +221,7 @@ def _substitute_in_body(  # noqa: PLR0911, PLR0913
     body: Expr,
     *,
     var_to_coord: Mapping[str, str],
+    var_to_axis: Mapping[str, str],
     bound: Mapping[str, str],
     axis_order: Sequence[str],
     shaped_params: Mapping[str, tuple[str, ...]],
@@ -248,6 +251,7 @@ def _substitute_in_body(  # noqa: PLR0911, PLR0913
             _substitute_in_body(
                 a,
                 var_to_coord=var_to_coord,
+                var_to_axis=var_to_axis,
                 bound=bound,
                 axis_order=axis_order,
                 shaped_params=shaped_params,
@@ -263,6 +267,7 @@ def _substitute_in_body(  # noqa: PLR0911, PLR0913
         return _rewrite_subscript(
             body,
             var_to_coord=var_to_coord,
+            var_to_axis=var_to_axis,
             bound=bound,
             axis_order=axis_order,
             shaped_params=shaped_params,
@@ -274,9 +279,13 @@ def _substitute_in_body(  # noqa: PLR0911, PLR0913
         outer_var_to_coord = {
             k: v for k, v in var_to_coord.items() if k not in inner_vars
         }
+        outer_var_to_axis = {
+            k: v for k, v in var_to_axis.items() if k not in inner_vars
+        }
         new_inner = _substitute_in_body(
             body.body,
             var_to_coord=outer_var_to_coord,
+            var_to_axis=outer_var_to_axis,
             bound=bound,
             axis_order=axis_order,
             shaped_params=shaped_params,
@@ -295,10 +304,11 @@ def _substitute_in_body(  # noqa: PLR0911, PLR0913
     return body  # pragma: no cover - exhaustive over Expr union
 
 
-def _rewrite_subscript(  # noqa: C901, PLR0912, PLR0913
+def _rewrite_subscript(  # noqa: C901, PLR0912, PLR0913, PLR0915
     sub: Subscript,
     *,
     var_to_coord: Mapping[str, str],
+    var_to_axis: Mapping[str, str],
     bound: Mapping[str, str],
     axis_order: Sequence[str],
     shaped_params: Mapping[str, tuple[str, ...]],
@@ -366,6 +376,11 @@ def _rewrite_subscript(  # noqa: C901, PLR0912, PLR0913
             c = bound[idx.axis]
             resolved_full.append((idx.axis, c))
             consumed.append((idx.axis, c))
+        elif idx.axis in var_to_axis:
+            real_axis = var_to_axis[idx.axis]
+            c = var_to_coord[idx.axis]
+            resolved_full.append((real_axis, c))
+            consumed.append((real_axis, c))
         else:
             resolved_full.append((idx.axis, None))
             remaining.append(idx)
