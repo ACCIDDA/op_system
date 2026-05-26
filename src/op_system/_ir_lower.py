@@ -693,11 +693,14 @@ def _lower_reduce(  # noqa: C901, PLR0912, PLR0913, PLR0914, PLR0915
 
     Same-axis-twice (e.g. a shaped contact kernel ``K[age, age:ap]``
     inside ``apply_along(..., age=ap)`` whose target also carries
-    ``age``) is supported by relabeling the bound position to a
-    synthetic axis name ``f"{axis}#{binding}"``: the synthetic label is
-    appended to ``extended_target`` as a distinct broadcast position,
-    while ``axis_weights`` / ``axis_coords`` / ``axis_types`` lookups
-    continue to resolve via the original axis name.
+    ``age``) is supported by using the binding variable itself (``ap``)
+    as a synthetic axis label: the label is appended to
+    ``extended_target`` as a distinct broadcast position, while
+    ``axis_weights`` / ``axis_coords`` / ``axis_types`` lookups continue
+    to resolve via the original axis name.  Crucially, the binding
+    variable is also added to ``body_axis_names``, so bare ``I[ap, ...]``
+    subscripts — where the spec uses the variable as an axis label
+    rather than the ``coord=`` form — classify as FREE without rewriting.
 
     Returns:
         An ``ast.expr`` invoking ``np.sum`` on the (possibly
@@ -736,10 +739,11 @@ def _lower_reduce(  # noqa: C901, PLR0912, PLR0913, PLR0914, PLR0915
     # index and a coord=binding index (e.g. ``K[age, age:ap]`` where
     # ``age`` is the outer-free position and ``age:ap`` is the bound
     # inner position on a duplicate-axis shaped parameter). When
-    # synthesized, **every** Subscript index with ``coord=binding`` on
-    # the axis is relabeled to the synthetic label — the bound
-    # iteration's broadcast position is the synthetic slot, not the
-    # real axis position.
+    # synthesized, the binding variable itself (e.g. ``ap``) is used as
+    # the label — it is already unique within the scope and is added to
+    # ``body_axis_names`` so that bare ``I[ap, ...]`` subscripts (where
+    # the spec uses the binding variable as an axis label rather than
+    # the ``coord=`` syntax) also classify as FREE without any rewriting.
     bound_axes_seen: set[str] = set()
     binding_label: dict[str, str] = {}  # var -> label (synthetic or real)
     axis_relabel: dict[str, str] = {}  # real axis -> synthetic label
@@ -754,7 +758,7 @@ def _lower_reduce(  # noqa: C901, PLR0912, PLR0913, PLR0914, PLR0915
         needs_synthetic = _binding_collides_with_free_index(
             expr.body, axis=axis, binding_var=binding
         )
-        label = f"{axis}#{binding}" if needs_synthetic else axis
+        label = binding if needs_synthetic else axis
         if needs_synthetic:
             axis_relabel[axis] = label
         binding_label[binding] = label
@@ -1040,9 +1044,9 @@ def _rebind_subscript_indices(  # noqa: PLR0911
     FREE index is taken from ``axis_relabel.get(original_axis,
     original_axis)``. This is used by :func:`_lower_reduce` to give
     same-axis-twice bound positions a distinct synthetic axis label
-    (e.g. ``age#ap``) so the broadcast-by-label pipeline can
-    disambiguate the outer-free and inner-bound positions of a
-    duplicate-axis shaped param such as ``K[age, age:ap]``.
+    (the binding variable itself, e.g. ``ap``) so the broadcast-by-label
+    pipeline can disambiguate the outer-free and inner-bound positions of
+    a duplicate-axis shaped param such as ``K[age, age:ap]``.
 
     Returns:
         A new IR expression with matching Subscript indices rewritten to
