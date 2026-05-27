@@ -38,6 +38,7 @@ from typing import (
 import numpy as np
 from numpy.typing import NDArray
 
+from op_system._block_axes import BlockAxisInfo, analyze_block_axes
 from op_system._errors import InvalidExpressionError, UnsupportedFeatureError
 from op_system._ir import Expr, extract_common_subexpressions, ir_to_ast_expr
 from op_system._normalize import ExprRhs, TransitionsRhs
@@ -238,6 +239,14 @@ class CompiledRhs:
     meta: Mapping[str, Any] = field(default_factory=lambda: MappingProxyType({}))
     operators: tuple[OperatorDescriptor, ...] = field(default_factory=tuple)
     factorize_axes: tuple[str, ...] = field(default_factory=tuple)
+    # ``block_axes`` is set by :func:`compile_rhs` for every axis listed in
+    # ``spec["factorize_axes"]`` that passes the IR separability check.
+    # Excluded from equality and hash (it is derived from ``_rhs``) so that
+    # two ``CompiledRhs`` instances compiled from the same ``NormalizedRhs``
+    # continue to compare equal regardless of their ``block_axes`` content.
+    block_axes: tuple[BlockAxisInfo, ...] = field(
+        default_factory=tuple, compare=False, hash=False
+    )
     # ``pytree_eval_fn`` is set when the vectorized compile path succeeds.
     # It accepts a ``StateDict`` (base → shaped array) and returns a
     # ``StateDict`` of derivatives, avoiding the flatten/unflatten step.
@@ -314,6 +323,7 @@ class CompiledRhs:
         object.__setattr__(self, "meta", rebuilt.meta)
         object.__setattr__(self, "operators", rebuilt.operators)
         object.__setattr__(self, "factorize_axes", rebuilt.factorize_axes)
+        object.__setattr__(self, "block_axes", rebuilt.block_axes)
         object.__setattr__(self, "pytree_eval_fn", rebuilt.pytree_eval_fn)
         object.__setattr__(self, "template_shapes", rebuilt.template_shapes)
         object.__setattr__(self, "_rhs", rhs)
@@ -1153,6 +1163,7 @@ def compile_rhs(rhs: NormalizedRhs, *, xp: object | None = None) -> CompiledRhs:
         meta=rhs.meta,
         operators=_parse_operator_descriptors(rhs.meta),
         factorize_axes=_parse_factorize_axes(rhs.meta),
+        block_axes=analyze_block_axes(rhs),
         pytree_eval_fn=pytree_eval_fn,
         template_shapes=template_shapes,
         _rhs=rhs,
