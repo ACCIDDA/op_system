@@ -21,7 +21,7 @@ import pytest
 from flepimop2.axis import AxisCollection
 from flepimop2.parameter.abc import ModelStateSpecification, ParameterRequest
 from flepimop2.typing import SystemProtocol
-from op_system import OperatorDescriptor
+from op_system import BlockAxisInfo, OperatorDescriptor
 
 from flepimop2.system.op_system import OpSystemSystem
 
@@ -724,3 +724,37 @@ def test_pytree_stepper_and_flat_stepper_agree() -> None:
     )
     pytree_flat = np.concatenate([pytree_result[b].reshape(-1) for b in shapes])
     np.testing.assert_allclose(pytree_flat, flat_result, rtol=1e-12)
+
+
+# ---------------------------------------------------------------------------
+# block_axes option (#164)
+# ---------------------------------------------------------------------------
+
+
+def test_option_block_axes_default_empty(sir_spec: dict[str, object]) -> None:
+    """block_axes is an empty tuple when no factorize_axes are declared."""
+    sys = OpSystemSystem(spec=sir_spec)
+    assert sys.option("block_axes", ()) == ()
+
+
+def test_option_block_axes_from_spec() -> None:
+    """block_axes contains one BlockAxisInfo entry per factorize_axes element."""
+    spec: dict[str, object] = {
+        "kind": "expr",
+        "axes": [
+            {"name": "age", "coords": ["y", "o"]},
+            {"name": "loc", "coords": ["a", "b"]},
+        ],
+        "state": ["S[age, loc]"],
+        "equations": {"S[age, loc]": "-S[age, loc]"},
+        "factorize_axes": ["loc"],
+    }
+    sys = OpSystemSystem(spec=spec)
+    block_axes = sys.option("block_axes", ())
+    assert len(block_axes) == 1
+    (info,) = block_axes
+    assert isinstance(info, BlockAxisInfo)
+    assert info.name == "loc"
+    assert info.size == 2
+    assert "S" in info.state_axis_pos
+    assert info.state_axis_pos["S"] == 1  # loc is the second axis in S[age, loc]

@@ -127,6 +127,7 @@ class OpSystemSystem(SystemABC, module="flepimop2.system.op_system"):  # noqa: D
             "operators": operators,
             "operator_axis": operator_axis,
             "factorize_axes": compiled.factorize_axes,
+            "block_axes": compiled.block_axes,
             "template_shapes": compiled.template_shapes,
             "pytree_stepper_fn": None,  # updated below if pytree path available
         }
