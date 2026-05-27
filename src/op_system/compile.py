@@ -38,7 +38,7 @@ from typing import (
 import numpy as np
 from numpy.typing import NDArray
 
-from op_system._errors import InvalidExpressionError
+from op_system._errors import InvalidExpressionError, UnsupportedFeatureError
 from op_system._ir import Expr, extract_common_subexpressions, ir_to_ast_expr
 from op_system._normalize import ExprRhs, TransitionsRhs
 from op_system._operators import OperatorDescriptor
@@ -182,12 +182,9 @@ def _raise_unsupported_feature(*, feature: str, detail: str | None = None) -> No
         detail: Optional additional detail.
 
     Raises:
-        NotImplementedError: Always.
+        UnsupportedFeatureError: Always.
     """
-    msg = f"{UNSUPPORTED_FEATURE_PREFIX} Feature '{feature}' is not supported."
-    if detail:
-        msg = f"{msg} Detail: {detail}"
-    raise NotImplementedError(msg)
+    raise UnsupportedFeatureError(feature=feature, detail=detail)
 
 
 # -----------------------------------------------------------------------------
@@ -1015,9 +1012,12 @@ def _wrap_pytree_eval_fn_for_synth_consts(
 def compile_rhs(rhs: NormalizedRhs, *, xp: object | None = None) -> CompiledRhs:
     """Compile a normalized RHS into a runnable evaluation function.
 
-    Always attempts the vectorized eval path that operates on shaped buffers
-    (one tensor expression per state template) and falls back automatically
-    to the scalar path when the spec falls outside the supported subset.
+    Always uses the vectorized eval path that operates on shaped buffers
+    (one tensor expression per state template) for specs that declare axes.
+    Specs without axes (genuinely scalar models) fall back to the scalar path.
+    Raising :class:`UnsupportedFeatureError` if an axis-indexed spec cannot be
+    vectorized, rather than silently falling back to the catastrophically slow
+    scalar path.
 
     The returned ``eval_fn`` is **namespace-polymorphic**: it infers its
     array namespace from the input ``y`` at call time
@@ -1034,6 +1034,11 @@ def compile_rhs(rhs: NormalizedRhs, *, xp: object | None = None) -> CompiledRhs:
 
     Returns:
         A `CompiledRhs` containing an `eval_fn(t, y, **params) -> dydt`.
+        For axis-indexed specs the returned object also carries
+        ``pytree_eval_fn`` and ``template_shapes``.  If the spec declares
+        axes but the vectorizer cannot build a plan an
+        ``UnsupportedFeatureError`` is raised (see bail reason in the detail
+        message) rather than silently degrading to the scalar path.
     """
     if xp is not None:
         warnings.warn(
@@ -1055,6 +1060,31 @@ def compile_rhs(rhs: NormalizedRhs, *, xp: object | None = None) -> CompiledRhs:
     # (op_system._vectorize imports helpers from this module).
     vec = importlib.import_module("op_system._vectorize")
     plan = vec.build_vector_plan(rhs)
+
+    if plan is None:
+        # Specs that declare axes MUST vectorize.  Falling back to the scalar
+        # path for an axis-indexed spec is catastrophically slow (O(N*M*...)
+        # Python loop per eval call), breaks the PyTree interface
+        # (pytree_eval_fn / template_shapes are absent), and silently hides
+        # vectorizer regressions.  Raise loudly so the gap gets fixed.
+        #
+        # Genuinely scalar specs (no axes declared) have no tensor structure to
+        # exploit and the scalar path is correct for them.
+        axes_meta_check = (
+            rhs.meta.get("axes") if isinstance(rhs.meta, _MappingABC) else None
+        )
+        if axes_meta_check:
+            bail_reason = vec.last_vector_plan_bail_reason()
+            _raise_unsupported_feature(
+                feature="vectorized eval path",
+                detail=(
+                    f"Spec declares axes but the vectorizer could not build a "
+                    f"plan: {bail_reason}. All axis-indexed specs must use the "
+                    f"vectorized path. If this expression pattern should be "
+                    f"supported, please file an issue referencing issue #160."
+                ),
+            )
+
     eval_fn: EvalFn | None = (
         vec.make_vectorized_eval_fn(plan) if plan is not None else None
     )
