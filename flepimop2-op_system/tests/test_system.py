@@ -16,13 +16,12 @@
 
 """Tests for the flepimop2 op_system adapter System."""
 
-from types import MappingProxyType
-
 import numpy as np
 import pytest
 from flepimop2.axis import AxisCollection
 from flepimop2.parameter.abc import ModelStateSpecification, ParameterRequest
 from flepimop2.typing import SystemProtocol
+from op_system import OperatorDescriptor
 
 from flepimop2.system.op_system import OpSystemSystem
 
@@ -228,35 +227,36 @@ def multi_operator_spec() -> dict[str, object]:
 
 
 def test_option_operators_none_when_absent(sir_spec: dict[str, object]) -> None:
-    """A spec without operators returns None for the operators option."""
+    """A spec without operators returns an empty tuple for the operators option."""
     sys = OpSystemSystem(spec=sir_spec)
-    assert sys.option("operators", "missing") is None
+    assert sys.option("operators", "missing") == ()
 
 
 def test_option_operators_present(
     sir_with_operators_spec: dict[str, object],
 ) -> None:
-    """A spec with operators exposes them via the operators option."""
+    """A spec with operators exposes them as typed OperatorDescriptor instances."""
     sys = OpSystemSystem(spec=sir_with_operators_spec)
     ops = sys.option("operators", None)
     assert ops is not None
     assert len(ops) == 1
-    assert ops[0]["kind"] == "diffusion"
-    assert ops[0]["axis"] == "loc"
-    assert ops[0]["bc"] == "neumann"
+    assert isinstance(ops[0], OperatorDescriptor)
+    assert ops[0].axis == "loc"
+    assert ops[0].velocity is None
+    assert ops[0].rate is None
 
 
 def test_option_operators_returns_immutable(
     sir_with_operators_spec: dict[str, object],
 ) -> None:
-    """Operator dicts returned by option() are immutable MappingProxy objects."""
+    """Operators returned by option() are frozen OperatorDescriptor instances."""
     sys = OpSystemSystem(spec=sir_with_operators_spec)
     ops = sys.option("operators", None)
     assert ops is not None
     assert isinstance(ops, tuple)
-    assert isinstance(ops[0], MappingProxyType)
-    with pytest.raises(TypeError):
-        ops[0]["kind"] = "advection"  # type: ignore[index]
+    assert isinstance(ops[0], OperatorDescriptor)
+    with pytest.raises((TypeError, AttributeError)):
+        ops[0].axis = "other"  # type: ignore[misc]
 
 
 def test_option_operator_axis_single(
@@ -286,13 +286,13 @@ def test_option_operator_axis_none_when_mixed(
 def test_option_operators_multi_axis(
     multi_operator_spec: dict[str, object],
 ) -> None:
-    """Multi-operator spec surfaces both operators."""
+    """Multi-operator spec surfaces both operators as OperatorDescriptor instances."""
     sys = OpSystemSystem(spec=multi_operator_spec)
     ops = sys.option("operators", None)
     assert ops is not None
     assert len(ops) == 2
-    kinds = {op["kind"] for op in ops}
-    assert kinds == {"diffusion", "advection"}
+    axes = {op.axis for op in ops}
+    assert axes == {"loc", "age"}
 
 
 def test_option_operators_independent_of_mixing_kernels(
