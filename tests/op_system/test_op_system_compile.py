@@ -26,8 +26,11 @@ from dataclasses import replace
 import numpy as np
 import pytest
 
+import op_system._vectorize as _vec
 from op_system import compile_spec
+from op_system._errors import UnsupportedFeatureError
 from op_system._operators import OperatorDescriptor
+from op_system._vectorize import _bail
 from op_system.compile import CompiledRhs, _collect_eq_code, compile_rhs
 from op_system.specs import NormalizedRhs, normalize_rhs
 
@@ -383,7 +386,7 @@ def test_compiled_rhs_meta_from_spec_with_axes_and_kernels() -> None:
     spec: dict[str, object] = {
         "kind": "expr",
         "axes": [{"name": "age", "coords": ["a0", "a1", "a2"]}],
-        "state": ["S", "I"],
+        "state": ["S[age]", "I[age]"],
         "kernels": [
             {
                 "name": "contact",
@@ -391,7 +394,7 @@ def test_compiled_rhs_meta_from_spec_with_axes_and_kernels() -> None:
                 "params": {"scale": 1.0, "sigma": 0.5},
             },
         ],
-        "equations": {"S": "-beta * S", "I": "beta * S"},
+        "equations": {"S[age]": "-beta * S[age]", "I[age]": "beta * S[age]"},
     }
     rhs = normalize_rhs(spec)
     compiled = compile_rhs(rhs, xp=np)
@@ -415,8 +418,8 @@ def test_compile_spec_preserves_meta() -> None:
     spec: dict[str, object] = {
         "kind": "expr",
         "axes": [{"name": "space", "coords": ["s0", "s1"]}],
-        "state": ["x"],
-        "equations": {"x": "a * x"},
+        "state": ["x[space]"],
+        "equations": {"x[space]": "a * x[space]"},
     }
     compiled = compile_spec(spec)
 
@@ -781,15 +784,38 @@ def test_pytree_eval_fn_produces_correct_result() -> None:
 def test_pytree_eval_fn_absent_for_scalar_path() -> None:
     """pytree_eval_fn is None when the scalar compile path is used.
 
-    The scalar path is triggered by a spec that the vectorizer bails on.
-    We verify the invariant by directly constructing a CompiledRhs with
-    pytree_eval_fn=None and confirming the field is accessible.
+    Only genuinely scalar specs (no axes declared) use the scalar path;
+    axis-indexed specs that fail vectorization now raise instead of falling
+    back.
     """
     spec = {"kind": "expr", "state": ["x"], "equations": {"x": "-x"}}
     cr = compile_rhs(normalize_rhs(spec))
-    # Either path is fine; just confirm the attribute exists and is typed
-    # correctly (not None for the vectorized path, which this spec uses).
-    assert hasattr(cr, "pytree_eval_fn")
+    # Scalar spec → scalar path → pytree_eval_fn is None.
+    assert cr.pytree_eval_fn is None
+
+
+def test_compile_rhs_raises_for_axis_spec_that_fails_vectorization(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """compile_rhs raises UnsupportedFeatureError for axis specs that cannot vectorize.
+
+    Axis-indexed specs must not silently fall back to the slow scalar path.
+    """
+    spec = {
+        "kind": "expr",
+        "axes": [{"name": "loc", "coords": ["a", "b"]}],
+        "state": ["S[loc]"],
+        "equations": {"S[loc]": "-S[loc]"},
+    }
+    rhs = normalize_rhs(spec)
+
+    def _always_bail(_rhs: object) -> None:
+        _bail("simulated vectorizer failure")
+
+    monkeypatch.setattr(_vec, "build_vector_plan", _always_bail)
+
+    with pytest.raises(UnsupportedFeatureError, match="vectorized eval path"):
+        compile_rhs(rhs)
 
 
 # ---------------------------------------------------------------------------
