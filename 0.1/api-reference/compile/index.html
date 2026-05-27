@@ -691,6 +691,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#op_system.compile.PytreeEvalFn" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        PytreeEvalFn
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#op_system.compile.compile_rhs" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -872,6 +883,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#op_system.compile.PytreeEvalFn" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        PytreeEvalFn
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#op_system.compile.compile_rhs" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -957,7 +979,7 @@ whitelist, and evaluation runs with empty builtins.</p>
 
 
 <h3 id="op_system.compile.CompiledRhs" class="doc doc-heading">
-              <code class="highlight language-python"><span class="n">CompiledRhs</span><span class="p">(</span><span class="n">state_names</span><span class="p">,</span> <span class="n">param_names</span><span class="p">,</span> <span class="n">eval_fn</span><span class="p">,</span> <span class="n">meta</span><span class="o">=</span><span class="p">(</span><span class="k">lambda</span><span class="p">:</span> <span class="n">MappingProxyType</span><span class="p">({}))(),</span> <span class="n">operators</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(),</span> <span class="n">_rhs</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
+              <code class="highlight language-python"><span class="n">CompiledRhs</span><span class="p">(</span><span class="n">state_names</span><span class="p">,</span> <span class="n">param_names</span><span class="p">,</span> <span class="n">eval_fn</span><span class="p">,</span> <span class="n">meta</span><span class="o">=</span><span class="p">(</span><span class="k">lambda</span><span class="p">:</span> <span class="n">MappingProxyType</span><span class="p">({}))(),</span> <span class="n">operators</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(),</span> <span class="n">factorize_axes</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(),</span> <span class="n">pytree_eval_fn</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">template_shapes</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">_rhs</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
 
   <span class="doc doc-labels">
       <small class="doc doc-label doc-label-dataclass"><code>dataclass</code></small>
@@ -1047,27 +1069,27 @@ via :func:<code>compile_rhs</code>).</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/op_system/compile.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">250</span>
-<span class="normal">251</span>
-<span class="normal">252</span>
-<span class="normal">253</span>
-<span class="normal">254</span>
-<span class="normal">255</span>
-<span class="normal">256</span>
-<span class="normal">257</span>
-<span class="normal">258</span>
-<span class="normal">259</span>
-<span class="normal">260</span>
-<span class="normal">261</span>
-<span class="normal">262</span>
-<span class="normal">263</span>
-<span class="normal">264</span>
-<span class="normal">265</span>
-<span class="normal">266</span>
-<span class="normal">267</span>
-<span class="normal">268</span>
-<span class="normal">269</span>
-<span class="normal">270</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">__getstate__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">287</span>
+<span class="normal">288</span>
+<span class="normal">289</span>
+<span class="normal">290</span>
+<span class="normal">291</span>
+<span class="normal">292</span>
+<span class="normal">293</span>
+<span class="normal">294</span>
+<span class="normal">295</span>
+<span class="normal">296</span>
+<span class="normal">297</span>
+<span class="normal">298</span>
+<span class="normal">299</span>
+<span class="normal">300</span>
+<span class="normal">301</span>
+<span class="normal">302</span>
+<span class="normal">303</span>
+<span class="normal">304</span>
+<span class="normal">305</span>
+<span class="normal">306</span>
+<span class="normal">307</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">__getstate__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Return picklable state.</span>
 
 <span class="sd">    The compiled ``eval_fn`` is a closure (and on the vectorized path</span>
@@ -1110,17 +1132,20 @@ via :func:<code>compile_rhs</code>).</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/op_system/compile.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">272</span>
-<span class="normal">273</span>
-<span class="normal">274</span>
-<span class="normal">275</span>
-<span class="normal">276</span>
-<span class="normal">277</span>
-<span class="normal">278</span>
-<span class="normal">279</span>
-<span class="normal">280</span>
-<span class="normal">281</span>
-<span class="normal">282</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">__setstate__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">309</span>
+<span class="normal">310</span>
+<span class="normal">311</span>
+<span class="normal">312</span>
+<span class="normal">313</span>
+<span class="normal">314</span>
+<span class="normal">315</span>
+<span class="normal">316</span>
+<span class="normal">317</span>
+<span class="normal">318</span>
+<span class="normal">319</span>
+<span class="normal">320</span>
+<span class="normal">321</span>
+<span class="normal">322</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">__setstate__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Restore by recompiling from the pickled :class:`NormalizedRhs`.&quot;&quot;&quot;</span>
     <span class="n">rhs</span> <span class="o">=</span> <span class="n">state</span><span class="p">[</span><span class="s2">&quot;_rhs&quot;</span><span class="p">]</span>
     <span class="n">rebuilt</span> <span class="o">=</span> <span class="n">compile_rhs</span><span class="p">(</span><span class="n">rhs</span><span class="p">)</span>
@@ -1130,6 +1155,9 @@ via :func:<code>compile_rhs</code>).</p>
     <span class="nb">object</span><span class="o">.</span><span class="fm">__setattr__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;eval_fn&quot;</span><span class="p">,</span> <span class="n">rebuilt</span><span class="o">.</span><span class="n">eval_fn</span><span class="p">)</span>
     <span class="nb">object</span><span class="o">.</span><span class="fm">__setattr__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;meta&quot;</span><span class="p">,</span> <span class="n">rebuilt</span><span class="o">.</span><span class="n">meta</span><span class="p">)</span>
     <span class="nb">object</span><span class="o">.</span><span class="fm">__setattr__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;operators&quot;</span><span class="p">,</span> <span class="n">rebuilt</span><span class="o">.</span><span class="n">operators</span><span class="p">)</span>
+    <span class="nb">object</span><span class="o">.</span><span class="fm">__setattr__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;factorize_axes&quot;</span><span class="p">,</span> <span class="n">rebuilt</span><span class="o">.</span><span class="n">factorize_axes</span><span class="p">)</span>
+    <span class="nb">object</span><span class="o">.</span><span class="fm">__setattr__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;pytree_eval_fn&quot;</span><span class="p">,</span> <span class="n">rebuilt</span><span class="o">.</span><span class="n">pytree_eval_fn</span><span class="p">)</span>
+    <span class="nb">object</span><span class="o">.</span><span class="fm">__setattr__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;template_shapes&quot;</span><span class="p">,</span> <span class="n">rebuilt</span><span class="o">.</span><span class="n">template_shapes</span><span class="p">)</span>
     <span class="nb">object</span><span class="o">.</span><span class="fm">__setattr__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;_rhs&quot;</span><span class="p">,</span> <span class="n">rhs</span><span class="p">)</span>
 </code></pre></div></td></tr></table></div>
             </details>
@@ -1207,23 +1235,23 @@ via :func:<code>compile_rhs</code>).</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/op_system/compile.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">232</span>
-<span class="normal">233</span>
-<span class="normal">234</span>
-<span class="normal">235</span>
-<span class="normal">236</span>
-<span class="normal">237</span>
-<span class="normal">238</span>
-<span class="normal">239</span>
-<span class="normal">240</span>
-<span class="normal">241</span>
-<span class="normal">242</span>
-<span class="normal">243</span>
-<span class="normal">244</span>
-<span class="normal">245</span>
-<span class="normal">246</span>
-<span class="normal">247</span>
-<span class="normal">248</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">bind</span><span class="p">(</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">269</span>
+<span class="normal">270</span>
+<span class="normal">271</span>
+<span class="normal">272</span>
+<span class="normal">273</span>
+<span class="normal">274</span>
+<span class="normal">275</span>
+<span class="normal">276</span>
+<span class="normal">277</span>
+<span class="normal">278</span>
+<span class="normal">279</span>
+<span class="normal">280</span>
+<span class="normal">281</span>
+<span class="normal">282</span>
+<span class="normal">283</span>
+<span class="normal">284</span>
+<span class="normal">285</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">bind</span><span class="p">(</span>
     <span class="bp">self</span><span class="p">,</span> <span class="n">params</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">object</span><span class="p">]</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Callable</span><span class="p">[[</span><span class="nb">object</span><span class="p">,</span> <span class="nb">object</span><span class="p">],</span> <span class="n">Float64Array</span><span class="p">]:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Bind parameter values and return a 2-arg RHS: rhs(t, y) -&gt; dydt.</span>
@@ -1272,6 +1300,61 @@ via :func:<code>compile_rhs</code>).</p>
 
 
         <p>Callable RHS evaluator supporting runtime parameter kwargs.</p>
+<p>Accepts a flat <code>(n_state,)</code> state array and returns a flat
+<code>(n_state,)</code> derivative array in the same array namespace.</p>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="op_system.compile.PytreeEvalFn" class="doc doc-heading">
+            <code>PytreeEvalFn</code>
+
+
+<a href="#op_system.compile.PytreeEvalFn" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="typing.Protocol">Protocol</span></code></p>
+
+
+
+        <p>Callable RHS evaluator operating on shaped PyTree state dicts.</p>
+<p>Accepts <code>y</code> as a <code>StateDict</code> (mapping from state-template base name
+to a shaped array with the template's natural N-D shape) and returns a
+<code>StateDict</code> of the same structure containing the derivative.
+Enables the engine to skip the flatten/unflatten step entirely and
+expose the full tensor structure to JAX/XLA.</p>
 
 
 
@@ -1386,7 +1469,7 @@ from the input <code>y</code>. Will be removed in a future release.</p>
       <tbody>
           <tr class="doc-section-item">
             <td>
-                  <code><a class="autorefs autorefs-internal" title="CompiledRhs(state_names, param_names, eval_fn, meta=(lambda: MappingProxyType({}))(), operators=tuple(), _rhs=None)
+                  <code><a class="autorefs autorefs-internal" title="CompiledRhs(state_names, param_names, eval_fn, meta=(lambda: MappingProxyType({}))(), operators=tuple(), factorize_axes=tuple(), pytree_eval_fn=None, template_shapes=None, _rhs=None)
 
   
       dataclass
@@ -1404,103 +1487,109 @@ from the input <code>y</code>. Will be removed in a future release.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/op_system/compile.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">842</span>
-<span class="normal">843</span>
-<span class="normal">844</span>
-<span class="normal">845</span>
-<span class="normal">846</span>
-<span class="normal">847</span>
-<span class="normal">848</span>
-<span class="normal">849</span>
-<span class="normal">850</span>
-<span class="normal">851</span>
-<span class="normal">852</span>
-<span class="normal">853</span>
-<span class="normal">854</span>
-<span class="normal">855</span>
-<span class="normal">856</span>
-<span class="normal">857</span>
-<span class="normal">858</span>
-<span class="normal">859</span>
-<span class="normal">860</span>
-<span class="normal">861</span>
-<span class="normal">862</span>
-<span class="normal">863</span>
-<span class="normal">864</span>
-<span class="normal">865</span>
-<span class="normal">866</span>
-<span class="normal">867</span>
-<span class="normal">868</span>
-<span class="normal">869</span>
-<span class="normal">870</span>
-<span class="normal">871</span>
-<span class="normal">872</span>
-<span class="normal">873</span>
-<span class="normal">874</span>
-<span class="normal">875</span>
-<span class="normal">876</span>
-<span class="normal">877</span>
-<span class="normal">878</span>
-<span class="normal">879</span>
-<span class="normal">880</span>
-<span class="normal">881</span>
-<span class="normal">882</span>
-<span class="normal">883</span>
-<span class="normal">884</span>
-<span class="normal">885</span>
-<span class="normal">886</span>
-<span class="normal">887</span>
-<span class="normal">888</span>
-<span class="normal">889</span>
-<span class="normal">890</span>
-<span class="normal">891</span>
-<span class="normal">892</span>
-<span class="normal">893</span>
-<span class="normal">894</span>
-<span class="normal">895</span>
-<span class="normal">896</span>
-<span class="normal">897</span>
-<span class="normal">898</span>
-<span class="normal">899</span>
-<span class="normal">900</span>
-<span class="normal">901</span>
-<span class="normal">902</span>
-<span class="normal">903</span>
-<span class="normal">904</span>
-<span class="normal">905</span>
-<span class="normal">906</span>
-<span class="normal">907</span>
-<span class="normal">908</span>
-<span class="normal">909</span>
-<span class="normal">910</span>
-<span class="normal">911</span>
-<span class="normal">912</span>
-<span class="normal">913</span>
-<span class="normal">914</span>
-<span class="normal">915</span>
-<span class="normal">916</span>
-<span class="normal">917</span>
-<span class="normal">918</span>
-<span class="normal">919</span>
-<span class="normal">920</span>
-<span class="normal">921</span>
-<span class="normal">922</span>
-<span class="normal">923</span>
-<span class="normal">924</span>
-<span class="normal">925</span>
-<span class="normal">926</span>
-<span class="normal">927</span>
-<span class="normal">928</span>
-<span class="normal">929</span>
-<span class="normal">930</span>
-<span class="normal">931</span>
-<span class="normal">932</span>
-<span class="normal">933</span>
-<span class="normal">934</span>
-<span class="normal">935</span>
-<span class="normal">936</span>
-<span class="normal">937</span>
-<span class="normal">938</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">compile_rhs</span><span class="p">(</span><span class="n">rhs</span><span class="p">:</span> <span class="n">NormalizedRhs</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">xp</span><span class="p">:</span> <span class="nb">object</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">CompiledRhs</span><span class="p">:</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1015</span>
+<span class="normal">1016</span>
+<span class="normal">1017</span>
+<span class="normal">1018</span>
+<span class="normal">1019</span>
+<span class="normal">1020</span>
+<span class="normal">1021</span>
+<span class="normal">1022</span>
+<span class="normal">1023</span>
+<span class="normal">1024</span>
+<span class="normal">1025</span>
+<span class="normal">1026</span>
+<span class="normal">1027</span>
+<span class="normal">1028</span>
+<span class="normal">1029</span>
+<span class="normal">1030</span>
+<span class="normal">1031</span>
+<span class="normal">1032</span>
+<span class="normal">1033</span>
+<span class="normal">1034</span>
+<span class="normal">1035</span>
+<span class="normal">1036</span>
+<span class="normal">1037</span>
+<span class="normal">1038</span>
+<span class="normal">1039</span>
+<span class="normal">1040</span>
+<span class="normal">1041</span>
+<span class="normal">1042</span>
+<span class="normal">1043</span>
+<span class="normal">1044</span>
+<span class="normal">1045</span>
+<span class="normal">1046</span>
+<span class="normal">1047</span>
+<span class="normal">1048</span>
+<span class="normal">1049</span>
+<span class="normal">1050</span>
+<span class="normal">1051</span>
+<span class="normal">1052</span>
+<span class="normal">1053</span>
+<span class="normal">1054</span>
+<span class="normal">1055</span>
+<span class="normal">1056</span>
+<span class="normal">1057</span>
+<span class="normal">1058</span>
+<span class="normal">1059</span>
+<span class="normal">1060</span>
+<span class="normal">1061</span>
+<span class="normal">1062</span>
+<span class="normal">1063</span>
+<span class="normal">1064</span>
+<span class="normal">1065</span>
+<span class="normal">1066</span>
+<span class="normal">1067</span>
+<span class="normal">1068</span>
+<span class="normal">1069</span>
+<span class="normal">1070</span>
+<span class="normal">1071</span>
+<span class="normal">1072</span>
+<span class="normal">1073</span>
+<span class="normal">1074</span>
+<span class="normal">1075</span>
+<span class="normal">1076</span>
+<span class="normal">1077</span>
+<span class="normal">1078</span>
+<span class="normal">1079</span>
+<span class="normal">1080</span>
+<span class="normal">1081</span>
+<span class="normal">1082</span>
+<span class="normal">1083</span>
+<span class="normal">1084</span>
+<span class="normal">1085</span>
+<span class="normal">1086</span>
+<span class="normal">1087</span>
+<span class="normal">1088</span>
+<span class="normal">1089</span>
+<span class="normal">1090</span>
+<span class="normal">1091</span>
+<span class="normal">1092</span>
+<span class="normal">1093</span>
+<span class="normal">1094</span>
+<span class="normal">1095</span>
+<span class="normal">1096</span>
+<span class="normal">1097</span>
+<span class="normal">1098</span>
+<span class="normal">1099</span>
+<span class="normal">1100</span>
+<span class="normal">1101</span>
+<span class="normal">1102</span>
+<span class="normal">1103</span>
+<span class="normal">1104</span>
+<span class="normal">1105</span>
+<span class="normal">1106</span>
+<span class="normal">1107</span>
+<span class="normal">1108</span>
+<span class="normal">1109</span>
+<span class="normal">1110</span>
+<span class="normal">1111</span>
+<span class="normal">1112</span>
+<span class="normal">1113</span>
+<span class="normal">1114</span>
+<span class="normal">1115</span>
+<span class="normal">1116</span>
+<span class="normal">1117</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">compile_rhs</span><span class="p">(</span><span class="n">rhs</span><span class="p">:</span> <span class="n">NormalizedRhs</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">xp</span><span class="p">:</span> <span class="nb">object</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">CompiledRhs</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Compile a normalized RHS into a runnable evaluation function.</span>
 
 <span class="sd">    Always attempts the vectorized eval path that operates on shaped buffers</span>
@@ -1546,6 +1635,14 @@ from the input <code>y</code>. Will be removed in a future release.</p>
     <span class="n">eval_fn</span><span class="p">:</span> <span class="n">EvalFn</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="p">(</span>
         <span class="n">vec</span><span class="o">.</span><span class="n">make_vectorized_eval_fn</span><span class="p">(</span><span class="n">plan</span><span class="p">)</span> <span class="k">if</span> <span class="n">plan</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span>
     <span class="p">)</span>
+    <span class="n">pytree_eval_fn</span><span class="p">:</span> <span class="n">PytreeEvalFn</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">vec</span><span class="o">.</span><span class="n">make_pytree_eval_fn</span><span class="p">(</span><span class="n">plan</span><span class="p">)</span> <span class="k">if</span> <span class="n">plan</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span>
+    <span class="p">)</span>
+    <span class="n">template_shapes</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">]]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="p">{</span><span class="n">tpl</span><span class="o">.</span><span class="n">base</span><span class="p">:</span> <span class="n">tpl</span><span class="o">.</span><span class="n">shape</span> <span class="k">for</span> <span class="n">tpl</span> <span class="ow">in</span> <span class="n">plan</span><span class="o">.</span><span class="n">state_templates</span><span class="p">}</span>
+        <span class="k">if</span> <span class="n">plan</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+        <span class="k">else</span> <span class="kc">None</span>
+    <span class="p">)</span>
 
     <span class="k">if</span> <span class="n">eval_fn</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">eval_fn</span> <span class="o">=</span> <span class="n">_make_eval_fn</span><span class="p">(</span>
@@ -1556,12 +1653,21 @@ from the input <code>y</code>. Will be removed in a future release.</p>
             <span class="n">equations_ir</span><span class="o">=</span><span class="n">rhs</span><span class="o">.</span><span class="n">equations_ir</span><span class="p">,</span>
         <span class="p">)</span>
 
+    <span class="n">time_axis_name</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">rhs</span><span class="o">.</span><span class="n">meta</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;time_axis&quot;</span><span class="p">,</span> <span class="s2">&quot;time&quot;</span><span class="p">))</span>
+    <span class="n">axes_meta</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">rhs</span><span class="o">.</span><span class="n">meta</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;axes&quot;</span><span class="p">)</span> <span class="ow">or</span> <span class="p">())</span>
     <span class="n">eval_fn</span> <span class="o">=</span> <span class="n">_wrap_eval_fn_for_time_varying</span><span class="p">(</span>
         <span class="n">eval_fn</span><span class="p">,</span>
         <span class="n">time_varying_params</span><span class="o">=</span><span class="n">rhs</span><span class="o">.</span><span class="n">time_varying_params</span><span class="p">,</span>
-        <span class="n">time_axis_name</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">rhs</span><span class="o">.</span><span class="n">meta</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;time_axis&quot;</span><span class="p">,</span> <span class="s2">&quot;time&quot;</span><span class="p">)),</span>
-        <span class="n">axes_meta</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(</span><span class="n">rhs</span><span class="o">.</span><span class="n">meta</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;axes&quot;</span><span class="p">)</span> <span class="ow">or</span> <span class="p">()),</span>
+        <span class="n">time_axis_name</span><span class="o">=</span><span class="n">time_axis_name</span><span class="p">,</span>
+        <span class="n">axes_meta</span><span class="o">=</span><span class="n">axes_meta</span><span class="p">,</span>
     <span class="p">)</span>
+    <span class="k">if</span> <span class="n">pytree_eval_fn</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">pytree_eval_fn</span> <span class="o">=</span> <span class="n">_wrap_pytree_eval_fn_for_time_varying</span><span class="p">(</span>
+            <span class="n">pytree_eval_fn</span><span class="p">,</span>
+            <span class="n">time_varying_params</span><span class="o">=</span><span class="n">rhs</span><span class="o">.</span><span class="n">time_varying_params</span><span class="p">,</span>
+            <span class="n">time_axis_name</span><span class="o">=</span><span class="n">time_axis_name</span><span class="p">,</span>
+            <span class="n">axes_meta</span><span class="o">=</span><span class="n">axes_meta</span><span class="p">,</span>
+        <span class="p">)</span>
 
     <span class="c1"># Inject normalize-time synthesized constants (e.g. one-hot masks for</span>
     <span class="c1"># pinned-coord transition selectors) into ``params`` so callers do not</span>
@@ -1569,25 +1675,11 @@ from the input <code>y</code>. Will be removed in a future release.</p>
     <span class="n">synth_consts</span> <span class="o">=</span> <span class="n">rhs</span><span class="o">.</span><span class="n">meta</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;op_system_synth_constants&quot;</span><span class="p">)</span>
     <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">synth_consts</span><span class="p">,</span> <span class="n">_MappingABC</span><span class="p">)</span> <span class="ow">and</span> <span class="n">synth_consts</span><span class="p">:</span>
         <span class="n">synth_const_values</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">synth_consts</span><span class="p">)</span>
-        <span class="n">inner_eval_fn</span> <span class="o">=</span> <span class="n">eval_fn</span>
-
-        <span class="k">def</span><span class="w"> </span><span class="nf">eval_fn</span><span class="p">(</span><span class="n">t</span><span class="p">:</span> <span class="nb">object</span><span class="p">,</span> <span class="n">y</span><span class="p">:</span> <span class="nb">object</span><span class="p">,</span> <span class="o">**</span><span class="n">params</span><span class="p">:</span> <span class="nb">object</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Float64Array</span><span class="p">:</span>
-            <span class="c1"># Cast synth-mask values to ``y``&#39;s namespace and dtype so they</span>
-            <span class="c1"># don&#39;t promote a float32 state buffer to float64 (or vice</span>
-            <span class="c1"># versa). Downstream shaped-param assembly does</span>
-            <span class="c1"># ``xp.asarray(bare)`` without a dtype, which would otherwise</span>
-            <span class="c1"># pick the namespace&#39;s default float and trigger</span>
-            <span class="c1"># incompatible-dtype scatter errors in JAX integrators.</span>
-            <span class="n">xp</span> <span class="o">=</span> <span class="n">_namespace_of</span><span class="p">(</span><span class="n">y</span><span class="p">)</span>
-            <span class="n">y_dtype</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">y</span><span class="p">,</span> <span class="s2">&quot;dtype&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
-            <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">synth_const_values</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
-                <span class="k">if</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">params</span><span class="p">:</span>
-                    <span class="k">continue</span>
-                <span class="k">if</span> <span class="n">y_dtype</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                    <span class="n">params</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="n">xp</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">y_dtype</span><span class="p">)</span>
-                <span class="k">else</span><span class="p">:</span>
-                    <span class="n">params</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="n">xp</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">v</span><span class="p">)</span>
-            <span class="k">return</span> <span class="n">inner_eval_fn</span><span class="p">(</span><span class="n">t</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="o">**</span><span class="n">params</span><span class="p">)</span>
+        <span class="n">eval_fn</span> <span class="o">=</span> <span class="n">_wrap_eval_fn_for_synth_consts</span><span class="p">(</span><span class="n">eval_fn</span><span class="p">,</span> <span class="n">synth_const_values</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">pytree_eval_fn</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">pytree_eval_fn</span> <span class="o">=</span> <span class="n">_wrap_pytree_eval_fn_for_synth_consts</span><span class="p">(</span>
+                <span class="n">pytree_eval_fn</span><span class="p">,</span> <span class="n">synth_const_values</span>
+            <span class="p">)</span>
 
     <span class="k">return</span> <span class="n">CompiledRhs</span><span class="p">(</span>
         <span class="n">state_names</span><span class="o">=</span><span class="n">rhs</span><span class="o">.</span><span class="n">state_names</span><span class="p">,</span>
@@ -1595,6 +1687,9 @@ from the input <code>y</code>. Will be removed in a future release.</p>
         <span class="n">eval_fn</span><span class="o">=</span><span class="n">eval_fn</span><span class="p">,</span>
         <span class="n">meta</span><span class="o">=</span><span class="n">rhs</span><span class="o">.</span><span class="n">meta</span><span class="p">,</span>
         <span class="n">operators</span><span class="o">=</span><span class="n">_parse_operator_descriptors</span><span class="p">(</span><span class="n">rhs</span><span class="o">.</span><span class="n">meta</span><span class="p">),</span>
+        <span class="n">factorize_axes</span><span class="o">=</span><span class="n">_parse_factorize_axes</span><span class="p">(</span><span class="n">rhs</span><span class="o">.</span><span class="n">meta</span><span class="p">),</span>
+        <span class="n">pytree_eval_fn</span><span class="o">=</span><span class="n">pytree_eval_fn</span><span class="p">,</span>
+        <span class="n">template_shapes</span><span class="o">=</span><span class="n">template_shapes</span><span class="p">,</span>
         <span class="n">_rhs</span><span class="o">=</span><span class="n">rhs</span><span class="p">,</span>
     <span class="p">)</span>
 </code></pre></div></td></tr></table></div>
