@@ -437,6 +437,13 @@ def normalize_expr_rhs(spec: Mapping[str, Any]) -> ExprRhs:  # noqa: C901, PLR09
     meta["time_axis"] = time_axis_name
     meta["time_varying_params"] = tuple(sorted(time_varying_full.items()))
 
+    factorize_axes_raw = spec.get("factorize_axes")
+    if factorize_axes_raw:
+        known_axes = {ax["name"] for ax in axes_meta}
+        meta["factorize_axes"] = [
+            a for a in factorize_axes_raw if isinstance(a, str) and a in known_axes
+        ]
+
     shaped_set = set(shaped_params)
     time_varying_set = set(time_varying_full)
     axis_name_set = set(axis_lookup_dict)
@@ -1457,6 +1464,13 @@ def normalize_transitions_rhs(  # noqa: C901, PLR0912, PLR0914, PLR0915
     meta["shaped_params"] = tuple(sorted(shaped_params.items()))
     meta["time_axis"] = time_axis_name
     meta["time_varying_params"] = tuple(sorted(time_varying_full.items()))
+
+    factorize_axes_raw = spec.get("factorize_axes")
+    if factorize_axes_raw:
+        known_axes = {ax["name"] for ax in axes_meta}
+        meta["factorize_axes"] = [
+            a for a in factorize_axes_raw if isinstance(a, str) and a in known_axes
+        ]
 
     shaped_set = set(shaped_params)
     time_varying_set = set(time_varying_full)

@@ -126,6 +126,8 @@ class OpSystemSystem(SystemABC, module="flepimop2.system.op_system"):  # noqa: D
             "mixing_kernels": mixing_kernels,
             "operators": operators,
             "operator_axis": operator_axis,
+            "factorize_axes": compiled.factorize_axes,
+            "template_shapes": compiled.template_shapes,
         }
 
         def _stepper(
@@ -145,6 +147,27 @@ class OpSystemSystem(SystemABC, module="flepimop2.system.op_system"):  # noqa: D
             return compiled.eval_fn(time, state, **params)
 
         self._stepper = _stepper
+
+        # Expose PyTree stepper when the vectorized compile path succeeded.
+        # Accepts and returns a ``StateDict`` (base → shaped array) rather
+        # than a flat ``(n_state,)`` vector, enabling engines to skip the
+        # flatten/unflatten step and exploit block-diagonal structure.
+        if compiled.pytree_eval_fn is not None:
+            pytree_eval_fn = compiled.pytree_eval_fn
+
+            def _stepper_pytree(
+                time: np.float64,
+                state_dict: dict[str, Any],
+                **kwargs: Any,  # noqa: ANN401
+            ) -> dict[str, Any]:
+                params = dict(mixing_kernels)
+                params.update(kwargs)
+                return pytree_eval_fn(time, state_dict, **params)
+
+            self._stepper_pytree: Any = _stepper_pytree
+        else:
+            self._stepper_pytree = None
+
         self._compiled_rhs = compiled  # handy for debugging/adapters
 
     @override
@@ -163,6 +186,10 @@ class OpSystemSystem(SystemABC, module="flepimop2.system.op_system"):  # noqa: D
         """
         bound = functools.partial(self._stepper, **(params or {}))
         bound.option = self.option  # type: ignore[attr-defined]
+        if self._stepper_pytree is not None:
+            bound.pytree_stepper = functools.partial(  # type: ignore[attr-defined]
+                self._stepper_pytree, **(params or {})
+            )
         return cast("SystemProtocol", bound)
 
     @override

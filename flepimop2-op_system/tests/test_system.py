@@ -242,6 +242,8 @@ def test_option_operators_present(
     assert len(ops) == 1
     assert isinstance(ops[0], OperatorDescriptor)
     assert ops[0].axis == "loc"
+    assert ops[0].kind == "diffusion"
+    assert ops[0].bc == "neumann"
     assert ops[0].velocity is None
     assert ops[0].rate is None
 
@@ -608,3 +610,117 @@ def test_requested_parameters_honours_time_axis_option() -> None:
     sys = OpSystemSystem(spec=spec)
     requested = sys.requested_parameters(AxisCollection())
     assert requested["beta"].axes == ("day",)
+
+
+# ---------------------------------------------------------------------------
+# factorize_axes / template_shapes / pytree_stepper options (#158)
+# ---------------------------------------------------------------------------
+
+
+def test_option_factorize_axes_default_empty(sir_spec: dict[str, object]) -> None:
+    """factorize_axes is an empty tuple when not declared."""
+    sys = OpSystemSystem(spec=sir_spec)
+    assert sys.option("factorize_axes", ()) == ()
+
+
+def test_option_factorize_axes_from_spec() -> None:
+    """factorize_axes is populated from the spec."""
+    spec: dict[str, object] = {
+        "kind": "expr",
+        "axes": [
+            {"name": "age", "coords": ["y", "o"]},
+            {"name": "loc", "coords": ["a", "b"]},
+        ],
+        "state": ["S[age, loc]"],
+        "equations": {"S[age, loc]": "-S[age, loc]"},
+        "factorize_axes": ["loc"],
+    }
+    sys = OpSystemSystem(spec=spec)
+    assert sys.option("factorize_axes", ()) == ("loc",)
+
+
+def test_option_template_shapes_none_scalar_spec(
+    sir_spec: dict[str, object],
+) -> None:
+    """template_shapes is None for a scalar (no-axes) spec (no vectorized path)."""
+    sys = OpSystemSystem(spec=sir_spec)
+    # Scalar specs have no N-D axes so pytree_eval_fn is absent and
+    # template_shapes is not set.
+    shapes = sys.option("template_shapes", None)
+    assert shapes is None
+
+
+def test_option_template_shapes_multidim() -> None:
+    """template_shapes reflects the N-D shape for each state template."""
+    spec: dict[str, object] = {
+        "kind": "expr",
+        "axes": [
+            {"name": "age", "coords": ["y", "o"]},
+            {"name": "loc", "coords": ["a", "b", "c"]},
+        ],
+        "state": ["S[age, loc]", "I[age, loc]"],
+        "equations": {
+            "S[age, loc]": "-beta * S[age, loc]",
+            "I[age, loc]": "beta * S[age, loc] - gamma * I[age, loc]",
+        },
+    }
+    sys = OpSystemSystem(spec=spec)
+    shapes = sys.option("template_shapes", None)
+    assert shapes is not None
+    assert shapes["S"] == (2, 3)
+    assert shapes["I"] == (2, 3)
+
+
+def test_bind_exposes_pytree_stepper_for_multidim_spec() -> None:
+    """bind() attaches pytree_stepper when pytree_eval_fn is available."""
+    spec: dict[str, object] = {
+        "kind": "expr",
+        "axes": [{"name": "loc", "coords": ["a", "b"]}],
+        "state": ["S[loc]", "I[loc]"],
+        "equations": {
+            "S[loc]": "-beta * S[loc] * I[loc]",
+            "I[loc]": "beta * S[loc] * I[loc] - gamma * I[loc]",
+        },
+    }
+
+    sys = OpSystemSystem(spec=spec)
+    bound = sys.bind(params={"beta": 0.3, "gamma": 0.1})
+    assert hasattr(bound, "pytree_stepper")
+
+    # The pytree_stepper should accept and return a StateDict.
+    shapes = sys.option("template_shapes", None)
+    assert shapes is not None
+    y_dict = {b: np.ones(s, dtype=np.float64) for b, s in shapes.items()}
+    result = bound.pytree_stepper(time=np.float64(0.0), state_dict=y_dict)  # type: ignore[attr-defined]
+    assert set(result.keys()) == set(y_dict.keys())
+
+
+def test_pytree_stepper_and_flat_stepper_agree() -> None:
+    """pytree_stepper and flat eval_fn produce the same numerical result."""
+    spec: dict[str, object] = {
+        "kind": "expr",
+        "axes": [{"name": "loc", "coords": ["a", "b"]}],
+        "state": ["S[loc]", "I[loc]", "R[loc]"],
+        "equations": {
+            "S[loc]": "-beta * S[loc] * I[loc]",
+            "I[loc]": "beta * S[loc] * I[loc] - gamma * I[loc]",
+            "R[loc]": "gamma * I[loc]",
+        },
+    }
+
+    sys = OpSystemSystem(spec=spec)
+    bound = sys.bind(params={"beta": 0.3, "gamma": 0.1})
+    shapes = sys.option("template_shapes", None)
+    assert shapes is not None
+
+    rng = np.random.default_rng(42)
+    y_dict = {b: rng.random(s).astype(np.float64) for b, s in shapes.items()}
+    # Flat state in template-order.
+    y_flat = np.concatenate([y_dict[b].reshape(-1) for b in shapes])
+
+    flat_result = bound(time=np.float64(0.5), state=y_flat)
+    pytree_result = bound.pytree_stepper(  # type: ignore[attr-defined]
+        time=np.float64(0.5), state_dict=y_dict
+    )
+    pytree_flat = np.concatenate([pytree_result[b].reshape(-1) for b in shapes])
+    np.testing.assert_allclose(pytree_flat, flat_result, rtol=1e-12)
