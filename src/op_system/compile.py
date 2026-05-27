@@ -1068,13 +1068,25 @@ def compile_rhs(rhs: NormalizedRhs, *, xp: object | None = None) -> CompiledRhs:
         # (pytree_eval_fn / template_shapes are absent), and silently hides
         # vectorizer regressions.  Raise loudly so the gap gets fixed.
         #
-        # Genuinely scalar specs (no axes declared) have no tensor structure to
-        # exploit and the scalar path is correct for them.
+        # Exceptions:
+        # - Genuinely scalar specs (no axes declared) have no tensor structure
+        #   to exploit and the scalar path is correct for them.
+        # - Specs that declare only a continuous time axis (for time-varying
+        #   parameters) but have scalar state templates are functionally scalar.
+        # - Mixed specs where some states lack axis wildcards (e.g. a scalar
+        #   background compartment alongside axis-indexed states) bail with
+        #   "scalar (non-wildcard) state template present"; this is a known
+        #   limitation and the scalar path is the correct fallback.
+        # Only fire the error for bail reasons that indicate an *unexpected*
+        # vectorization failure (e.g. unsupported expression patterns).
         axes_meta_check = (
             rhs.meta.get("axes") if isinstance(rhs.meta, _MappingABC) else None
         )
-        if axes_meta_check:
-            bail_reason = vec.last_vector_plan_bail_reason()
+        bail_reason = vec.last_vector_plan_bail_reason() or ""
+        if (
+            axes_meta_check
+            and bail_reason != "scalar (non-wildcard) state template present"
+        ):
             _raise_unsupported_feature(
                 feature="vectorized eval path",
                 detail=(
