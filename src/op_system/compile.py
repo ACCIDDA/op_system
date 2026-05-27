@@ -41,6 +41,7 @@ from numpy.typing import NDArray
 from op_system._errors import InvalidExpressionError
 from op_system._ir import Expr, extract_common_subexpressions, ir_to_ast_expr
 from op_system._normalize import ExprRhs, TransitionsRhs
+from op_system._operators import OperatorDescriptor
 from op_system._symbols import parse_expression_string
 
 if TYPE_CHECKING:
@@ -218,6 +219,7 @@ class CompiledRhs:
     param_names: tuple[str, ...]
     eval_fn: EvalFn
     meta: Mapping[str, Any] = field(default_factory=lambda: MappingProxyType({}))
+    operators: tuple[OperatorDescriptor, ...] = field(default_factory=tuple)
     # Private: source spec retained for pickling. ``compile_rhs`` populates
     # this; direct constructions without ``_rhs`` are not picklable (the
     # ``eval_fn`` closure cannot be serialized) and will raise from
@@ -276,6 +278,7 @@ class CompiledRhs:
         object.__setattr__(self, "param_names", rebuilt.param_names)
         object.__setattr__(self, "eval_fn", rebuilt.eval_fn)
         object.__setattr__(self, "meta", rebuilt.meta)
+        object.__setattr__(self, "operators", rebuilt.operators)
         object.__setattr__(self, "_rhs", rhs)
 
 
@@ -799,6 +802,43 @@ def _wrap_eval_fn_for_time_varying(
     return wrapped
 
 
+def _parse_operator_descriptors(
+    meta: Mapping[str, Any],
+) -> tuple[OperatorDescriptor, ...]:
+    """Parse raw ``meta["operators"]`` into typed :class:`OperatorDescriptor` instances.
+
+    Returns:
+        Tuple of :class:`OperatorDescriptor` instances, empty if no operators.
+    """
+    ops = meta.get("operators")
+    if not ops:
+        return ()
+    result: list[OperatorDescriptor] = []
+    for op in ops:
+        if not isinstance(op, _MappingABC):
+            continue
+        axis_raw = op.get("axis")
+        if not isinstance(axis_raw, str) or not axis_raw:
+            continue
+        velocity_raw = op.get("velocity")
+        rate_raw = op.get("rate")
+        kernel_raw = op.get("kernel")
+        kernel = (
+            MappingProxyType(dict(kernel_raw))
+            if isinstance(kernel_raw, _MappingABC)
+            else None
+        )
+        result.append(
+            OperatorDescriptor(
+                axis=axis_raw,
+                velocity=velocity_raw if isinstance(velocity_raw, str) else None,
+                rate=rate_raw if isinstance(rate_raw, str) else None,
+                kernel=kernel,
+            )
+        )
+    return tuple(result)
+
+
 def compile_rhs(rhs: NormalizedRhs, *, xp: object | None = None) -> CompiledRhs:
     """Compile a normalized RHS into a runnable evaluation function.
 
@@ -893,5 +933,6 @@ def compile_rhs(rhs: NormalizedRhs, *, xp: object | None = None) -> CompiledRhs:
         param_names=tuple(rhs.param_names),
         eval_fn=eval_fn,
         meta=rhs.meta,
+        operators=_parse_operator_descriptors(rhs.meta),
         _rhs=rhs,
     )

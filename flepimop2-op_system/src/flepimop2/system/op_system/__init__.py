@@ -29,7 +29,6 @@ from __future__ import annotations
 import functools
 import sys
 from collections.abc import Mapping
-from types import MappingProxyType
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -61,6 +60,8 @@ if TYPE_CHECKING:
 
     from flepimop2.axis import AxisCollection
     from flepimop2.typing import Float64NDArray
+
+    from op_system._operators import OperatorDescriptor
 
 
 class _AxesMeta(NamedTuple):
@@ -274,31 +275,27 @@ class OpSystemSystem(SystemABC, module="flepimop2.system.op_system"):  # noqa: D
                 raise ValueError(msg)
         # Operator velocity/rate fields are consumed by engine plugins (not by
         # the compiled rhs eval_fn), but still need to be in the params dict.
-        for op in self._compiled_rhs.meta.get("operators") or ():
+        for op in self._compiled_rhs.operators:
             self._collect_operator_param_requests(op, requests)
         return requests
 
     @staticmethod
     def _collect_operator_param_requests(
-        op: object,
+        op: OperatorDescriptor,
         requests: dict[IdentifierString, ParameterRequest],
     ) -> None:
         """Add velocity/rate/kernel-param names referenced by `op` to `requests`."""
-        if not isinstance(op, Mapping):
-            return
-        for field in ("velocity", "rate"):
-            value = op.get(field)
+        for value in (op.velocity, op.rate):
             if (
-                isinstance(value, str)
+                value is not None
                 and value.isidentifier()
                 and value != "t"
                 and value not in requests
             ):
                 requests[value] = ParameterRequest(name=value)
-        kernel = op.get("kernel")
-        if not isinstance(kernel, Mapping):
+        if op.kernel is None:
             return
-        kernel_params = kernel.get("params")
+        kernel_params = op.kernel.get("params")
         if not isinstance(kernel_params, Mapping):
             return
         for value in kernel_params.values():
@@ -364,16 +361,13 @@ class OpSystemSystem(SystemABC, module="flepimop2.system.op_system"):  # noqa: D
     @staticmethod
     def _extract_operators(
         compiled: CompiledRhs,
-    ) -> tuple[MappingProxyType[str, Any], ...] | None:
-        """Extract operator metadata from compiled spec as immutable mappings.
+    ) -> tuple[OperatorDescriptor, ...]:
+        """Return the typed operator descriptors from the compiled spec.
 
         Returns:
-            Tuple of read-only operator dicts, or ``None`` if no operators.
+            Tuple of :class:`OperatorDescriptor` instances (empty if none declared).
         """
-        ops = compiled.meta.get("operators")
-        if not ops:
-            return None
-        return tuple(MappingProxyType(op) for op in ops)
+        return compiled.operators
 
     @staticmethod
     def _extract_operator_axis(compiled: CompiledRhs) -> str | None:
@@ -382,12 +376,11 @@ class OpSystemSystem(SystemABC, module="flepimop2.system.op_system"):  # noqa: D
         Returns:
             Shared axis name, or ``None`` if there are zero or multiple axes.
         """
-        ops = compiled.meta.get("operators")
-        if not ops:
+        if not compiled.operators:
             return None
-        axes = {op.get("axis") for op in ops}
+        axes = {op.axis for op in compiled.operators}
         if len(axes) == 1:
-            return str(next(iter(axes)))
+            return next(iter(axes))
         return None
 
     def _build_mixing_kernels(
