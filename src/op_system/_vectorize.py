@@ -49,10 +49,11 @@ if TYPE_CHECKING:
     from types import CodeType
 
     from op_system._ir import Expr
-    from op_system.compile import EvalFn, Float64Array
+    from op_system.compile import EvalFn, Float64Array, PytreeEvalFn, StateDict
     from op_system.specs import NormalizedRhs
 else:
     Float64Array = Any
+    StateDict = Any
 
 
 # ---------------------------------------------------------------------------
@@ -1161,3 +1162,123 @@ def make_vectorized_eval_fn(plan: _VectorPlan) -> EvalFn:  # noqa: C901, PLR0915
         return cast("Float64Array", xp.concatenate(pieces))
 
     return eval_fn
+
+
+def make_pytree_eval_fn(plan: _VectorPlan) -> PytreeEvalFn:  # noqa: C901, PLR0915
+    """Return a namespace-polymorphic ``pytree_eval_fn(t, y_dict, **params)``.
+
+    Like :func:`make_vectorized_eval_fn` but the state is passed and returned
+    as a ``StateDict`` — a mapping from each state-template base name to an
+    N-D shaped array with that template's natural shape.  This avoids the
+    flatten/unflatten step at the ODE solver boundary and exposes the full
+    tensor structure to JAX/XLA, enabling engines to exploit block-diagonal
+    structure via ``jax.vmap`` over factorizable axes.
+
+    The internal computation (alias eval, CSE, equation eval) is identical to
+    the flat eval_fn; only the state I/O differs.
+    """
+    state_templates = plan.state_templates
+    alias_codes = plan.alias_codes
+    cse_codes = plan.cse_codes
+    eq_groups = plan.eq_groups
+
+    param_recipes: list[tuple[str, tuple[str, ...], tuple[int, ...]]] = [
+        (buf.base, buf.expanded_names, buf.shape)
+        for buf in plan.param_templates
+        if buf.axes
+    ]
+    extra_param_buffers = plan.extra_param_buffers
+
+    def pytree_eval_fn(  # noqa: C901, PLR0912, PLR0915
+        t: object, y: StateDict, **params: object
+    ) -> StateDict:
+        # Obtain the array namespace from the first state value.
+        first_val = y[state_templates[0].base]
+        xp = _namespace_of(first_val)
+        _check_numeric_dtype(xp, getattr(first_val, "dtype", None))
+
+        t_val: object = xp.asarray(t)
+        env: dict[str, object] = {"np": xp, "t": t_val}
+        env.update(params)
+
+        # Assemble templated param buffers (identical to flat path).
+        for base, names, shape in param_recipes:
+            if all(n in params for n in names):
+                vals = [params[n] for n in names]
+                env[f"{base}_buf"] = xp.reshape(xp.asarray(vals), shape)
+            elif base in params:
+                bare = params[base]
+                env[f"{base}_buf"] = xp.reshape(xp.asarray(bare), shape)
+            else:
+                missing = next(n for n in names if n not in params)
+                msg = (
+                    f"missing param {missing!r} for templated buffer {base!r}"
+                    f" (or supply {base!r} directly as a shape-{shape} array)"
+                )
+                raise ValueError(msg)
+
+        # Assemble extra shaped-param buffers (identical to flat path).
+        for base, _axes, shape in extra_param_buffers:
+            if base not in params:
+                msg = f"missing shaped param {base!r}: supply as a shape-{shape} array"
+                raise ValueError(msg)
+            bare = params[base]
+            env[f"{base}_buf"] = xp.reshape(xp.asarray(bare), shape)
+
+        # Build state buffers DIRECTLY from dict — no slice/reshape needed.
+        for tpl in state_templates:
+            env[f"{tpl.base}_buf"] = y[tpl.base]
+
+        # Eval alias buffers (identical to flat path).
+        for base, code, shape in alias_codes:
+            try:
+                val = eval(  # noqa: S307
+                    code, {"__builtins__": _SAFE_BUILTINS}, env
+                )
+            except (NameError, ValueError, TypeError, ArithmeticError) as exc:
+                msg = f"alias {base!r} evaluation failed: {exc!r}"
+                raise ValueError(msg) from exc
+            if shape:
+                val = xp.broadcast_to(val, shape)
+            env[f"{base}_buf"] = val
+
+        # Eval CSE temporaries (identical to flat path).
+        for name, code in cse_codes:
+            try:
+                val = eval(  # noqa: S307
+                    code, {"__builtins__": _SAFE_BUILTINS}, env
+                )
+            except (NameError, ValueError, TypeError, ArithmeticError) as exc:
+                msg = f"CSE temp {name!r} evaluation failed: {exc!r}"
+                raise ValueError(msg) from exc
+            env[name] = val
+
+        # Eval per-template equation buffers; return as dict of shaped arrays.
+        result: dict[str, object] = {}
+        for grp in eq_groups:
+            bin_results: list[object] = []
+            for code in grp.codes:
+                try:
+                    val = eval(  # noqa: S307
+                        code, {"__builtins__": _SAFE_BUILTINS}, env
+                    )
+                except (NameError, ValueError, TypeError, ArithmeticError) as exc:
+                    msg = f"equation {grp.base!r} evaluation failed: {exc!r}"
+                    raise ValueError(msg) from exc
+                arr = xp.broadcast_to(xp.asarray(val), grp.vec_shape)
+                bin_results.append(arr)
+
+            if not grp.unroll_axes:
+                whole = bin_results[0]
+            else:
+                stacked = xp.reshape(
+                    xp.stack(bin_results, axis=0),
+                    grp.unroll_shape + grp.vec_shape,
+                )
+                whole = xp.transpose(stacked, grp.assembly_perm)
+            # Return the shaped array (no flatten) keyed by template base name.
+            result[grp.base] = whole
+
+        return cast("StateDict", result)
+
+    return pytree_eval_fn

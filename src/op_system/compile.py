@@ -51,6 +51,7 @@ if TYPE_CHECKING:
     from .specs import NormalizedRhs
 
 Float64Array = NDArray[np.float64]
+StateDict = dict[str, Float64Array]
 ScalarLike = SupportsFloat | SupportsIndex | str | bytes | None
 _SAFE_BUILTINS = {"__import__": __import__}
 
@@ -193,11 +194,30 @@ def _raise_unsupported_feature(*, feature: str, detail: str | None = None) -> No
 # Public compiled RHS container
 # -----------------------------------------------------------------------------
 class EvalFn(Protocol):
-    """Callable RHS evaluator supporting runtime parameter kwargs."""
+    """Callable RHS evaluator supporting runtime parameter kwargs.
+
+    Accepts a flat ``(n_state,)`` state array and returns a flat
+    ``(n_state,)`` derivative array in the same array namespace.
+    """
 
     def __call__(  # noqa: D102
         self, t: object, y: object, **params: object
     ) -> Float64Array: ...
+
+
+class PytreeEvalFn(Protocol):
+    """Callable RHS evaluator operating on shaped PyTree state dicts.
+
+    Accepts ``y`` as a ``StateDict`` (mapping from state-template base name
+    to a shaped array with the template's natural N-D shape) and returns a
+    ``StateDict`` of the same structure containing the derivative.
+    Enables the engine to skip the flatten/unflatten step entirely and
+    expose the full tensor structure to JAX/XLA.
+    """
+
+    def __call__(  # noqa: D102
+        self, t: object, y: StateDict, **params: object
+    ) -> StateDict: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -220,6 +240,23 @@ class CompiledRhs:
     eval_fn: EvalFn
     meta: Mapping[str, Any] = field(default_factory=lambda: MappingProxyType({}))
     operators: tuple[OperatorDescriptor, ...] = field(default_factory=tuple)
+    factorize_axes: tuple[str, ...] = field(default_factory=tuple)
+    # ``pytree_eval_fn`` is set when the vectorized compile path succeeds.
+    # It accepts a ``StateDict`` (base → shaped array) and returns a
+    # ``StateDict`` of derivatives, avoiding the flatten/unflatten step.
+    # Excluded from equality, repr, and hash — it is a derived closure
+    # rebuilt during ``__setstate__`` from ``_rhs``.
+    pytree_eval_fn: PytreeEvalFn | None = field(
+        default=None, repr=False, compare=False, hash=False
+    )
+    # ``template_shapes`` maps each state-template base name to its N-D shape.
+    # Set when the vectorized compile path succeeds; ``None`` for the scalar
+    # fallback.  Enables engines to build a PyTree y0 without knowing
+    # vectorize internals.  Excluded from equality and hash (it is derived
+    # from ``_rhs``).
+    template_shapes: dict[str, tuple[int, ...]] | None = field(
+        default=None, repr=False, compare=False, hash=False
+    )
     # Private: source spec retained for pickling. ``compile_rhs`` populates
     # this; direct constructions without ``_rhs`` are not picklable (the
     # ``eval_fn`` closure cannot be serialized) and will raise from
@@ -279,6 +316,9 @@ class CompiledRhs:
         object.__setattr__(self, "eval_fn", rebuilt.eval_fn)
         object.__setattr__(self, "meta", rebuilt.meta)
         object.__setattr__(self, "operators", rebuilt.operators)
+        object.__setattr__(self, "factorize_axes", rebuilt.factorize_axes)
+        object.__setattr__(self, "pytree_eval_fn", rebuilt.pytree_eval_fn)
+        object.__setattr__(self, "template_shapes", rebuilt.template_shapes)
         object.__setattr__(self, "_rhs", rhs)
 
 
@@ -802,6 +842,66 @@ def _wrap_eval_fn_for_time_varying(
     return wrapped
 
 
+def _wrap_pytree_eval_fn_for_time_varying(
+    eval_fn: PytreeEvalFn,
+    *,
+    time_varying_params: tuple[tuple[str, tuple[str, ...]], ...],
+    time_axis_name: str,
+    axes_meta: tuple[Mapping[str, Any], ...],
+) -> PytreeEvalFn:
+    """Like :func:`_wrap_eval_fn_for_time_varying` but for PyTree eval fns.
+
+    The only difference from the flat version is that ``xp`` is obtained
+    from the first value in the incoming state dict rather than from the
+    state array directly.
+
+    Args:
+        eval_fn: Unwrapped PyTree evaluator.
+        time_varying_params: Same as for the flat wrapper.
+        time_axis_name: Configured time-axis name.
+        axes_meta: Normalized axes metadata records.
+
+    Returns:
+        A new :class:`PytreeEvalFn` with the same PyTree shape contract.
+    """
+    if not time_varying_params:
+        return eval_fn
+    ts_lookup = {
+        ax["name"]: np.asarray(ax["coords"], dtype=np.float64)
+        for ax in axes_meta
+        if ax.get("name") == time_axis_name
+    }
+    if time_axis_name not in ts_lookup:
+        _raise_parameter_error(
+            detail=(
+                f"time-varying parameters declared but the configured time "
+                f"axis {time_axis_name!r} is missing from the spec axes."
+            )
+        )
+    ts = ts_lookup[time_axis_name]
+    plan = tuple(
+        (name, full_axes.index(time_axis_name))
+        for name, full_axes in time_varying_params
+    )
+
+    def wrapped(t: object, y: StateDict, **params: object) -> StateDict:
+        first_val = next(iter(y.values()))
+        xp = _namespace_of(first_val)
+        for name, axis_pos in plan:
+            if name not in params:
+                _raise_parameter_error(
+                    detail=(
+                        f"time-varying parameter {name!r} requires the bare "
+                        f"{name!r} kwarg at call time."
+                    )
+                )
+            grid = params.pop(name)
+            params[name] = _interp_along_axis(t, ts, grid, axis=axis_pos, xp=xp)
+        return eval_fn(t, y, **params)
+
+    return wrapped
+
+
 def _parse_operator_descriptors(
     meta: Mapping[str, Any],
 ) -> tuple[OperatorDescriptor, ...]:
@@ -820,6 +920,8 @@ def _parse_operator_descriptors(
         axis_raw = op.get("axis")
         if not isinstance(axis_raw, str) or not axis_raw:
             continue
+        kind_raw = op.get("kind")
+        bc_raw = op.get("bc")
         velocity_raw = op.get("velocity")
         rate_raw = op.get("rate")
         kernel_raw = op.get("kernel")
@@ -831,12 +933,83 @@ def _parse_operator_descriptors(
         result.append(
             OperatorDescriptor(
                 axis=axis_raw,
+                kind=kind_raw if isinstance(kind_raw, str) else None,
+                bc=bc_raw if isinstance(bc_raw, str) else None,
                 velocity=velocity_raw if isinstance(velocity_raw, str) else None,
                 rate=rate_raw if isinstance(rate_raw, str) else None,
                 kernel=kernel,
             )
         )
     return tuple(result)
+
+
+def _parse_factorize_axes(meta: Mapping[str, Any]) -> tuple[str, ...]:
+    """Parse ``meta["factorize_axes"]`` into a tuple of axis-name strings.
+
+    Returns:
+        Tuple of axis name strings; empty if not declared.
+    """
+    raw = meta.get("factorize_axes")
+    if not raw:
+        return ()
+    return tuple(s for s in raw if isinstance(s, str))
+
+
+def _wrap_eval_fn_for_synth_consts(
+    eval_fn: EvalFn,
+    synth_const_values: dict[str, Any],
+) -> EvalFn:
+    """Inject compile-time synthesized constants into every call to ``eval_fn``.
+
+    Returns:
+        A new :class:`EvalFn` that injects ``synth_const_values`` before
+        delegating to the wrapped evaluator.
+    """
+    inner = eval_fn
+
+    def wrapped(t: object, y: object, **params: object) -> Float64Array:
+        # Cast synth-mask values to ``y``'s namespace and dtype so they
+        # don't promote a float32 state buffer to float64 (or vice versa).
+        xp = _namespace_of(y)
+        y_dtype = getattr(y, "dtype", None)
+        for k, v in synth_const_values.items():
+            if k in params:
+                continue
+            if y_dtype is not None:
+                params[k] = xp.asarray(v, dtype=y_dtype)
+            else:
+                params[k] = xp.asarray(v)
+        return inner(t, y, **params)
+
+    return wrapped
+
+
+def _wrap_pytree_eval_fn_for_synth_consts(
+    eval_fn: PytreeEvalFn,
+    synth_const_values: dict[str, Any],
+) -> PytreeEvalFn:
+    """Like :func:`_wrap_eval_fn_for_synth_consts` but for PyTree eval fns.
+
+    Returns:
+        A new :class:`PytreeEvalFn` that injects ``synth_const_values`` before
+        delegating to the wrapped evaluator.
+    """
+    inner = eval_fn
+
+    def wrapped(t: object, y: StateDict, **params: object) -> StateDict:
+        first_val = next(iter(y.values()))
+        xp = _namespace_of(first_val)
+        y_dtype = getattr(first_val, "dtype", None)
+        for k, v in synth_const_values.items():
+            if k in params:
+                continue
+            if y_dtype is not None:
+                params[k] = xp.asarray(v, dtype=y_dtype)
+            else:
+                params[k] = xp.asarray(v)
+        return inner(t, y, **params)
+
+    return wrapped
 
 
 def compile_rhs(rhs: NormalizedRhs, *, xp: object | None = None) -> CompiledRhs:
@@ -885,6 +1058,14 @@ def compile_rhs(rhs: NormalizedRhs, *, xp: object | None = None) -> CompiledRhs:
     eval_fn: EvalFn | None = (
         vec.make_vectorized_eval_fn(plan) if plan is not None else None
     )
+    pytree_eval_fn: PytreeEvalFn | None = (
+        vec.make_pytree_eval_fn(plan) if plan is not None else None
+    )
+    template_shapes: dict[str, tuple[int, ...]] | None = (
+        {tpl.base: tpl.shape for tpl in plan.state_templates}
+        if plan is not None
+        else None
+    )
 
     if eval_fn is None:
         eval_fn = _make_eval_fn(
@@ -895,12 +1076,21 @@ def compile_rhs(rhs: NormalizedRhs, *, xp: object | None = None) -> CompiledRhs:
             equations_ir=rhs.equations_ir,
         )
 
+    time_axis_name = str(rhs.meta.get("time_axis", "time"))
+    axes_meta = tuple(rhs.meta.get("axes") or ())
     eval_fn = _wrap_eval_fn_for_time_varying(
         eval_fn,
         time_varying_params=rhs.time_varying_params,
-        time_axis_name=str(rhs.meta.get("time_axis", "time")),
-        axes_meta=tuple(rhs.meta.get("axes") or ()),
+        time_axis_name=time_axis_name,
+        axes_meta=axes_meta,
     )
+    if pytree_eval_fn is not None:
+        pytree_eval_fn = _wrap_pytree_eval_fn_for_time_varying(
+            pytree_eval_fn,
+            time_varying_params=rhs.time_varying_params,
+            time_axis_name=time_axis_name,
+            axes_meta=axes_meta,
+        )
 
     # Inject normalize-time synthesized constants (e.g. one-hot masks for
     # pinned-coord transition selectors) into ``params`` so callers do not
@@ -908,25 +1098,11 @@ def compile_rhs(rhs: NormalizedRhs, *, xp: object | None = None) -> CompiledRhs:
     synth_consts = rhs.meta.get("op_system_synth_constants")
     if isinstance(synth_consts, _MappingABC) and synth_consts:
         synth_const_values = dict(synth_consts)
-        inner_eval_fn = eval_fn
-
-        def eval_fn(t: object, y: object, **params: object) -> Float64Array:
-            # Cast synth-mask values to ``y``'s namespace and dtype so they
-            # don't promote a float32 state buffer to float64 (or vice
-            # versa). Downstream shaped-param assembly does
-            # ``xp.asarray(bare)`` without a dtype, which would otherwise
-            # pick the namespace's default float and trigger
-            # incompatible-dtype scatter errors in JAX integrators.
-            xp = _namespace_of(y)
-            y_dtype = getattr(y, "dtype", None)
-            for k, v in synth_const_values.items():
-                if k in params:
-                    continue
-                if y_dtype is not None:
-                    params[k] = xp.asarray(v, dtype=y_dtype)
-                else:
-                    params[k] = xp.asarray(v)
-            return inner_eval_fn(t, y, **params)
+        eval_fn = _wrap_eval_fn_for_synth_consts(eval_fn, synth_const_values)
+        if pytree_eval_fn is not None:
+            pytree_eval_fn = _wrap_pytree_eval_fn_for_synth_consts(
+                pytree_eval_fn, synth_const_values
+            )
 
     return CompiledRhs(
         state_names=rhs.state_names,
@@ -934,5 +1110,8 @@ def compile_rhs(rhs: NormalizedRhs, *, xp: object | None = None) -> CompiledRhs:
         eval_fn=eval_fn,
         meta=rhs.meta,
         operators=_parse_operator_descriptors(rhs.meta),
+        factorize_axes=_parse_factorize_axes(rhs.meta),
+        pytree_eval_fn=pytree_eval_fn,
+        template_shapes=template_shapes,
         _rhs=rhs,
     )
