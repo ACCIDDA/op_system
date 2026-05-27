@@ -12,6 +12,7 @@ Primary user entrypoints:
 Core data structures:
 - `NormalizedRhs`
 - `CompiledRhs`
+- `OperatorDescriptor`
 
 Design guarantees:
 - No dependency on provider/adapters (eg flepimop2).
@@ -26,6 +27,7 @@ from importlib.metadata import version
 from typing import Final, Literal
 
 from op_system._identifer_string import IdentifierString
+from op_system._operators import OperatorDescriptor
 from op_system._state_string import StateString
 from op_system._typing import Array
 
@@ -116,6 +118,7 @@ __all__ = [
     "ExpressionString",
     "IdentifierString",
     "NormalizedRhs",
+    "OperatorDescriptor",
     "StateString",
     "TransitionsRhs",
     "__version__",
