@@ -613,6 +613,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#op_system.BlockAxisInfo" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        BlockAxisInfo
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#op_system.CompiledRhs" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -981,6 +992,17 @@
     <span class="md-ellipsis">
       
         Array
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#op_system.BlockAxisInfo" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        BlockAxisInfo
       
     </span>
   </a>
@@ -1400,8 +1422,155 @@ backend selector.</p>
 
 
 
+<h3 id="op_system.BlockAxisInfo" class="doc doc-heading">
+              <code class="highlight language-python"><span class="n">BlockAxisInfo</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">size</span><span class="p">,</span> <span class="n">state_axis_pos</span><span class="p">,</span> <span class="n">param_axis_pos</span><span class="p">)</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-dataclass"><code>dataclass</code></small>
+  </span>
+
+<a href="#op_system.BlockAxisInfo" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+
+
+        <p>Metadata for one block-diagonal (factorizable) axis.</p>
+<p>A <code>BlockAxisInfo</code> is attached to
+:class:<code>~op_system.compile.CompiledRhs</code> for each axis declared in
+<code>spec["factorize_axes"]</code> that passes the IR separability check in
+:func:<code>analyze_block_axes</code>.  Engines (e.g. the diffrax plugin) consume
+this to partition ODE solves with <code>jax.vmap</code> over the block axis.</p>
+
+
+<p><span class="doc-section-title">Attributes:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code><span title="op_system.BlockAxisInfo.name">name</span></code></td>
+            <td>
+                  <code><span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Axis name string (e.g. <code>"loc"</code>).</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="op_system.BlockAxisInfo.size">size</span></code></td>
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Number of elements along the axis.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="op_system.BlockAxisInfo.state_axis_pos">state_axis_pos</span></code></td>
+            <td>
+                  <code><span title="dict">dict</span>[<span title="str">str</span>, <span title="int">int</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Maps each state-template base name to the integer
+position of this axis within that template's shape tuple.
+Only templates that carry this axis appear in the dict.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="op_system.BlockAxisInfo.param_axis_pos">param_axis_pos</span></code></td>
+            <td>
+                  <code><span title="dict">dict</span>[<span title="str">str</span>, <span title="int">int</span> | None]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Maps each <em>shaped</em> parameter name (including
+time-varying ones, with the time axis already stripped) to
+the integer position of this axis within the post-interpolation
+parameter shape, or <code>None</code> if the parameter does not carry
+this axis (broadcast).  Parameters that are entirely scalar
+(not shaped) do not appear in this dict and are always broadcast.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<details class="note" open>
+  <summary>Note</summary>
+  <p><code>BlockAxisInfo</code> uses <code>dict</code> fields and therefore cannot be used
+as a hash key.  It is stored on
+:class:<code>~op_system.compile.CompiledRhs</code> with <code>hash=False</code> and is
+fully pickle-stable.</p>
+</details>
+
+<p><span class="doc-section-title">Examples:</span></p>
+    <div class="highlight"><pre><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">info</span> <span class="o">=</span> <span class="n">BlockAxisInfo</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;loc&quot;</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">size</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">state_axis_pos</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;S&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span> <span class="s2">&quot;I&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span> <span class="s2">&quot;R&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">},</span>
+<span class="gp">... </span>    <span class="n">param_axis_pos</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;rho&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;beta&quot;</span><span class="p">:</span> <span class="kc">None</span><span class="p">},</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">info</span><span class="o">.</span><span class="n">name</span>
+<span class="go">&#39;loc&#39;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">info</span><span class="o">.</span><span class="n">size</span>
+<span class="go">3</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">info</span><span class="o">.</span><span class="n">state_axis_pos</span><span class="p">[</span><span class="s2">&quot;S&quot;</span><span class="p">]</span>
+<span class="go">1</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">info</span><span class="o">.</span><span class="n">param_axis_pos</span><span class="p">[</span><span class="s2">&quot;rho&quot;</span><span class="p">]</span>
+<span class="go">0</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">info</span><span class="o">.</span><span class="n">param_axis_pos</span><span class="p">[</span><span class="s2">&quot;beta&quot;</span><span class="p">]</span> <span class="ow">is</span> <span class="kc">None</span>
+<span class="go">True</span>
+</code></pre></div>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
 <h3 id="op_system.CompiledRhs" class="doc doc-heading">
-              <code class="highlight language-python"><span class="n">CompiledRhs</span><span class="p">(</span><span class="n">state_names</span><span class="p">,</span> <span class="n">param_names</span><span class="p">,</span> <span class="n">eval_fn</span><span class="p">,</span> <span class="n">meta</span><span class="o">=</span><span class="p">(</span><span class="k">lambda</span><span class="p">:</span> <span class="n">MappingProxyType</span><span class="p">({}))(),</span> <span class="n">operators</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(),</span> <span class="n">factorize_axes</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(),</span> <span class="n">pytree_eval_fn</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">template_shapes</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">_rhs</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
+              <code class="highlight language-python"><span class="n">CompiledRhs</span><span class="p">(</span><span class="n">state_names</span><span class="p">,</span> <span class="n">param_names</span><span class="p">,</span> <span class="n">eval_fn</span><span class="p">,</span> <span class="n">meta</span><span class="o">=</span><span class="p">(</span><span class="k">lambda</span><span class="p">:</span> <span class="n">MappingProxyType</span><span class="p">({}))(),</span> <span class="n">operators</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(),</span> <span class="n">factorize_axes</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(),</span> <span class="n">block_axes</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(),</span> <span class="n">pytree_eval_fn</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">template_shapes</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">_rhs</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
 
   <span class="doc doc-labels">
       <small class="doc doc-label doc-label-dataclass"><code>dataclass</code></small>
@@ -1491,16 +1660,7 @@ via :func:<code>compile_rhs</code>).</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/op_system/compile.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">284</span>
-<span class="normal">285</span>
-<span class="normal">286</span>
-<span class="normal">287</span>
-<span class="normal">288</span>
-<span class="normal">289</span>
-<span class="normal">290</span>
-<span class="normal">291</span>
-<span class="normal">292</span>
-<span class="normal">293</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">293</span>
 <span class="normal">294</span>
 <span class="normal">295</span>
 <span class="normal">296</span>
@@ -1511,7 +1671,16 @@ via :func:<code>compile_rhs</code>).</p>
 <span class="normal">301</span>
 <span class="normal">302</span>
 <span class="normal">303</span>
-<span class="normal">304</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">__getstate__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="normal">304</span>
+<span class="normal">305</span>
+<span class="normal">306</span>
+<span class="normal">307</span>
+<span class="normal">308</span>
+<span class="normal">309</span>
+<span class="normal">310</span>
+<span class="normal">311</span>
+<span class="normal">312</span>
+<span class="normal">313</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">__getstate__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Return picklable state.</span>
 
 <span class="sd">    The compiled ``eval_fn`` is a closure (and on the vectorized path</span>
@@ -1554,20 +1723,21 @@ via :func:<code>compile_rhs</code>).</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/op_system/compile.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">306</span>
-<span class="normal">307</span>
-<span class="normal">308</span>
-<span class="normal">309</span>
-<span class="normal">310</span>
-<span class="normal">311</span>
-<span class="normal">312</span>
-<span class="normal">313</span>
-<span class="normal">314</span>
-<span class="normal">315</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">315</span>
 <span class="normal">316</span>
 <span class="normal">317</span>
 <span class="normal">318</span>
-<span class="normal">319</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">__setstate__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="normal">319</span>
+<span class="normal">320</span>
+<span class="normal">321</span>
+<span class="normal">322</span>
+<span class="normal">323</span>
+<span class="normal">324</span>
+<span class="normal">325</span>
+<span class="normal">326</span>
+<span class="normal">327</span>
+<span class="normal">328</span>
+<span class="normal">329</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">__setstate__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Restore by recompiling from the pickled :class:`NormalizedRhs`.&quot;&quot;&quot;</span>
     <span class="n">rhs</span> <span class="o">=</span> <span class="n">state</span><span class="p">[</span><span class="s2">&quot;_rhs&quot;</span><span class="p">]</span>
     <span class="n">rebuilt</span> <span class="o">=</span> <span class="n">compile_rhs</span><span class="p">(</span><span class="n">rhs</span><span class="p">)</span>
@@ -1578,6 +1748,7 @@ via :func:<code>compile_rhs</code>).</p>
     <span class="nb">object</span><span class="o">.</span><span class="fm">__setattr__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;meta&quot;</span><span class="p">,</span> <span class="n">rebuilt</span><span class="o">.</span><span class="n">meta</span><span class="p">)</span>
     <span class="nb">object</span><span class="o">.</span><span class="fm">__setattr__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;operators&quot;</span><span class="p">,</span> <span class="n">rebuilt</span><span class="o">.</span><span class="n">operators</span><span class="p">)</span>
     <span class="nb">object</span><span class="o">.</span><span class="fm">__setattr__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;factorize_axes&quot;</span><span class="p">,</span> <span class="n">rebuilt</span><span class="o">.</span><span class="n">factorize_axes</span><span class="p">)</span>
+    <span class="nb">object</span><span class="o">.</span><span class="fm">__setattr__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;block_axes&quot;</span><span class="p">,</span> <span class="n">rebuilt</span><span class="o">.</span><span class="n">block_axes</span><span class="p">)</span>
     <span class="nb">object</span><span class="o">.</span><span class="fm">__setattr__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;pytree_eval_fn&quot;</span><span class="p">,</span> <span class="n">rebuilt</span><span class="o">.</span><span class="n">pytree_eval_fn</span><span class="p">)</span>
     <span class="nb">object</span><span class="o">.</span><span class="fm">__setattr__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;template_shapes&quot;</span><span class="p">,</span> <span class="n">rebuilt</span><span class="o">.</span><span class="n">template_shapes</span><span class="p">)</span>
     <span class="nb">object</span><span class="o">.</span><span class="fm">__setattr__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;_rhs&quot;</span><span class="p">,</span> <span class="n">rhs</span><span class="p">)</span>
@@ -1657,23 +1828,23 @@ via :func:<code>compile_rhs</code>).</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/op_system/compile.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">266</span>
-<span class="normal">267</span>
-<span class="normal">268</span>
-<span class="normal">269</span>
-<span class="normal">270</span>
-<span class="normal">271</span>
-<span class="normal">272</span>
-<span class="normal">273</span>
-<span class="normal">274</span>
-<span class="normal">275</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">275</span>
 <span class="normal">276</span>
 <span class="normal">277</span>
 <span class="normal">278</span>
 <span class="normal">279</span>
 <span class="normal">280</span>
 <span class="normal">281</span>
-<span class="normal">282</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">bind</span><span class="p">(</span>
+<span class="normal">282</span>
+<span class="normal">283</span>
+<span class="normal">284</span>
+<span class="normal">285</span>
+<span class="normal">286</span>
+<span class="normal">287</span>
+<span class="normal">288</span>
+<span class="normal">289</span>
+<span class="normal">290</span>
+<span class="normal">291</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">bind</span><span class="p">(</span>
     <span class="bp">self</span><span class="p">,</span> <span class="n">params</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">object</span><span class="p">]</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Callable</span><span class="p">[[</span><span class="nb">object</span><span class="p">,</span> <span class="nb">object</span><span class="p">],</span> <span class="n">Float64Array</span><span class="p">]:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Bind parameter values and return a 2-arg RHS: rhs(t, y) -&gt; dydt.</span>
@@ -2493,7 +2664,7 @@ from the input <code>y</code>. Will be removed in a future release.</p>
       <tbody>
           <tr class="doc-section-item">
             <td>
-                  <code><a class="autorefs autorefs-internal" title="CompiledRhs(state_names, param_names, eval_fn, meta=(lambda: MappingProxyType({}))(), operators=tuple(), factorize_axes=tuple(), pytree_eval_fn=None, template_shapes=None, _rhs=None)
+                  <code><a class="autorefs autorefs-internal" title="CompiledRhs(state_names, param_names, eval_fn, meta=(lambda: MappingProxyType({}))(), operators=tuple(), factorize_axes=tuple(), block_axes=tuple(), pytree_eval_fn=None, template_shapes=None, _rhs=None)
 
   
       dataclass
@@ -2507,7 +2678,7 @@ from the input <code>y</code>. Will be removed in a future release.</p>
           </tr>
           <tr class="doc-section-item">
             <td>
-                  <code><a class="autorefs autorefs-internal" title="CompiledRhs(state_names, param_names, eval_fn, meta=(lambda: MappingProxyType({}))(), operators=tuple(), factorize_axes=tuple(), pytree_eval_fn=None, template_shapes=None, _rhs=None)
+                  <code><a class="autorefs autorefs-internal" title="CompiledRhs(state_names, param_names, eval_fn, meta=(lambda: MappingProxyType({}))(), operators=tuple(), factorize_axes=tuple(), block_axes=tuple(), pytree_eval_fn=None, template_shapes=None, _rhs=None)
 
   
       dataclass
@@ -2521,7 +2692,7 @@ from the input <code>y</code>. Will be removed in a future release.</p>
           </tr>
           <tr class="doc-section-item">
             <td>
-                  <code><a class="autorefs autorefs-internal" title="CompiledRhs(state_names, param_names, eval_fn, meta=(lambda: MappingProxyType({}))(), operators=tuple(), factorize_axes=tuple(), pytree_eval_fn=None, template_shapes=None, _rhs=None)
+                  <code><a class="autorefs autorefs-internal" title="CompiledRhs(state_names, param_names, eval_fn, meta=(lambda: MappingProxyType({}))(), operators=tuple(), factorize_axes=tuple(), block_axes=tuple(), pytree_eval_fn=None, template_shapes=None, _rhs=None)
 
   
       dataclass
@@ -2535,7 +2706,7 @@ from the input <code>y</code>. Will be removed in a future release.</p>
           </tr>
           <tr class="doc-section-item">
             <td>
-                  <code><a class="autorefs autorefs-internal" title="CompiledRhs(state_names, param_names, eval_fn, meta=(lambda: MappingProxyType({}))(), operators=tuple(), factorize_axes=tuple(), pytree_eval_fn=None, template_shapes=None, _rhs=None)
+                  <code><a class="autorefs autorefs-internal" title="CompiledRhs(state_names, param_names, eval_fn, meta=(lambda: MappingProxyType({}))(), operators=tuple(), factorize_axes=tuple(), block_axes=tuple(), pytree_eval_fn=None, template_shapes=None, _rhs=None)
 
   
       dataclass
@@ -2549,7 +2720,7 @@ from the input <code>y</code>. Will be removed in a future release.</p>
           </tr>
           <tr class="doc-section-item">
             <td>
-                  <code><a class="autorefs autorefs-internal" title="CompiledRhs(state_names, param_names, eval_fn, meta=(lambda: MappingProxyType({}))(), operators=tuple(), factorize_axes=tuple(), pytree_eval_fn=None, template_shapes=None, _rhs=None)
+                  <code><a class="autorefs autorefs-internal" title="CompiledRhs(state_names, param_names, eval_fn, meta=(lambda: MappingProxyType({}))(), operators=tuple(), factorize_axes=tuple(), block_axes=tuple(), pytree_eval_fn=None, template_shapes=None, _rhs=None)
 
   
       dataclass
@@ -2563,7 +2734,7 @@ from the input <code>y</code>. Will be removed in a future release.</p>
           </tr>
           <tr class="doc-section-item">
             <td>
-                  <code><a class="autorefs autorefs-internal" title="CompiledRhs(state_names, param_names, eval_fn, meta=(lambda: MappingProxyType({}))(), operators=tuple(), factorize_axes=tuple(), pytree_eval_fn=None, template_shapes=None, _rhs=None)
+                  <code><a class="autorefs autorefs-internal" title="CompiledRhs(state_names, param_names, eval_fn, meta=(lambda: MappingProxyType({}))(), operators=tuple(), factorize_axes=tuple(), block_axes=tuple(), pytree_eval_fn=None, template_shapes=None, _rhs=None)
 
   
       dataclass
@@ -2581,17 +2752,7 @@ from the input <code>y</code>. Will be removed in a future release.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/op_system/compile.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1012</span>
-<span class="normal">1013</span>
-<span class="normal">1014</span>
-<span class="normal">1015</span>
-<span class="normal">1016</span>
-<span class="normal">1017</span>
-<span class="normal">1018</span>
-<span class="normal">1019</span>
-<span class="normal">1020</span>
-<span class="normal">1021</span>
-<span class="normal">1022</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1022</span>
 <span class="normal">1023</span>
 <span class="normal">1024</span>
 <span class="normal">1025</span>
@@ -2728,7 +2889,18 @@ from the input <code>y</code>. Will be removed in a future release.</p>
 <span class="normal">1156</span>
 <span class="normal">1157</span>
 <span class="normal">1158</span>
-<span class="normal">1159</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">compile_rhs</span><span class="p">(</span><span class="n">rhs</span><span class="p">:</span> <span class="n">NormalizedRhs</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">xp</span><span class="p">:</span> <span class="nb">object</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">CompiledRhs</span><span class="p">:</span>
+<span class="normal">1159</span>
+<span class="normal">1160</span>
+<span class="normal">1161</span>
+<span class="normal">1162</span>
+<span class="normal">1163</span>
+<span class="normal">1164</span>
+<span class="normal">1165</span>
+<span class="normal">1166</span>
+<span class="normal">1167</span>
+<span class="normal">1168</span>
+<span class="normal">1169</span>
+<span class="normal">1170</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">compile_rhs</span><span class="p">(</span><span class="n">rhs</span><span class="p">:</span> <span class="n">NormalizedRhs</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">xp</span><span class="p">:</span> <span class="nb">object</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">CompiledRhs</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Compile a normalized RHS into a runnable evaluation function.</span>
 
 <span class="sd">    Always uses the vectorized eval path that operates on shaped buffers</span>
@@ -2872,6 +3044,7 @@ from the input <code>y</code>. Will be removed in a future release.</p>
         <span class="n">meta</span><span class="o">=</span><span class="n">rhs</span><span class="o">.</span><span class="n">meta</span><span class="p">,</span>
         <span class="n">operators</span><span class="o">=</span><span class="n">_parse_operator_descriptors</span><span class="p">(</span><span class="n">rhs</span><span class="o">.</span><span class="n">meta</span><span class="p">),</span>
         <span class="n">factorize_axes</span><span class="o">=</span><span class="n">_parse_factorize_axes</span><span class="p">(</span><span class="n">rhs</span><span class="o">.</span><span class="n">meta</span><span class="p">),</span>
+        <span class="n">block_axes</span><span class="o">=</span><span class="n">analyze_block_axes</span><span class="p">(</span><span class="n">rhs</span><span class="p">),</span>
         <span class="n">pytree_eval_fn</span><span class="o">=</span><span class="n">pytree_eval_fn</span><span class="p">,</span>
         <span class="n">template_shapes</span><span class="o">=</span><span class="n">template_shapes</span><span class="p">,</span>
         <span class="n">_rhs</span><span class="o">=</span><span class="n">rhs</span><span class="p">,</span>
@@ -2980,7 +3153,7 @@ removed in a future release.</p>
       <tbody>
           <tr class="doc-section-item">
 <td><code>CompiledRhs</code></td>            <td>
-                  <code><a class="autorefs autorefs-internal" title="CompiledRhs(state_names, param_names, eval_fn, meta=(lambda: MappingProxyType({}))(), operators=tuple(), factorize_axes=tuple(), pytree_eval_fn=None, template_shapes=None, _rhs=None)
+                  <code><a class="autorefs autorefs-internal" title="CompiledRhs(state_names, param_names, eval_fn, meta=(lambda: MappingProxyType({}))(), operators=tuple(), factorize_axes=tuple(), block_axes=tuple(), pytree_eval_fn=None, template_shapes=None, _rhs=None)
 
   
       dataclass
@@ -2998,8 +3171,7 @@ removed in a future release.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/op_system/__init__.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"> 62</span>
-<span class="normal"> 63</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"> 63</span>
 <span class="normal"> 64</span>
 <span class="normal"> 65</span>
 <span class="normal"> 66</span>
@@ -3039,7 +3211,8 @@ removed in a future release.</p>
 <span class="normal">100</span>
 <span class="normal">101</span>
 <span class="normal">102</span>
-<span class="normal">103</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">compile_spec</span><span class="p">(</span>  <span class="c1"># noqa: RUF067</span>
+<span class="normal">103</span>
+<span class="normal">104</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">compile_spec</span><span class="p">(</span>  <span class="c1"># noqa: RUF067</span>
     <span class="n">spec</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">object</span><span class="p">],</span>
     <span class="o">*</span><span class="p">,</span>
     <span class="n">xp</span><span class="p">:</span> <span class="nb">object</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>

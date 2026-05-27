@@ -1,0 +1,949 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+        <link rel="canonical" href="https://accidda.github.io/op_system/0.1/development/block-axis-vmap-plan/">
+      
+      
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>Plan: jax.vmap over block-diagonal axes (factorize_axes) - op_system Documentation</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    <body dir="ltr">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#plan-jaxvmap-over-block-diagonal-axes-factorize_axes" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+          <aside class="md-banner md-banner--warning">
+            <div class="md-banner__inner md-grid md-typeset">
+              
+  You're not viewing the latest version.
+  <a href="../../..">
+    <strong>Click here to go to latest.</strong>
+  </a>
+
+            </div>
+            <script>var el=document.querySelector("[data-md-component=outdated]"),base=new URL("../.."),outdated=__md_get("__outdated",sessionStorage,base);!0===outdated&&el&&(el.hidden=!1)</script>
+          </aside>
+        
+      </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="op_system Documentation" class="md-header__button md-logo" aria-label="op_system Documentation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            op_system Documentation
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Plan: jax.vmap over block-diagonal axes (factorize_axes)
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/ACCIDDA/op_system" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    ACCIDDA/op_system
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="op_system Documentation" class="md-nav__button md-logo" aria-label="op_system Documentation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    op_system Documentation
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/ACCIDDA/op_system" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    ACCIDDA/op_system
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Development
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Development
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../code-style/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Code Style
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../creating-a-release/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Creating A Release
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Guides
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/getting-started/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting Started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    API Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api-reference/op-system/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    OP System
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api-reference/compile/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Compile
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api-reference/specs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Specs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#1-whats-already-true-today" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. What's already true today
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-concept-and-contract" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Concept and contract
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-plan-by-layer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Plan, by layer
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="3. Plan, by layer">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#31-op_system-promote-factorize_axes-from-advisory-to-checked" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.1 op_system — promote factorize_axes from advisory to checked
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#32-flepimop2-op_system-connector-publish-the-new-info" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.2 flepimop2-op_system connector — publish the new info
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#33-diffrax_engine-implement-the-partitioned-solve" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.3 diffrax_engine — implement the partitioned solve
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#34-configs-opt-in" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.4 Configs — opt in
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#35-flepimop2-core-no-changes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.5 flepimop2 core — no changes
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-order-of-work" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Order of work
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-risks-and-open-questions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. Risks and open questions
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+
+<h1 id="plan-jaxvmap-over-block-diagonal-axes-factorize_axes">Plan: <code>jax.vmap</code> over block-diagonal axes (<code>factorize_axes</code>)<a class="headerlink" href="#plan-jaxvmap-over-block-diagonal-axes-factorize_axes" title="Permanent link">&para;</a></h1>
+<p><strong>Status</strong>: approved 2026-05-27. Naming: keep <code>factorize_axes</code>.</p>
+<h2 id="1-whats-already-true-today">1. What's already true today<a class="headerlink" href="#1-whats-already-true-today" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>op_system.compile_rhs</code></td>
+<td>Produces both <code>eval_fn</code> (flat) and <code>pytree_eval_fn</code> (<code>StateDict → StateDict</code>), plus <code>template_shapes</code> and a passthrough <code>factorize_axes: tuple[str, ...]</code> field.</td>
+</tr>
+<tr>
+<td><code>op_system</code> vectorizer</td>
+<td>Already emits one shaped tensor expression per state template; <code>factorize_axes</code> is <strong>not</strong> consumed by the vectorizer — it is advisory metadata.</td>
+</tr>
+<tr>
+<td><code>flepimop2-op_system</code> connector</td>
+<td>Exposes <code>pytree_stepper_fn</code>, <code>template_shapes</code>, <code>factorize_axes</code>, <code>axis_order</code>, <code>axis_sizes</code>, <code>axis_labels</code>, <code>axis_coords</code> on <code>options</code>.</td>
+</tr>
+<tr>
+<td><code>diffrax_engine.runner</code> / <code>runner_vmap</code></td>
+<td>One ODE solve per draw; <code>runner_vmap</code> already vmaps <strong>draws</strong>. No partitioning across model axes.</td>
+</tr>
+<tr>
+<td>Configs (<code>SMH_R19_op_system*</code>)</td>
+<td>FOI is per-<code>loc</code> (no cross-loc reads). All state templates contain <code>loc</code>. No params index <code>loc</code> except <code>rho_h[loc]</code>, <code>rho_d[loc]</code> (used only in the observation likelihood, not the RHS).</td>
+</tr>
+</tbody>
+</table>
+<p>So the runtime contract <code>pytree_stepper_fn(t, {base: y}, **params) → {base: dy}</code> is already block-diagonal-friendly <em>if</em> the RHS is structurally separable across the partition axis. The pieces that don't yet exist are: <strong>a structural separability check</strong>, <strong>declaration in the spec</strong>, and <strong>a vmap-over-partition-axis path in the engine.</strong></p>
+<h2 id="2-concept-and-contract">2. Concept and contract<a class="headerlink" href="#2-concept-and-contract" title="Permanent link">&para;</a></h2>
+<p>Introduce a single, narrow concept: a <strong>block axis</strong> — a model axis <code>a</code> such that for every state template the RHS at coord <code>a=i</code> depends only on values at coord <code>a=i</code> of every other buffer (state or param) that carries axis <code>a</code>, and on values at every coord of buffers that do not carry axis <code>a</code>.</p>
+<p>This is exactly what allows</p>
+<pre><code>dy/dt = f(t, y)   →    dy[..., i, ...]/dt = f_i(t, y[..., i, ...])
+</code></pre>
+<p>and therefore allows the engine to evaluate <code>f</code> with <code>jax.vmap(in_axes=axis_position)</code> over coord <code>i</code>.</p>
+<p>Reuse the existing <code>factorize_axes</code> spec field as the <strong>block axis declaration</strong>. It already round-trips through normalize → compile → connector. We just give it real semantics in op_system and a real consumer in the engine.</p>
+<h2 id="3-plan-by-layer">3. Plan, by layer<a class="headerlink" href="#3-plan-by-layer" title="Permanent link">&para;</a></h2>
+<h3 id="31-op_system-promote-factorize_axes-from-advisory-to-checked">3.1 <code>op_system</code> — promote <code>factorize_axes</code> from advisory to checked<a class="headerlink" href="#31-op_system-promote-factorize_axes-from-advisory-to-checked" title="Permanent link">&para;</a></h3>
+<p>Goal: at compile time, prove the declared axes are block-diagonal in the IR; emit per-template metadata the engine can trust without re-inspecting the IR.</p>
+<ol>
+<li><strong>New IR pass</strong> <code>analyze_block_axes(rhs) -&gt; BlockAxisReport</code> in a new <code>_block_axes.py</code>:</li>
+<li>For each axis <code>a</code> in <code>meta["factorize_axes"]</code>:<ul>
+<li>For each <code>equations_ir</code> / <code>aliases_ir</code> expression: walk subscripts.</li>
+<li><strong>Reject</strong> if any <code>apply_along(..., a=...)</code> / <code>sum_over(a)</code> / <code>Reduce</code> mentions <code>a</code> (cross-coord reduction).</li>
+<li><strong>Reject</strong> if any subscript pins <code>a</code> to a literal coord (e.g. <code>loc=AK</code>) without that same coord being the equation's cell coord on <code>a</code>.</li>
+<li><strong>Reject</strong> if any subscript renames <code>a</code> to a fresh bound name and uses it elsewhere at a different cell coord (<code>I[..., loc:l] * J[..., loc:m]</code> with <code>l != m</code>).</li>
+<li><strong>Allow</strong> any expression that touches <code>a</code> only as the matching free position of the cell template, or never mentions <code>a</code>.</li>
+</ul>
+</li>
+<li>Also walk the <code>operators</code> list so a kernel keyed on <code>a</code> is rejected statically.</li>
+<li>Classify each <strong>parameter</strong> the RHS reads as <code>axis_kind ∈ {has_axis, lacks_axis}</code> for each block axis. (Already available via <code>time_varying_params</code> + <code>shaped_params</code> axes tuples.)</li>
+<li>
+<p>Output: <code>BlockAxisInfo(name, size, state_axis_pos: dict[base, int], param_axis_pos: dict[name, int|None])</code>.</p>
+</li>
+<li>
+<p><strong>Wire into <code>compile_rhs</code></strong>:</p>
+</li>
+<li>Call <code>analyze_block_axes(rhs)</code> for axes in <code>meta["factorize_axes"]</code>.</li>
+<li>On any failure: raise <code>UnsupportedFeatureError</code> with the specific equation/alias and offending subscript (fail loudly, like the existing vectorize bail).</li>
+<li>On success: attach to <code>CompiledRhs</code> as a new field <code>block_axes: tuple[BlockAxisInfo, ...]</code>. Keep it pickle-stable: plain dataclass with builtin types.</li>
+<li>
+<p>Continue exposing <code>factorize_axes</code> as the raw tuple for backwards compat.</p>
+</li>
+<li>
+<p><strong>Tests</strong> in <code>tests/op_system/test_block_axes.py</code>: separable RHS passes; cross-loc RHS rejects with named reason; mixed state where one template lacks the axis rejects; operator on partition axis rejects.</p>
+</li>
+<li>
+<p><strong>Docs</strong> in <code>docs/api-reference/specs.md</code>: short section on block axes.</p>
+</li>
+</ol>
+<p>LOC estimate: ~400 src + ~250 tests.</p>
+<h3 id="32-flepimop2-op_system-connector-publish-the-new-info">3.2 <code>flepimop2-op_system</code> connector — publish the new info<a class="headerlink" href="#32-flepimop2-op_system-connector-publish-the-new-info" title="Permanent link">&para;</a></h3>
+<p><code>src/flepimop2/system/op_system/__init__.py</code>:</p>
+<ol>
+<li>Forward <code>compiled.block_axes</code> onto <code>self.options["block_axes"]</code>.</li>
+<li>No behaviour change in <code>_bind_impl</code>.</li>
+<li>Tests in <code>flepimop2-op_system/tests/test_system.py</code>: round-trip for a config declaring <code>factorize_axes: [loc]</code>; empty otherwise.</li>
+</ol>
+<p>LOC estimate: ~30 src + ~50 tests.</p>
+<h3 id="33-diffrax_engine-implement-the-partitioned-solve">3.3 <code>diffrax_engine</code> — implement the partitioned solve<a class="headerlink" href="#33-diffrax_engine-implement-the-partitioned-solve" title="Permanent link">&para;</a></h3>
+<p><code>COVID19_USA/model_input/plugins/diffrax_engine.py</code>:</p>
+<ol>
+<li>
+<p><strong><code>_prepare_call</code> extension</strong>: read <code>stepper.option("block_axes")</code>. Pick one block axis for the run via a new opt key <code>block_solve_axis</code> (default: first entry of <code>block_axes</code>; <code>None</code> disables). Stash on <code>prep</code> as <code>block_axis: BlockAxisInfo | None</code>.</p>
+</li>
+<li>
+<p><strong>New solve closure</strong> when <code>block_axis</code> is set and we are on the pytree path:</p>
+</li>
+<li>Build <code>_solve_one_block</code> over the sliced state dict + sliced params.</li>
+<li><code>_solve = jax.vmap(_solve_one_block, in_axes=(per_base_axis_pos, per_param_axis_pos))</code> — positions from <code>block_axis.state_axis_pos</code> / <code>block_axis.param_axis_pos</code> (None ⇒ broadcast). Use <code>out_axes</code> so vmap re-inserts at the original axis position.</li>
+<li>
+<p>The inner <code>_solve_one_block</code> calls <code>pytree_stepper_fn</code> with the sliced <code>state_dict</code> and sliced params; diffrax solves a much smaller ODE.</p>
+</li>
+<li>
+<p><strong><code>runner</code> semantics</strong>: pytree return is still <code>{base: (T, *full_shape)}</code> — vmap reinserts the block axis automatically (use <code>out_axes</code> to land it at the original position; no reshape needed).</p>
+</li>
+<li>
+<p><strong><code>runner_vmap</code> semantics</strong>: nest as <code>jax.vmap(draws, jax.vmap(block_axis, _solve_one_block))</code>. Static signatures already match across draws, so the existing "same <code>_solve</code>" guard still works.</p>
+</li>
+<li>
+<p><strong>Operator-splitting</strong> (<code>_make_advection_term_pytree</code>, <code>_make_jump_term_pytree</code>): build operator terms inside <code>_solve_one_block</code> (after slicing) so they see the per-block shapes.</p>
+</li>
+<li>
+<p><strong>Fallback / safety</strong>:</p>
+</li>
+<li>If <code>block_axes</code> is empty or <code>pytree_mode</code> is False: behave exactly as today (no regression).</li>
+<li>
+<p>If a param the engine routes as dynamic carries the block axis but <code>block_axis.param_axis_pos[name]</code> is <code>None</code>: raise clearly.</p>
+</li>
+<li>
+<p><strong>Tests</strong> in <code>COVID19_USA/tests/test_diffrax_engine.py</code>:</p>
+</li>
+<li>Numerical equivalence: monolithic solve vs. block-partitioned solve on a tiny 2-loc separable config — must match to solver tolerance.</li>
+<li>Shape contract: <code>runner</code> output dict has correct full shapes.</li>
+<li>Negative: monolithic-only config (no <code>factorize_axes</code>) still passes through unmodified.</li>
+</ol>
+<p>LOC estimate: ~350 src + ~200 tests.</p>
+<h3 id="34-configs-opt-in">3.4 Configs — opt in<a class="headerlink" href="#34-configs-opt-in" title="Permanent link">&para;</a></h3>
+<p>In each config that should solve per-location, add at the spec level:</p>
+<pre><code class="language-yaml">spec:
+  kind: transitions
+  factorize_axes: [loc]
+  axes: ...
+</code></pre>
+<p>No other config changes needed — FOI is already loc-local in the continuum configs.</p>
+<h3 id="35-flepimop2-core-no-changes">3.5 <code>flepimop2</code> core — no changes<a class="headerlink" href="#35-flepimop2-core-no-changes" title="Permanent link">&para;</a></h3>
+<p><code>flepimop2</code>'s <code>EngineProtocol.runner / runner_vmap</code> signatures are unchanged. No core flepimop2 edits.</p>
+<h2 id="4-order-of-work">4. Order of work<a class="headerlink" href="#4-order-of-work" title="Permanent link">&para;</a></h2>
+<ol>
+<li>op_system: <code>analyze_block_axes</code> + <code>CompiledRhs.block_axes</code> + tests.</li>
+<li>Connector: forward <code>block_axes</code> to options + tests.</li>
+<li><code>diffrax_engine</code>: partitioned <code>_solve_one_block</code> + numerical-equivalence test.</li>
+<li>Opt configs into <code>factorize_axes: [loc]</code> and run prior-predictive smoke.</li>
+</ol>
+<h2 id="5-risks-and-open-questions">5. Risks and open questions<a class="headerlink" href="#5-risks-and-open-questions" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>Operator terms with non-local kernels on the block axis</strong>: the separability analyzer rejects these — IR walk must include the <code>operators</code> list.</li>
+<li><strong><code>runner_vmap</code> × block-vmap memory</strong>: vmapping draws outside and block-axis inside means the inner solve has shapes <code>(D, n_loc, ...)</code>. Same total work as today but XLA may pick a different schedule; benchmark on GPU before committing nesting order.</li>
+<li><strong>Multiple block axes</strong>: spec already accepts a list. v1: support exactly one runtime block axis (pick first; engine opt overrides). Multi-axis nesting is a follow-up.</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": [], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"provider": "mike"}}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>
