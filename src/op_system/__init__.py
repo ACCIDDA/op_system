@@ -26,6 +26,7 @@ import warnings
 from importlib.metadata import version
 from typing import Final, Literal
 
+from op_system._block_axes import BlockAxisInfo
 from op_system._identifer_string import IdentifierString
 from op_system._operators import OperatorDescriptor
 from op_system._state_string import StateString
@@ -112,6 +113,7 @@ __all__ = [
     "EXPERIMENTAL_FEATURES",
     "SUPPORTED_RHS_KINDS",
     "Array",
+    "BlockAxisInfo",
     "CompiledRhs",
     "EvalFn",
     "ExprRhs",

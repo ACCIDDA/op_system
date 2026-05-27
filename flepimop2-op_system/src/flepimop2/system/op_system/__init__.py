@@ -128,6 +128,7 @@ class OpSystemSystem(SystemABC, module="flepimop2.system.op_system"):  # noqa: D
             "operator_axis": operator_axis,
             "factorize_axes": compiled.factorize_axes,
             "template_shapes": compiled.template_shapes,
+            "pytree_stepper_fn": None,  # updated below if pytree path available
         }
 
         def _stepper(
@@ -165,6 +166,7 @@ class OpSystemSystem(SystemABC, module="flepimop2.system.op_system"):  # noqa: D
                 return pytree_eval_fn(time, state_dict, **params)
 
             self._stepper_pytree: Any = _stepper_pytree
+            self.options["pytree_stepper_fn"] = _stepper_pytree
         else:
             self._stepper_pytree = None
 
