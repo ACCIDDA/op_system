@@ -299,6 +299,40 @@ def test_analyze_rejects_operator_on_block_axis() -> None:
         analyze_block_axes(rhs)
 
 
+def test_tv_param_axis_pos_uses_runtime_position() -> None:
+    """Time-varying param's block-axis position accounts for the time dimension.
+
+    A time-varying param ``beta[time, loc]`` has shape ``(n_time, n_loc)`` at
+    runtime (time prepended).  The block axis ``loc`` is therefore at index 1
+    in the actual array, not index 0 in the reduced axes.
+    """
+    spec: dict[str, object] = {
+        "kind": "transitions",
+        "state": ["S[age,loc]", "I[age,loc]", "R[age,loc]"],
+        "transitions": [
+            {
+                "from": "S[age,loc]",
+                "to": "I[age,loc]",
+                # beta is time-varying: declared with time axis
+                "rate": "beta[time, loc] * I[age,loc]",
+            },
+            {"from": "I[age,loc]", "to": "R[age,loc]", "rate": "gamma"},
+        ],
+        "axes": [
+            {"name": "time", "type": "categorical", "coords": ["t0", "t1"]},
+            {"name": "age", "type": "categorical", "coords": ["y", "o"]},
+            {"name": "loc", "type": "categorical", "coords": ["a", "b"]},
+        ],
+        "factorize_axes": ["loc"],
+    }
+    rhs = normalize_rhs(spec)
+    infos = analyze_block_axes(rhs)
+    assert len(infos) == 1
+    info = infos[0]
+    # beta[time, loc] → runtime shape (n_time, n_loc); loc is at index 1
+    assert info.param_axis_pos["beta"] == 1
+
+
 # ---------------------------------------------------------------------------
 # Axis position correctness
 # ---------------------------------------------------------------------------
