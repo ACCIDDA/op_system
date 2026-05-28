@@ -129,7 +129,9 @@ class OpSystemSystem(SystemABC, module="flepimop2.system.op_system"):  # noqa: D
             "factorize_axes": compiled.factorize_axes,
             "block_axes": compiled.block_axes,
             "template_shapes": compiled.template_shapes,
+            "block_template_shapes": compiled.block_template_shapes,
             "pytree_stepper_fn": None,  # updated below if pytree path available
+            "block_pytree_stepper_fn": None,  # updated below if block path available
         }
 
         def _stepper(
@@ -170,6 +172,26 @@ class OpSystemSystem(SystemABC, module="flepimop2.system.op_system"):  # noqa: D
             self.options["pytree_stepper_fn"] = _stepper_pytree
         else:
             self._stepper_pytree = None
+
+        # Expose block PyTree stepper when block_pytree_eval_fn is available.
+        # The engine calls this function with a per-block-coord state dict
+        # (block axis removed) and vmaps it over the block axis.
+        if compiled.block_pytree_eval_fn is not None:
+            block_pytree_eval_fn = compiled.block_pytree_eval_fn
+
+            def _stepper_block_pytree(
+                time: np.float64,
+                state_dict: dict[str, Any],
+                **kwargs: Any,  # noqa: ANN401
+            ) -> dict[str, Any]:
+                params = dict(mixing_kernels)
+                params.update(kwargs)
+                return block_pytree_eval_fn(time, state_dict, **params)
+
+            self._stepper_block_pytree: Any = _stepper_block_pytree
+            self.options["block_pytree_stepper_fn"] = _stepper_block_pytree
+        else:
+            self._stepper_block_pytree = None
 
         self._compiled_rhs = compiled  # handy for debugging/adapters
 

@@ -20,8 +20,9 @@ jobs:
         with:
           persist-credentials: false
       - name: 'install just'
-        run: |
-          curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | sudo bash -s -- --to /usr/local/bin
+        uses: 'taiki-e/install-action@v2'
+        with:
+          tool: 'just'
       - name: 'setup uv'
         uses: 'astral-sh/setup-uv@v7'
         with:
@@ -41,8 +42,9 @@ jobs:
         with:
           persist-credentials: false
       - name: 'install just'
-        run: |
-          curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | sudo bash -s -- --to /usr/local/bin
+        uses: 'taiki-e/install-action@v2'
+        with:
+          tool: 'just'
       - name: 'setup uv'
         uses: 'astral-sh/setup-uv@v7'
         with:
@@ -62,8 +64,9 @@ jobs:
         with:
           persist-credentials: false
       - name: 'install just'
-        run: |
-          curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | sudo bash -s -- --to /usr/local/bin
+        uses: 'taiki-e/install-action@v2'
+        with:
+          tool: 'just'
       - name: 'setup uv'
         uses: 'astral-sh/setup-uv@v7'
         with:
@@ -93,8 +96,9 @@ jobs:
         with:
           persist-credentials: false
       - name: 'install just'
-        run: |
-          curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | sudo bash -s -- --to /usr/local/bin
+        uses: 'taiki-e/install-action@v2'
+        with:
+          tool: 'just'
       - name: 'setup uv with python ${{ matrix.python-version }}'
         uses: 'astral-sh/setup-uv@v7'
         with:

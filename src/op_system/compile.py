@@ -263,6 +263,21 @@ class CompiledRhs:
     template_shapes: dict[str, tuple[int, ...]] | None = field(
         default=None, repr=False, compare=False, hash=False
     )
+    # ``block_pytree_eval_fn`` is the PyTree eval fn compiled against the
+    # block-stripped RHS (with the first declared factorize_axis removed).
+    # Engines can vmap this over the block axis instead of calling the
+    # monolithic ``pytree_eval_fn`` with axis-indexed state slices.
+    # ``None`` when there are no factorize_axes or no pytree_eval_fn.
+    block_pytree_eval_fn: PytreeEvalFn | None = field(
+        default=None, repr=False, compare=False, hash=False
+    )
+    # ``block_template_shapes`` maps each state-template base name to its
+    # per-block shape (block axis removed).  Mirrors ``template_shapes`` but
+    # for the stripped compile.  ``None`` when ``block_pytree_eval_fn`` is
+    # ``None``.
+    block_template_shapes: dict[str, tuple[int, ...]] | None = field(
+        default=None, repr=False, compare=False, hash=False
+    )
     # Private: source spec retained for pickling. ``compile_rhs`` populates
     # this; direct constructions without ``_rhs`` are not picklable (the
     # ``eval_fn`` closure cannot be serialized) and will raise from
@@ -326,6 +341,8 @@ class CompiledRhs:
         object.__setattr__(self, "block_axes", rebuilt.block_axes)
         object.__setattr__(self, "pytree_eval_fn", rebuilt.pytree_eval_fn)
         object.__setattr__(self, "template_shapes", rebuilt.template_shapes)
+        object.__setattr__(self, "block_pytree_eval_fn", rebuilt.block_pytree_eval_fn)
+        object.__setattr__(self, "block_template_shapes", rebuilt.block_template_shapes)
         object.__setattr__(self, "_rhs", rhs)
 
 
@@ -1019,7 +1036,7 @@ def _wrap_pytree_eval_fn_for_synth_consts(
     return wrapped
 
 
-def compile_rhs(rhs: NormalizedRhs, *, xp: object | None = None) -> CompiledRhs:
+def compile_rhs(rhs: NormalizedRhs, *, xp: object | None = None) -> CompiledRhs:  # noqa: C901, PLR0914
     """Compile a normalized RHS into a runnable evaluation function.
 
     Always uses the vectorized eval path that operates on shaped buffers
@@ -1156,6 +1173,40 @@ def compile_rhs(rhs: NormalizedRhs, *, xp: object | None = None) -> CompiledRhs:
                 pytree_eval_fn, synth_const_values
             )
 
+    block_axes = analyze_block_axes(rhs)
+
+    # ------------------------------------------------------------------
+    # Block-stripped compile: produce a per-block-coord pytree_eval_fn by
+    # stripping the first factorize axis from the RHS and re-running the
+    # vectorizer.  Engines can jax.vmap this over the block axis instead
+    # of baking literal axis indices that break under vmap.
+    # ------------------------------------------------------------------
+    block_pytree_eval_fn: PytreeEvalFn | None = None
+    block_template_shapes: dict[str, tuple[int, ...]] | None = None
+    if pytree_eval_fn is not None and block_axes:
+        from op_system._normalize_block import strip_block_axis  # noqa: PLC0415
+
+        stripped = strip_block_axis(rhs, block_axes[0].name)
+        stripped_plan = vec.build_vector_plan(stripped)
+        if stripped_plan is not None:
+            raw_block_fn: PytreeEvalFn = vec.make_pytree_eval_fn(stripped_plan)
+            block_template_shapes = {
+                tpl.base: tpl.shape for tpl in stripped_plan.state_templates
+            }
+            stripped_time_axis = str(stripped.meta.get("time_axis", "time"))
+            stripped_axes_meta = tuple(stripped.meta.get("axes") or ())
+            raw_block_fn = _wrap_pytree_eval_fn_for_time_varying(
+                raw_block_fn,
+                time_varying_params=stripped.time_varying_params,
+                time_axis_name=stripped_time_axis,
+                axes_meta=stripped_axes_meta,
+            )
+            if isinstance(synth_consts, _MappingABC) and synth_consts:
+                raw_block_fn = _wrap_pytree_eval_fn_for_synth_consts(
+                    raw_block_fn, dict(synth_consts)
+                )
+            block_pytree_eval_fn = raw_block_fn
+
     return CompiledRhs(
         state_names=rhs.state_names,
         param_names=tuple(rhs.param_names),
@@ -1163,8 +1214,10 @@ def compile_rhs(rhs: NormalizedRhs, *, xp: object | None = None) -> CompiledRhs:
         meta=rhs.meta,
         operators=_parse_operator_descriptors(rhs.meta),
         factorize_axes=_parse_factorize_axes(rhs.meta),
-        block_axes=analyze_block_axes(rhs),
+        block_axes=block_axes,
         pytree_eval_fn=pytree_eval_fn,
         template_shapes=template_shapes,
+        block_pytree_eval_fn=block_pytree_eval_fn,
+        block_template_shapes=block_template_shapes,
         _rhs=rhs,
     )
