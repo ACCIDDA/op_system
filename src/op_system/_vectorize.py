@@ -1265,7 +1265,7 @@ def make_pytree_eval_fn(plan: _VectorPlan) -> PytreeEvalFn:  # noqa: C901, PLR09
                 except (NameError, ValueError, TypeError, ArithmeticError) as exc:
                     msg = f"equation {grp.base!r} evaluation failed: {exc!r}"
                     raise ValueError(msg) from exc
-                arr = xp.broadcast_to(xp.asarray(val), grp.vec_shape)
+                arr = xp.broadcast_to(xp.asarray(val), y[grp.base].shape)
                 bin_results.append(arr)
 
             if not grp.unroll_axes:

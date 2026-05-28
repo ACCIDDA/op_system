@@ -47,12 +47,16 @@ class BlockAxisInfo:
         state_axis_pos: Maps each state-template base name to the integer
             position of this axis within that template's shape tuple.
             Only templates that carry this axis appear in the dict.
-        param_axis_pos: Maps each *shaped* parameter name (including
-            time-varying ones, with the time axis already stripped) to
-            the integer position of this axis within the post-interpolation
-            parameter shape, or ``None`` if the parameter does not carry
-            this axis (broadcast).  Parameters that are entirely scalar
-            (not shaped) do not appear in this dict and are always broadcast.
+        param_axis_pos: Maps each *shaped* parameter name to the integer
+            position of this axis within the *actual runtime array* that the
+            engine passes to the eval function, or ``None`` if the parameter
+            does not carry this axis (broadcast).  For non-time-varying shaped
+            parameters the position is the index in the parameter's axis tuple.
+            For time-varying parameters the runtime array has time prepended at
+            index 0, so the position equals the index of the block axis in the
+            full ``(time, *spatial_axes)`` tuple.  Parameters that are entirely
+            scalar (not shaped) do not appear in this dict and are always
+            broadcast.
 
     Note:
         ``BlockAxisInfo`` uses ``dict`` fields and therefore cannot be used
@@ -83,6 +87,10 @@ class BlockAxisInfo:
     size: int
     state_axis_pos: dict[str, int]
     param_axis_pos: dict[str, int | None]
+    # Note: for time-varying parameters the position stored here is the
+    # index of the block axis in the *actual runtime array* (which has
+    # time prepended at index 0).  For non-time-varying shaped parameters
+    # the position is simply the index in the parameter's axis tuple.
 
 
 # ---------------------------------------------------------------------------
@@ -177,6 +185,42 @@ def _check_expr_separable(
 # ---------------------------------------------------------------------------
 # Public entry point
 # ---------------------------------------------------------------------------
+
+
+def _build_param_axis_pos(
+    rhs: NormalizedRhs,
+    axis_name: str,
+) -> dict[str, int | None]:
+    """Return the runtime array axis position for each shaped param.
+
+    For non-time-varying params the position equals the index in the
+    parameter's reduced axis tuple.  For time-varying params the engine
+    receives arrays with ``time`` prepended at index 0, so the position
+    is looked up in the full ``(time, *spatial_axes)`` tuple stored in
+    ``rhs.time_varying_params``.
+
+    Args:
+        rhs: Normalized RHS containing shaped and TV param metadata.
+        axis_name: Block axis whose position is being computed.
+
+    Returns:
+        Mapping from param name to the integer axis position in the
+        *actual* runtime array, or ``None`` if the param does not carry
+        this axis.
+    """
+    tv_full: dict[str, tuple[str, ...]] = dict(rhs.time_varying_params)
+    param_axis_pos: dict[str, int | None] = {}
+    for param_name, reduced_axes in rhs.shaped_params:
+        if param_name in tv_full:
+            full = tv_full[param_name]
+            param_axis_pos[param_name] = (
+                full.index(axis_name) if axis_name in full else None
+            )
+        else:
+            param_axis_pos[param_name] = (
+                reduced_axes.index(axis_name) if axis_name in reduced_axes else None
+            )
+    return param_axis_pos
 
 
 def analyze_block_axes(rhs: NormalizedRhs) -> tuple[BlockAxisInfo, ...]:
@@ -308,13 +352,7 @@ def analyze_block_axes(rhs: NormalizedRhs) -> tuple[BlockAxisInfo, ...]:
         }
 
         # --- param_axis_pos ------------------------------------------------------
-        # ``rhs.shaped_params`` uses the *reduced* axes (time axis already stripped
-        # for time-varying params), so positions here match the post-interpolation
-        # array shape that the engine actually passes to eval_fn.
-        param_axis_pos: dict[str, int | None] = {
-            param_name: (axes.index(axis_name) if axis_name in axes else None)
-            for param_name, axes in rhs.shaped_params
-        }
+        param_axis_pos = _build_param_axis_pos(rhs, axis_name)
 
         result.append(
             BlockAxisInfo(
