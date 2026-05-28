@@ -1,15 +1,62 @@
 # op_system
 
-Domain-agnostic model specification and compilation for ODE, PDE, and multi-physics/multi-scale hybrids, with templates, helpers, and preserved metadata.
+Domain-agnostic specification and compilation of right-hand sides (RHS) for
+ODE, PDE, and multi-physics / multi-scale compartmental systems.  `op_system`
+takes a YAML/JSON-friendly spec, validates and normalizes it, then compiles
+it into a fast, **array-API-polymorphic** callable that runs identically on
+NumPy, JAX (concrete and traced), or any other Array-API backend — without
+recompiling.
 
-## Statement of Need
+- Docs: <https://accidda.github.io/op_system/>
+- License: MIT
+- Python: 3.11 – 3.13
 
-Modelers often combine compartment-style hazards, templated populations, and metadata such as axes, kernels, and operators that must be validated and preserved for downstream solvers. `op_system` provides:
-- YAML/JSON-friendly specs for model definitions (expr and transitions styles).
-- Normalization with strict validation and metadata preservation.
-- Compilation to safe, fast callables usable by engines like `op_engine` or custom integrators.
+## Why op_system?
 
-## Quick start (Python dict)
+Modelers often combine compartment hazards, templated populations, and rich
+metadata (axes, kernels, operators) that must be validated and preserved for
+downstream solvers.  `op_system` provides:
+
+- **Two equivalent surfaces** — `expr` (explicit equations) and `transitions`
+  (hazard / flow style) — that share the same axis, alias, template, and
+  reducer machinery.
+- **Validated, restricted expression parsing** with a small allowlist of
+  NumPy ops and helpers; no arbitrary code execution.
+- **A typed intermediate representation (IR)** that handles template
+  expansion, alias inlining, and `apply_along`/`sum_over` reductions
+  symbolically before code generation.
+- **Vectorized compilation** that operates on shaped state buffers (one
+  tensor expression per template) rather than per-cell scalar code, with
+  template-level common-subexpression elimination.
+- **Backend polymorphism at call time** — the compiled `eval_fn` reads
+  `y.__array_namespace__()` on every call, so the same compiled artifact
+  serves NumPy hosts, JAX `jit`/`vmap`/`grad`, and traced inference loops.
+- **First-class PyTree interface** (`pytree_eval_fn`) for engines that want
+  to keep state as a dict of shaped arrays rather than a flat vector.
+- **Block-axis vmap support** (`block_pytree_eval_fn`) for hierarchical
+  models — declare a `factorize_axis` and the engine can vmap a stripped
+  per-block RHS over the block axis instead of evaluating a monolithic
+  flat state.
+- **Picklable `CompiledRhs`** — round-trips through `pickle.dumps`/`loads`
+  by retaining the source spec and recompiling on load.
+
+## Installation
+
+```bash
+pip install op-system
+# or, from a checkout, using uv:
+uv pip install .
+```
+
+Optional extras:
+
+```bash
+pip install "op-system[jax]"            # JAX runtime support
+pip install "op-system[jax-inference]"  # adds diffrax + blackjax
+pip install "op-system[data]"           # pandas + pyarrow helpers
+```
+
+## Quick start
 
 ```python
 from op_system import compile_spec
@@ -20,8 +67,8 @@ spec = {
     "aliases": {"N": "S + I + R"},
     "equations": {
         "S": "-beta * S * I / N",
-        "I": "beta * S * I / N - gamma * I",
-        "R": "gamma * I",
+        "I":  "beta * S * I / N - gamma * I",
+        "R":  "gamma * I",
     },
 }
 
@@ -29,423 +76,185 @@ compiled = compile_spec(spec)
 dydt = compiled.eval_fn(0.0, [999.0, 1.0, 0.0], beta=0.3, gamma=0.1)
 ```
 
-## Optional JAX Backend
+The compiled object exposes:
 
-Install the optional dependency group if you want to compile RHS callables
-for JAX-native tracing and integration workflows:
+| Attribute | Description |
+|---|---|
+| `eval_fn(t, y, **params) -> dydt` | Flat-vector RHS; array namespace inferred from `y`. |
+| `pytree_eval_fn(t, state_dict, **params) -> dict` | PyTree RHS keyed by state template base name (axis-indexed specs). |
+| `template_shapes` | `{base: shape}` for each state template. |
+| `state_names`, `param_names` | Tuples of expanded state cells and parameter names. |
+| `factorize_axes`, `block_axes` | Axes the IR proved separable for block vmap. |
+| `block_pytree_eval_fn`, `block_template_shapes` | Per-block PyTree RHS with the first factorize axis stripped. |
+| `meta` | Normalized metadata (axes, state_axes, kernels, operators, reserved blocks). |
+| `operators` | Tuple of `OperatorDescriptor` (e.g. advection terms). |
 
-```shell
-pip install "op_system[jax]"
-```
+`compile_spec` accepts legacy `backend=` / `xp=` keyword arguments but they
+are deprecated and ignored — the compiled callable infers its array
+namespace from the input `y` on every call.
 
-Then choose JAX using the backend selector:
+## JAX usage
 
 ```python
+import jax, jax.numpy as jnp
 from op_system import compile_spec
 
-compiled = compile_spec(spec, backend="jax")
+compiled = compile_spec(spec)
+y0 = jnp.asarray([999.0, 1.0, 0.0])
+
+# Native JAX call — eval_fn returns a jnp array.
+dydt = compiled.eval_fn(0.0, y0, beta=0.3, gamma=0.1)
+
+# Works inside jit / vmap / grad without recompilation.
+solve = jax.jit(lambda y: compiled.eval_fn(0.0, y, beta=0.3, gamma=0.1))
 ```
 
-You can also pass an explicit array namespace when needed:
+For diffrax-based ODE solves and NUTS / HMC inference, install the
+`jax-inference` extra above.
 
-```python
-import jax.numpy as jnp
-from op_system import compile_spec
+## YAML examples
 
-compiled = compile_spec(spec, xp=jnp)
-dydt = compiled.eval_fn(0.0, jnp.asarray([999.0, 1.0, 0.0]), beta=0.3, gamma=0.1)
-```
+The full guide of YAML patterns — including templates, axis asymmetry,
+chains, continuous axes with kernels, and block-axis hierarchical models —
+lives at <https://accidda.github.io/op_system/guides/getting-started/>.
+A few highlights:
 
-If you do not pass `xp`, `op_system` defaults to NumPy behavior.
+### Baseline SIR (two pathways)
 
-For diffrax-native solves and NUTS/HMC workflows, install the inference extra:
-
-```shell
-pip install "op_system[jax-inference]"
-```
-
-This includes `diffrax` and `blackjax` for end-to-end tracing workflows.
-
-## YAML examples (organized and API-current)
-
-The example set below is intentionally small but complete: each core modeling pattern is shown for both `expr` and `transitions` pathways where applicable.
-
-### 1) Baseline SIR in both pathways
-
-Smallest valid SIR written once; demonstrates `expr` vs `transitions` parity.
-
-**`expr`**
 ```yaml
-system:
-  - module: op_system
-    spec:
-      kind: expr
-      state: [S, I, R]
-      equations:
-        S: -beta * S * I / sum_state()
-        I: beta * S * I / sum_state() - gamma * I
-        R: gamma * I
+# expr
+spec:
+  kind: expr
+  state: [S, I, R]
+  equations:
+    S: -beta * S * I / sum_state()
+    I:  beta * S * I / sum_state() - gamma * I
+    R:  gamma * I
 ```
 
-**`transitions`**
 ```yaml
-system:
-  - module: op_system
-    spec:
-      kind: transitions
-      state: [S, I, R]
-      transitions:
-        - from: S
-          to: I
-          rate: beta * I / sum_state()
-        - from: I
-          to: R
-          rate: gamma
-```
-
-### 2) Vaccination symmetry vs asymmetry (age × vax)
-
-Shows how axis templates keep model structure concise while rate terms decide symmetry.
-
-**Symmetric across `vax` within each `age` (`expr`)**
-```yaml
-system:
-  - module: op_system
-    spec:
-      kind: expr
-      axes:
-        - name: age
-          coords: [child, adult]
-        - name: vax
-          coords: [u, v]
-      state: [S[age,vax], I[age,vax], R[age,vax]]
-      aliases:
-        lambda[age]: beta * apply_along(vax=j, I[age,vax=j]) / sum_state()
-      equations:
-        S[age,vax]: -lambda[age] * S[age,vax]
-        I[age,vax]: lambda[age] * S[age,vax] - gamma * I[age,vax]
-        R[age,vax]: gamma * I[age,vax]
-```
-
-**Asymmetric by `vax` (`expr`)**
-```yaml
-system:
-  - module: op_system
-    spec:
-      kind: expr
-      axes:
-        - name: age
-          coords: [child, adult]
-        - name: vax
-          coords: [u, v]
-      state: [S[age,vax], I[age,vax], R[age,vax]]
-      aliases:
-        lambda[age,vax]: beta * (1 - ve[vax]) * apply_along(vax=j, I[age,vax=j]) / sum_state()
-      equations:
-        S[age,vax]: -lambda[age,vax] * S[age,vax]
-        I[age,vax]: lambda[age,vax] * S[age,vax] - gamma[vax] * I[age,vax]
-        R[age,vax]: gamma[vax] * I[age,vax]
-```
-
-  What differs:
-  - In the symmetric config, the force term is `lambda[age]` (no `vax` index), so vaccinated and unvaccinated groups within the same age use the same infection pressure and recovery rate.
-  - In the asymmetric config, vaccine-specific terms are introduced (`ve[vax]`, `gamma[vax]`), so dynamics can diverge by vaccination status.
-  - The structural template (`S[age,vax]`, `I[age,vax]`, `R[age,vax]`) is identical in both; only the rate expressions change.
-
-**Symmetric vs asymmetric using `transitions` rates**
-```yaml
-# symmetric
+# transitions
 spec:
   kind: transitions
+  state: [S, I, R]
+  transitions:
+    - {from: S, to: I, rate: beta * I / sum_state()}
+    - {from: I, to: R, rate: gamma}
+```
+
+### Templated states with `apply_along`
+
+```yaml
+spec:
+  kind: expr
   axes:
-    - name: age
-      coords: [child, adult]
-    - name: vax
-      coords: [u, v]
+    - {name: age,  coords: [child, adult]}
+    - {name: vax,  coords: [u, v]}
   state: [S[age,vax], I[age,vax], R[age,vax]]
   aliases:
     lambda[age]: beta * apply_along(vax=j, I[age,vax=j]) / sum_state()
-  transitions:
-    - from: S[age,vax]
-      to: I[age,vax]
-      rate: lambda[age]
-    - from: I[age,vax]
-      to: R[age,vax]
-      rate: gamma
+  equations:
+    S[age,vax]: -lambda[age] * S[age,vax]
+    I[age,vax]:  lambda[age] * S[age,vax] - gamma * I[age,vax]
+    R[age,vax]:  gamma * I[age,vax]
+```
 
-# asymmetric
+`apply_along(axis=var, expr)` contracts `expr` along one or more axes in a
+single call.  Categorical / ordinal axes use uniform weights of 1;
+continuous axes use trapezoidal weights derived from axis spacing
+(non-uniform supported).  Bindings can be restricted with
+`axis=var in [...]` for sub-range integration.
+
+### Chain helper
+
+```yaml
 spec:
   kind: transitions
+  state: [S, I, R]
+  chain:
+    - name: I
+      length: 3
+      entry:   {from: S, rate: beta * S / sum_state()}
+      forward: [gamma12, gamma23]
+      exit:    {to: R, rate: gamma3r}
+  transitions: []
+```
+
+`chain` synthesizes the staged compartments (`I1..I3`) and the internal
+forward / exit transitions; declare only the base `I` in `state`.
+
+### Continuous axis + kernel
+
+```yaml
+spec:
+  kind: expr
   axes:
-    - name: age
-      coords: [child, adult]
-    - name: vax
-      coords: [u, v]
-  state: [S[age,vax], I[age,vax], R[age,vax]]
-  transitions:
-    - from: S[age,vax]
-      to: I[age,vax]
-      rate: beta * (1 - ve[vax]) * apply_along(vax=j, I[age,vax=j]) / sum_state()
-    - from: I[age,vax]
-      to: R[age,vax]
-      rate: gamma[vax]
+    - name: x
+      type: continuous
+      domain: {lb: 0.0, ub: 10.0}
+      size: 5
+      spacing: linear
+  state: [u[x]]
+  state_axes: {u: [x]}
+  kernels:
+    - {name: K, axes: [x], form: gaussian, params: {scale: 1.0, sigma: 0.5}}
+  equations:
+    u[x]: apply_along(x=xi, K[x=xi] * u[x=xi]) - decay * u[x]
 ```
 
-Transitions pathway interpretation is the same:
-- Symmetric: transition rates omit `vax` dependence (or depend only through shared aggregates).
-- Asymmetric: transition rates include explicit `vax`-indexed terms.
-- There is no implicit symmetry constraint; symmetry/asymmetry is determined entirely by your rate expressions.
+## Public API
 
-### 3) Multi-axis templates + helpers in both pathways
-
-Highlights asymmetric axis membership and reuse of helper expressions across pathways.
-
-**`expr` (age × vax × strain; asymmetric axis membership)**
-```yaml
-system:
-  - module: op_system
-    spec:
-      kind: expr
-      axes:
-        - name: age
-          coords: [child, adult]
-        - name: vax
-          coords: [u, v]
-        - name: strain
-          coords: [wt, var]
-      state: [S[age,vax], I[age,vax,strain], R[age,vax]]
-      aliases:
-        foi[age,vax,strain]: beta[strain] * I[age,vax,strain] / sum_state()
-      equations:
-        S[age,vax]: -apply_along(strain=s, foi[age,vax,strain=s] * S[age,vax])
-        I[age,vax,strain]: foi[age,vax,strain] * S[age,vax] - gamma[strain] * I[age,vax,strain]
-        R[age,vax]: apply_along(strain=s, gamma[strain=s] * I[age,vax,strain=s])
+```python
+from op_system import (
+    compile_spec,            # validate + normalize + compile
+    compile_rhs,             # compile a pre-normalized NormalizedRhs
+    normalize_rhs,           # validate + normalize only
+    normalize_expr_rhs,
+    normalize_transitions_rhs,
+    CompiledRhs,
+    NormalizedRhs, ExprRhs, TransitionsRhs,
+    EvalFn, PytreeEvalFn, StateDict,
+    OperatorDescriptor, BlockAxisInfo,
+)
 ```
 
-**`transitions` (same axis pattern)**
-```yaml
-system:
-  - module: op_system
-    spec:
-      kind: transitions
-      axes:
-        - name: age
-          coords: [child, adult]
-        - name: vax
-          coords: [u, v]
-        - name: strain
-          coords: [wt, var]
-      state: [S[age,vax], I[age,vax,strain], R[age,vax]]
-      transitions:
-        - from: S[age,vax]
-          to: I[age,vax,strain]
-          rate: beta[strain] * I[age,vax,strain] / sum_state()
-        - from: I[age,vax,strain]
-          to: R[age,vax]
-          rate: gamma[strain]
-```
+`NormalizedRhs` is a discriminated union of `ExprRhs | TransitionsRhs`; use
+`isinstance` to dispatch.
 
-### 3b) Axis available only for a subgroup (no empty compartments)
-
-When an axis should apply only to a subset (for example vaccination only for 65+), keep that axis off ineligible states to avoid empty compartments, and stratify only the eligible subgroup.
-
-**`transitions` with vax only for 65+**
-```yaml
-axes:
-  - name: age
-    coords: [u65, o65]
-  - name: vax
-    coords: [u, v]
-
-state:
-  - S_u65
-  - I_u65
-  - R_u65
-  - S_o65[vax]
-  - I_o65[vax]
-  - R_o65[vax]
-
-aliases:
-  I_total: sum_prefix("I_")
-
-transitions:
-  # under 65 (unstratified by vax)
-  - from: S_u65
-    to: I_u65
-    rate: beta_u65 * I_total / sum_state()
-  - from: I_u65
-    to: R_u65
-    rate: gamma_u65
-
-  # 65+ (stratified by vax)
-  - from: S_o65[vax]
-    to: I_o65[vax]
-    rate: beta_o65[vax] * I_total / sum_state()
-  - from: I_o65[vax]
-    to: R_o65[vax]
-    rate: gamma_o65[vax]
-
-  # vaccination only available to 65+
-  - from: S_o65[u]
-    to: S_o65[v]
-    rate: vax_rate_o65
-```
-
-Key points:
-- No coordinate-level masking exists today; adding an axis to a state expands over all its coordinates.
-- To avoid empty vaccinated compartments for ineligible groups, split states so only eligible subpopulations carry that axis.
-
-### 4) Chain helper in both pathways (no predeclared `I1..Ik`)
-
-Even when using `chain`, declare the base staged compartment name in `state` (for example `I` below); the helper synthesizes `I1..Ik` so you do not enumerate them.
-
-**`expr` chain with synthesized staged states**
-```yaml
-system:
-  - module: op_system
-    spec:
-      kind: expr
-      state: [S, I, R]
-      chain:
-        - name: I
-          length: 3
-          forward: [gamma12, gamma23]
-          exit:
-            to: R
-            rate: gamma3r
-      equations:
-        S: -beta * S * I1 / sum_state()
-        R: gamma3r * I3
-```
-
-**`transitions` chain-only flow generation**
-```yaml
-system:
-  - module: op_system
-    spec:
-      kind: transitions
-      state: [S, I, R]
-      chain:
-        - name: I
-          length: 3
-          entry:
-            from: S
-            rate: beta * S / sum_state()
-          forward: [gamma12, gamma23]
-          exit:
-            to: R
-            rate: gamma3r
-      transitions: []
-```
-
-### 5) Continuous axis + `apply_along` (expr pathway)
-
-```yaml
-system:
-  - module: op_system
-    spec:
-      kind: expr
-      axes:
-        - name: x
-          type: continuous
-          domain:
-            lb: 0.0
-            ub: 10.0
-          size: 5
-          spacing: linear
-      state: [u[x]]
-      state_axes:
-        u: [x]
-      kernels:
-        - name: K
-          axes: [x]
-          form: gaussian
-          params:
-            scale: 1.0
-            sigma: 0.5
-      equations:
-        u[x]: apply_along(x=xi, K[x=xi] * u[x=xi]) - decay * u[x]
-```
-
-`apply_along` uses trapezoidal weights derived from axis coordinates when the bound axes are continuous; non-uniform spacing is respected.
-
-
----
-
-## Installation
-
-```bash
-pip install op-system
-# or locally
-uv pip install .
-```
-
-Supports Python >= 3.11.
-
-## Testing
-
-```bash
-just ci        # ruff + pytest + mypy (core + provider mirror)
-# or individually
-just pytest
-just ruff
-just mypy
-```
-
-## Features
-
-- Model kinds: `expr` (explicit equations) and `transitions` (hazard/flow style).
-- Transitions support optional `name` metadata preserved in `meta.transitions`; templated transitions expand before hazard assembly with metadata intact.
-- Templates: `State[axis,...]` expand over categorical axes; equations may be written once per template.
-- Aliases and inline placeholders like `theta[age]` expand over categorical axes using the same assignments, removing per-axis parameter duplication.
-- Transitions now accept templated states and rates over categorical axes; templated `from`/`to`/`rate` are expanded before hazard assembly.
-- `apply_along(axis1=var1, ..., expr, [kernel=sum|integrate])`: contracts an expression along one or more axes in a single call. Categorical and ordinal axes use uniform weights of 1; continuous axes use trapezoidal weights derived from axis-`deltas` (non-uniform spacing supported). The kernel is inferred from axis types; pass `kernel=sum` or `kernel=integrate` to override. A binding may restrict expansion with `axis=var in [...]`: on categorical axes the list is the explicit set of coords to retain; on ordinal axes the list must be `[lo_label, hi_label]` and selects the inclusive index range from `index(lo_label)` to `index(hi_label)` along the declared coord order; on continuous axes the list is the closed sub-interval `[lo, hi]` (exactly two endpoints) and trapezoidal weights are recomputed for that sub-interval.
-- Chain helper: `chain` block auto-fills equations/transitions for staged compartments (expr or transitions kinds). Keep your base model structure explicit (for example `I` or `I[age,vax]` must appear in `state`), while staged chain internals (`I1..Ik`) are synthesized automatically and do not need explicit `state` entries.
-- Reducers in expressions: `sum_state()`, `sum_prefix(prefix)`.
-- Axes: categorical or continuous; continuous can be generated via `domain` + `size` + `spacing` (linear/log/geom).
-- Metadata passthrough: axes, state_axes, kernels, operators, reserved blocks (`sources`, `couplings`, `constraints`) in `NormalizedRhs.meta`.
-
-## Specification behavior notes
-
-- Alias usage: aliases are expanded expressions evaluated against state, params, and earlier aliases; they are best used to reduce repeated symbolic expressions.
-- Multi-axis grouping: forms like `S[age,vax,strain]` are supported when all listed axes are defined in `axes`.
-- Axis asymmetry (`expr`): states/equations may use different axis subsets (for example `S[age]`, `I[age,strain]`), and substitutions only apply where placeholders are present.
-- Axis asymmetry (`transitions`): placeholder expansion uses all placeholders appearing in `from`, `to`, `rate`, and optional `name`, then renders each field with its own placeholders.
-- Chain helper state behavior: `chain` synthesizes staged names from `name` and `length`, but does not replace explicit top-level state/axis declarations in your model. It can generate the first infection transition via `entry` so transitions specs do not need a manual `S -> I1` edge.
-
-## Chain schema
-
-```yaml
-chain:
-  - name: I
-    length: 3
-    entry: {from: S, rate: beta * force}  # optional
-    forward: gamma                         # scalar broadcast
-    # or forward: [gamma12, gamma23]       # per internal edge, length-1 values
-    exit: {to: R, rate: gamma3r}           # optional; rate defaults to last forward rate
-```
-
-- `forward` may be scalar or a list of `length - 1` rates.
-- `entry` is optional and, when provided, generates `entry.from -> I1`.
-- `exit` is optional and, when provided, generates `I_last -> exit.to`.
-
-## Validation & AST guardrails
+## Expression guardrails
 
 Expressions are parsed with `ast` and restricted to:
-- Arithmetic, comparisons, ternary, bool ops; names/constants; calls/attributes on an allowlist.
-- NumPy calls with `np.` root: `abs`, `exp`, `expm1`, `log`, `log1p`, `log2`, `log10`, `sqrt`, `maximum`, `minimum`, `clip`, `where`, `sin`, `cos`, `tan`, `sinh`, `cosh`, `tanh`, `hypot`, `arctan2`.
-- Helpers: `sum_state()`, `sum_prefix(prefix)`.
 
-Disallowed: non-`np` attribute access, non-whitelisted helpers, imports, or other AST node types. Errors are raised as `ValueError` / `TypeError` / `NotImplementedError`.
+- Arithmetic, comparisons, ternary, boolean ops, names and constants.
+- A NumPy allowlist under the `np.` root: `abs`, `exp`, `expm1`, `log`,
+  `log1p`, `log2`, `log10`, `sqrt`, `maximum`, `minimum`, `clip`, `where`,
+  `sin`, `cos`, `tan`, `sinh`, `cosh`, `tanh`, `hypot`, `arctan2`.
+- Helpers: `sum_state()`, `sum_prefix(prefix)`, `apply_along(...)`,
+  `sum_over(...)`.
 
-## API (brief)
+Anything else — non-`np` attribute access, imports, lambdas, comprehensions,
+other AST nodes — raises `ValueError` / `TypeError` /
+`UnsupportedFeatureError` at normalize time.
 
-- `compile_spec(spec) -> CompiledRhs`: normalize + compile in one step.
-- `normalize_rhs(spec) -> NormalizedRhs`: validation + metadata preservation.
-- `compile_rhs(rhs) -> CompiledRhs`: compile a pre-normalized model specification.
-- `NormalizedRhs.meta`: access normalized metadata (axes, state_axes, kernels, operators, reserved blocks).
+## Development
 
-## License & support
+```bash
+just ci      # ruff + pytest + mypy (core + flepimop2-op_system mirror) + docs
+just test    # pytest only
+just ruff
+just mypy
+just docs    # mkdocs build
+```
 
-- License: GPL-3.0 (see LICENSE).
-- Issues/feedback: use the GitHub issue tracker.
+See [docs/development/](docs/development/) for the IR architecture, block
+axis plan, and code-style guide.
+
+## Repository layout
+
+| Path | Purpose |
+|---|---|
+| `src/op_system/` | Library source (specs, IR, normalize, vectorize, compile). |
+| `flepimop2-op_system/` | Thin adapter package exposing `op_system` to flepimop2. |
+| `tests/op_system/` | Pytest suite (~430 tests). |
+| `docs/` | mkdocs sources; built site published to GitHub Pages. |
+| `scripts/` | Release validation and API-reference generation helpers. |
