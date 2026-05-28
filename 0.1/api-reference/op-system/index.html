@@ -1496,12 +1496,16 @@ Only templates that carry this axis appear in the dict.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Maps each <em>shaped</em> parameter name (including
-time-varying ones, with the time axis already stripped) to
-the integer position of this axis within the post-interpolation
-parameter shape, or <code>None</code> if the parameter does not carry
-this axis (broadcast).  Parameters that are entirely scalar
-(not shaped) do not appear in this dict and are always broadcast.</p>
+                <p>Maps each <em>shaped</em> parameter name to the integer
+position of this axis within the <em>actual runtime array</em> that the
+engine passes to the eval function, or <code>None</code> if the parameter
+does not carry this axis (broadcast).  For non-time-varying shaped
+parameters the position is the index in the parameter's axis tuple.
+For time-varying parameters the runtime array has time prepended at
+index 0, so the position equals the index of the block axis in the
+full <code>(time, *spatial_axes)</code> tuple.  Parameters that are entirely
+scalar (not shaped) do not appear in this dict and are always
+broadcast.</p>
               </div>
             </td>
           </tr>
