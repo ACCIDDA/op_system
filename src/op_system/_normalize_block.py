@@ -34,7 +34,11 @@ if TYPE_CHECKING:
     from op_system._normalize_ir import StateTemplate
 
 
-def _strip_axis_from_ir(expr: Expr, axis_name: str) -> Expr:  # noqa: PLR0911
+def _strip_axis_from_ir(  # noqa: C901, PLR0911
+    expr: Expr,
+    axis_name: str,
+    shaped_param_axes: Mapping[str, tuple[str, ...]] | None = None,
+) -> Expr:
     """Recursively remove *axis_name* from all Subscript index lists.
 
     Transitions-kind specs lift state references to template-form
@@ -45,28 +49,61 @@ def _strip_axis_from_ir(expr: Expr, axis_name: str) -> Expr:  # noqa: PLR0911
     picture: templates with ``(age,)`` axes and subscripts with only an
     ``age`` index.
 
+    Two kinds of AxisIndex entries are stripped:
+
+    1. **Named entries** (``idx.axis == axis_name``): the normal case for
+       template-form state/alias Subscripts.
+    2. **Literal positional entries** (``idx.axis == ''``, ``idx.coord``
+       set): used when a shaped parameter is referenced with a numeric
+       literal index, e.g. ``r0_loc[0]`` in an alias body that is
+       evaluated for the first coordinate of the block axis.  These
+       cannot carry the axis name directly, so ``shaped_param_axes`` is
+       consulted positionally: if ``shaped_param_axes[sub.name][i] ==
+       axis_name`` then index *i* is stripped.
+
     Args:
         expr: IR expression to rewrite.
-        axis_name: Axis name to remove from all ``Subscript`` index lists.
+        axis_name: Axis name to remove from all Subscript index lists.
+        shaped_param_axes: Optional mapping from shaped-parameter name to
+            its declared axis order (before stripping).  Required to
+            correctly handle literal-indexed shaped-param subscripts.
 
     Returns:
         A new IR expression with the axis stripped; structurally equal to
         ``expr`` when no stripping occurs.
     """
+    spa = shaped_param_axes or {}
+
+    def _recurse(e: Expr) -> Expr:
+        return _strip_axis_from_ir(e, axis_name, shaped_param_axes)
+
     if isinstance(expr, (Literal, Sym)):
         return expr
     if isinstance(expr, Subscript):
-        new_indices = tuple(idx for idx in expr.indices if idx.axis != axis_name)
+        declared = spa.get(expr.name)
+        if declared is not None and len(declared) == len(expr.indices):
+            # Positional matching: strip indices whose declared axis matches.
+            new_indices = tuple(
+                idx
+                for ax, idx in zip(declared, expr.indices, strict=True)
+                if ax != axis_name
+            )
+        else:
+            # Named matching: strip indices where idx.axis == axis_name.
+            new_indices = tuple(idx for idx in expr.indices if idx.axis != axis_name)
         if new_indices == expr.indices:
             return expr
+        if not new_indices:
+            # All indices stripped → treat as a plain scalar symbol.
+            return Sym(expr.name)
         return Subscript(name=expr.name, indices=new_indices)
     if isinstance(expr, Apply):
-        new_args = tuple(_strip_axis_from_ir(a, axis_name) for a in expr.args)
+        new_args = tuple(_recurse(a) for a in expr.args)
         if new_args == expr.args:
             return expr
         return Apply(op=expr.op, args=new_args)
     if isinstance(expr, Reduce):
-        new_body = _strip_axis_from_ir(expr.body, axis_name)
+        new_body = _recurse(expr.body)
         if new_body is expr.body:
             return expr
         return Reduce(
@@ -262,8 +299,15 @@ def strip_block_axis(rhs: NormalizedRhs, axis_name: str) -> NormalizedRhs:  # no
     }
     eq_keep_indices = [original_state_index[n] for n in new_state_names]
 
+    # Build shaped-param axis map for positional literal-index stripping.
+    orig_shaped_param_axes: dict[str, tuple[str, ...]] = {
+        name: tuple(axes) for name, axes in rhs.shaped_params
+    }
+
     def _maybe_strip(ir: Expr | None) -> Expr | None:
-        return _strip_axis_from_ir(ir, axis_name) if ir is not None else None
+        if ir is None:
+            return None
+        return _strip_axis_from_ir(ir, axis_name, orig_shaped_param_axes)
 
     new_equations = tuple(rhs.equations[i] for i in eq_keep_indices)
     new_equations_ir = tuple(_maybe_strip(rhs.equations_ir[i]) for i in eq_keep_indices)
@@ -284,12 +328,12 @@ def strip_block_axis(rhs: NormalizedRhs, axis_name: str) -> NormalizedRhs:  # no
     )
 
     new_aliases_ir: dict[str, Any] = {
-        k: _strip_axis_from_ir(v, axis_name)
+        k: _strip_axis_from_ir(v, axis_name, orig_shaped_param_axes)
         for k, v in rhs.aliases_ir.items()
         if k in alias_keep_cells
     }
     new_aliases_ir_reduce: dict[str, Any] = {
-        k: _strip_axis_from_ir(v, axis_name)
+        k: _strip_axis_from_ir(v, axis_name, orig_shaped_param_axes)
         for k, v in rhs.aliases_ir_reduce.items()
         if k in alias_keep_cells
     }

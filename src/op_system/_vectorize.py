@@ -1119,6 +1119,11 @@ def make_vectorized_eval_fn(plan: _VectorPlan) -> EvalFn:  # noqa: C901, PLR0915
             if shape:
                 val = xp.broadcast_to(val, shape)
             env[f"{base}_buf"] = val
+            # Also expose under the plain base name so that equation IR
+            # lowered via the reduce path (which strips axis indices and
+            # emits ``Sym(base)`` rather than ``Sym(base__loc_XX)``) can
+            # reference the alias value as ``env[base]`` directly.
+            env[base] = val
 
         # Eval plan-level CSE temporaries (shared sub-expressions extracted
         # across state templates).  Computed after alias buffers so that
@@ -1241,6 +1246,11 @@ def make_pytree_eval_fn(plan: _VectorPlan) -> PytreeEvalFn:  # noqa: C901, PLR09
             if shape:
                 val = xp.broadcast_to(val, shape)
             env[f"{base}_buf"] = val
+            # Also expose under the plain base name so that equation IR
+            # lowered via the reduce path (which strips axis indices and
+            # emits ``Sym(base)`` rather than ``Sym(base__loc_XX)``) can
+            # reference the alias value as ``env[base]`` directly.
+            env[base] = val
 
         # Eval CSE temporaries (identical to flat path).
         for name, code in cse_codes:
