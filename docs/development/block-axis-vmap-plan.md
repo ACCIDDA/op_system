@@ -1,6 +1,6 @@
 # Plan: `jax.vmap` over block-diagonal axes (`factorize_axes`)
 
-**Status**: approved 2026-05-27. Naming: keep `factorize_axes`.
+**Status**: ✅ **complete** 2026-05-28. All four slices merged. Naming: keep `factorize_axes`.
 
 ## 1. What's already true today
 
