@@ -388,3 +388,166 @@ def test_analyze_multiple_factorize_axes() -> None:
     vax_info = next(i for i in infos if i.name == "vax")
     assert loc_info.state_axis_pos["S"] == 1
     assert vax_info.state_axis_pos["S"] == 2
+
+
+# ---------------------------------------------------------------------------
+# strip_block_axis: unit tests
+# ---------------------------------------------------------------------------
+
+
+from op_system._normalize_block import strip_block_axis  # noqa: E402
+
+
+def test_strip_block_axis_removes_axis_from_template_shapes() -> None:
+    """strip_block_axis removes the block axis from all state template shapes."""
+    rhs = normalize_rhs(_sep_spec(factorize=["loc"]))
+    stripped = strip_block_axis(rhs, "loc")
+    # Each template should now have only age axis (size 2)
+    for tpl in stripped.state_templates:
+        assert "loc" not in tpl.axes
+        assert tpl.shape == (2,)
+    # Only first-loc cells remain: 3 states x 2 age coords = 6
+    assert len(stripped.state_names) == 6
+
+
+def test_strip_block_axis_state_names_use_ref_coord() -> None:
+    """Stripped state names correspond to the first loc coordinate ('a')."""
+    rhs = normalize_rhs(_sep_spec(factorize=["loc"]))
+    stripped = strip_block_axis(rhs, "loc")
+    # All expanded names should contain '__loc_a' (first coord)
+    for name in stripped.state_names:
+        assert "__loc_a" in name, f"Expected '__loc_a' in {name!r}"
+
+
+def test_strip_block_axis_equation_count_matches_state_names() -> None:
+    """Number of equations equals number of state names after stripping."""
+    rhs = normalize_rhs(_sep_spec(factorize=["loc"]))
+    stripped = strip_block_axis(rhs, "loc")
+    assert len(stripped.equations) == len(stripped.state_names)
+    assert len(stripped.equations_ir) == len(stripped.state_names)
+    assert len(stripped.equations_ir_reduce) == len(stripped.state_names)
+
+
+def test_strip_block_axis_strips_tv_param_axes() -> None:
+    """strip_block_axis removes the block axis from time_varying_params axes."""
+    spec: dict[str, object] = {
+        "kind": "transitions",
+        "state": ["S[age,loc]", "I[age,loc]", "R[age,loc]"],
+        "transitions": [
+            {
+                "from": "S[age,loc]",
+                "to": "I[age,loc]",
+                "rate": "beta[loc] * I[age,loc]",
+            },
+            {"from": "I[age,loc]", "to": "R[age,loc]", "rate": "gamma"},
+        ],
+        "axes": [
+            {"name": "age", "type": "categorical", "coords": ["y", "o"]},
+            {"name": "loc", "type": "categorical", "coords": ["a", "b", "c"]},
+            {"name": "time", "type": "categorical", "coords": ["0", "1"]},
+        ],
+        "factorize_axes": ["loc"],
+    }
+    rhs = normalize_rhs(spec)
+    stripped = strip_block_axis(rhs, "loc")
+    tv = dict(stripped.time_varying_params)
+    # beta was time_varying with (time, loc) axes; after strip should be (time,)
+    if "beta" in tv:
+        assert "loc" not in tv["beta"]
+
+
+def test_strip_block_axis_raises_on_unknown_axis() -> None:
+    """strip_block_axis raises UnsupportedFeatureError for non-factorize axis."""
+    rhs = normalize_rhs(_sep_spec(factorize=["loc"]))
+    with pytest.raises(UnsupportedFeatureError, match=r"not in rhs\.meta"):
+        strip_block_axis(rhs, "age")
+
+
+def test_strip_block_axis_raises_when_axis_not_in_factorize() -> None:
+    """strip_block_axis raises when factorize_axes is absent."""
+    rhs = normalize_rhs(_sep_spec())  # no factorize_axes
+    with pytest.raises(UnsupportedFeatureError):
+        strip_block_axis(rhs, "loc")
+
+
+def test_strip_block_axis_meta_no_longer_contains_axis() -> None:
+    """Stripped meta no longer lists the block axis in axes or factorize_axes."""
+    rhs = normalize_rhs(_sep_spec(factorize=["loc"]))
+    stripped = strip_block_axis(rhs, "loc")
+    axes_names = [ax["name"] for ax in (stripped.meta.get("axes") or [])]
+    assert "loc" not in axes_names
+    assert "loc" not in (stripped.meta.get("factorize_axes") or [])
+
+
+# ---------------------------------------------------------------------------
+# compile_rhs: block_pytree_eval_fn integration tests
+# ---------------------------------------------------------------------------
+
+
+def test_compile_rhs_emits_block_pytree_eval_fn_when_block_axes_nonempty() -> None:
+    """compile_rhs sets block_pytree_eval_fn when factorize_axes is declared."""
+    rhs = normalize_rhs(_sep_spec(factorize=["loc"]))
+    compiled = compile_rhs(rhs)
+    assert compiled.block_pytree_eval_fn is not None
+    assert compiled.block_template_shapes is not None
+
+
+def test_compile_rhs_no_factorize_axes_leaves_block_fields_none() -> None:
+    """compile_rhs sets block_pytree_eval_fn=None when no factorize_axes."""
+    rhs = normalize_rhs(_sep_spec())
+    compiled = compile_rhs(rhs)
+    assert compiled.block_pytree_eval_fn is None
+    assert compiled.block_template_shapes is None
+
+
+def test_block_template_shapes_have_no_block_axis() -> None:
+    """block_template_shapes reflect the per-block shape (loc axis removed)."""
+    rhs = normalize_rhs(_sep_spec(factorize=["loc"]))
+    compiled = compile_rhs(rhs)
+    assert compiled.block_template_shapes is not None
+    assert compiled.template_shapes is not None
+    # Each template in block_template_shapes should have one fewer axis
+    for base, shape in compiled.block_template_shapes.items():
+        full_shape = compiled.template_shapes[base]
+        assert len(shape) == len(full_shape) - 1
+
+
+def test_block_pytree_eval_fn_is_callable() -> None:
+    """block_pytree_eval_fn accepts a per-block state dict and returns derivatives."""
+    import numpy as np  # noqa: PLC0415
+
+    rhs = normalize_rhs(_sep_spec(factorize=["loc"]))
+    compiled = compile_rhs(rhs)
+    assert compiled.block_pytree_eval_fn is not None
+    assert compiled.block_template_shapes is not None
+    # Build a per-block state dict with age axis only
+    y_block = {
+        base: np.ones(shape, dtype=np.float64)
+        for base, shape in compiled.block_template_shapes.items()
+    }
+    result = compiled.block_pytree_eval_fn(0.0, y_block, beta=0.3, gamma=0.1)
+    assert set(result.keys()) == set(y_block.keys())
+    for base, arr in result.items():
+        assert arr.shape == y_block[base].shape
+
+
+def test_block_pytree_eval_fn_pickle_round_trip() -> None:
+    """CompiledRhs with block_pytree_eval_fn survives a pickle round-trip."""
+    import numpy as np  # noqa: PLC0415
+
+    rhs = normalize_rhs(_sep_spec(factorize=["loc"]))
+    compiled = compile_rhs(rhs)
+    restored = pickle.loads(pickle.dumps(compiled))  # noqa: S301
+    assert restored.block_pytree_eval_fn is not None
+    assert restored.block_template_shapes == compiled.block_template_shapes
+    # Functional check
+    assert compiled.block_template_shapes is not None
+    assert compiled.block_pytree_eval_fn is not None
+    y_block = {
+        base: np.ones(shape, dtype=np.float64)
+        for base, shape in compiled.block_template_shapes.items()
+    }
+    r1 = compiled.block_pytree_eval_fn(0.0, y_block, beta=0.3, gamma=0.1)
+    r2 = restored.block_pytree_eval_fn(0.0, y_block, beta=0.3, gamma=0.1)
+    for base in r1:
+        np.testing.assert_array_equal(r1[base], r2[base])
