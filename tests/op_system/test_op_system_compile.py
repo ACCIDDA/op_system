@@ -22,6 +22,7 @@ from __future__ import annotations
 import pickle  # noqa: S403
 import re
 from dataclasses import replace
+from typing import TYPE_CHECKING
 
 import numpy as np
 import pytest
@@ -33,6 +34,9 @@ from op_system._operators import OperatorDescriptor
 from op_system._vectorize import _bail
 from op_system.compile import CompiledRhs, _collect_eq_code, compile_rhs
 from op_system.specs import NormalizedRhs, normalize_rhs
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 
 @pytest.fixture
@@ -263,6 +267,107 @@ def test_history_eval_fn_is_none_when_no_history_ops() -> None:
     rhs = normalize_rhs(spec)
     compiled = compile_rhs(rhs, xp=np)
     assert compiled.history_eval_fn is None
+
+
+class _Erlang3HistoryProvider:
+    def __init__(self, *, dt: np.float64, rate: np.float64) -> None:
+        self._dt = dt
+        self._rate = rate
+        self._s1 = np.zeros(1, dtype=np.float64)
+        self._s2 = np.zeros(1, dtype=np.float64)
+        self._s3 = np.zeros(1, dtype=np.float64)
+
+    def query(self, signal_id: int, body: object, **options: object) -> object:
+        del signal_id, options
+        inflow = np.asarray(body, dtype=np.float64)
+        out = self._rate * self._s3
+        ds1 = inflow - self._rate * self._s1
+        ds2 = self._rate * self._s1 - self._rate * self._s2
+        ds3 = self._rate * self._s2 - self._rate * self._s3
+        self._s1 += self._dt * ds1
+        self._s2 += self._dt * ds2
+        self._s3 += self._dt * ds3
+        return out
+
+
+def _run_erlang3_parity_sim(
+    *,
+    chain_fn: Callable[..., dict[str, np.ndarray]],
+    hist_fn: Callable[..., dict[str, np.ndarray]],
+    dt: np.float64,
+    rate: np.float64,
+    inflow_trace: np.ndarray,
+) -> tuple[list[float], list[float]]:
+    provider = _Erlang3HistoryProvider(dt=dt, rate=rate)
+    state_chain = {
+        "x1": np.zeros(1, dtype=np.float64),
+        "x2": np.zeros(1, dtype=np.float64),
+        "x3": np.zeros(1, dtype=np.float64),
+    }
+    state_hist = {"h": np.zeros(1, dtype=np.float64)}
+    chain_out: list[float] = []
+    hist_out: list[float] = []
+
+    for step, t in enumerate(np.arange(len(inflow_trace), dtype=np.float64) * dt):
+        inflow = np.array([inflow_trace[step]], dtype=np.float64)
+        chain_out.append(float(rate * state_chain["x3"][0]))
+
+        chain_deriv = chain_fn(t, state_chain, inflow=inflow, rate=rate)
+        state_chain = {
+            name: value + dt * chain_deriv[name] for name, value in state_chain.items()
+        }
+
+        hist_deriv = hist_fn(
+            t,
+            state_hist,
+            history_provider=provider,
+            inflow=inflow,
+        )
+        hist_out.append(float(np.asarray(hist_deriv["h"])[0]))
+
+    return chain_out, hist_out
+
+
+def test_convolve_history_erlang3_matches_linear_chain_baseline() -> None:
+    """#175 acceptance: Erlang(3) history provider matches 3-stage chain baseline."""
+    chain_spec = {
+        "kind": "expr",
+        "axes": [{"name": "loc", "coords": ["a"]}],
+        "state": ["x1[loc]", "x2[loc]", "x3[loc]"],
+        "equations": {
+            "x1[loc]": "inflow[loc] - rate * x1[loc]",
+            "x2[loc]": "rate * x1[loc] - rate * x2[loc]",
+            "x3[loc]": "rate * x2[loc] - rate * x3[loc]",
+        },
+    }
+    hist_spec = {
+        "kind": "expr",
+        "axes": [{"name": "loc", "coords": ["a"]}],
+        "state": ["h[loc]"],
+        "equations": {
+            "h[loc]": "convolve_history(inflow[loc], kernel=gamma, window=128)"
+        },
+    }
+
+    chain = compile_rhs(normalize_rhs(chain_spec))
+    hist = compile_rhs(normalize_rhs(hist_spec))
+    assert chain.pytree_eval_fn is not None
+    assert hist.history_eval_fn is not None
+
+    dt = np.float64(0.2)
+    rate = np.float64(1.3)
+    times = np.arange(120, dtype=np.float64) * dt
+    inflow_trace = np.exp(-times / np.float64(6.0)) + np.float64(0.2) * np.sin(times)
+
+    chain_out, hist_out = _run_erlang3_parity_sim(
+        chain_fn=chain.pytree_eval_fn,
+        hist_fn=hist.history_eval_fn,
+        dt=dt,
+        rate=rate,
+        inflow_trace=inflow_trace,
+    )
+
+    assert np.allclose(hist_out, chain_out, rtol=1e-12, atol=1e-12)
 
 
 def test_compile_rejects_disallowed_attribute_access() -> None:

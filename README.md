@@ -245,13 +245,53 @@ Expressions are parsed with `ast` and restricted to:
 - Helpers: `sum_state()`, `sum_prefix(prefix)`, `apply_along(...)`,
   `sum_over(...)`.
 
-Planned history helpers (`history(...)`, `delay(...)`, `convolve_history(...)`)
-are reserved for issue #173 and currently raise a targeted "not yet
-implemented" unsupported-feature error at compile time, including a
-`history_requirements=...` payload that specifies the required engine-side
-history buffer contract. Each requirement record currently includes:
-`scope`, `kind`, `signal_expr`, `options`, `required_options`,
-`missing_required_options`, and `unknown_options`.
+`convolve_history(...)` is available via the history-provider runtime hook
+(`CompiledRhs.history_eval_fn` and `OpSystemSystem`'s
+`options["history_stepper_fn"]`). `history(...)` and `delay(...)` remain
+reserved for issue #173 and still raise a targeted unsupported-feature error
+with `history_requirements=...` payloads.
+
+Each history requirement record currently includes: `scope`, `kind`,
+`signal_expr`, `options`, `required_options`, `missing_required_options`, and
+`unknown_options`.
+
+## Runnable convolve_history example
+
+```python
+import numpy as np
+
+from op_system import compile_spec
+
+spec = {
+  "kind": "expr",
+  "axes": [{"name": "loc", "coords": ["a", "b"]}],
+  "state": ["x[loc]"],
+  "equations": {
+    "x[loc]": "convolve_history(inflow[loc], kernel=gamma, window=14)"
+  },
+}
+compiled = compile_spec(spec)
+
+# history_eval_fn is available for axis-indexed convolve_history specs.
+assert compiled.history_eval_fn is not None
+print(compiled.history_requirements)
+
+
+class ZeroHistoryProvider:
+  def query(self, signal_id: int, body: object, **options: object) -> object:
+    # Runtime contract from lowering: __hist_query(signal_id, body, **options)
+    return np.zeros_like(body)
+
+
+state = {"x": np.array([1.0, 2.0], dtype=np.float64)}
+out = compiled.history_eval_fn(
+  0.0,
+  state,
+  history_provider=ZeroHistoryProvider(),
+  inflow=np.array([0.2, 0.4], dtype=np.float64),
+)
+print(out["x"])  # [0. 0.]
+```
 
 Anything else — non-`np` attribute access, imports, lambdas, comprehensions,
 other AST nodes — raises `ValueError` / `TypeError` /
