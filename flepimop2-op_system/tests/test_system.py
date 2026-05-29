@@ -785,6 +785,7 @@ def test_history_requirements_default_empty(sir_spec: dict[str, object]) -> None
     sys = OpSystemSystem(spec=sir_spec)
     assert sys.option("history_requirements", None) == ()
     assert sys.option("history_stepper_fn", "MISSING") is None
+    assert sys.option("body_eval_fn", "MISSING") is None
 
 
 def test_history_requirements_exposed_for_convolve_history_spec() -> None:
@@ -805,6 +806,8 @@ def test_history_requirements_exposed_for_convolve_history_spec() -> None:
 
     stepper_fn = sys.option("history_stepper_fn", None)
     assert callable(stepper_fn)
+    body_eval_fn = sys.option("body_eval_fn", None)
+    assert callable(body_eval_fn)
 
 
 def test_bind_exposes_history_stepper_and_invokes_provider() -> None:
@@ -842,3 +845,30 @@ def test_bind_exposes_history_stepper_and_invokes_provider() -> None:
     assert signal_id == 0
     assert options["kernel"] == "gamma"
     assert options["window"] == 14
+
+
+def test_bind_exposes_body_eval_for_history_specs() -> None:
+    """bind() attaches body_eval and returns per-signal body values."""
+    spec: dict[str, object] = {
+        "kind": "expr",
+        "axes": [{"name": "loc", "coords": ["a", "b"]}],
+        "state": ["x[loc]", "I[loc]"],
+        "equations": {
+            "x[loc]": "convolve_history(I[loc] * beta, kernel=gamma, window=14)",
+            "I[loc]": "0.0",
+        },
+    }
+    sys = OpSystemSystem(spec=spec)
+    bound = sys.bind()
+    assert hasattr(bound, "body_eval")
+
+    values = bound.body_eval(  # type: ignore[attr-defined]
+        time=np.float64(0.0),
+        state_dict={
+            "x": np.array([0.0, 0.0], dtype=np.float64),
+            "I": np.array([2.0, 4.0], dtype=np.float64),
+        },
+        beta=np.float64(1.5),
+    )
+    assert values.keys() == {0}
+    np.testing.assert_allclose(np.asarray(values[0]), np.array([3.0, 6.0]))

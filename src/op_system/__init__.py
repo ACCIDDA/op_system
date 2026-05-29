@@ -32,7 +32,14 @@ from op_system._operators import OperatorDescriptor
 from op_system._state_string import StateString
 from op_system._typing import Array
 
-from .compile import CompiledRhs, EvalFn, PytreeEvalFn, StateDict, compile_rhs
+from .compile import (
+    BodyEvalFn,
+    CompiledRhs,
+    EvalFn,
+    PytreeEvalFn,
+    StateDict,
+    compile_rhs,
+)
 from .specs import (
     ExpressionString,
     ExprRhs,
@@ -114,6 +121,7 @@ __all__ = [
     "SUPPORTED_RHS_KINDS",
     "Array",
     "BlockAxisInfo",
+    "BodyEvalFn",
     "CompiledRhs",
     "EvalFn",
     "ExprRhs",

@@ -70,6 +70,15 @@ class _Indexable(Protocol):
     def __getitem__(self, idx: int | slice) -> object: ...
 
 
+@dataclass(frozen=True, slots=True)
+class _HistoryCollectContext:
+    """Context needed while collecting de-duplicated history requirements."""
+
+    seen_by_key: dict[tuple[str, str, tuple[tuple[str, str], ...]], int]
+    cell_to_template: Mapping[str, tuple[str, tuple[str, ...]]] | None
+    lift_cell_ir_to_template: Any
+
+
 def _namespace_of(y: object) -> Any:  # noqa: ANN401
     """Return the Array-API namespace of ``y``.
 
@@ -238,6 +247,17 @@ class HistoryEvalFn(Protocol):
     ) -> StateDict: ...
 
 
+class BodyEvalFn(Protocol):
+    """Callable that evaluates history signal bodies at ``(t, y, **params)``.
+
+    Returns a mapping from ``signal_id`` to the evaluated body array/value.
+    """
+
+    def __call__(  # noqa: D102
+        self, t: object, y: StateDict, **params: object
+    ) -> dict[int, object]: ...
+
+
 @dataclass(frozen=True, slots=True)
 class CompiledRhs:
     """Container for a compiled RHS evaluation function.
@@ -311,6 +331,12 @@ class CompiledRhs:
     history_eval_fn: HistoryEvalFn | None = field(
         default=None, repr=False, compare=False, hash=False
     )
+    # ``body_eval_fn`` evaluates each history body expression independently of
+    # provider query-side effects and returns ``{signal_id: body_value}``.
+    # It is set iff ``history_eval_fn`` is set.
+    body_eval_fn: BodyEvalFn | None = field(
+        default=None, repr=False, compare=False, hash=False
+    )
     # Private: source spec retained for pickling. ``compile_rhs`` populates
     # this; direct constructions without ``_rhs`` are not picklable (the
     # ``eval_fn`` closure cannot be serialized) and will raise from
@@ -378,6 +404,7 @@ class CompiledRhs:
         object.__setattr__(self, "block_template_shapes", rebuilt.block_template_shapes)
         object.__setattr__(self, "history_requirements", rebuilt.history_requirements)
         object.__setattr__(self, "history_eval_fn", rebuilt.history_eval_fn)
+        object.__setattr__(self, "body_eval_fn", rebuilt.body_eval_fn)
         object.__setattr__(self, "_rhs", rhs)
 
 
@@ -785,10 +812,116 @@ def _make_eval_fn(
     return eval_fn
 
 
+_HISTORY_REQUIRED_OPTIONS: dict[str, tuple[str, ...]] = {
+    "history": ("lag",),
+    "delay": ("tau",),
+    "convolve_history": ("kernel", "window"),
+}
+
+_HISTORY_ALLOWED_OPTIONS: dict[str, tuple[str, ...]] = {
+    "history": ("lag", "interpolation", "history_axis"),
+    "delay": ("tau", "interpolation", "history_axis"),
+    "convolve_history": (
+        "kernel",
+        "window",
+        "kernel_params",
+        "interpolation",
+        "history_axis",
+    ),
+}
+
+
+def _normalize_history_node(
+    node: HistoryOp,
+    *,
+    cell_to_template: Mapping[str, tuple[str, tuple[str, ...]]] | None,
+    lift_cell_ir_to_template: Any,  # noqa: ANN401
+) -> HistoryOp:
+    """Lift a per-cell history node to template form when mappings exist.
+
+    Returns:
+        Normalized history node in template coordinate space.
+    """
+    if not cell_to_template or lift_cell_ir_to_template is None:
+        return node
+    lifted = lift_cell_ir_to_template(node, cell_to_template=cell_to_template)
+    return cast("HistoryOp", lifted)
+
+
+def _history_key(node: HistoryOp) -> tuple[str, str, tuple[tuple[str, str], ...]]:
+    """Build stable de-dup key for a history node.
+
+    Returns:
+        Hashable key identifying semantically-equivalent history call sites.
+    """
+    body_repr = unparse_ir(node.body)
+    options_tuple = tuple((k, unparse_ir(v)) for k, v in node.options)
+    return (node.kind, body_repr, options_tuple)
+
+
+def _history_requirement_record(
+    *,
+    signal_id: int,
+    scope: str,
+    node: HistoryOp,
+) -> dict[str, object]:
+    """Build a single history requirement payload record.
+
+    Returns:
+        Structured requirement record for one history signal.
+    """
+    options = {k: unparse_ir(v) for k, v in node.options}
+    required = _HISTORY_REQUIRED_OPTIONS.get(node.kind, ())
+    allowed = _HISTORY_ALLOWED_OPTIONS.get(node.kind, ())
+    missing = tuple(k for k in required if k not in options)
+    unknown = tuple(sorted(k for k in options if k not in allowed))
+    return {
+        "signal_id": signal_id,
+        "scope": scope,
+        "kind": node.kind,
+        "signal_expr": unparse_ir(node.body),
+        "options": options,
+        "required_options": required,
+        "missing_required_options": missing,
+        "unknown_options": unknown,
+    }
+
+
+def _append_history_nodes(
+    *,
+    scope: str,
+    expr: Expr,
+    sink: list[dict[str, object]],
+    context: _HistoryCollectContext,
+) -> None:
+    """Append first-seen history nodes from ``expr`` into ``sink``."""
+    for node in walk(expr):
+        if not isinstance(node, HistoryOp):
+            continue
+        normalized = _normalize_history_node(
+            node,
+            cell_to_template=context.cell_to_template,
+            lift_cell_ir_to_template=context.lift_cell_ir_to_template,
+        )
+        key = _history_key(normalized)
+        if key in context.seen_by_key:
+            continue
+        signal_id = len(sink)
+        context.seen_by_key[key] = signal_id
+        sink.append(
+            _history_requirement_record(
+                signal_id=signal_id,
+                scope=scope,
+                node=normalized,
+            )
+        )
+
+
 def _history_requirements_from_ir(
     *,
     aliases_ir: Mapping[str, Expr] | None,
     equations_ir: tuple[Expr | None, ...] | None,
+    cell_to_template: Mapping[str, tuple[str, tuple[str, ...]]] | None = None,
 ) -> tuple[dict[str, object], ...]:
     """Collect structured history-operator requirements from typed IR.
 
@@ -796,74 +929,36 @@ def _history_requirements_from_ir(
         Tuple of requirement records, each containing helper kind, body,
         signal_id, and normalized option expressions.
     """
-    required_by_kind: dict[str, tuple[str, ...]] = {
-        "history": ("lag",),
-        "delay": ("tau",),
-        "convolve_history": ("kernel", "window"),
-    }
-    allowed_by_kind: dict[str, tuple[str, ...]] = {
-        "history": ("lag", "interpolation", "history_axis"),
-        "delay": ("tau", "interpolation", "history_axis"),
-        "convolve_history": (
-            "kernel",
-            "window",
-            "kernel_params",
-            "interpolation",
-            "history_axis",
-        ),
-    }
+    lift_cell_ir_to_template = None
+    if cell_to_template:
+        from op_system._ir_lower import (  # noqa: PLC0415
+            lift_cell_ir_to_template as _lift_cell_ir,
+        )
 
-    def _make_req(signal_id: int, scope: str, node: HistoryOp) -> dict[str, object]:
-        options = {k: unparse_ir(v) for k, v in node.options}
-        required = required_by_kind.get(node.kind, ())
-        allowed = allowed_by_kind.get(node.kind, ())
-        missing = tuple(k for k in required if k not in options)
-        unknown = tuple(sorted(k for k in options if k not in allowed))
-        return {
-            "signal_id": signal_id,
-            "scope": scope,
-            "kind": node.kind,
-            "signal_expr": unparse_ir(node.body),
-            "options": options,
-            "required_options": required,
-            "missing_required_options": missing,
-            "unknown_options": unknown,
-        }
-
-    def _append_history_nodes(
-        signal_id: int,
-        *,
-        scope: str,
-        expr: Expr,
-        sink: list[dict[str, object]],
-    ) -> int:
-        for node in walk(expr):
-            if not isinstance(node, HistoryOp):
-                continue
-            sink.append(_make_req(signal_id, scope, node))
-            signal_id += 1
-        return signal_id
+        lift_cell_ir_to_template = _lift_cell_ir
 
     reqs: list[dict[str, object]] = []
-    signal_id = 0
-    if aliases_ir:
-        for alias_name, alias_expr in aliases_ir.items():
-            signal_id = _append_history_nodes(
-                signal_id,
-                scope=f"alias:{alias_name}",
-                expr=alias_expr,
-                sink=reqs,
-            )
-    if equations_ir:
-        for eq_idx, eq_expr in enumerate(equations_ir):
-            if eq_expr is None:
-                continue
-            signal_id = _append_history_nodes(
-                signal_id,
-                scope=f"equation:{eq_idx}",
-                expr=eq_expr,
-                sink=reqs,
-            )
+    context = _HistoryCollectContext(
+        seen_by_key={},
+        cell_to_template=cell_to_template,
+        lift_cell_ir_to_template=lift_cell_ir_to_template,
+    )
+    for alias_name, alias_expr in (aliases_ir or {}).items():
+        _append_history_nodes(
+            scope=f"alias:{alias_name}",
+            expr=alias_expr,
+            sink=reqs,
+            context=context,
+        )
+    for eq_idx, eq_expr in enumerate(equations_ir or ()):
+        if eq_expr is None:
+            continue
+        _append_history_nodes(
+            scope=f"equation:{eq_idx}",
+            expr=eq_expr,
+            sink=reqs,
+            context=context,
+        )
     return tuple(reqs)
 
 
@@ -1183,6 +1278,37 @@ def _make_history_eval_fn(pytree_eval_fn: PytreeEvalFn) -> HistoryEvalFn:
     return history_eval_fn
 
 
+def _make_body_eval_fn(history_eval_fn: HistoryEvalFn) -> BodyEvalFn:
+    """Wrap history_eval_fn to expose evaluated history signal bodies.
+
+    Returns:
+        Callable returning ``{signal_id: body_value}``.
+    """
+
+    def body_eval_fn(t: object, y: StateDict, **params: object) -> dict[int, object]:
+        signal_values: dict[int, object] = {}
+
+        class _CollectorProvider:
+            @staticmethod
+            def query(signal_id: int, body: object, **options: object) -> object:
+                del options
+                signal_values[signal_id] = body
+                ns_fn = getattr(body, "__array_namespace__", None)
+                if ns_fn is None:
+                    return np.zeros_like(body)
+                return ns_fn().zeros_like(body)
+
+        history_eval_fn(
+            t,
+            y,
+            history_provider=_CollectorProvider(),
+            **params,
+        )
+        return signal_values
+
+    return body_eval_fn
+
+
 def _warn_on_deprecated_xp(xp: object | None) -> None:
     """Emit the compile_rhs deprecation warning for compile-time xp."""
     if xp is None:
@@ -1254,11 +1380,17 @@ def _enforce_vector_plan_for_axes(
 
 def _build_primary_eval_artifacts(
     rhs: NormalizedRhs,
-) -> tuple[Any, EvalFn | None, PytreeEvalFn | None, dict[str, tuple[int, ...]] | None]:
+) -> tuple[
+    Any,
+    Any,
+    EvalFn | None,
+    PytreeEvalFn | None,
+    dict[str, tuple[int, ...]] | None,
+]:
     """Build vector plan and derive primary eval callables.
 
     Returns:
-        Tuple of ``(vec_module, eval_fn, pytree_eval_fn, template_shapes)``.
+        Tuple of ``(vec_module, plan, eval_fn, pytree_eval_fn, template_shapes)``.
     """
     vec = importlib.import_module("op_system._vectorize")
     plan = vec.build_vector_plan(rhs)
@@ -1275,7 +1407,105 @@ def _build_primary_eval_artifacts(
         if plan is not None
         else None
     )
-    return vec, eval_fn, pytree_eval_fn, template_shapes
+    return vec, plan, eval_fn, pytree_eval_fn, template_shapes
+
+
+def _cell_to_template_from_plan(plan: Any) -> dict[str, tuple[str, tuple[str, ...]]]:  # noqa: ANN401
+    """Build mapping from expanded cell names to ``(template_base, axes)``.
+
+    Returns:
+        Mapping used to lift per-cell IR to template IR for stable signal ids.
+    """
+    if plan is None:
+        return {}
+    out: dict[str, tuple[str, tuple[str, ...]]] = {}
+    for group_name in ("state_templates", "alias_templates"):
+        for tpl in getattr(plan, group_name, ()):
+            for cell_name in getattr(tpl, "expanded_names", ()):
+                out[cell_name] = (tpl.base, tpl.axes)
+    return out
+
+
+def _build_history_artifacts(
+    *,
+    rhs: NormalizedRhs,
+    plan: Any,  # noqa: ANN401
+    pytree_eval_fn: PytreeEvalFn | None,
+) -> tuple[tuple[dict[str, object], ...], HistoryEvalFn | None, BodyEvalFn | None]:
+    """Build history requirements and optional history/body evaluators.
+
+    Returns:
+        Tuple of ``(history_requirements, history_eval_fn, body_eval_fn)``.
+    """
+    history_requirements = _history_requirements_from_ir(
+        aliases_ir=rhs.aliases_ir,
+        equations_ir=rhs.equations_ir,
+        cell_to_template=_cell_to_template_from_plan(plan),
+    )
+    if not history_requirements or pytree_eval_fn is None:
+        return history_requirements, None, None
+    history_eval_fn = _make_history_eval_fn(pytree_eval_fn)
+    return history_requirements, history_eval_fn, _make_body_eval_fn(history_eval_fn)
+
+
+def _wrap_time_varying_artifacts(
+    *,
+    rhs: NormalizedRhs,
+    eval_fn: EvalFn,
+    pytree_eval_fn: PytreeEvalFn | None,
+) -> tuple[EvalFn, PytreeEvalFn | None]:
+    """Apply time-varying parameter wrappers to eval artifacts.
+
+    Returns:
+        Wrapped ``(eval_fn, pytree_eval_fn)`` pair.
+    """
+    time_axis_name = str(rhs.meta.get("time_axis", "time"))
+    axes_meta = tuple(rhs.meta.get("axes") or ())
+    wrapped_eval_fn = _wrap_eval_fn_for_time_varying(
+        eval_fn,
+        time_varying_params=rhs.time_varying_params,
+        time_axis_name=time_axis_name,
+        axes_meta=axes_meta,
+    )
+    wrapped_pytree_eval_fn = pytree_eval_fn
+    if wrapped_pytree_eval_fn is not None:
+        wrapped_pytree_eval_fn = _wrap_pytree_eval_fn_for_time_varying(
+            wrapped_pytree_eval_fn,
+            time_varying_params=rhs.time_varying_params,
+            time_axis_name=time_axis_name,
+            axes_meta=axes_meta,
+        )
+    return wrapped_eval_fn, wrapped_pytree_eval_fn
+
+
+def _apply_synth_const_wrappers(
+    *,
+    rhs: NormalizedRhs,
+    eval_fn: EvalFn,
+    pytree_eval_fn: PytreeEvalFn | None,
+) -> tuple[EvalFn, PytreeEvalFn | None, Mapping[str, object] | None]:
+    """Inject normalize-time synthesized constants into eval artifacts.
+
+    Returns:
+        Tuple ``(eval_fn, pytree_eval_fn, synth_consts_mapping_or_none)``.
+    """
+    synth_consts = rhs.meta.get("op_system_synth_constants")
+    if not isinstance(synth_consts, _MappingABC) or not synth_consts:
+        return eval_fn, pytree_eval_fn, None
+
+    synth_const_values = dict(synth_consts)
+    wrapped_eval_fn = _wrap_eval_fn_for_synth_consts(eval_fn, synth_const_values)
+    wrapped_pytree_eval_fn = pytree_eval_fn
+    if wrapped_pytree_eval_fn is not None:
+        wrapped_pytree_eval_fn = _wrap_pytree_eval_fn_for_synth_consts(
+            wrapped_pytree_eval_fn,
+            synth_const_values,
+        )
+    return (
+        wrapped_eval_fn,
+        wrapped_pytree_eval_fn,
+        cast("Mapping[str, object]", synth_consts),
+    )
 
 
 def _scalar_history_eval_unavailable() -> EvalFn:
@@ -1396,19 +1626,21 @@ def compile_rhs(rhs: NormalizedRhs, *, xp: object | None = None) -> CompiledRhs:
     _warn_on_deprecated_xp(xp)
     _validate_rhs_type(rhs)
 
-    history_requirements = _history_requirements_from_ir(
+    raw_history_requirements = _history_requirements_from_ir(
         aliases_ir=rhs.aliases_ir,
         equations_ir=rhs.equations_ir,
     )
-    _validate_history_kinds(history_requirements)
+    _validate_history_kinds(raw_history_requirements)
 
-    vec, eval_fn, pytree_eval_fn, template_shapes = _build_primary_eval_artifacts(rhs)
+    vec, plan, eval_fn, pytree_eval_fn, template_shapes = _build_primary_eval_artifacts(
+        rhs
+    )
 
-    # Construct history_eval_fn when history operators are present and
-    # the vectorized path succeeded.
-    history_eval_fn: HistoryEvalFn | None = None
-    if history_requirements and pytree_eval_fn is not None:
-        history_eval_fn = _make_history_eval_fn(pytree_eval_fn)
+    history_requirements, history_eval_fn, body_eval_fn = _build_history_artifacts(
+        rhs=rhs,
+        plan=plan,
+        pytree_eval_fn=pytree_eval_fn,
+    )
 
     eval_fn = _resolve_eval_fn(
         rhs=rhs,
@@ -1416,33 +1648,16 @@ def compile_rhs(rhs: NormalizedRhs, *, xp: object | None = None) -> CompiledRhs:
         history_requirements=history_requirements,
     )
 
-    time_axis_name = str(rhs.meta.get("time_axis", "time"))
-    axes_meta = tuple(rhs.meta.get("axes") or ())
-    eval_fn = _wrap_eval_fn_for_time_varying(
-        eval_fn,
-        time_varying_params=rhs.time_varying_params,
-        time_axis_name=time_axis_name,
-        axes_meta=axes_meta,
+    eval_fn, pytree_eval_fn = _wrap_time_varying_artifacts(
+        rhs=rhs,
+        eval_fn=eval_fn,
+        pytree_eval_fn=pytree_eval_fn,
     )
-    if pytree_eval_fn is not None:
-        pytree_eval_fn = _wrap_pytree_eval_fn_for_time_varying(
-            pytree_eval_fn,
-            time_varying_params=rhs.time_varying_params,
-            time_axis_name=time_axis_name,
-            axes_meta=axes_meta,
-        )
-
-    # Inject normalize-time synthesized constants (e.g. one-hot masks for
-    # pinned-coord transition selectors) into ``params`` so callers do not
-    # need to supply them. ``setdefault`` lets user overrides win.
-    synth_consts = rhs.meta.get("op_system_synth_constants")
-    if isinstance(synth_consts, _MappingABC) and synth_consts:
-        synth_const_values = dict(synth_consts)
-        eval_fn = _wrap_eval_fn_for_synth_consts(eval_fn, synth_const_values)
-        if pytree_eval_fn is not None:
-            pytree_eval_fn = _wrap_pytree_eval_fn_for_synth_consts(
-                pytree_eval_fn, synth_const_values
-            )
+    eval_fn, pytree_eval_fn, synth_consts = _apply_synth_const_wrappers(
+        rhs=rhs,
+        eval_fn=eval_fn,
+        pytree_eval_fn=pytree_eval_fn,
+    )
 
     block_axes = analyze_block_axes(rhs)
 
@@ -1457,11 +1672,7 @@ def compile_rhs(rhs: NormalizedRhs, *, xp: object | None = None) -> CompiledRhs:
         vec=vec,
         pytree_eval_fn=pytree_eval_fn,
         block_axes=block_axes,
-        synth_consts=(
-            cast("Mapping[str, object]", synth_consts)
-            if isinstance(synth_consts, _MappingABC)
-            else None
-        ),
+        synth_consts=synth_consts,
     )
 
     return CompiledRhs(
@@ -1478,5 +1689,6 @@ def compile_rhs(rhs: NormalizedRhs, *, xp: object | None = None) -> CompiledRhs:
         block_template_shapes=block_template_shapes,
         history_requirements=history_requirements,
         history_eval_fn=history_eval_fn,
+        body_eval_fn=body_eval_fn,
         _rhs=rhs,
     )
