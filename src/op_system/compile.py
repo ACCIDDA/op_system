@@ -225,6 +225,19 @@ class PytreeEvalFn(Protocol):
     ) -> StateDict: ...
 
 
+class HistoryEvalFn(Protocol):
+    """Callable RHS evaluator with history provider support.
+
+    Accepts ``y`` as a ``StateDict`` and a ``history_provider`` object
+    implementing a ``query(signal_id, body, **options)`` method.
+    Returns a ``StateDict`` of derivatives.
+    """
+
+    def __call__(  # noqa: D102
+        self, t: object, y: StateDict, *, history_provider: object, **params: object
+    ) -> StateDict: ...
+
+
 @dataclass(frozen=True, slots=True)
 class CompiledRhs:
     """Container for a compiled RHS evaluation function.
@@ -283,6 +296,19 @@ class CompiledRhs:
     # for the stripped compile.  ``None`` when ``block_pytree_eval_fn`` is
     # ``None``.
     block_template_shapes: dict[str, tuple[int, ...]] | None = field(
+        default=None, repr=False, compare=False, hash=False
+    )
+    # ``history_requirements`` captures structured history-operator metadata
+    # from the IR, including signal_id assignment. Empty tuple when no history
+    # operators are present. Excluded from equality and hash (derived from
+    # ``_rhs``).
+    history_requirements: tuple[Mapping[str, object], ...] = field(
+        default_factory=tuple, repr=False, compare=False, hash=False
+    )
+    # ``history_eval_fn`` is set when history_requirements is non-empty AND
+    # the vectorized path succeeds. It wraps ``pytree_eval_fn`` to inject the
+    # ``history_provider`` kwarg. Excluded from equality, repr, hash.
+    history_eval_fn: HistoryEvalFn | None = field(
         default=None, repr=False, compare=False, hash=False
     )
     # Private: source spec retained for pickling. ``compile_rhs`` populates
@@ -350,6 +376,8 @@ class CompiledRhs:
         object.__setattr__(self, "template_shapes", rebuilt.template_shapes)
         object.__setattr__(self, "block_pytree_eval_fn", rebuilt.block_pytree_eval_fn)
         object.__setattr__(self, "block_template_shapes", rebuilt.block_template_shapes)
+        object.__setattr__(self, "history_requirements", rebuilt.history_requirements)
+        object.__setattr__(self, "history_eval_fn", rebuilt.history_eval_fn)
         object.__setattr__(self, "_rhs", rhs)
 
 
@@ -766,7 +794,7 @@ def _history_requirements_from_ir(
 
     Returns:
         Tuple of requirement records, each containing helper kind, body,
-        and normalized option expressions.
+        signal_id, and normalized option expressions.
     """
     required_by_kind: dict[str, tuple[str, ...]] = {
         "history": ("lag",),
@@ -785,13 +813,14 @@ def _history_requirements_from_ir(
         ),
     }
 
-    def _make_req(scope: str, node: HistoryOp) -> dict[str, object]:
+    def _make_req(signal_id: int, scope: str, node: HistoryOp) -> dict[str, object]:
         options = {k: unparse_ir(v) for k, v in node.options}
         required = required_by_kind.get(node.kind, ())
         allowed = allowed_by_kind.get(node.kind, ())
         missing = tuple(k for k in required if k not in options)
         unknown = tuple(sorted(k for k in options if k not in allowed))
         return {
+            "signal_id": signal_id,
             "scope": scope,
             "kind": node.kind,
             "signal_expr": unparse_ir(node.body),
@@ -801,22 +830,39 @@ def _history_requirements_from_ir(
             "unknown_options": unknown,
         }
 
+    def _append_history_nodes(
+        signal_id: int,
+        *,
+        scope: str,
+        expr: Expr,
+        sink: list[dict[str, object]],
+    ) -> int:
+        for node in walk(expr):
+            if not isinstance(node, HistoryOp):
+                continue
+            sink.append(_make_req(signal_id, scope, node))
+            signal_id += 1
+        return signal_id
+
     reqs: list[dict[str, object]] = []
+    signal_id = 0
     if aliases_ir:
         for alias_name, alias_expr in aliases_ir.items():
-            reqs.extend(
-                _make_req(f"alias:{alias_name}", node)
-                for node in walk(alias_expr)
-                if isinstance(node, HistoryOp)
+            signal_id = _append_history_nodes(
+                signal_id,
+                scope=f"alias:{alias_name}",
+                expr=alias_expr,
+                sink=reqs,
             )
     if equations_ir:
         for eq_idx, eq_expr in enumerate(equations_ir):
             if eq_expr is None:
                 continue
-            reqs.extend(
-                _make_req(f"equation:{eq_idx}", node)
-                for node in walk(eq_expr)
-                if isinstance(node, HistoryOp)
+            signal_id = _append_history_nodes(
+                signal_id,
+                scope=f"equation:{eq_idx}",
+                expr=eq_expr,
+                sink=reqs,
             )
     return tuple(reqs)
 
@@ -1120,7 +1166,203 @@ def _wrap_pytree_eval_fn_for_synth_consts(
     return wrapped
 
 
-def compile_rhs(rhs: NormalizedRhs, *, xp: object | None = None) -> CompiledRhs:  # noqa: C901, PLR0914
+def _make_history_eval_fn(pytree_eval_fn: PytreeEvalFn) -> HistoryEvalFn:
+    """Wrap pytree_eval_fn to inject history_provider.query as __hist_query.
+
+    Returns:
+        History-aware wrapper that forwards ``history_provider.query`` as
+        ``__hist_query``.
+    """
+
+    def history_eval_fn(
+        t: object, y: StateDict, *, history_provider: object, **params: object
+    ) -> StateDict:
+        query_fn = cast("Any", history_provider).query
+        return pytree_eval_fn(t, y, __hist_query=query_fn, **params)
+
+    return history_eval_fn
+
+
+def _warn_on_deprecated_xp(xp: object | None) -> None:
+    """Emit the compile_rhs deprecation warning for compile-time xp."""
+    if xp is None:
+        return
+    warnings.warn(
+        "compile_rhs(xp=...) is deprecated and ignored. The compiled "
+        "eval_fn now infers its array namespace from the input `y` at "
+        "call time via __array_namespace__(); pass JAX arrays for a "
+        "JAX-native call, NumPy arrays for a NumPy call. The `xp` "
+        "kwarg will be removed in a future release.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+
+
+def _validate_rhs_type(rhs: NormalizedRhs) -> None:
+    """Ensure compile_rhs received a supported normalized RHS variant."""
+    if isinstance(rhs, (ExprRhs, TransitionsRhs)):
+        return
+    _raise_unsupported_feature(
+        feature=f"rhs type={type(rhs).__name__}",
+        detail="Only ExprRhs and TransitionsRhs are supported in v1.",
+    )
+
+
+def _validate_history_kinds(
+    history_requirements: tuple[dict[str, object], ...],
+) -> None:
+    """Reject history kinds that still require engine-managed buffers."""
+    if not any(req["kind"] in {"history", "delay"} for req in history_requirements):
+        return
+    _raise_unsupported_feature(
+        feature="history operators",
+        detail=(
+            "History/delay operators require engine-managed state history "
+            "buffers and are not implemented yet (issue #173). "
+            f"history_requirements={history_requirements!r}"
+        ),
+    )
+
+
+def _enforce_vector_plan_for_axes(
+    *,
+    rhs: NormalizedRhs,
+    vec: Any,  # noqa: ANN401
+    plan: object,
+) -> None:
+    """Raise when an axis-indexed spec fails vector-plan construction."""
+    if plan is not None:
+        return
+    axes_meta_check = (
+        rhs.meta.get("axes") if isinstance(rhs.meta, _MappingABC) else None
+    )
+    bail_reason = vec.last_vector_plan_bail_reason() or ""
+    if (
+        axes_meta_check
+        and bail_reason != "scalar (non-wildcard) state template present"
+    ):
+        _raise_unsupported_feature(
+            feature="vectorized eval path",
+            detail=(
+                f"Spec declares axes but the vectorizer could not build a "
+                f"plan: {bail_reason}. All axis-indexed specs must use the "
+                f"vectorized path. If this expression pattern should be "
+                f"supported, please file an issue referencing issue #160."
+            ),
+        )
+
+
+def _build_primary_eval_artifacts(
+    rhs: NormalizedRhs,
+) -> tuple[Any, EvalFn | None, PytreeEvalFn | None, dict[str, tuple[int, ...]] | None]:
+    """Build vector plan and derive primary eval callables.
+
+    Returns:
+        Tuple of ``(vec_module, eval_fn, pytree_eval_fn, template_shapes)``.
+    """
+    vec = importlib.import_module("op_system._vectorize")
+    plan = vec.build_vector_plan(rhs)
+    _enforce_vector_plan_for_axes(rhs=rhs, vec=vec, plan=plan)
+
+    eval_fn: EvalFn | None = (
+        vec.make_vectorized_eval_fn(plan) if plan is not None else None
+    )
+    pytree_eval_fn: PytreeEvalFn | None = (
+        vec.make_pytree_eval_fn(plan) if plan is not None else None
+    )
+    template_shapes: dict[str, tuple[int, ...]] | None = (
+        {tpl.base: tpl.shape for tpl in plan.state_templates}
+        if plan is not None
+        else None
+    )
+    return vec, eval_fn, pytree_eval_fn, template_shapes
+
+
+def _scalar_history_eval_unavailable() -> EvalFn:
+    """Return a sentinel eval_fn for history specs without scalar support."""
+
+    def eval_fn(*_args: object, **_kwargs: object) -> NoReturn:
+        message = (
+            "scalar eval_fn is not available for specs containing "
+            "history operators (e.g. convolve_history); use "
+            "history_eval_fn(t, y, history_provider=..., **params) "
+            "instead."
+        )
+        raise NotImplementedError(message)
+
+    return eval_fn
+
+
+def _resolve_eval_fn(
+    *,
+    rhs: NormalizedRhs,
+    eval_fn: EvalFn | None,
+    history_requirements: tuple[dict[str, object], ...],
+) -> EvalFn:
+    """Select vectorized, scalar, or history-sentinel eval_fn.
+
+    Returns:
+        Concrete evaluator callable to expose in :class:`CompiledRhs`.
+    """
+    if eval_fn is not None:
+        return eval_fn
+    if history_requirements:
+        return _scalar_history_eval_unavailable()
+    return _make_eval_fn(
+        state_names=rhs.state_names,
+        aliases=rhs.aliases,
+        equations=rhs.equations,
+        aliases_ir=rhs.aliases_ir,
+        equations_ir=rhs.equations_ir,
+    )
+
+
+def _build_block_pytree_artifacts(
+    *,
+    rhs: NormalizedRhs,
+    vec: Any,  # noqa: ANN401
+    pytree_eval_fn: PytreeEvalFn | None,
+    block_axes: tuple[BlockAxisInfo, ...],
+    synth_consts: Mapping[str, object] | None,
+) -> tuple[PytreeEvalFn | None, dict[str, tuple[int, ...]] | None]:
+    """Build block-stripped pytree eval function and shapes when available.
+
+    Returns:
+        Tuple of ``(block_pytree_eval_fn, block_template_shapes)``.
+    """
+    block_pytree_eval_fn: PytreeEvalFn | None = None
+    block_template_shapes: dict[str, tuple[int, ...]] | None = None
+    if pytree_eval_fn is None or not block_axes:
+        return block_pytree_eval_fn, block_template_shapes
+
+    from op_system._normalize_block import strip_block_axis  # noqa: PLC0415
+
+    stripped = strip_block_axis(rhs, block_axes[0].name)
+    stripped_plan = vec.build_vector_plan(stripped)
+    if stripped_plan is None:
+        return block_pytree_eval_fn, block_template_shapes
+
+    raw_block_fn: PytreeEvalFn = vec.make_pytree_eval_fn(stripped_plan)
+    block_template_shapes = {
+        tpl.base: tpl.shape for tpl in stripped_plan.state_templates
+    }
+    stripped_time_axis = str(stripped.meta.get("time_axis", "time"))
+    stripped_axes_meta = tuple(stripped.meta.get("axes") or ())
+    raw_block_fn = _wrap_pytree_eval_fn_for_time_varying(
+        raw_block_fn,
+        time_varying_params=stripped.time_varying_params,
+        time_axis_name=stripped_time_axis,
+        axes_meta=stripped_axes_meta,
+    )
+    if isinstance(synth_consts, _MappingABC) and synth_consts:
+        raw_block_fn = _wrap_pytree_eval_fn_for_synth_consts(
+            raw_block_fn, dict(synth_consts)
+        )
+    block_pytree_eval_fn = raw_block_fn
+    return block_pytree_eval_fn, block_template_shapes
+
+
+def compile_rhs(rhs: NormalizedRhs, *, xp: object | None = None) -> CompiledRhs:
     """Compile a normalized RHS into a runnable evaluation function.
 
     Always uses the vectorized eval path that operates on shaped buffers
@@ -1151,97 +1393,28 @@ def compile_rhs(rhs: NormalizedRhs, *, xp: object | None = None) -> CompiledRhs:
         ``UnsupportedFeatureError`` is raised (see bail reason in the detail
         message) rather than silently degrading to the scalar path.
     """
-    if xp is not None:
-        warnings.warn(
-            "compile_rhs(xp=...) is deprecated and ignored. The compiled "
-            "eval_fn now infers its array namespace from the input `y` at "
-            "call time via __array_namespace__(); pass JAX arrays for a "
-            "JAX-native call, NumPy arrays for a NumPy call. The `xp` "
-            "kwarg will be removed in a future release.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-    if not isinstance(rhs, (ExprRhs, TransitionsRhs)):
-        _raise_unsupported_feature(
-            feature=f"rhs type={type(rhs).__name__}",
-            detail="Only ExprRhs and TransitionsRhs are supported in v1.",
-        )
+    _warn_on_deprecated_xp(xp)
+    _validate_rhs_type(rhs)
 
     history_requirements = _history_requirements_from_ir(
         aliases_ir=rhs.aliases_ir,
         equations_ir=rhs.equations_ir,
     )
-    if history_requirements:
-        _raise_unsupported_feature(
-            feature="history operators",
-            detail=(
-                "History/delay operators require engine-managed state history "
-                "buffers and are not implemented yet (issue #173). "
-                f"history_requirements={history_requirements!r}"
-            ),
-        )
+    _validate_history_kinds(history_requirements)
 
-    # Lazy load via importlib to avoid a static circular import
-    # (op_system._vectorize imports helpers from this module).
-    vec = importlib.import_module("op_system._vectorize")
-    plan = vec.build_vector_plan(rhs)
+    vec, eval_fn, pytree_eval_fn, template_shapes = _build_primary_eval_artifacts(rhs)
 
-    if plan is None:
-        # Specs that declare axes MUST vectorize.  Falling back to the scalar
-        # path for an axis-indexed spec is catastrophically slow (O(N*M*...)
-        # Python loop per eval call), breaks the PyTree interface
-        # (pytree_eval_fn / template_shapes are absent), and silently hides
-        # vectorizer regressions.  Raise loudly so the gap gets fixed.
-        #
-        # Exceptions:
-        # - Genuinely scalar specs (no axes declared) have no tensor structure
-        #   to exploit and the scalar path is correct for them.
-        # - Specs that declare only a continuous time axis (for time-varying
-        #   parameters) but have scalar state templates are functionally scalar.
-        # - Mixed specs where some states lack axis wildcards (e.g. a scalar
-        #   background compartment alongside axis-indexed states) bail with
-        #   "scalar (non-wildcard) state template present"; this is a known
-        #   limitation and the scalar path is the correct fallback.
-        # Only fire the error for bail reasons that indicate an *unexpected*
-        # vectorization failure (e.g. unsupported expression patterns).
-        axes_meta_check = (
-            rhs.meta.get("axes") if isinstance(rhs.meta, _MappingABC) else None
-        )
-        bail_reason = vec.last_vector_plan_bail_reason() or ""
-        if (
-            axes_meta_check
-            and bail_reason != "scalar (non-wildcard) state template present"
-        ):
-            _raise_unsupported_feature(
-                feature="vectorized eval path",
-                detail=(
-                    f"Spec declares axes but the vectorizer could not build a "
-                    f"plan: {bail_reason}. All axis-indexed specs must use the "
-                    f"vectorized path. If this expression pattern should be "
-                    f"supported, please file an issue referencing issue #160."
-                ),
-            )
+    # Construct history_eval_fn when history operators are present and
+    # the vectorized path succeeded.
+    history_eval_fn: HistoryEvalFn | None = None
+    if history_requirements and pytree_eval_fn is not None:
+        history_eval_fn = _make_history_eval_fn(pytree_eval_fn)
 
-    eval_fn: EvalFn | None = (
-        vec.make_vectorized_eval_fn(plan) if plan is not None else None
+    eval_fn = _resolve_eval_fn(
+        rhs=rhs,
+        eval_fn=eval_fn,
+        history_requirements=history_requirements,
     )
-    pytree_eval_fn: PytreeEvalFn | None = (
-        vec.make_pytree_eval_fn(plan) if plan is not None else None
-    )
-    template_shapes: dict[str, tuple[int, ...]] | None = (
-        {tpl.base: tpl.shape for tpl in plan.state_templates}
-        if plan is not None
-        else None
-    )
-
-    if eval_fn is None:
-        eval_fn = _make_eval_fn(
-            state_names=rhs.state_names,
-            aliases=rhs.aliases,
-            equations=rhs.equations,
-            aliases_ir=rhs.aliases_ir,
-            equations_ir=rhs.equations_ir,
-        )
 
     time_axis_name = str(rhs.meta.get("time_axis", "time"))
     axes_meta = tuple(rhs.meta.get("axes") or ())
@@ -1279,31 +1452,17 @@ def compile_rhs(rhs: NormalizedRhs, *, xp: object | None = None) -> CompiledRhs:
     # vectorizer.  Engines can jax.vmap this over the block axis instead
     # of baking literal axis indices that break under vmap.
     # ------------------------------------------------------------------
-    block_pytree_eval_fn: PytreeEvalFn | None = None
-    block_template_shapes: dict[str, tuple[int, ...]] | None = None
-    if pytree_eval_fn is not None and block_axes:
-        from op_system._normalize_block import strip_block_axis  # noqa: PLC0415
-
-        stripped = strip_block_axis(rhs, block_axes[0].name)
-        stripped_plan = vec.build_vector_plan(stripped)
-        if stripped_plan is not None:
-            raw_block_fn: PytreeEvalFn = vec.make_pytree_eval_fn(stripped_plan)
-            block_template_shapes = {
-                tpl.base: tpl.shape for tpl in stripped_plan.state_templates
-            }
-            stripped_time_axis = str(stripped.meta.get("time_axis", "time"))
-            stripped_axes_meta = tuple(stripped.meta.get("axes") or ())
-            raw_block_fn = _wrap_pytree_eval_fn_for_time_varying(
-                raw_block_fn,
-                time_varying_params=stripped.time_varying_params,
-                time_axis_name=stripped_time_axis,
-                axes_meta=stripped_axes_meta,
-            )
-            if isinstance(synth_consts, _MappingABC) and synth_consts:
-                raw_block_fn = _wrap_pytree_eval_fn_for_synth_consts(
-                    raw_block_fn, dict(synth_consts)
-                )
-            block_pytree_eval_fn = raw_block_fn
+    block_pytree_eval_fn, block_template_shapes = _build_block_pytree_artifacts(
+        rhs=rhs,
+        vec=vec,
+        pytree_eval_fn=pytree_eval_fn,
+        block_axes=block_axes,
+        synth_consts=(
+            cast("Mapping[str, object]", synth_consts)
+            if isinstance(synth_consts, _MappingABC)
+            else None
+        ),
+    )
 
     return CompiledRhs(
         state_names=rhs.state_names,
@@ -1317,5 +1476,7 @@ def compile_rhs(rhs: NormalizedRhs, *, xp: object | None = None) -> CompiledRhs:
         template_shapes=template_shapes,
         block_pytree_eval_fn=block_pytree_eval_fn,
         block_template_shapes=block_template_shapes,
+        history_requirements=history_requirements,
+        history_eval_fn=history_eval_fn,
         _rhs=rhs,
     )

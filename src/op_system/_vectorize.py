@@ -31,7 +31,15 @@ from dataclasses import dataclass
 from itertools import combinations as _comb
 from typing import TYPE_CHECKING, Any, cast
 
-from op_system._ir import Apply, Literal, Sym, extract_common_subexpressions
+from op_system._ir import (
+    Apply,
+    HistoryOp,
+    Literal,
+    Sym,
+    extract_common_subexpressions,
+    unparse_ir,
+    walk,
+)
 from op_system._ir_lower import (
     UnsupportedIRLoweringError,
     lift_cell_ir_to_template,
@@ -172,6 +180,140 @@ class _VectorPlan:
     cse_codes: tuple[tuple[str, CodeType], ...] = ()
 
 
+@dataclass(frozen=True, slots=True)
+class _LoweringContext:
+    """Shared lowering configuration for IR-to-AST code generation."""
+
+    buffer_axes: Mapping[str, tuple[str, ...]]
+    axis_names: frozenset[str]
+    reducible_axes: frozenset[str]
+    axis_weights: Mapping[str, tuple[float, ...]] | None
+    axis_coords: Mapping[str, tuple[str, ...]] | None
+    axis_types: Mapping[str, str] | None
+    shaped_param_axes: Mapping[str, tuple[str, ...]] | None
+
+
+def _build_history_signal_id_map(
+    expr: Expr,
+) -> dict[tuple[str, str, tuple[tuple[str, str], ...]], int]:
+    """Build stable history signal ids from IR pre-order traversal.
+
+    Returns:
+        Mapping from ``(kind, body_repr, options_tuple)`` to dense integer
+        signal ids in first-seen pre-order.
+    """
+    history_signal_id_map: dict[tuple[str, str, tuple[tuple[str, str], ...]], int] = {}
+    signal_id = 0
+    for node in walk(expr):
+        if not isinstance(node, HistoryOp):
+            continue
+        body_repr = unparse_ir(node.body)
+        options_tuple = tuple((k, unparse_ir(v)) for k, v in node.options)
+        key = (node.kind, body_repr, options_tuple)
+        if key in history_signal_id_map:
+            continue
+        history_signal_id_map[key] = signal_id
+        signal_id += 1
+    return history_signal_id_map
+
+
+def _compile_ir_expr(
+    expr: Expr,
+    *,
+    target_axes: tuple[str, ...],
+    context: _LoweringContext,
+    filename: str,
+) -> CodeType | None:
+    """Lower IR to AST and compile it into an eval-ready code object.
+
+    Returns:
+        Code object on success, otherwise ``None`` when lowering/compile fails.
+    """
+    try:
+        body = lower_to_vector_ast(
+            expr,
+            target_axes=target_axes,
+            buffer_axes=context.buffer_axes,
+            axis_names=context.axis_names,
+            reducible_axes=context.reducible_axes,
+            axis_weights=context.axis_weights,
+            axis_coords=context.axis_coords,
+            axis_types=context.axis_types,
+            shaped_param_axes=context.shaped_param_axes,
+            history_signal_id_map=_build_history_signal_id_map(expr),
+        )
+    except UnsupportedIRLoweringError:
+        return None
+    tree = ast.Expression(body=body)
+    ast.fix_missing_locations(tree)
+    try:
+        return compile(tree, filename=filename, mode="eval")
+    except (ValueError, TypeError, SyntaxError):
+        return None
+
+
+def _compile_cse_bindings(
+    *,
+    bindings: tuple[tuple[str, Expr], ...],
+    common_axes: tuple[str, ...],
+    context: _LoweringContext,
+) -> list[tuple[str, CodeType]] | None:
+    """Compile template-level CSE bindings.
+
+    Returns:
+        List of ``(name, code)`` CSE bindings, or ``None`` on failure.
+    """
+    cse_codes_list: list[tuple[str, CodeType]] = []
+    for name, binding_ir in bindings:
+        code = _compile_ir_expr(
+            binding_ir,
+            target_axes=common_axes,
+            context=context,
+            filename="<op_system_cse>",
+        )
+        if code is None:
+            return None
+        cse_codes_list.append((name, code))
+    return cse_codes_list
+
+
+def _compile_cse_eq_groups(
+    *,
+    state_buffers: list[_BufferTemplate],
+    rewritten_irs: tuple[Expr, ...],
+    context: _LoweringContext,
+) -> list[_EqGroup] | None:
+    """Compile rewritten CSE equations into vectorized equation groups.
+
+    Returns:
+        List of vectorized equation groups, or ``None`` on failure.
+    """
+    eq_groups: list[_EqGroup] = []
+    for buf, rewritten_ir in zip(state_buffers, rewritten_irs, strict=True):
+        code = _compile_ir_expr(
+            rewritten_ir,
+            target_axes=buf.axes,
+            context=context,
+            filename="<op_system_vec>",
+        )
+        if code is None:
+            return None
+        assembly_perm = tuple(range(len(buf.axes)))
+        eq_groups.append(
+            _EqGroup(
+                base=buf.base,
+                codes=(code,),
+                vec_axes=buf.axes,
+                vec_shape=buf.shape,
+                unroll_axes=(),
+                unroll_shape=(),
+                assembly_perm=assembly_perm,
+                full_shape=buf.shape,
+            )
+        )
+    return eq_groups
+
+
 def _try_ir_fast_path(  # noqa: PLR0913
     expr_ir: Expr,
     *,
@@ -213,6 +355,11 @@ def _try_ir_fast_path(  # noqa: PLR0913
         return None
     try:
         lifted = lift_cell_ir_to_template(expr_ir, cell_to_template=cell_to_template)
+    except UnsupportedIRLoweringError:
+        return None
+
+    history_signal_id_map = _build_history_signal_id_map(lifted)
+    try:
         body = lower_to_vector_ast(
             lifted,
             target_axes=target_axes,
@@ -223,6 +370,7 @@ def _try_ir_fast_path(  # noqa: PLR0913
             axis_coords=axis_coords,
             axis_types=axis_types,
             shaped_param_axes=shaped_param_axes,
+            history_signal_id_map=history_signal_id_map,
         )
     except UnsupportedIRLoweringError:
         return None
@@ -440,7 +588,7 @@ def _rewrite_cell_to_vector(  # noqa: PLR0913
 # ---------------------------------------------------------------------------
 
 
-def _try_cse_eq_plan(  # noqa: C901, PLR0911, PLR0912, PLR0913, PLR0914
+def _try_cse_eq_plan(  # noqa: C901, PLR0911, PLR0912, PLR0913
     *,
     state_buffers: list[_BufferTemplate],
     rhs: NormalizedRhs,
@@ -493,7 +641,15 @@ def _try_cse_eq_plan(  # noqa: C901, PLR0911, PLR0912, PLR0913, PLR0914
         if tpl.axes:
             buffer_axes[tpl.base] = tpl.axes
 
-    axis_names = frozenset(axis_index.keys())
+    lowering_context = _LoweringContext(
+        buffer_axes=buffer_axes,
+        axis_names=frozenset(axis_index.keys()),
+        reducible_axes=reducible_axes,
+        axis_weights=axis_weights,
+        axis_coords=axis_coords,
+        axis_types=axis_types,
+        shaped_param_axes=shaped_param_axes,
+    )
 
     # Lift the first-cell IR for each template to template form.
     # Prefer equations_ir_reduce (preserves Reduce helper structure) so that
@@ -531,67 +687,21 @@ def _try_cse_eq_plan(  # noqa: C901, PLR0911, PLR0912, PLR0913, PLR0914
     # Compile CSE binding codes.  Each binding is computed once after alias
     # buffers are assembled; its result is added to the eval env under the
     # assigned name so rewritten equation codes can reference it by Sym.
-    cse_codes_list: list[tuple[str, CodeType]] = []
-    for name, binding_ir in bindings:
-        try:
-            body = lower_to_vector_ast(
-                binding_ir,
-                target_axes=common_axes,
-                buffer_axes=buffer_axes,
-                axis_names=axis_names,
-                reducible_axes=reducible_axes,
-                axis_weights=axis_weights,
-                axis_coords=axis_coords,
-                axis_types=axis_types,
-                shaped_param_axes=shaped_param_axes,
-            )
-        except UnsupportedIRLoweringError:
-            return None
-        tree = ast.Expression(body=body)
-        ast.fix_missing_locations(tree)
-        try:
-            code = compile(tree, filename="<op_system_cse>", mode="eval")
-        except (ValueError, TypeError, SyntaxError):
-            return None
-        cse_codes_list.append((name, code))
+    cse_codes_list = _compile_cse_bindings(
+        bindings=bindings,
+        common_axes=common_axes,
+        context=lowering_context,
+    )
+    if cse_codes_list is None:
+        return None
 
-    # Compile one rewritten equation code per state template.
-    eq_groups: list[_EqGroup] = []
-    for buf, rewritten_ir in zip(state_buffers, rewritten_irs, strict=True):
-        try:
-            body = lower_to_vector_ast(
-                rewritten_ir,
-                target_axes=buf.axes,
-                buffer_axes=buffer_axes,
-                axis_names=axis_names,
-                reducible_axes=reducible_axes,
-                axis_weights=axis_weights,
-                axis_coords=axis_coords,
-                axis_types=axis_types,
-                shaped_param_axes=shaped_param_axes,
-            )
-        except UnsupportedIRLoweringError:
-            return None
-        tree = ast.Expression(body=body)
-        ast.fix_missing_locations(tree)
-        try:
-            code = compile(tree, filename="<op_system_vec>", mode="eval")
-        except (ValueError, TypeError, SyntaxError):
-            return None
-        # CSE path always produces a fully-vectorized code (no unrolled axes).
-        assembly_perm = tuple(range(len(buf.axes)))
-        eq_groups.append(
-            _EqGroup(
-                base=buf.base,
-                codes=(code,),
-                vec_axes=buf.axes,
-                vec_shape=buf.shape,
-                unroll_axes=(),
-                unroll_shape=(),
-                assembly_perm=assembly_perm,
-                full_shape=buf.shape,
-            )
-        )
+    eq_groups = _compile_cse_eq_groups(
+        state_buffers=state_buffers,
+        rewritten_irs=rewritten_irs,
+        context=lowering_context,
+    )
+    if eq_groups is None:
+        return None
 
     return tuple(cse_codes_list), eq_groups
 

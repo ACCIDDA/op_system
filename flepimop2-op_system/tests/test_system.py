@@ -773,3 +773,72 @@ def test_option_block_axes_from_spec() -> None:
     assert info.size == 2
     assert "S" in info.state_axis_pos
     assert info.state_axis_pos["S"] == 1  # loc is the second axis in S[age, loc]
+
+
+# ---------------------------------------------------------------------------
+# history operators surface (#175)
+# ---------------------------------------------------------------------------
+
+
+def test_history_requirements_default_empty(sir_spec: dict[str, object]) -> None:
+    """history_requirements is an empty tuple for specs without history ops."""
+    sys = OpSystemSystem(spec=sir_spec)
+    assert sys.option("history_requirements", None) == ()
+    assert sys.option("history_stepper_fn", "MISSING") is None
+
+
+def test_history_requirements_exposed_for_convolve_history_spec() -> None:
+    """Specs containing ``convolve_history`` expose requirements + stepper."""
+    spec: dict[str, object] = {
+        "kind": "expr",
+        "axes": [{"name": "loc", "coords": ["a", "b"]}],
+        "state": ["x[loc]"],
+        "equations": {"x[loc]": "convolve_history(x[loc], kernel=gamma, window=14)"},
+    }
+    sys = OpSystemSystem(spec=spec)
+
+    reqs = sys.option("history_requirements", ())
+    assert isinstance(reqs, tuple)
+    assert len(reqs) >= 1
+    assert any(req["kind"] == "convolve_history" for req in reqs)
+    assert any(req["signal_id"] == 0 for req in reqs)
+
+    stepper_fn = sys.option("history_stepper_fn", None)
+    assert callable(stepper_fn)
+
+
+def test_bind_exposes_history_stepper_and_invokes_provider() -> None:
+    """bind() attaches history_stepper; the stepper routes through the provider."""
+    spec: dict[str, object] = {
+        "kind": "expr",
+        "axes": [{"name": "loc", "coords": ["a", "b"]}],
+        "state": ["x[loc]"],
+        "equations": {"x[loc]": "convolve_history(x[loc], kernel=gamma, window=14)"},
+    }
+    sys = OpSystemSystem(spec=spec)
+    bound = sys.bind()
+    assert hasattr(bound, "history_stepper")
+
+    calls: list[tuple[int, object, dict[str, object]]] = []
+
+    class MockProvider:
+        @staticmethod
+        def query(signal_id: int, body: object, **options: object) -> object:
+            calls.append((signal_id, body, options))
+            return np.zeros_like(body)
+
+    shapes = sys.option("template_shapes", None)
+    assert shapes is not None
+    y_dict = {b: np.ones(s, dtype=np.float64) for b, s in shapes.items()}
+
+    result = bound.history_stepper(  # type: ignore[attr-defined]
+        time=np.float64(0.0),
+        state_dict=y_dict,
+        history_provider=MockProvider(),
+    )
+    assert "x" in result
+    assert len(calls) >= 1
+    signal_id, _body, options = calls[0]
+    assert signal_id == 0
+    assert options["kernel"] == "gamma"
+    assert options["window"] == 14

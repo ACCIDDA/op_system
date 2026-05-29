@@ -90,49 +90,127 @@ class OpSystemSystem(SystemABC, module="flepimop2.system.op_system"):  # noqa: D
         """
         del context
 
-        spec_obj = self.spec
-        compiled = compile_spec(spec_obj)
-        n_state = len(compiled.state_names)
-
+        compiled = compile_spec(self.spec)
         axes_meta = self._extract_axes_meta(compiled)
         mixing_kernels = self._build_mixing_kernels(compiled, axes_meta.axis_coords)
         shape_dims, flatten_fn, unflatten_fn = self._make_shape_helpers(
-            n_state, axes_meta
+            len(compiled.state_names), axes_meta
         )
 
-        operators = self._extract_operators(compiled)
-        operator_axis = self._extract_operator_axis(compiled)
-        # Preserve the user-declared coordinate labels (typically strings
-        # like ``unvaccinated`` / ``age65to100``) alongside the numeric
-        # ``axis_coords`` arrays.  Engine plugins use this to translate
-        # shaped-IC coord assignments back to integer indices.
+        self.options = self._build_options(
+            compiled=compiled,
+            axes_meta=axes_meta,
+            shape_helpers=(shape_dims, flatten_fn, unflatten_fn),
+            mixing_kernels=mixing_kernels,
+        )
+
+        self._stepper = self._make_stepper(
+            compiled=compiled, mixing_kernels=mixing_kernels
+        )
+
+        self._stepper_pytree = self._maybe_make_pytree_stepper(
+            compiled=compiled,
+            mixing_kernels=mixing_kernels,
+        )
+        self.options["pytree_stepper_fn"] = self._stepper_pytree
+
+        self._stepper_block_pytree = self._maybe_make_block_pytree_stepper(
+            compiled=compiled,
+            mixing_kernels=mixing_kernels,
+        )
+        self.options["block_pytree_stepper_fn"] = self._stepper_block_pytree
+
+        self._stepper_history = self._maybe_make_history_stepper(
+            compiled=compiled,
+            mixing_kernels=mixing_kernels,
+        )
+        self.options["history_stepper_fn"] = self._stepper_history
+
+        self._compiled_rhs = compiled  # handy for debugging/adapters
+
+    @staticmethod
+    def _extract_axis_labels(compiled: CompiledRhs) -> dict[str, tuple[str, ...]]:
+        """Preserve declared axis coordinate labels for shaped-IC resolution.
+
+        Returns:
+            Mapping from axis name to declared coordinate labels.
+        """
         axis_labels: dict[str, tuple[str, ...]] = {}
         for ax in compiled.meta.get("axes", []) or []:
             name = ax.get("name")
             coords = ax.get("coords")
             if isinstance(name, str) and isinstance(coords, (list, tuple)):
                 axis_labels[name] = tuple(str(c) for c in coords)
-        self.options = {
+        return axis_labels
+
+    @staticmethod
+    def _merged_params(
+        mixing_kernels: Mapping[str, np.ndarray],
+        kwargs: Mapping[str, Any],
+    ) -> dict[str, Any]:
+        """Merge static mixing-kernel params with call-time kwargs.
+
+        Returns:
+            Dict containing kernel defaults overridden by runtime kwargs.
+        """
+        merged = dict(mixing_kernels)
+        merged.update(kwargs)
+        return merged
+
+    def _build_options(
+        self,
+        *,
+        compiled: CompiledRhs,
+        axes_meta: _AxesMeta,
+        shape_helpers: tuple[
+            tuple[int, ...],
+            Callable[[np.ndarray], np.ndarray],
+            Callable[[np.ndarray], np.ndarray],
+        ],
+        mixing_kernels: Mapping[str, np.ndarray],
+    ) -> dict[str, object]:
+        """Build the public options map surfaced to engine plugins.
+
+        Returns:
+            Fully-populated options mapping for bound steppers/plugins.
+        """
+        shape_dims, flatten_fn, unflatten_fn = shape_helpers
+        return {
             **dict(self.options or {}),
             "axis_order": axes_meta.axis_order,
             "axis_sizes": axes_meta.axis_sizes,
             "axis_coords": axes_meta.axis_coords,
-            "axis_labels": axis_labels,
+            "axis_labels": self._extract_axis_labels(compiled),
             "state_names": compiled.state_names,
             "initial_state": compiled.meta.get("initial_state"),
             "state_shape": shape_dims,
             "flatten": flatten_fn,
             "unflatten": unflatten_fn,
-            "mixing_kernels": mixing_kernels,
-            "operators": operators,
-            "operator_axis": operator_axis,
+            "mixing_kernels": dict(mixing_kernels),
+            "operators": self._extract_operators(compiled),
+            "operator_axis": self._extract_operator_axis(compiled),
             "factorize_axes": compiled.factorize_axes,
             "block_axes": compiled.block_axes,
             "template_shapes": compiled.template_shapes,
             "block_template_shapes": compiled.block_template_shapes,
-            "pytree_stepper_fn": None,  # updated below if pytree path available
-            "block_pytree_stepper_fn": None,  # updated below if block path available
+            "pytree_stepper_fn": None,
+            "block_pytree_stepper_fn": None,
+            "history_requirements": compiled.history_requirements,
+            "history_stepper_fn": None,
         }
+
+    @staticmethod
+    def _make_stepper(
+        *,
+        compiled: CompiledRhs,
+        mixing_kernels: Mapping[str, np.ndarray],
+    ) -> Callable[[np.float64, Float64NDArray], Float64NDArray]:
+        """Build scalar-vector stepper wrapper around compiled.eval_fn.
+
+        Returns:
+            Callable matching the flat state-vector stepper contract.
+        """
+        n_state = len(compiled.state_names)
 
         def _stepper(
             time: np.float64,
@@ -146,54 +224,92 @@ class OpSystemSystem(SystemABC, module="flepimop2.system.op_system"):  # noqa: D
                     f"expected ({n_state},), got {shape}."
                 )
                 raise ValueError(msg)
-            params = dict(mixing_kernels)
-            params.update(kwargs)
+            params = OpSystemSystem._merged_params(mixing_kernels, kwargs)
             return compiled.eval_fn(time, state, **params)
 
-        self._stepper = _stepper
+        return _stepper
 
-        # Expose PyTree stepper when the vectorized compile path succeeded.
-        # Accepts and returns a ``StateDict`` (base → shaped array) rather
-        # than a flat ``(n_state,)`` vector, enabling engines to skip the
-        # flatten/unflatten step and exploit block-diagonal structure.
-        if compiled.pytree_eval_fn is not None:
-            pytree_eval_fn = compiled.pytree_eval_fn
+    @staticmethod
+    def _maybe_make_pytree_stepper(
+        *,
+        compiled: CompiledRhs,
+        mixing_kernels: Mapping[str, np.ndarray],
+    ) -> Callable[[np.float64, dict[str, Any]], dict[str, Any]] | None:
+        """Build optional PyTree stepper wrapper when vectorized path exists.
 
-            def _stepper_pytree(
-                time: np.float64,
-                state_dict: dict[str, Any],
-                **kwargs: Any,  # noqa: ANN401
-            ) -> dict[str, Any]:
-                params = dict(mixing_kernels)
-                params.update(kwargs)
-                return pytree_eval_fn(time, state_dict, **params)
+        Returns:
+            PyTree stepper callable when available, otherwise ``None``.
+        """
+        pytree_eval_fn = compiled.pytree_eval_fn
+        if pytree_eval_fn is None:
+            return None
 
-            self._stepper_pytree: Any = _stepper_pytree
-            self.options["pytree_stepper_fn"] = _stepper_pytree
-        else:
-            self._stepper_pytree = None
+        def _stepper_pytree(
+            time: np.float64,
+            state_dict: dict[str, Any],
+            **kwargs: Any,  # noqa: ANN401
+        ) -> dict[str, Any]:
+            params = OpSystemSystem._merged_params(mixing_kernels, kwargs)
+            return pytree_eval_fn(time, state_dict, **params)
 
-        # Expose block PyTree stepper when block_pytree_eval_fn is available.
-        # The engine calls this function with a per-block-coord state dict
-        # (block axis removed) and vmaps it over the block axis.
-        if compiled.block_pytree_eval_fn is not None:
-            block_pytree_eval_fn = compiled.block_pytree_eval_fn
+        return _stepper_pytree
 
-            def _stepper_block_pytree(
-                time: np.float64,
-                state_dict: dict[str, Any],
-                **kwargs: Any,  # noqa: ANN401
-            ) -> dict[str, Any]:
-                params = dict(mixing_kernels)
-                params.update(kwargs)
-                return block_pytree_eval_fn(time, state_dict, **params)
+    @staticmethod
+    def _maybe_make_block_pytree_stepper(
+        *,
+        compiled: CompiledRhs,
+        mixing_kernels: Mapping[str, np.ndarray],
+    ) -> Callable[[np.float64, dict[str, Any]], dict[str, Any]] | None:
+        """Build optional block-pytree stepper wrapper.
 
-            self._stepper_block_pytree: Any = _stepper_block_pytree
-            self.options["block_pytree_stepper_fn"] = _stepper_block_pytree
-        else:
-            self._stepper_block_pytree = None
+        Returns:
+            Block-pytree stepper callable when available, otherwise ``None``.
+        """
+        block_pytree_eval_fn = compiled.block_pytree_eval_fn
+        if block_pytree_eval_fn is None:
+            return None
 
-        self._compiled_rhs = compiled  # handy for debugging/adapters
+        def _stepper_block_pytree(
+            time: np.float64,
+            state_dict: dict[str, Any],
+            **kwargs: Any,  # noqa: ANN401
+        ) -> dict[str, Any]:
+            params = OpSystemSystem._merged_params(mixing_kernels, kwargs)
+            return block_pytree_eval_fn(time, state_dict, **params)
+
+        return _stepper_block_pytree
+
+    @staticmethod
+    def _maybe_make_history_stepper(
+        *,
+        compiled: CompiledRhs,
+        mixing_kernels: Mapping[str, np.ndarray],
+    ) -> Callable[..., dict[str, Any]] | None:
+        """Build optional history-provider-aware stepper wrapper.
+
+        Returns:
+            History-aware stepper callable when available, otherwise ``None``.
+        """
+        history_eval_fn = compiled.history_eval_fn
+        if history_eval_fn is None:
+            return None
+
+        def _stepper_history(
+            time: np.float64,
+            state_dict: dict[str, Any],
+            *,
+            history_provider: object,
+            **kwargs: Any,  # noqa: ANN401
+        ) -> dict[str, Any]:
+            params = OpSystemSystem._merged_params(mixing_kernels, kwargs)
+            return history_eval_fn(
+                time,
+                state_dict,
+                history_provider=history_provider,
+                **params,
+            )
+
+        return _stepper_history
 
     @override
     def _bind_impl(
@@ -214,6 +330,12 @@ class OpSystemSystem(SystemABC, module="flepimop2.system.op_system"):  # noqa: D
         if self._stepper_pytree is not None:
             bound.pytree_stepper = functools.partial(  # type: ignore[attr-defined]
                 self._stepper_pytree, **(params or {})
+            )
+        if self._stepper_history is not None:
+            # ``history_provider`` is per-call (not partialized) because the
+            # engine constructs and owns the history buffer registry.
+            bound.history_stepper = functools.partial(  # type: ignore[attr-defined]
+                self._stepper_history, **(params or {})
             )
         return cast("SystemProtocol", bound)
 

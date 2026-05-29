@@ -44,6 +44,7 @@ from op_system._ir import (
     Sym,
     classify_axis_index,
     substitute,
+    unparse_ir,
     walk,
 )
 
@@ -402,6 +403,121 @@ def _lower_shaped_param_subscript(  # noqa: C901, PLR0911, PLR0912, PLR0915
 # ---------------------------------------------------------------------------
 
 
+def _lower_history_op(  # noqa: PLR0913
+    expr: HistoryOp,
+    *,
+    target_axes: tuple[str, ...],
+    buffer_axes: Mapping[str, tuple[str, ...]],
+    axis_names: frozenset[str],
+    reducible_axes: frozenset[str] = frozenset(),
+    axis_weights: Mapping[str, tuple[float, ...]] | None = None,
+    axis_coords: Mapping[str, tuple[str, ...]] | None = None,
+    axis_types: Mapping[str, str] | None = None,
+    shaped_param_axes: Mapping[str, tuple[str, ...]] | None = None,
+    axis_alias: Mapping[str, str] | None = None,
+    history_signal_id_map: Mapping[tuple[str, str, tuple[tuple[str, str], ...]], int]
+    | None = None,
+) -> ast.expr:
+    """Lower a HistoryOp to a __hist_query call.
+
+    Args:
+        expr: The HistoryOp node.
+        target_axes: Target broadcast axis order for the lowered body.
+        buffer_axes: Mapping of buffer name to declared axis order.
+        axis_names: Registered axis labels.
+        reducible_axes: Axis labels allowed for reduction.
+        axis_weights: Optional per-axis integration weights.
+        axis_coords: Optional per-axis coordinate labels.
+        axis_types: Optional per-axis type declarations.
+        shaped_param_axes: Optional mapping for shaped-parameter axes.
+        axis_alias: Optional synthetic-axis to real-axis mapping.
+        history_signal_id_map: Mapping from history-op lookup key to signal id.
+
+    Returns:
+        ast.Call node calling __hist_query(signal_id, body, **options).
+
+    Raises:
+        UnsupportedIRLoweringError: If kind is not convolve_history or if
+            signal_id_map is missing.
+    """
+    if expr.kind in {"history", "delay"}:
+        msg = (
+            f"{expr.kind} operator requires engine-managed history buffers "
+            "and cannot be lowered in v1 (issue #173)"
+        )
+        raise UnsupportedIRLoweringError(msg)
+
+    if expr.kind != "convolve_history":
+        msg = f"unknown HistoryOp kind: {expr.kind!r}"
+        raise UnsupportedIRLoweringError(msg)
+
+    if history_signal_id_map is None:
+        msg = (
+            "convolve_history lowering requires a signal_id_map; "
+            "this is a caller error (vectorize path should provide it)"
+        )
+        raise UnsupportedIRLoweringError(msg)
+
+    # Build lookup key: (kind, body_repr, options_tuple).
+    body_repr = unparse_ir(expr.body)
+    options_tuple = tuple((k, unparse_ir(v)) for k, v in expr.options)
+    lookup_key = (expr.kind, body_repr, options_tuple)
+    signal_id = history_signal_id_map.get(lookup_key)
+    if signal_id is None:
+        msg = (
+            f"convolve_history node not found in signal_id_map: {lookup_key}; "
+            "this indicates a mismatch between compile.py and lowering traversal order"
+        )
+        raise UnsupportedIRLoweringError(msg)
+
+    # Lower body expression.
+    body_ast = lower_to_vector_ast(
+        expr.body,
+        target_axes=target_axes,
+        buffer_axes=buffer_axes,
+        axis_names=axis_names,
+        reducible_axes=reducible_axes,
+        axis_weights=axis_weights,
+        axis_coords=axis_coords,
+        axis_types=axis_types,
+        shaped_param_axes=shaped_param_axes,
+        axis_alias=axis_alias,
+        history_signal_id_map=history_signal_id_map,
+    )
+
+    # Lower options: Literal → Constant, Sym → Constant(name), else recurse.
+    keywords: list[ast.keyword] = []
+    for opt_name, opt_expr in expr.options:
+        opt_ast: ast.expr
+        if isinstance(opt_expr, Literal):
+            opt_ast = ast.Constant(value=opt_expr.value)
+        elif isinstance(opt_expr, Sym):
+            # Pass symbolic name as string for runtime dispatch.
+            opt_ast = ast.Constant(value=opt_expr.name)
+        else:
+            # Recursively lower complex option expressions.
+            opt_ast = lower_to_vector_ast(
+                opt_expr,
+                target_axes=target_axes,
+                buffer_axes=buffer_axes,
+                axis_names=axis_names,
+                reducible_axes=reducible_axes,
+                axis_weights=axis_weights,
+                axis_coords=axis_coords,
+                axis_types=axis_types,
+                shaped_param_axes=shaped_param_axes,
+                axis_alias=axis_alias,
+                history_signal_id_map=history_signal_id_map,
+            )
+        keywords.append(ast.keyword(arg=opt_name, value=opt_ast))
+
+    return ast.Call(
+        func=ast.Name(id="__hist_query", ctx=ast.Load()),
+        args=[ast.Constant(value=signal_id), body_ast],
+        keywords=keywords,
+    )
+
+
 def lower_to_vector_ast(  # noqa: PLR0913
     expr: Expr,
     *,
@@ -414,6 +530,8 @@ def lower_to_vector_ast(  # noqa: PLR0913
     axis_types: Mapping[str, str] | None = None,
     shaped_param_axes: Mapping[str, tuple[str, ...]] | None = None,
     axis_alias: Mapping[str, str] | None = None,
+    history_signal_id_map: Mapping[tuple[str, str, tuple[tuple[str, str], ...]], int]
+    | None = None,
 ) -> ast.expr:
     """Lower an IR expression to a vector-shape AST.
 
@@ -467,6 +585,9 @@ def lower_to_vector_ast(  # noqa: PLR0913
             and :func:`_lower_shaped_param_subscript` so labeled
             indices still match the real buffer axes while preserving
             the synthetic label for ``target_axes`` broadcast alignment.
+        history_signal_id_map: Optional mapping from
+            ``(kind, body_repr, options_tuple)`` to signal id for lowering
+            :class:`HistoryOp` nodes.
 
     Returns:
         An ``ast.expr`` suitable for ``compile(ast.Expression(body=...))``
@@ -476,39 +597,39 @@ def lower_to_vector_ast(  # noqa: PLR0913
         UnsupportedIRLoweringError: If ``expr`` (or any subexpression)
             contains a node outside the v1 subset.
     """
+    lowered: ast.expr
     if isinstance(expr, Literal):
-        return ast.Constant(value=expr.value)
-
-    if isinstance(expr, Sym):
-        return _name(expr.name)
-
-    if isinstance(expr, Subscript):
+        lowered = ast.Constant(value=expr.value)
+    elif isinstance(expr, Sym):
+        lowered = _name(expr.name)
+    elif isinstance(expr, Subscript):
         src_axes = buffer_axes.get(expr.name)
         if src_axes is not None:
-            return lower_subscript_to_buffer(
+            lowered = lower_subscript_to_buffer(
                 expr,
                 src_axes=src_axes,
                 target_axes=target_axes,
                 axis_names=axis_names,
                 axis_alias=axis_alias,
             )
-        shaped_axes = (shaped_param_axes or {}).get(expr.name)
-        if shaped_axes is not None:
-            return _lower_shaped_param_subscript(
-                expr,
-                src_axes=shaped_axes,
-                target_axes=target_axes,
-                axis_names=axis_names,
-                axis_alias=axis_alias,
-            )
-        msg = (
-            f"subscript {expr.name!r} is not a registered templated "
-            "buffer or shaped parameter — v1 lowering cannot resolve it"
-        )
-        raise UnsupportedIRLoweringError(msg)
-
-    if isinstance(expr, Apply):
-        return _lower_apply(
+        else:
+            shaped_axes = (shaped_param_axes or {}).get(expr.name)
+            if shaped_axes is not None:
+                lowered = _lower_shaped_param_subscript(
+                    expr,
+                    src_axes=shaped_axes,
+                    target_axes=target_axes,
+                    axis_names=axis_names,
+                    axis_alias=axis_alias,
+                )
+            else:
+                msg = (
+                    f"subscript {expr.name!r} is not a registered templated "
+                    "buffer or shaped parameter — v1 lowering cannot resolve it"
+                )
+                raise UnsupportedIRLoweringError(msg)
+    elif isinstance(expr, Apply):
+        lowered = _lower_apply(
             expr,
             target_axes=target_axes,
             buffer_axes=buffer_axes,
@@ -519,31 +640,41 @@ def lower_to_vector_ast(  # noqa: PLR0913
             axis_types=axis_types,
             shaped_param_axes=shaped_param_axes,
             axis_alias=axis_alias,
+            history_signal_id_map=history_signal_id_map,
         )
-
-    if isinstance(expr, HistoryOp):
-        msg = (
-            "history/delay operators require engine-managed history "
-            "buffers and cannot be lowered in v1 (issue #173)"
+    elif isinstance(expr, HistoryOp):
+        lowered = _lower_history_op(
+            expr,
+            target_axes=target_axes,
+            buffer_axes=buffer_axes,
+            axis_names=axis_names,
+            reducible_axes=reducible_axes,
+            axis_weights=axis_weights,
+            axis_coords=axis_coords,
+            axis_types=axis_types,
+            shaped_param_axes=shaped_param_axes,
+            axis_alias=axis_alias,
+            history_signal_id_map=history_signal_id_map,
         )
-        raise UnsupportedIRLoweringError(msg)
-
-    if not isinstance(expr, Reduce):
+    elif isinstance(expr, Reduce):
+        lowered = _lower_reduce(
+            expr,
+            target_axes=target_axes,
+            buffer_axes=buffer_axes,
+            axis_names=axis_names,
+            reducible_axes=reducible_axes,
+            axis_weights=axis_weights,
+            axis_coords=axis_coords,
+            axis_types=axis_types,
+            shaped_param_axes=shaped_param_axes,
+            axis_alias=axis_alias,
+            history_signal_id_map=history_signal_id_map,
+        )
+    else:
         msg = f"unsupported IR node in lowering: {type(expr).__name__}"
         raise UnsupportedIRLoweringError(msg)
 
-    return _lower_reduce(
-        expr,
-        target_axes=target_axes,
-        buffer_axes=buffer_axes,
-        axis_names=axis_names,
-        reducible_axes=reducible_axes,
-        axis_weights=axis_weights,
-        axis_coords=axis_coords,
-        axis_types=axis_types,
-        shaped_param_axes=shaped_param_axes,
-        axis_alias=axis_alias,
-    )
+    return lowered
 
 
 _REDUCE_SUM_KINDS: frozenset[str] = frozenset({
@@ -692,6 +823,8 @@ def _lower_reduce(  # noqa: C901, PLR0912, PLR0913, PLR0914, PLR0915
     axis_types: Mapping[str, str] | None = None,
     shaped_param_axes: Mapping[str, tuple[str, ...]] | None = None,
     axis_alias: Mapping[str, str] | None = None,
+    history_signal_id_map: Mapping[tuple[str, str, tuple[tuple[str, str], ...]], int]
+    | None = None,
 ) -> ast.expr:
     """Lower a :class:`Reduce` node to ``np.sum(body, axis=...)``.
 
@@ -814,6 +947,7 @@ def _lower_reduce(  # noqa: C901, PLR0912, PLR0913, PLR0914, PLR0915
         axis_types=axis_types,
         shaped_param_axes=shaped_param_axes,
         axis_alias=child_axis_alias,
+        history_signal_id_map=history_signal_id_map,
     )
 
     # Resolve per-axis filter coord lists to integer indices. The
@@ -1131,6 +1265,8 @@ def _lower_apply(  # noqa: PLR0913
     axis_types: Mapping[str, str] | None = None,
     shaped_param_axes: Mapping[str, tuple[str, ...]] | None = None,
     axis_alias: Mapping[str, str] | None = None,
+    history_signal_id_map: Mapping[tuple[str, str, tuple[tuple[str, str], ...]], int]
+    | None = None,
 ) -> ast.expr:
     def lower(child: Expr) -> ast.expr:
         return lower_to_vector_ast(
@@ -1144,6 +1280,7 @@ def _lower_apply(  # noqa: PLR0913
             axis_types=axis_types,
             shaped_param_axes=shaped_param_axes,
             axis_alias=axis_alias,
+            history_signal_id_map=history_signal_id_map,
         )
 
     if expr.op == "neg" and len(expr.args) == 1:

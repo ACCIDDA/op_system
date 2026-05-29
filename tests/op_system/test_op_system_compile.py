@@ -171,7 +171,7 @@ def test_compile_rejects_nonwhitelisted_helper() -> None:
         compile_rhs(rhs, xp=np)
 
 
-@pytest.mark.parametrize("helper", ["history", "delay", "convolve_history"])
+@pytest.mark.parametrize("helper", ["history", "delay"])
 def test_compile_rejects_planned_history_helpers_with_targeted_message(
     helper: str,
 ) -> None:
@@ -200,7 +200,7 @@ def test_history_requirements_payload_includes_missing_required_options() -> Non
 
 
 def test_history_requirements_payload_captures_provided_options() -> None:
-    """history_requirements payload preserves normalized option expressions."""
+    """#174 integration: signal_id and provided options exposed in requirements map."""
     spec = {
         "kind": "expr",
         "state": ["x"],
@@ -209,18 +209,60 @@ def test_history_requirements_payload_captures_provided_options() -> None:
         },
     }
     rhs = normalize_rhs(spec)
+    compiled = compile_rhs(rhs, xp=np)
+    assert compiled.history_requirements
+    first_req = compiled.history_requirements[0]
+    options = first_req["options"]
+    assert isinstance(options, dict)
+    assert first_req["signal_id"] == 0
+    assert options["kernel"] == "gamma"
+    assert options["window"] == "14"
+    assert options["interpolation"] == "linear"
 
-    with pytest.raises(UnsupportedFeatureError) as exc_info:
-        compile_rhs(rhs, xp=np)
 
-    msg = str(exc_info.value)
-    assert "'kind': 'convolve_history'" in msg
-    assert (
-        "'options': {'kernel': 'gamma', 'window': '14', 'interpolation': 'linear'}"
-        in msg
-    )
-    assert "'missing_required_options': ()" in msg
-    assert "'unknown_options': ()" in msg
+def test_convolve_history_compiles_and_calls_provider() -> None:
+    """#175 integration: convolve_history lowers to provider hook invocation."""
+    spec = {
+        "kind": "expr",
+        "axes": [{"name": "loc", "coords": ["a", "b"]}],
+        "state": ["x[loc]"],
+        "equations": {"x[loc]": "convolve_history(x[loc], kernel=gamma, window=14)"},
+    }
+    rhs = normalize_rhs(spec)
+    compiled = compile_rhs(rhs)
+    assert compiled.pytree_eval_fn is not None
+    assert compiled.history_eval_fn is not None
+    # Per-cell scopes report one requirement per axis coord; the vectorized
+    # lowering collapses to a single ``__hist_query`` call (signal_id == 0).
+    assert len(compiled.history_requirements) >= 1
+    assert any(req["signal_id"] == 0 for req in compiled.history_requirements)
+
+    # Mock provider exposes a ``.query`` method matching the lowered call:
+    # ``__hist_query(signal_id, body, **options)``.
+    mock_queries: list[tuple[int, object, dict[str, object]]] = []
+
+    class MockProvider:
+        @staticmethod
+        def query(signal_id: int, body: object, **options: object) -> object:
+            mock_queries.append((signal_id, body, options))
+            return np.zeros_like(body)
+
+    state = {"x": np.array([1.5, 2.5])}
+    result = compiled.history_eval_fn(0.0, state, history_provider=MockProvider())
+    assert len(mock_queries) >= 1
+    signal_id, _body, opts = mock_queries[0]
+    assert signal_id == 0
+    assert opts["kernel"] == "gamma"
+    assert opts["window"] == 14
+    assert "x" in result
+
+
+def test_history_eval_fn_is_none_when_no_history_ops() -> None:
+    """#175 integration: history_eval_fn is None when no history ops present."""
+    spec = {"kind": "expr", "state": ["x"], "equations": {"x": "x + 1"}}
+    rhs = normalize_rhs(spec)
+    compiled = compile_rhs(rhs, xp=np)
+    assert compiled.history_eval_fn is None
 
 
 def test_compile_rejects_disallowed_attribute_access() -> None:
