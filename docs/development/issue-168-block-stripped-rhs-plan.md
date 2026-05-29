@@ -77,19 +77,20 @@ logic lives in op_system, not the engine.
 
 ---
 
-### Slice 3 — `feat/168-engine-uses-block-fn`
+### Slice 3 — `feat/168-engine-uses-block-fn` ✅ DONE
 **Goal**: Switch `diffrax_engine` to use `block_pytree_eval_fn`; delete the engine-side stripping helper.
 
 This slice lands in **ACCIDDA/COVID19_USA**, not op_system.
 
+**What was done**:
 - `model_input/plugins/diffrax_engine.py`:
-  - In `_solve_one_block`: call `compiled.block_pytree_eval_fn` instead of `pytree_eval_fn`.
-  - In `_prepare_call`: when picking `block_axis`, also bind `block_template_shapes` for shape computations.
-  - Delete `_build_operator_terms_pytree_block` (its job is now done at compile time).
+  - Merged `_build_operator_terms_pytree_block` into `_build_operator_terms_pytree` (added `block_axis_name: str | None = None` parameter); deleted the separate 80-LOC block function.
+  - Block path now reads `stepper.option("block_template_shapes")` (from Slice 4 shim) instead of computing shapes inline.
+  - Replaced `else pytree_stepper_fn` fallback with a `RuntimeError` assertion — `block_pytree_stepper_fn` must be set when entering the block path.
+  - Acceptance gate (`SMH_R19_op_system_hierarchical.yml -t prior_predictive`) passes: EXIT=0.
 - `tests/test_diffrax_engine.py`:
-  - Update existing 4 tests to assert the block path uses `block_pytree_eval_fn` (mock or attribute check).
-  - Add `test_block_path_runs_for_alias_with_reduce_over_non_block_axis` — the original failing config-style alias (`N_total[loc]: sum over (age, vax)`).
-- Also: surface `block_template_shapes` on the flepimop2 connector if needed (read of `stepper.option("block_template_shapes")`).
+  - `_MockStepper` now exposes `block_pytree_stepper_fn` and `block_template_shapes` from `compiled.*`.
+  - All 4 existing tests pass with the real `block_pytree_eval_fn` path (no fallback).
 
 **Files**: COVID19_USA `model_input/plugins/diffrax_engine.py`, `tests/test_diffrax_engine.py`
 **Dependencies**: Slice 2 released (op_system version bump).
