@@ -6,6 +6,7 @@ from op_system._ir import (
     Apply,
     AxisIndex,
     Expr,
+    HistoryOp,
     Literal,
     Reduce,
     Subscript,
@@ -105,3 +106,20 @@ def test_substitute_is_identity_when_no_match() -> None:
     """Substituting an empty mapping yields a structurally equal tree."""
     expr = parse_expr_to_ir("a + b * c")
     assert substitute(expr, {}) == expr
+
+
+def test_historyop_free_symbols_and_substitute() -> None:
+    """HistoryOp participates in free-symbol analysis and substitution."""
+    expr = HistoryOp(
+        kind="delay",
+        body=Sym(name="I"),
+        options=(("tau", Sym(name="tau_param")),),
+    )
+
+    assert free_symbols(expr) == frozenset({"I", "tau_param"})
+    out = substitute(expr, {"I": Sym(name="incidence")})
+    assert out == HistoryOp(
+        kind="delay",
+        body=Sym(name="incidence"),
+        options=(("tau", Sym(name="tau_param")),),
+    )

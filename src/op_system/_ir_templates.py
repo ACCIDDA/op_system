@@ -28,6 +28,7 @@ from ._ir import (
     Apply,
     AxisIndex,
     Expr,
+    HistoryOp,
     Literal,
     Reduce,
     Subscript,
@@ -182,6 +183,11 @@ def _compute_free_axes(
         if not (bound and body_axes):
             return body_axes
         return (body_axes - bound) or _EMPTY_AXES
+    if isinstance(node, HistoryOp):
+        hist_acc: set[str] = set(_free_axes_in(node.body, shaped=shaped, memo=memo))
+        for _, opt_expr in node.options:
+            hist_acc |= _free_axes_in(opt_expr, shaped=shaped, memo=memo)
+        return frozenset(hist_acc) or _EMPTY_AXES
     # Literal, Sym, and any other leaf node carry no free axes.
     return _EMPTY_AXES
 
@@ -245,7 +251,7 @@ def expand_inline_templates(
             shaped_params=shaped,
             axis_lookup=axis_lookup,
         )
-    # Compound nodes (Apply / Reduce): skip the recursion entirely when
+    # Compound nodes (Apply / Reduce / HistoryOp): skip the recursion entirely when
     # the cached free-axis set is disjoint from ``assignment``. This is
     # the dominant win for per-coord alias pinning where ``assignment``
     # is ``{<one-axis>: ...}`` but the body spans many axes (issue #145).
@@ -291,6 +297,15 @@ def expand_inline_templates(
         )
     elif isinstance(expr, Reduce):
         result = _expand_reduce(
+            expr,
+            assignment=assignment,
+            shaped_params=shaped,
+            axis_lookup=axis_lookup,
+            free_axes_memo=_free_axes_memo,
+            expand_result_memo=_expand_result_memo,
+        )
+    elif isinstance(expr, HistoryOp):
+        result = _expand_history_op(
             expr,
             assignment=assignment,
             shaped_params=shaped,
@@ -358,7 +373,49 @@ def _expand_reduce(  # noqa: PLR0913
     )
     if new_body is expr.body:
         return expr
-    return Reduce(kind=expr.kind, bindings=expr.bindings, body=new_body)
+    return Reduce(
+        kind=expr.kind,
+        bindings=expr.bindings,
+        body=new_body,
+        filters=expr.filters,
+        kernel=expr.kernel,
+    )
+
+
+def _expand_history_op(  # noqa: PLR0913
+    expr: HistoryOp,
+    *,
+    assignment: Mapping[str, str],
+    shaped_params: Mapping[str, tuple[str, ...]],
+    axis_lookup: Mapping[str, Sequence[str]] | None,
+    free_axes_memo: dict[int, frozenset[str]] | None,
+    expand_result_memo: dict[tuple[object, ...], Expr] | None = None,
+) -> Expr:
+    new_body = expand_inline_templates(
+        expr.body,
+        assignment=assignment,
+        shaped_params=shaped_params,
+        axis_lookup=axis_lookup,
+        _free_axes_memo=free_axes_memo,
+        _expand_result_memo=expand_result_memo,
+    )
+    new_options = tuple(
+        (
+            k,
+            expand_inline_templates(
+                opt_expr,
+                assignment=assignment,
+                shaped_params=shaped_params,
+                axis_lookup=axis_lookup,
+                _free_axes_memo=free_axes_memo,
+                _expand_result_memo=expand_result_memo,
+            ),
+        )
+        for k, opt_expr in expr.options
+    )
+    if new_body is expr.body and new_options == expr.options:
+        return expr
+    return HistoryOp(kind=expr.kind, body=new_body, options=new_options)
 
 
 __all__ = [
@@ -407,6 +464,11 @@ def _walk_for_axes(
         _walk_for_axes(node.body, shaped=shaped, seen=seen)
         for _, bind in node.bindings:
             seen.pop(bind, None)
+        return
+    if isinstance(node, HistoryOp):
+        _walk_for_axes(node.body, shaped=shaped, seen=seen)
+        for _, opt_expr in node.options:
+            _walk_for_axes(opt_expr, shaped=shaped, seen=seen)
 
 
 def free_axes(

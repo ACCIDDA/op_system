@@ -34,3 +34,13 @@ def test_unparse_ir_renders_helper_reduce_node() -> None:
     rendered = unparse_ir(ir)
     assert rendered.startswith("apply_along(")
     assert "age=ap" in rendered
+
+
+def test_unparse_ir_renders_history_helper_node() -> None:
+    """Lowered history/delay helper nodes unparse back to helper-call syntax."""
+    ir1 = parse_expr_to_ir("delay(I, tau=7)", lower_helpers=True)
+
+    rendered = unparse_ir(ir1)
+    assert rendered == "delay(I, tau=7)"
+    ir2 = parse_expr_to_ir(rendered, lower_helpers=True)
+    assert ir1 == ir2
