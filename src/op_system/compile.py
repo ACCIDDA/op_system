@@ -40,7 +40,14 @@ from numpy.typing import NDArray
 
 from op_system._block_axes import BlockAxisInfo, analyze_block_axes
 from op_system._errors import InvalidExpressionError, UnsupportedFeatureError
-from op_system._ir import Expr, extract_common_subexpressions, ir_to_ast_expr
+from op_system._ir import (
+    Expr,
+    HistoryOp,
+    extract_common_subexpressions,
+    ir_to_ast_expr,
+    unparse_ir,
+    walk,
+)
 from op_system._normalize import ExprRhs, TransitionsRhs
 from op_system._operators import OperatorDescriptor
 from op_system._symbols import parse_expression_string
@@ -750,6 +757,43 @@ def _make_eval_fn(
     return eval_fn
 
 
+def _history_requirements_from_ir(
+    *,
+    aliases_ir: Mapping[str, Expr] | None,
+    equations_ir: tuple[Expr | None, ...] | None,
+) -> tuple[dict[str, object], ...]:
+    """Collect structured history-operator requirements from typed IR.
+
+    Returns:
+        Tuple of requirement records, each containing helper kind, body,
+        and normalized option expressions.
+    """
+    reqs: list[dict[str, object]] = []
+    if aliases_ir:
+        for alias_name, alias_expr in aliases_ir.items():
+            for node in walk(alias_expr):
+                if isinstance(node, HistoryOp):
+                    reqs.append({
+                        "scope": f"alias:{alias_name}",
+                        "kind": node.kind,
+                        "body": unparse_ir(node.body),
+                        "options": {k: unparse_ir(v) for k, v in node.options},
+                    })
+    if equations_ir:
+        for eq_idx, eq_expr in enumerate(equations_ir):
+            if eq_expr is None:
+                continue
+            for node in walk(eq_expr):
+                if isinstance(node, HistoryOp):
+                    reqs.append({
+                        "scope": f"equation:{eq_idx}",
+                        "kind": node.kind,
+                        "body": unparse_ir(node.body),
+                        "options": {k: unparse_ir(v) for k, v in node.options},
+                    })
+    return tuple(reqs)
+
+
 # -----------------------------------------------------------------------------
 # Public compile API
 # -----------------------------------------------------------------------------
@@ -1094,6 +1138,20 @@ def compile_rhs(rhs: NormalizedRhs, *, xp: object | None = None) -> CompiledRhs:
         _raise_unsupported_feature(
             feature=f"rhs type={type(rhs).__name__}",
             detail="Only ExprRhs and TransitionsRhs are supported in v1.",
+        )
+
+    history_requirements = _history_requirements_from_ir(
+        aliases_ir=rhs.aliases_ir,
+        equations_ir=rhs.equations_ir,
+    )
+    if history_requirements:
+        _raise_unsupported_feature(
+            feature="history operators",
+            detail=(
+                "History/delay operators require engine-managed state history "
+                "buffers and are not implemented yet (issue #173). "
+                f"history_requirements={history_requirements!r}"
+            ),
         )
 
     # Lazy load via importlib to avoid a static circular import

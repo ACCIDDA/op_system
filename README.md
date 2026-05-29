@@ -247,7 +247,9 @@ Expressions are parsed with `ast` and restricted to:
 
 Planned history helpers (`history(...)`, `delay(...)`, `convolve_history(...)`)
 are reserved for issue #173 and currently raise a targeted "not yet
-implemented" validation error.
+implemented" unsupported-feature error at compile time, including a
+`history_requirements=...` payload that specifies the required engine-side
+history buffer contract.
 
 Anything else — non-`np` attribute access, imports, lambdas, comprehensions,
 other AST nodes — raises `ValueError` / `TypeError` /

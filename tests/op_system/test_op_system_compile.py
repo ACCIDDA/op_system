@@ -179,8 +179,8 @@ def test_compile_rejects_planned_history_helpers_with_targeted_message(
     spec = {"kind": "expr", "state": ["x"], "equations": {"x": f"{helper}(x)"}}
     rhs = normalize_rhs(spec)
     with pytest.raises(
-        ValueError,
-        match=r"history/delay operators are recognized but not yet implemented",
+        UnsupportedFeatureError,
+        match=r"issue #173.*history_requirements=",
     ):
         compile_rhs(rhs, xp=np)
 
