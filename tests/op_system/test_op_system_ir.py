@@ -10,6 +10,7 @@ from op_system._errors import InvalidExpressionError
 from op_system._ir import (
     Apply,
     AxisIndex,
+    HistoryOp,
     Literal,
     Reduce,
     Subscript,
@@ -236,3 +237,28 @@ def test_lower_helper_combines_binding_and_filter_across_axes() -> None:
     assert isinstance(ir, Reduce)
     assert ir.bindings == (("age", "a"), ("vax", "b"))
     assert ir.filters == (("vax", ("v", "w")),)
+
+
+@pytest.mark.parametrize("helper,arg_name", [("history", "lag"), ("delay", "tau")])
+def test_lower_helper_rewrites_history_family_calls(
+    helper: str,
+    arg_name: str,
+) -> None:
+    """History-family helpers lower to structured HistoryOp nodes."""
+    ir = parse_expr_to_ir(f"{helper}(I, {arg_name}=7)", lower_helpers=True)
+
+    assert isinstance(ir, HistoryOp)
+    assert ir.kind == helper
+    assert ir.body == Sym(name="I")
+    assert ir.options == ((arg_name, Literal(value=7)),)
+
+
+def test_ir_to_ast_rejects_structured_history_nodes_for_now() -> None:
+    """#173 scaffold: HistoryOp exists in IR but has no runtime lowering yet."""
+    ir = parse_expr_to_ir("delay(I, tau=7)", lower_helpers=True)
+
+    with pytest.raises(
+        InvalidExpressionError,
+        match=r"history/delay operators are recognized but not yet implemented",
+    ):
+        ir_to_ast_expr(ir)

@@ -94,12 +94,32 @@ class Reduce:
     kernel: str | None = None
 
 
-Expr = Literal | Sym | Subscript | Apply | Reduce
+@dataclass(frozen=True, slots=True)
+class HistoryOp:
+    """History-aware helper placeholder (issue #173 scaffolding).
+
+    ``kind`` is one of ``history`` / ``delay`` / ``convolve_history``.
+    ``body`` holds the signal expression to query over history and
+    ``options`` stores helper keyword arguments as ``(name, Expr)`` pairs.
+    """
+
+    kind: str
+    body: Expr
+    options: tuple[tuple[str, Expr], ...] = ()
+
+
+Expr = Literal | Sym | Subscript | Apply | Reduce | HistoryOp
 
 _HELPER_REDUCE_OPS: frozenset[str] = frozenset({
     "apply_along",
     "sum_over",
     "integrate_over",
+})
+
+_HELPER_HISTORY_OPS: frozenset[str] = frozenset({
+    "history",
+    "delay",
+    "convolve_history",
 })
 
 
@@ -190,7 +210,7 @@ def _extract_filter_from_value(value: Expr) -> tuple[str, tuple[str, ...]] | Non
 
 
 def _lower_single_helper(node: Apply) -> Expr:  # noqa: C901, PLR0912
-    if node.op not in _HELPER_REDUCE_OPS:
+    if node.op not in _HELPER_REDUCE_OPS | _HELPER_HISTORY_OPS:
         return node
 
     kw_nodes: list[Apply] = []
@@ -203,6 +223,15 @@ def _lower_single_helper(node: Apply) -> Expr:  # noqa: C901, PLR0912
 
     if len(positional) != 1:
         _invalid(detail=f"{node.op} requires exactly one inner expression")
+
+    if node.op in _HELPER_HISTORY_OPS:
+        options: list[tuple[str, Expr]] = []
+        for kw_node in kw_nodes:
+            if len(kw_node.args) != 2:
+                _invalid(detail="kwarg marker must contain (key, value)")
+            key = _kwarg_name(kw_node.args[0])
+            options.append((key, kw_node.args[1]))
+        return HistoryOp(kind=node.op, body=positional[0], options=tuple(options))
 
     bindings: list[tuple[str, str]] = []
     filters: list[tuple[str, tuple[str, ...]]] = []
@@ -277,6 +306,13 @@ def lower_helper_calls(expr: Expr) -> Expr:
             body=lower_helper_calls(expr.body),
             filters=expr.filters,
             kernel=expr.kernel,
+        )
+
+    if isinstance(expr, HistoryOp):
+        return HistoryOp(
+            kind=expr.kind,
+            body=lower_helper_calls(expr.body),
+            options=tuple((k, lower_helper_calls(v)) for k, v in expr.options),
         )
 
     return expr
@@ -547,6 +583,13 @@ def ir_to_ast_expr(expr: Expr) -> ast.expr:  # noqa: C901, PLR0911, PLR0912
         )
     if isinstance(expr, Reduce):
         _invalid(detail="structured Reduce nodes cannot be converted to Python AST yet")
+    if isinstance(expr, HistoryOp):
+        _invalid(
+            detail=(
+                "history/delay operators are recognized but not yet "
+                f"implemented (helper={expr.kind!r}); see issue #173"
+            )
+        )
     if isinstance(expr, Apply):
         if expr.op == "neg" and len(expr.args) == 1:
             return ast.UnaryOp(op=ast.USub(), operand=ir_to_ast_expr(expr.args[0]))
@@ -844,6 +887,23 @@ def _unparse_ir(  # noqa: C901, PLR0912
             _memo[key] = result
         return result
 
+    if isinstance(expr, HistoryOp):
+        body_str = _unparse_ir(expr.body, parent_prec=0, is_right=False, _memo=_memo)
+        kw_parts = [
+            (
+                f"{k}="
+                f"{_unparse_ir(v, parent_prec=0, is_right=False, _memo=_memo)}"
+            )
+            for k, v in expr.options
+        ]
+        suffix = ""
+        if kw_parts:
+            suffix = ", " + ", ".join(kw_parts)
+        result = f"{expr.kind}({body_str}{suffix})"
+        if _memo is not None and key is not None:
+            _memo[key] = result
+        return result
+
     _invalid(detail=f"unsupported IR node in unparser: {type(expr).__name__}")
 
 
@@ -899,6 +959,11 @@ def iter_subscripts(expr: Expr) -> Iterator[Subscript]:
         return
     if isinstance(expr, Reduce):
         yield from iter_subscripts(expr.body)
+        return
+    if isinstance(expr, HistoryOp):
+        yield from iter_subscripts(expr.body)
+        for _, opt_expr in expr.options:
+            yield from iter_subscripts(opt_expr)
 
 
 def walk(expr: Expr) -> Iterator[Expr]:
@@ -919,6 +984,11 @@ def walk(expr: Expr) -> Iterator[Expr]:
         return
     if isinstance(expr, Reduce):
         yield from walk(expr.body)
+        return
+    if isinstance(expr, HistoryOp):
+        yield from walk(expr.body)
+        for _, opt_expr in expr.options:
+            yield from walk(opt_expr)
 
 
 def _free_symbols_push_children(
@@ -935,6 +1005,16 @@ def _free_symbols_push_children(
         stack.append((node, True))
         if id(node.body) not in memo:
             stack.append((node.body, False))
+        return
+    if isinstance(node, HistoryOp):
+        stack.append((node, True))
+        if id(node.body) not in memo:
+            stack.append((node.body, False))
+        stack.extend(
+            (opt_expr, False)
+            for _, opt_expr in reversed(node.options)
+            if id(opt_expr) not in memo
+        )
         return
     _invalid(detail=f"unsupported IR node in free_symbols: {type(node).__name__}")
 
@@ -956,6 +1036,11 @@ def _free_symbols_finalize(
     if isinstance(node, Reduce):
         bound = {bind for _, bind in node.bindings}
         return frozenset(memo[id(node.body)] - bound)
+    if isinstance(node, HistoryOp):
+        acc: set[str] = set(memo[id(node.body)])
+        for _, opt_expr in node.options:
+            acc.update(memo[id(opt_expr)])
+        return frozenset(acc)
     _invalid(detail=f"unsupported IR node in free_symbols: {type(node).__name__}")
 
 
@@ -1054,6 +1139,12 @@ def substitute(
             filters=expr.filters,
             kernel=expr.kernel,
         )
+    if isinstance(expr, HistoryOp):
+        return HistoryOp(
+            kind=expr.kind,
+            body=substitute(expr.body, mapping, memo),
+            options=tuple((k, substitute(v, mapping, memo)) for k, v in expr.options),
+        )
     _invalid(detail=f"unsupported IR node in substitute: {type(expr).__name__}")
 
 
@@ -1074,11 +1165,17 @@ def _map_children(expr: Expr, fn: Callable[[Expr], Expr]) -> Expr:
             filters=expr.filters,
             kernel=expr.kernel,
         )
+    if isinstance(expr, HistoryOp):
+        new_body = fn(expr.body)
+        new_options = tuple((k, fn(v)) for k, v in expr.options)
+        if new_body == expr.body and new_options == expr.options:
+            return expr
+        return HistoryOp(kind=expr.kind, body=new_body, options=new_options)
     return expr
 
 
 def _is_cse_candidate(expr: Expr) -> bool:
-    return isinstance(expr, (Apply, Reduce))
+    return isinstance(expr, (Apply, Reduce, HistoryOp))
 
 
 def _expr_cost(expr: Expr) -> int:
@@ -1086,6 +1183,8 @@ def _expr_cost(expr: Expr) -> int:
         return 1 + sum(_expr_cost(arg) for arg in expr.args)
     if isinstance(expr, Reduce):
         return 1 + _expr_cost(expr.body)
+    if isinstance(expr, HistoryOp):
+        return 1 + _expr_cost(expr.body) + sum(_expr_cost(v) for _, v in expr.options)
     return 1
 
 
@@ -1095,6 +1194,10 @@ def _postorder(expr: Expr, out: dict[Expr, int]) -> None:
             _postorder(arg, out)
     elif isinstance(expr, Reduce):
         _postorder(expr.body, out)
+    elif isinstance(expr, HistoryOp):
+        _postorder(expr.body, out)
+        for _, opt_expr in expr.options:
+            _postorder(opt_expr, out)
     out[expr] = out.get(expr, 0) + 1
 
 
@@ -1223,6 +1326,15 @@ def resolve_axis_kinds(expr: Expr, *, axis_names: frozenset[str]) -> Expr:  # no
             filters=expr.filters,
             kernel=expr.kernel,
         )
+    if isinstance(expr, HistoryOp):
+        new_body = resolve_axis_kinds(expr.body, axis_names=axis_names)
+        new_options = tuple(
+            (k, resolve_axis_kinds(v, axis_names=axis_names))
+            for k, v in expr.options
+        )
+        if new_body is expr.body and new_options == expr.options:
+            return expr
+        return HistoryOp(kind=expr.kind, body=new_body, options=new_options)
     _invalid(detail=f"unsupported IR node in resolve_axis_kinds: {type(expr).__name__}")
 
 
@@ -1231,6 +1343,7 @@ __all__ = [
     "AxisIndex",
     "AxisKind",
     "Expr",
+    "HistoryOp",
     "Literal",
     "Reduce",
     "Subscript",
