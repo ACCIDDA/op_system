@@ -132,6 +132,12 @@ class OpSystemSystem(SystemABC, module="flepimop2.system.op_system"):  # noqa: D
             "block_template_shapes": compiled.block_template_shapes,
             "pytree_stepper_fn": None,  # updated below if pytree path available
             "block_pytree_stepper_fn": None,  # updated below if block path available
+            # History-op surface (#175). ``history_requirements`` is always
+            # populated (empty tuple for specs without history operators);
+            # ``history_stepper_fn`` is set only when the compiled RHS
+            # produced a runnable ``history_eval_fn``.
+            "history_requirements": compiled.history_requirements,
+            "history_stepper_fn": None,  # updated below if history path available
         }
 
         def _stepper(
@@ -193,6 +199,36 @@ class OpSystemSystem(SystemABC, module="flepimop2.system.op_system"):  # noqa: D
         else:
             self._stepper_block_pytree = None
 
+        # Expose history stepper when history operators are present (#175).
+        # The returned callable accepts a ``history_provider`` keyword that
+        # the engine injects at solve time; the provider's ``.query`` method
+        # is wired to the lowered ``__hist_query(signal_id, body, **opts)``
+        # call sites. Engines should consult ``options['history_requirements']``
+        # to allocate per-signal history buffers ahead of time.
+        if compiled.history_eval_fn is not None:
+            history_eval_fn = compiled.history_eval_fn
+
+            def _stepper_history(
+                time: np.float64,
+                state_dict: dict[str, Any],
+                *,
+                history_provider: object,
+                **kwargs: Any,  # noqa: ANN401
+            ) -> dict[str, Any]:
+                params = dict(mixing_kernels)
+                params.update(kwargs)
+                return history_eval_fn(
+                    time,
+                    state_dict,
+                    history_provider=history_provider,
+                    **params,
+                )
+
+            self._stepper_history: Any = _stepper_history
+            self.options["history_stepper_fn"] = _stepper_history
+        else:
+            self._stepper_history = None
+
         self._compiled_rhs = compiled  # handy for debugging/adapters
 
     @override
@@ -214,6 +250,12 @@ class OpSystemSystem(SystemABC, module="flepimop2.system.op_system"):  # noqa: D
         if self._stepper_pytree is not None:
             bound.pytree_stepper = functools.partial(  # type: ignore[attr-defined]
                 self._stepper_pytree, **(params or {})
+            )
+        if self._stepper_history is not None:
+            # ``history_provider`` is per-call (not partialized) because the
+            # engine constructs and owns the history buffer registry.
+            bound.history_stepper = functools.partial(  # type: ignore[attr-defined]
+                self._stepper_history, **(params or {})
             )
         return cast("SystemProtocol", bound)
 
