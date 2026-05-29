@@ -136,6 +136,52 @@ def test_transitions_accepts_optional_name_and_preserves_meta() -> None:
     assert "name" not in transitions_meta[1]
 
 
+def test_transitions_support_source_only_null_from() -> None:
+    """`from: null` should add inflow to ``to`` without donor depletion."""
+    spec = {
+        "kind": "transitions",
+        "state": ["I", "H_cum"],
+        "transitions": [
+            {"from": None, "to": "H_cum", "rate": "k * I"},
+        ],
+    }
+
+    rhs = normalize_transitions_rhs(spec)
+    assert rhs.state_names == ("I", "H_cum")
+    assert rhs.param_names == ("k",)
+    transitions_meta = rhs.meta.get("transitions")
+    assert isinstance(transitions_meta, list)
+    assert transitions_meta[0]["from"] is None
+    assert transitions_meta[0]["to"] == "H_cum"
+
+    compiled = compile_rhs(rhs)
+    y = np.array([2.0, 5.0], dtype=np.float64)
+    dydt = compiled.eval_fn(0.0, y, k=3.0)
+    np.testing.assert_allclose(dydt, np.array([0.0, 6.0]))
+
+
+def test_transitions_support_source_only_omitted_from() -> None:
+    """Missing ``from`` should behave the same as ``from: null``."""
+    spec = {
+        "kind": "transitions",
+        "state": ["I", "H_cum"],
+        "transitions": [
+            {"to": "H_cum", "rate": "I"},
+        ],
+    }
+
+    rhs = normalize_transitions_rhs(spec)
+    transitions_meta = rhs.meta.get("transitions")
+    assert isinstance(transitions_meta, list)
+    assert transitions_meta[0]["from"] is None
+    assert transitions_meta[0]["to"] == "H_cum"
+
+    compiled = compile_rhs(rhs)
+    y = np.array([4.0, 1.0], dtype=np.float64)
+    dydt = compiled.eval_fn(0.0, y)
+    np.testing.assert_allclose(dydt, np.array([0.0, 4.0]))
+
+
 def test_transitions_rejects_nonstring_name() -> None:
     """Transition names must be non-empty strings when provided."""
     spec = {
