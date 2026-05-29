@@ -37,6 +37,7 @@ from op_system._ir import (
     AxisIndex,
     AxisKind,
     Expr,
+    HistoryOp,
     Literal,
     Reduce,
     Subscript,
@@ -519,6 +520,17 @@ def lower_to_vector_ast(  # noqa: PLR0913
             shaped_param_axes=shaped_param_axes,
             axis_alias=axis_alias,
         )
+
+    if isinstance(expr, HistoryOp):
+        msg = (
+            "history/delay operators require engine-managed history "
+            "buffers and cannot be lowered in v1 (issue #173)"
+        )
+        raise UnsupportedIRLoweringError(msg)
+
+    if not isinstance(expr, Reduce):
+        msg = f"unsupported IR node in lowering: {type(expr).__name__}"
+        raise UnsupportedIRLoweringError(msg)
 
     return _lower_reduce(
         expr,

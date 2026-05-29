@@ -185,6 +185,44 @@ def test_compile_rejects_planned_history_helpers_with_targeted_message(
         compile_rhs(rhs, xp=np)
 
 
+def test_history_requirements_payload_includes_missing_required_options() -> None:
+    """history_requirements payload reports missing mandatory helper kwargs."""
+    spec = {"kind": "expr", "state": ["x"], "equations": {"x": "delay(x)"}}
+    rhs = normalize_rhs(spec)
+
+    with pytest.raises(UnsupportedFeatureError) as exc_info:
+        compile_rhs(rhs, xp=np)
+
+    msg = str(exc_info.value)
+    assert "'kind': 'delay'" in msg
+    assert "'required_options': ('tau',)" in msg
+    assert "'missing_required_options': ('tau',)" in msg
+
+
+def test_history_requirements_payload_captures_provided_options() -> None:
+    """history_requirements payload preserves normalized option expressions."""
+    spec = {
+        "kind": "expr",
+        "state": ["x"],
+        "equations": {
+            "x": "convolve_history(x, kernel=gamma, window=14, interpolation=linear)"
+        },
+    }
+    rhs = normalize_rhs(spec)
+
+    with pytest.raises(UnsupportedFeatureError) as exc_info:
+        compile_rhs(rhs, xp=np)
+
+    msg = str(exc_info.value)
+    assert "'kind': 'convolve_history'" in msg
+    assert (
+        "'options': {'kernel': 'gamma', 'window': '14', 'interpolation': 'linear'}"
+        in msg
+    )
+    assert "'missing_required_options': ()" in msg
+    assert "'unknown_options': ()" in msg
+
+
 def test_compile_rejects_disallowed_attribute_access() -> None:
     """Disallowed attribute access should be rejected before evaluation."""
     spec = {"kind": "expr", "state": ["x"], "equations": {"x": "x.real"}}

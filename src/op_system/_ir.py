@@ -800,7 +800,7 @@ def _unparse_binary(
     return _wrap(rendered, need=need_parens)
 
 
-def _unparse_ir(  # noqa: C901, PLR0912
+def _unparse_ir(  # noqa: C901, PLR0911, PLR0912, PLR0914, PLR0915
     expr: Expr,
     *,
     parent_prec: int,
@@ -890,10 +890,7 @@ def _unparse_ir(  # noqa: C901, PLR0912
     if isinstance(expr, HistoryOp):
         body_str = _unparse_ir(expr.body, parent_prec=0, is_right=False, _memo=_memo)
         kw_parts = [
-            (
-                f"{k}="
-                f"{_unparse_ir(v, parent_prec=0, is_right=False, _memo=_memo)}"
-            )
+            (f"{k}={_unparse_ir(v, parent_prec=0, is_right=False, _memo=_memo)}")
             for k, v in expr.options
         ]
         suffix = ""
@@ -1037,10 +1034,10 @@ def _free_symbols_finalize(
         bound = {bind for _, bind in node.bindings}
         return frozenset(memo[id(node.body)] - bound)
     if isinstance(node, HistoryOp):
-        acc: set[str] = set(memo[id(node.body)])
+        hist_acc: set[str] = set(memo[id(node.body)])
         for _, opt_expr in node.options:
-            acc.update(memo[id(opt_expr)])
-        return frozenset(acc)
+            hist_acc.update(memo[id(opt_expr)])
+        return frozenset(hist_acc)
     _invalid(detail=f"unsupported IR node in free_symbols: {type(node).__name__}")
 
 
@@ -1148,7 +1145,7 @@ def substitute(
     _invalid(detail=f"unsupported IR node in substitute: {type(expr).__name__}")
 
 
-def _map_children(expr: Expr, fn: Callable[[Expr], Expr]) -> Expr:
+def _map_children(expr: Expr, fn: Callable[[Expr], Expr]) -> Expr:  # noqa: PLR0911
     if isinstance(expr, Apply):
         new_args = tuple(fn(arg) for arg in expr.args)
         if new_args == expr.args:
@@ -1329,8 +1326,7 @@ def resolve_axis_kinds(expr: Expr, *, axis_names: frozenset[str]) -> Expr:  # no
     if isinstance(expr, HistoryOp):
         new_body = resolve_axis_kinds(expr.body, axis_names=axis_names)
         new_options = tuple(
-            (k, resolve_axis_kinds(v, axis_names=axis_names))
-            for k, v in expr.options
+            (k, resolve_axis_kinds(v, axis_names=axis_names)) for k, v in expr.options
         )
         if new_body is expr.body and new_options == expr.options:
             return expr

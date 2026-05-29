@@ -768,29 +768,56 @@ def _history_requirements_from_ir(
         Tuple of requirement records, each containing helper kind, body,
         and normalized option expressions.
     """
+    required_by_kind: dict[str, tuple[str, ...]] = {
+        "history": ("lag",),
+        "delay": ("tau",),
+        "convolve_history": ("kernel", "window"),
+    }
+    allowed_by_kind: dict[str, tuple[str, ...]] = {
+        "history": ("lag", "interpolation", "history_axis"),
+        "delay": ("tau", "interpolation", "history_axis"),
+        "convolve_history": (
+            "kernel",
+            "window",
+            "kernel_params",
+            "interpolation",
+            "history_axis",
+        ),
+    }
+
+    def _make_req(scope: str, node: HistoryOp) -> dict[str, object]:
+        options = {k: unparse_ir(v) for k, v in node.options}
+        required = required_by_kind.get(node.kind, ())
+        allowed = allowed_by_kind.get(node.kind, ())
+        missing = tuple(k for k in required if k not in options)
+        unknown = tuple(sorted(k for k in options if k not in allowed))
+        return {
+            "scope": scope,
+            "kind": node.kind,
+            "signal_expr": unparse_ir(node.body),
+            "options": options,
+            "required_options": required,
+            "missing_required_options": missing,
+            "unknown_options": unknown,
+        }
+
     reqs: list[dict[str, object]] = []
     if aliases_ir:
         for alias_name, alias_expr in aliases_ir.items():
-            for node in walk(alias_expr):
-                if isinstance(node, HistoryOp):
-                    reqs.append({
-                        "scope": f"alias:{alias_name}",
-                        "kind": node.kind,
-                        "body": unparse_ir(node.body),
-                        "options": {k: unparse_ir(v) for k, v in node.options},
-                    })
+            reqs.extend(
+                _make_req(f"alias:{alias_name}", node)
+                for node in walk(alias_expr)
+                if isinstance(node, HistoryOp)
+            )
     if equations_ir:
         for eq_idx, eq_expr in enumerate(equations_ir):
             if eq_expr is None:
                 continue
-            for node in walk(eq_expr):
-                if isinstance(node, HistoryOp):
-                    reqs.append({
-                        "scope": f"equation:{eq_idx}",
-                        "kind": node.kind,
-                        "body": unparse_ir(node.body),
-                        "options": {k: unparse_ir(v) for k, v in node.options},
-                    })
+            reqs.extend(
+                _make_req(f"equation:{eq_idx}", node)
+                for node in walk(eq_expr)
+                if isinstance(node, HistoryOp)
+            )
     return tuple(reqs)
 
 

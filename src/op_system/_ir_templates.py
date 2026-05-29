@@ -184,10 +184,10 @@ def _compute_free_axes(
             return body_axes
         return (body_axes - bound) or _EMPTY_AXES
     if isinstance(node, HistoryOp):
-        acc: set[str] = set(_free_axes_in(node.body, shaped=shaped, memo=memo))
+        hist_acc: set[str] = set(_free_axes_in(node.body, shaped=shaped, memo=memo))
         for _, opt_expr in node.options:
-            acc |= _free_axes_in(opt_expr, shaped=shaped, memo=memo)
-        return frozenset(acc) or _EMPTY_AXES
+            hist_acc |= _free_axes_in(opt_expr, shaped=shaped, memo=memo)
+        return frozenset(hist_acc) or _EMPTY_AXES
     # Literal, Sym, and any other leaf node carry no free axes.
     return _EMPTY_AXES
 

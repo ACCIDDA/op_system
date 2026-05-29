@@ -239,7 +239,7 @@ def test_lower_helper_combines_binding_and_filter_across_axes() -> None:
     assert ir.filters == (("vax", ("v", "w")),)
 
 
-@pytest.mark.parametrize("helper,arg_name", [("history", "lag"), ("delay", "tau")])
+@pytest.mark.parametrize(("helper", "arg_name"), [("history", "lag"), ("delay", "tau")])
 def test_lower_helper_rewrites_history_family_calls(
     helper: str,
     arg_name: str,

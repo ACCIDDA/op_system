@@ -249,7 +249,9 @@ Planned history helpers (`history(...)`, `delay(...)`, `convolve_history(...)`)
 are reserved for issue #173 and currently raise a targeted "not yet
 implemented" unsupported-feature error at compile time, including a
 `history_requirements=...` payload that specifies the required engine-side
-history buffer contract.
+history buffer contract. Each requirement record currently includes:
+`scope`, `kind`, `signal_expr`, `options`, `required_options`,
+`missing_required_options`, and `unknown_options`.
 
 Anything else — non-`np` attribute access, imports, lambdas, comprehensions,
 other AST nodes — raises `ValueError` / `TypeError` /
