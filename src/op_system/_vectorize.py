@@ -37,6 +37,7 @@ from op_system._ir_lower import (
     lift_cell_ir_to_template,
     lower_to_vector_ast,
 )
+from op_system._ir import HistoryOp, unparse_ir, walk
 from op_system.compile import (
     _SAFE_BUILTINS,
     _check_numeric_dtype,
@@ -213,6 +214,17 @@ def _try_ir_fast_path(  # noqa: PLR0913
         return None
     try:
         lifted = lift_cell_ir_to_template(expr_ir, cell_to_template=cell_to_template)
+        # Build signal_id_map by walking lifted IR in pre-order (matches compile.py).
+        history_signal_id_map: dict[tuple[str, str, tuple[tuple[str, str], ...]], int] = {}
+        signal_id = 0
+        for node in walk(lifted):
+            if isinstance(node, HistoryOp):
+                body_repr = unparse_ir(node.body)
+                options_tuple = tuple((k, unparse_ir(v)) for k, v in node.options)
+                key = (node.kind, body_repr, options_tuple)
+                if key not in history_signal_id_map:
+                    history_signal_id_map[key] = signal_id
+                    signal_id += 1
         body = lower_to_vector_ast(
             lifted,
             target_axes=target_axes,
@@ -223,6 +235,7 @@ def _try_ir_fast_path(  # noqa: PLR0913
             axis_coords=axis_coords,
             axis_types=axis_types,
             shaped_param_axes=shaped_param_axes,
+            history_signal_id_map=history_signal_id_map,
         )
     except UnsupportedIRLoweringError:
         return None
@@ -533,6 +546,17 @@ def _try_cse_eq_plan(  # noqa: C901, PLR0911, PLR0912, PLR0913, PLR0914
     # assigned name so rewritten equation codes can reference it by Sym.
     cse_codes_list: list[tuple[str, CodeType]] = []
     for name, binding_ir in bindings:
+        # Build signal_id_map by walking binding_ir in pre-order (matches compile.py).
+        history_signal_id_map: dict[tuple[str, str, tuple[tuple[str, str], ...]], int] = {}
+        signal_id = 0
+        for node in walk(binding_ir):
+            if isinstance(node, HistoryOp):
+                body_repr = unparse_ir(node.body)
+                options_tuple = tuple((k, unparse_ir(v)) for k, v in node.options)
+                key = (node.kind, body_repr, options_tuple)
+                if key not in history_signal_id_map:
+                    history_signal_id_map[key] = signal_id
+                    signal_id += 1
         try:
             body = lower_to_vector_ast(
                 binding_ir,
@@ -544,6 +568,7 @@ def _try_cse_eq_plan(  # noqa: C901, PLR0911, PLR0912, PLR0913, PLR0914
                 axis_coords=axis_coords,
                 axis_types=axis_types,
                 shaped_param_axes=shaped_param_axes,
+                history_signal_id_map=history_signal_id_map,
             )
         except UnsupportedIRLoweringError:
             return None
@@ -558,6 +583,17 @@ def _try_cse_eq_plan(  # noqa: C901, PLR0911, PLR0912, PLR0913, PLR0914
     # Compile one rewritten equation code per state template.
     eq_groups: list[_EqGroup] = []
     for buf, rewritten_ir in zip(state_buffers, rewritten_irs, strict=True):
+        # Build signal_id_map by walking rewritten_ir in pre-order (matches compile.py).
+        history_signal_id_map = {}
+        signal_id = 0
+        for node in walk(rewritten_ir):
+            if isinstance(node, HistoryOp):
+                body_repr = unparse_ir(node.body)
+                options_tuple = tuple((k, unparse_ir(v)) for k, v in node.options)
+                key = (node.kind, body_repr, options_tuple)
+                if key not in history_signal_id_map:
+                    history_signal_id_map[key] = signal_id
+                    signal_id += 1
         try:
             body = lower_to_vector_ast(
                 rewritten_ir,
@@ -569,6 +605,7 @@ def _try_cse_eq_plan(  # noqa: C901, PLR0911, PLR0912, PLR0913, PLR0914
                 axis_coords=axis_coords,
                 axis_types=axis_types,
                 shaped_param_axes=shaped_param_axes,
+                history_signal_id_map=history_signal_id_map,
             )
         except UnsupportedIRLoweringError:
             return None

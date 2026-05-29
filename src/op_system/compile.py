@@ -225,6 +225,19 @@ class PytreeEvalFn(Protocol):
     ) -> StateDict: ...
 
 
+class HistoryEvalFn(Protocol):
+    """Callable RHS evaluator with history provider support.
+
+    Accepts ``y`` as a ``StateDict`` and a ``history_provider`` object
+    implementing a ``query(signal_id, body, **options)`` method.
+    Returns a ``StateDict`` of derivatives.
+    """
+
+    def __call__(  # noqa: D102
+        self, t: object, y: StateDict, *, history_provider: object, **params: object
+    ) -> StateDict: ...
+
+
 @dataclass(frozen=True, slots=True)
 class CompiledRhs:
     """Container for a compiled RHS evaluation function.
@@ -283,6 +296,19 @@ class CompiledRhs:
     # for the stripped compile.  ``None`` when ``block_pytree_eval_fn`` is
     # ``None``.
     block_template_shapes: dict[str, tuple[int, ...]] | None = field(
+        default=None, repr=False, compare=False, hash=False
+    )
+    # ``history_requirements`` captures structured history-operator metadata
+    # from the IR, including signal_id assignment. Empty tuple when no history
+    # operators are present. Excluded from equality and hash (derived from
+    # ``_rhs``).
+    history_requirements: tuple[Mapping[str, object], ...] = field(
+        default_factory=tuple, repr=False, compare=False, hash=False
+    )
+    # ``history_eval_fn`` is set when history_requirements is non-empty AND
+    # the vectorized path succeeds. It wraps ``pytree_eval_fn`` to inject the
+    # ``history_provider`` kwarg. Excluded from equality, repr, hash.
+    history_eval_fn: HistoryEvalFn | None = field(
         default=None, repr=False, compare=False, hash=False
     )
     # Private: source spec retained for pickling. ``compile_rhs`` populates
@@ -350,6 +376,8 @@ class CompiledRhs:
         object.__setattr__(self, "template_shapes", rebuilt.template_shapes)
         object.__setattr__(self, "block_pytree_eval_fn", rebuilt.block_pytree_eval_fn)
         object.__setattr__(self, "block_template_shapes", rebuilt.block_template_shapes)
+        object.__setattr__(self, "history_requirements", rebuilt.history_requirements)
+        object.__setattr__(self, "history_eval_fn", rebuilt.history_eval_fn)
         object.__setattr__(self, "_rhs", rhs)
 
 
@@ -766,7 +794,7 @@ def _history_requirements_from_ir(
 
     Returns:
         Tuple of requirement records, each containing helper kind, body,
-        and normalized option expressions.
+        signal_id, and normalized option expressions.
     """
     required_by_kind: dict[str, tuple[str, ...]] = {
         "history": ("lag",),
@@ -785,13 +813,14 @@ def _history_requirements_from_ir(
         ),
     }
 
-    def _make_req(scope: str, node: HistoryOp) -> dict[str, object]:
+    def _make_req(signal_id: int, scope: str, node: HistoryOp) -> dict[str, object]:
         options = {k: unparse_ir(v) for k, v in node.options}
         required = required_by_kind.get(node.kind, ())
         allowed = allowed_by_kind.get(node.kind, ())
         missing = tuple(k for k in required if k not in options)
         unknown = tuple(sorted(k for k in options if k not in allowed))
         return {
+            "signal_id": signal_id,
             "scope": scope,
             "kind": node.kind,
             "signal_expr": unparse_ir(node.body),
@@ -802,22 +831,21 @@ def _history_requirements_from_ir(
         }
 
     reqs: list[dict[str, object]] = []
+    signal_id = 0
     if aliases_ir:
         for alias_name, alias_expr in aliases_ir.items():
-            reqs.extend(
-                _make_req(f"alias:{alias_name}", node)
-                for node in walk(alias_expr)
-                if isinstance(node, HistoryOp)
-            )
+            for node in walk(alias_expr):
+                if isinstance(node, HistoryOp):
+                    reqs.append(_make_req(signal_id, f"alias:{alias_name}", node))
+                    signal_id += 1
     if equations_ir:
         for eq_idx, eq_expr in enumerate(equations_ir):
             if eq_expr is None:
                 continue
-            reqs.extend(
-                _make_req(f"equation:{eq_idx}", node)
-                for node in walk(eq_expr)
-                if isinstance(node, HistoryOp)
-            )
+            for node in walk(eq_expr):
+                if isinstance(node, HistoryOp):
+                    reqs.append(_make_req(signal_id, f"equation:{eq_idx}", node))
+                    signal_id += 1
     return tuple(reqs)
 
 
@@ -1120,6 +1148,15 @@ def _wrap_pytree_eval_fn_for_synth_consts(
     return wrapped
 
 
+def _make_history_eval_fn(pytree_eval_fn: PytreeEvalFn) -> HistoryEvalFn:
+    """Wrap pytree_eval_fn to inject history_provider.query as __hist_query."""
+    def history_eval_fn(
+        t: object, y: StateDict, *, history_provider: object, **params: object
+    ) -> StateDict:
+        return pytree_eval_fn(t, y, __hist_query=history_provider.query, **params)
+    return history_eval_fn
+
+
 def compile_rhs(rhs: NormalizedRhs, *, xp: object | None = None) -> CompiledRhs:  # noqa: C901, PLR0914
     """Compile a normalized RHS into a runnable evaluation function.
 
@@ -1171,7 +1208,7 @@ def compile_rhs(rhs: NormalizedRhs, *, xp: object | None = None) -> CompiledRhs:
         aliases_ir=rhs.aliases_ir,
         equations_ir=rhs.equations_ir,
     )
-    if history_requirements:
+    if any(req["kind"] in {"history", "delay"} for req in history_requirements):
         _raise_unsupported_feature(
             feature="history operators",
             detail=(
@@ -1234,14 +1271,32 @@ def compile_rhs(rhs: NormalizedRhs, *, xp: object | None = None) -> CompiledRhs:
         else None
     )
 
+    # Construct history_eval_fn when history operators are present and
+    # the vectorized path succeeded.
+    history_eval_fn: HistoryEvalFn | None = None
+    if history_requirements and pytree_eval_fn is not None:
+        history_eval_fn = _make_history_eval_fn(pytree_eval_fn)
+
     if eval_fn is None:
-        eval_fn = _make_eval_fn(
-            state_names=rhs.state_names,
-            aliases=rhs.aliases,
-            equations=rhs.equations,
-            aliases_ir=rhs.aliases_ir,
-            equations_ir=rhs.equations_ir,
-        )
+        if history_requirements:
+            # The scalar eval_fn path cannot route a history_provider; emit a
+            # sentinel that raises clearly if called. Consumers of specs with
+            # history operators must use pytree_eval_fn + history_eval_fn.
+            def eval_fn(*_args: object, **_kwargs: object) -> NoReturn:  # noqa: D401,E501
+                raise NotImplementedError(
+                    "scalar eval_fn is not available for specs containing "
+                    "history operators (e.g. convolve_history); use "
+                    "history_eval_fn(t, y, history_provider=..., **params) "
+                    "instead."
+                )
+        else:
+            eval_fn = _make_eval_fn(
+                state_names=rhs.state_names,
+                aliases=rhs.aliases,
+                equations=rhs.equations,
+                aliases_ir=rhs.aliases_ir,
+                equations_ir=rhs.equations_ir,
+            )
 
     time_axis_name = str(rhs.meta.get("time_axis", "time"))
     axes_meta = tuple(rhs.meta.get("axes") or ())
@@ -1317,5 +1372,7 @@ def compile_rhs(rhs: NormalizedRhs, *, xp: object | None = None) -> CompiledRhs:
         template_shapes=template_shapes,
         block_pytree_eval_fn=block_pytree_eval_fn,
         block_template_shapes=block_template_shapes,
+        history_requirements=history_requirements,
+        history_eval_fn=history_eval_fn,
         _rhs=rhs,
     )

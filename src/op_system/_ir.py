@@ -584,10 +584,17 @@ def ir_to_ast_expr(expr: Expr) -> ast.expr:  # noqa: C901, PLR0911, PLR0912
     if isinstance(expr, Reduce):
         _invalid(detail="structured Reduce nodes cannot be converted to Python AST yet")
     if isinstance(expr, HistoryOp):
+        if expr.kind in {"history", "delay"}:
+            _invalid(
+                detail=(
+                    "history/delay operators are recognized but not yet "
+                    f"implemented (helper={expr.kind!r}); see issue #173"
+                )
+            )
         _invalid(
             detail=(
-                "history/delay operators are recognized but not yet "
-                f"implemented (helper={expr.kind!r}); see issue #173"
+                f"{expr.kind} requires the vectorized lowering path "
+                "(this scalar-AST function is legacy and insufficient)"
             )
         )
     if isinstance(expr, Apply):
