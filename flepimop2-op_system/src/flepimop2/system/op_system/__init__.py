@@ -126,6 +126,12 @@ class OpSystemSystem(SystemABC, module="flepimop2.system.op_system"):  # noqa: D
         )
         self.options["history_stepper_fn"] = self._stepper_history
 
+        self._stepper_body_eval = self._maybe_make_body_eval(
+            compiled=compiled,
+            mixing_kernels=mixing_kernels,
+        )
+        self.options["body_eval_fn"] = self._stepper_body_eval
+
         self._compiled_rhs = compiled  # handy for debugging/adapters
 
     @staticmethod
@@ -197,6 +203,7 @@ class OpSystemSystem(SystemABC, module="flepimop2.system.op_system"):  # noqa: D
             "block_pytree_stepper_fn": None,
             "history_requirements": compiled.history_requirements,
             "history_stepper_fn": None,
+            "body_eval_fn": None,
         }
 
     @staticmethod
@@ -311,6 +318,31 @@ class OpSystemSystem(SystemABC, module="flepimop2.system.op_system"):  # noqa: D
 
         return _stepper_history
 
+    @staticmethod
+    def _maybe_make_body_eval(
+        *,
+        compiled: CompiledRhs,
+        mixing_kernels: Mapping[str, np.ndarray],
+    ) -> Callable[..., dict[int, object]] | None:
+        """Build optional body-eval wrapper for history engines.
+
+        Returns:
+            Body-eval callable when available, otherwise ``None``.
+        """
+        body_eval_fn = compiled.body_eval_fn
+        if body_eval_fn is None:
+            return None
+
+        def _stepper_body_eval(
+            time: np.float64,
+            state_dict: dict[str, Any],
+            **kwargs: Any,  # noqa: ANN401
+        ) -> dict[int, object]:
+            params = OpSystemSystem._merged_params(mixing_kernels, kwargs)
+            return body_eval_fn(time, state_dict, **params)
+
+        return _stepper_body_eval
+
     @override
     def _bind_impl(
         self, params: dict[IdentifierString, Any] | None = None
@@ -336,6 +368,10 @@ class OpSystemSystem(SystemABC, module="flepimop2.system.op_system"):  # noqa: D
             # engine constructs and owns the history buffer registry.
             bound.history_stepper = functools.partial(  # type: ignore[attr-defined]
                 self._stepper_history, **(params or {})
+            )
+        if self._stepper_body_eval is not None:
+            bound.body_eval = functools.partial(  # type: ignore[attr-defined]
+                self._stepper_body_eval, **(params or {})
             )
         return cast("SystemProtocol", bound)
 

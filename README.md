@@ -226,6 +226,7 @@ from op_system import (
     normalize_transitions_rhs,
     CompiledRhs,
     NormalizedRhs, ExprRhs, TransitionsRhs,
+    BodyEvalFn,
     EvalFn, PytreeEvalFn, StateDict,
     OperatorDescriptor, BlockAxisInfo,
 )
@@ -250,6 +251,11 @@ Expressions are parsed with `ast` and restricted to:
 `options["history_stepper_fn"]`). `history(...)` and `delay(...)` remain
 reserved for issue #173 and still raise a targeted unsupported-feature error
 with `history_requirements=...` payloads.
+
+For adaptive ring-buffer engines, use `CompiledRhs.body_eval_fn` (or
+`OpSystemSystem`'s `options["body_eval_fn"]`) to evaluate each history
+signal body exactly once at a known outer-step boundary. This complements
+`history_eval_fn`, which is still responsible for in-RHS history queries.
 
 Each history requirement record currently includes: `scope`, `kind`,
 `signal_expr`, `options`, `required_options`, `missing_required_options`, and

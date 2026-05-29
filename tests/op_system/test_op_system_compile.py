@@ -236,6 +236,7 @@ def test_convolve_history_compiles_and_calls_provider() -> None:
     compiled = compile_rhs(rhs)
     assert compiled.pytree_eval_fn is not None
     assert compiled.history_eval_fn is not None
+    assert compiled.body_eval_fn is not None
     # Per-cell scopes report one requirement per axis coord; the vectorized
     # lowering collapses to a single ``__hist_query`` call (signal_id == 0).
     assert len(compiled.history_requirements) >= 1
@@ -267,6 +268,34 @@ def test_history_eval_fn_is_none_when_no_history_ops() -> None:
     rhs = normalize_rhs(spec)
     compiled = compile_rhs(rhs, xp=np)
     assert compiled.history_eval_fn is None
+    assert compiled.body_eval_fn is None
+
+
+def test_body_eval_fn_returns_signal_body_map_for_convolve_history() -> None:
+    """#178 integration: body_eval_fn exposes per-signal body values."""
+    spec = {
+        "kind": "expr",
+        "axes": [{"name": "loc", "coords": ["a", "b"]}],
+        "state": ["x[loc]", "I[loc]"],
+        "equations": {
+            "x[loc]": "convolve_history(I[loc] * beta, kernel=gamma, window=14)",
+            "I[loc]": "0.0",
+        },
+    }
+    compiled = compile_rhs(normalize_rhs(spec))
+    assert compiled.history_eval_fn is not None
+    assert compiled.body_eval_fn is not None
+
+    bodies = compiled.body_eval_fn(
+        0.0,
+        {
+            "x": np.array([0.0, 0.0], dtype=np.float64),
+            "I": np.array([1.0, 3.0], dtype=np.float64),
+        },
+        beta=np.float64(2.5),
+    )
+    assert bodies.keys() == {0}
+    np.testing.assert_allclose(np.asarray(bodies[0]), np.array([2.5, 7.5]))
 
 
 class _Erlang3HistoryProvider:
