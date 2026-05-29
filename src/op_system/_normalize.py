@@ -854,17 +854,25 @@ def _build_transition_equations_ir(  # noqa: C901, PLR0912, PLR0913, PLR0914, PL
 
     old_limit = sys.getrecursionlimit()
     needed = max(old_limit, 10_000)
-    with _raise_recursion_limit(needed, old_limit):
+    with _raise_recursion_limit(needed, old_limit):  # noqa: PLR1702
         for tr_idx, tr_map in enumerate(transitions_raw):
             tr_valid = _validate_transition_mapping(dict(tr_map), idx=tr_idx)
-            frm_s = _get_required_str(tr_valid, idx=tr_idx, key="from")
             to_s = _get_required_str(tr_valid, idx=tr_idx, key="to")
             rate_s = _get_required_str(tr_valid, idx=tr_idx, key="rate")
             name_s = (
                 tr_valid.get("name") if isinstance(tr_valid.get("name"), str) else None
             )
 
-            frm_base, frm_tokens = parse_selector(frm_s)
+            # ``from: null`` (or omitted ``from``) is treated as a source-only
+            # transition: add ``+rate`` to ``to`` with no donor depletion.
+            frm_raw = tr_valid.get("from")
+            source_only = frm_raw is None
+            if source_only:
+                frm_base = ""
+                frm_tokens: list[Any] = []
+            else:
+                frm_s = _get_required_str(tr_valid, idx=tr_idx, key="from")
+                frm_base, frm_tokens = parse_selector(frm_s)
             to_base, to_tokens = parse_selector(to_s)
 
             # Collect wildcard axes
@@ -1081,7 +1089,7 @@ def _build_transition_equations_ir(  # noqa: C901, PLR0912, PLR0913, PLR0914, PL
                 # Build per-axis-subset keys directly from the combo
                 # tuple without materializing an ``assignment`` dict.
                 from_key = tuple(combo[i] for i in from_key_idx)
-                from_name = from_name_memo.get(from_key)
+                from_name = None if source_only else from_name_memo.get(from_key)
                 to_key = tuple(combo[i] for i in to_key_idx)
                 to_name = to_name_memo.get(to_key)
                 # ``assignment`` is only required on memo misses or for
@@ -1089,7 +1097,7 @@ def _build_transition_equations_ir(  # noqa: C901, PLR0912, PLR0913, PLR0914, PL
                 assignment: dict[str, str] | None = (
                     dict(zip(wildcard_axes, combo, strict=True)) if name_s else None
                 )
-                if from_name is None:
+                if not source_only and from_name is None:
                     assignment = assignment or dict(
                         zip(wildcard_axes, combo, strict=True)
                     )
@@ -1105,7 +1113,7 @@ def _build_transition_equations_ir(  # noqa: C901, PLR0912, PLR0913, PLR0914, PL
                         to_base, to_tokens, assignment, axis_lookup=None
                     )
                     to_name_memo[to_key] = to_name
-                if from_name not in state_set:
+                if not source_only and from_name not in state_set:
                     raise InvalidRhsSpecError(
                         detail=f"transitions[{tr_idx}].from={from_name!r} not in state"
                     )
@@ -1144,17 +1152,34 @@ def _build_transition_equations_ir(  # noqa: C901, PLR0912, PLR0913, PLR0914, PL
                 # from-template's wildcard axes, and the resulting
                 # ``flow_full`` / ``flow_reduce`` / negated forms are the
                 # SAME IR object for every combo of this transition.
+                flow_full: Expr
+                flow_reduce: Expr
+                neg_flow_full: Expr | None
+                neg_flow_reduce: Expr | None
                 if tpl_uniform:
-                    flow_full: Expr = tpl_flow_full  # type: ignore[assignment]
-                    flow_reduce: Expr = tpl_flow_reduce  # type: ignore[assignment]
-                    neg_flow_full: Expr = tpl_neg_flow_full  # type: ignore[assignment]
-                    neg_flow_reduce: Expr = tpl_neg_flow_reduce  # type: ignore[assignment]
+                    flow_full = tpl_flow_full  # type: ignore[assignment]
+                    flow_reduce = tpl_flow_reduce  # type: ignore[assignment]
+                    neg_flow_full = tpl_neg_flow_full
+                    neg_flow_reduce = tpl_neg_flow_reduce
                 else:
-                    from_sym = Sym(name=from_name)
-                    flow_full = Apply(op="*", args=(ir_rate_full, from_sym))
-                    flow_reduce = Apply(op="*", args=(ir_rate_reduce, from_sym))
-                    neg_flow_full = Apply(op="neg", args=(flow_full,))
-                    neg_flow_reduce = Apply(op="neg", args=(flow_reduce,))
+                    neg_flow_full = None
+                    neg_flow_reduce = None
+                    if source_only:
+                        flow_full = ir_rate_full
+                        flow_reduce = ir_rate_reduce
+                    else:
+                        if from_name is None:
+                            raise InvalidRhsSpecError(
+                                detail=(
+                                    "transition source is required when "
+                                    "building non-source-only flow"
+                                )
+                            )
+                        from_sym = Sym(name=from_name)
+                        flow_full = Apply(op="*", args=(ir_rate_full, from_sym))
+                        flow_reduce = Apply(op="*", args=(ir_rate_reduce, from_sym))
+                        neg_flow_full = Apply(op="neg", args=(flow_full,))
+                        neg_flow_reduce = Apply(op="neg", args=(flow_reduce,))
 
                 # Accumulate: from_state gets -flow, to_state gets +flow.
                 # When synthesizing template-uniform IR for this transition
@@ -1174,9 +1199,21 @@ def _build_transition_equations_ir(  # noqa: C901, PLR0912, PLR0913, PLR0914, PL
                     # whose mask-multiplied contribution is 0.
                     pass
                 else:
-                    d_ir_full[from_name].append(neg_flow_full)
+                    if not source_only:
+                        if (
+                            from_name is None
+                            or neg_flow_full is None
+                            or neg_flow_reduce is None
+                        ):
+                            raise InvalidRhsSpecError(
+                                detail=(
+                                    "transition bookkeeping error while "
+                                    "building signed flow contributions"
+                                )
+                            )
+                        d_ir_full[from_name].append(neg_flow_full)
+                        d_ir_reduce[from_name].append(neg_flow_reduce)
                     d_ir_full[to_name].append(flow_full)
-                    d_ir_reduce[from_name].append(neg_flow_reduce)
                     d_ir_reduce[to_name].append(flow_reduce)
 
                 # Collect rate symbols (alias Syms kept unresolved). Skip
@@ -1202,7 +1239,7 @@ def _build_transition_equations_ir(  # noqa: C901, PLR0912, PLR0913, PLR0914, PL
                         rate_key, rate_str_memo, ir_rate_full
                     )
                 tr_out: dict[str, Any] = dict(tr_valid)
-                tr_out["from"] = from_name
+                tr_out["from"] = None if source_only else from_name
                 tr_out["to"] = to_name
                 tr_out["rate"] = rate_string
                 if name_s:

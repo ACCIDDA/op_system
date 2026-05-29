@@ -74,6 +74,21 @@ def test_invalid_spec_raises() -> None:
         OpSystemSystem(spec=bad_spec)
 
 
+def test_source_only_transition_system_step() -> None:
+    """System adapter supports source-only transitions (from omitted/null)."""
+    spec: dict[str, object] = {
+        "kind": "transitions",
+        "state": ["I", "H_cum"],
+        "transitions": [
+            {"to": "H_cum", "rate": "k * I"},
+        ],
+    }
+    sys = OpSystemSystem(spec=spec)
+    y0 = np.array([3.0, 10.0], dtype=np.float64)
+    out = sys.step(np.float64(0.0), y0, k=2.0)
+    np.testing.assert_allclose(out, np.array([0.0, 6.0], dtype=np.float64))
+
+
 def test_option_mixing_kernels_bare_spec(sir_spec: dict[str, object]) -> None:
     """A spec without kernels exposes an empty mixing_kernels option."""
     sys = OpSystemSystem(spec=sir_spec)
