@@ -212,10 +212,12 @@ def test_history_requirements_payload_captures_provided_options() -> None:
     compiled = compile_rhs(rhs, xp=np)
     assert compiled.history_requirements
     first_req = compiled.history_requirements[0]
+    options = first_req["options"]
+    assert isinstance(options, dict)
     assert first_req["signal_id"] == 0
-    assert first_req["options"]["kernel"] == "gamma"
-    assert first_req["options"]["window"] == "14"
-    assert first_req["options"]["interpolation"] == "linear"
+    assert options["kernel"] == "gamma"
+    assert options["window"] == "14"
+    assert options["interpolation"] == "linear"
 
 
 def test_convolve_history_compiles_and_calls_provider() -> None:
@@ -224,9 +226,7 @@ def test_convolve_history_compiles_and_calls_provider() -> None:
         "kind": "expr",
         "axes": [{"name": "loc", "coords": ["a", "b"]}],
         "state": ["x[loc]"],
-        "equations": {
-            "x[loc]": "convolve_history(x[loc], kernel=gamma, window=14)"
-        },
+        "equations": {"x[loc]": "convolve_history(x[loc], kernel=gamma, window=14)"},
     }
     rhs = normalize_rhs(spec)
     compiled = compile_rhs(rhs)
@@ -242,18 +242,15 @@ def test_convolve_history_compiles_and_calls_provider() -> None:
     mock_queries: list[tuple[int, object, dict[str, object]]] = []
 
     class MockProvider:
-        def query(
-            self, signal_id: int, body: object, **options: object
-        ) -> object:
+        @staticmethod
+        def query(signal_id: int, body: object, **options: object) -> object:
             mock_queries.append((signal_id, body, options))
             return np.zeros_like(body)
 
     state = {"x": np.array([1.5, 2.5])}
-    result = compiled.history_eval_fn(
-        0.0, state, history_provider=MockProvider()
-    )
+    result = compiled.history_eval_fn(0.0, state, history_provider=MockProvider())
     assert len(mock_queries) >= 1
-    signal_id, body, opts = mock_queries[0]
+    signal_id, _body, opts = mock_queries[0]
     assert signal_id == 0
     assert opts["kernel"] == "gamma"
     assert opts["window"] == 14

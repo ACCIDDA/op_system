@@ -793,9 +793,7 @@ def test_history_requirements_exposed_for_convolve_history_spec() -> None:
         "kind": "expr",
         "axes": [{"name": "loc", "coords": ["a", "b"]}],
         "state": ["x[loc]"],
-        "equations": {
-            "x[loc]": "convolve_history(x[loc], kernel=gamma, window=14)"
-        },
+        "equations": {"x[loc]": "convolve_history(x[loc], kernel=gamma, window=14)"},
     }
     sys = OpSystemSystem(spec=spec)
 
@@ -815,9 +813,7 @@ def test_bind_exposes_history_stepper_and_invokes_provider() -> None:
         "kind": "expr",
         "axes": [{"name": "loc", "coords": ["a", "b"]}],
         "state": ["x[loc]"],
-        "equations": {
-            "x[loc]": "convolve_history(x[loc], kernel=gamma, window=14)"
-        },
+        "equations": {"x[loc]": "convolve_history(x[loc], kernel=gamma, window=14)"},
     }
     sys = OpSystemSystem(spec=spec)
     bound = sys.bind()
@@ -826,9 +822,8 @@ def test_bind_exposes_history_stepper_and_invokes_provider() -> None:
     calls: list[tuple[int, object, dict[str, object]]] = []
 
     class MockProvider:
-        def query(
-            self, signal_id: int, body: object, **options: object
-        ) -> object:
+        @staticmethod
+        def query(signal_id: int, body: object, **options: object) -> object:
             calls.append((signal_id, body, options))
             return np.zeros_like(body)
 
