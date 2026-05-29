@@ -376,6 +376,42 @@ def test_transitions_rhs_compiles_and_evaluates() -> None:
     assert np.allclose(out, expected)
 
 
+def test_transitions_source_only_compiles_and_evaluates() -> None:
+    """Source-only transitions add to ``to`` without draining any donor."""
+    spec = {
+        "kind": "transitions",
+        "state": ["I", "H_cum"],
+        "transitions": [
+            {"from": None, "to": "H_cum", "rate": "k * I"},
+        ],
+    }
+    rhs = normalize_rhs(spec)
+    compiled = compile_rhs(rhs, xp=np)
+
+    y = np.array([4.0, 10.0], dtype=np.float64)
+    out = compiled.eval_fn(np.float64(0.0), y, k=2.5)
+    np.testing.assert_allclose(out, np.array([0.0, 10.0], dtype=np.float64))
+
+
+def test_transitions_source_only_templated_vectorized() -> None:
+    """Templated source-only transitions work in the vectorized compile path."""
+    spec = {
+        "kind": "transitions",
+        "axes": [{"name": "age", "coords": ["y", "o"]}],
+        "state": ["I[age]", "H_cum[age]"],
+        "transitions": [
+            {"to": "H_cum[age]", "rate": "k[age] * I[age]"},
+        ],
+    }
+    rhs = normalize_rhs(spec)
+    compiled = compile_rhs(rhs, xp=np)
+
+    y = np.array([2.0, 3.0, 100.0, 200.0], dtype=np.float64)
+    out = compiled.eval_fn(np.float64(0.0), y, k=np.array([1.0, 0.5]))
+    # dI/dt = 0; dH_cum/dt = k[age] * I[age]
+    np.testing.assert_allclose(out, np.array([0.0, 0.0, 2.0, 1.5], dtype=np.float64))
+
+
 # ---------------------------------------------------------------------------
 # Meta threading (#11)
 # ---------------------------------------------------------------------------

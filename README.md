@@ -142,6 +142,19 @@ spec:
     - {from: I, to: R, rate: gamma}
 ```
 
+Source-only tracking transitions are also supported (``from: null`` or omitted):
+
+```yaml
+spec:
+  kind: transitions
+  state: [I, H_cum]
+  transitions:
+    - {to: H_cum, rate: k * I}  # equivalent to {from: null, ...}
+```
+
+This pattern is useful for cumulative trackers (e.g., weekly admissions via
+``diff(H_cum)``) without introducing a dummy donor compartment.
+
 ### Templated states with `apply_along`
 
 ```yaml
