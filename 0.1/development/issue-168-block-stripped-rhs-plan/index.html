@@ -669,10 +669,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#slice-3-feat168-engine-uses-block-fn" class="md-nav__link">
+  <a href="#slice-3-feat168-engine-uses-block-fn-done" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Slice 3 — feat/168-engine-uses-block-fn
+        Slice 3 — feat/168-engine-uses-block-fn ✅ DONE
       
     </span>
   </a>
@@ -825,19 +825,18 @@ logic lives in op_system, not the engine.</p>
 <strong>Dependencies</strong>: Slice 1 merged.
 <strong>Budget</strong>: ~300 LOC.</p>
 <hr />
-<h3 id="slice-3-feat168-engine-uses-block-fn">Slice 3 — <code>feat/168-engine-uses-block-fn</code><a class="headerlink" href="#slice-3-feat168-engine-uses-block-fn" title="Permanent link">&para;</a></h3>
+<h3 id="slice-3-feat168-engine-uses-block-fn-done">Slice 3 — <code>feat/168-engine-uses-block-fn</code> ✅ DONE<a class="headerlink" href="#slice-3-feat168-engine-uses-block-fn-done" title="Permanent link">&para;</a></h3>
 <p><strong>Goal</strong>: Switch <code>diffrax_engine</code> to use <code>block_pytree_eval_fn</code>; delete the engine-side stripping helper.</p>
 <p>This slice lands in <strong>ACCIDDA/COVID19_USA</strong>, not op_system.</p>
-<ul>
-<li><code>model_input/plugins/diffrax_engine.py</code>:</li>
-<li>In <code>_solve_one_block</code>: call <code>compiled.block_pytree_eval_fn</code> instead of <code>pytree_eval_fn</code>.</li>
-<li>In <code>_prepare_call</code>: when picking <code>block_axis</code>, also bind <code>block_template_shapes</code> for shape computations.</li>
-<li>Delete <code>_build_operator_terms_pytree_block</code> (its job is now done at compile time).</li>
-<li><code>tests/test_diffrax_engine.py</code>:</li>
-<li>Update existing 4 tests to assert the block path uses <code>block_pytree_eval_fn</code> (mock or attribute check).</li>
-<li>Add <code>test_block_path_runs_for_alias_with_reduce_over_non_block_axis</code> — the original failing config-style alias (<code>N_total[loc]: sum over (age, vax)</code>).</li>
-<li>Also: surface <code>block_template_shapes</code> on the flepimop2 connector if needed (read of <code>stepper.option("block_template_shapes")</code>).</li>
-</ul>
+<p><strong>What was done</strong>:
+- <code>model_input/plugins/diffrax_engine.py</code>:
+  - Merged <code>_build_operator_terms_pytree_block</code> into <code>_build_operator_terms_pytree</code> (added <code>block_axis_name: str | None = None</code> parameter); deleted the separate 80-LOC block function.
+  - Block path now reads <code>stepper.option("block_template_shapes")</code> (from Slice 4 shim) instead of computing shapes inline.
+  - Replaced <code>else pytree_stepper_fn</code> fallback with a <code>RuntimeError</code> assertion — <code>block_pytree_stepper_fn</code> must be set when entering the block path.
+  - Acceptance gate (<code>SMH_R19_op_system_hierarchical.yml -t prior_predictive</code>) passes: EXIT=0.
+- <code>tests/test_diffrax_engine.py</code>:
+  - <code>_MockStepper</code> now exposes <code>block_pytree_stepper_fn</code> and <code>block_template_shapes</code> from <code>compiled.*</code>.
+  - All 4 existing tests pass with the real <code>block_pytree_eval_fn</code> path (no fallback).</p>
 <p><strong>Files</strong>: COVID19_USA <code>model_input/plugins/diffrax_engine.py</code>, <code>tests/test_diffrax_engine.py</code>
 <strong>Dependencies</strong>: Slice 2 released (op_system version bump).
 <strong>Budget</strong>: ~150 LOC of net deletes + ~80 LOC of new tests.</p>
