@@ -245,6 +245,10 @@ Expressions are parsed with `ast` and restricted to:
 - Helpers: `sum_state()`, `sum_prefix(prefix)`, `apply_along(...)`,
   `sum_over(...)`.
 
+Planned history helpers (`history(...)`, `delay(...)`, `convolve_history(...)`)
+are reserved for issue #173 and currently raise a targeted "not yet
+implemented" validation error.
+
 Anything else — non-`np` attribute access, imports, lambdas, comprehensions,
 other AST nodes — raises `ValueError` / `TypeError` /
 `UnsupportedFeatureError` at normalize time.

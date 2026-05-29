@@ -415,6 +415,12 @@ _ALLOWED_CALL_FUNCS: frozenset[str] = frozenset({
 
 _ALLOWED_HELPER_FUNCS: frozenset[str] = frozenset({"sum_state", "sum_prefix"})
 
+_PLANNED_HISTORY_HELPERS: frozenset[str] = frozenset({
+    "history",
+    "delay",
+    "convolve_history",
+})
+
 
 def _parse_expr(expr: str) -> ast.Expression:
     """Parse a Python expression and return the AST.
@@ -446,6 +452,13 @@ def _validate_call(func: ast.AST, *, expr: str) -> None:
 
     if isinstance(func, ast.Name):
         helper_name = str(func.id)
+        if helper_name in _PLANNED_HISTORY_HELPERS:
+            _raise_invalid_expression(
+                detail=(
+                    "history/delay operators are recognized but not yet "
+                    f"implemented (helper={helper_name!r}); see issue #173"
+                )
+            )
         if helper_name not in _ALLOWED_HELPER_FUNCS:
             _raise_invalid_expression(
                 detail=f"{DISALLOWED_FUNCTION_CALL}: {helper_name}"

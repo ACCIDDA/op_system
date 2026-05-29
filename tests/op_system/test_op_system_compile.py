@@ -171,6 +171,20 @@ def test_compile_rejects_nonwhitelisted_helper() -> None:
         compile_rhs(rhs, xp=np)
 
 
+@pytest.mark.parametrize("helper", ["history", "delay", "convolve_history"])
+def test_compile_rejects_planned_history_helpers_with_targeted_message(
+    helper: str,
+) -> None:
+    """#173 scaffold: planned history helpers have explicit unsupported diagnostics."""
+    spec = {"kind": "expr", "state": ["x"], "equations": {"x": f"{helper}(x)"}}
+    rhs = normalize_rhs(spec)
+    with pytest.raises(
+        ValueError,
+        match=r"history/delay operators are recognized but not yet implemented",
+    ):
+        compile_rhs(rhs, xp=np)
+
+
 def test_compile_rejects_disallowed_attribute_access() -> None:
     """Disallowed attribute access should be rejected before evaluation."""
     spec = {"kind": "expr", "state": ["x"], "equations": {"x": "x.real"}}
