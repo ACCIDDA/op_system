@@ -337,6 +337,18 @@ class CompiledRhs:
     body_eval_fn: BodyEvalFn | None = field(
         default=None, repr=False, compare=False, hash=False
     )
+    # ``block_history_eval_fn`` mirrors ``history_eval_fn`` but wraps
+    # ``block_pytree_eval_fn`` (the per-block-coord RHS).  Engines can
+    # jax.vmap this over the block axis for history solves.
+    # ``None`` when ``block_pytree_eval_fn`` or ``history_eval_fn`` is None.
+    block_history_eval_fn: HistoryEvalFn | None = field(
+        default=None, repr=False, compare=False, hash=False
+    )
+    # ``block_body_eval_fn`` mirrors ``body_eval_fn`` but for the per-block
+    # compile.  Set iff ``block_history_eval_fn`` is set.
+    block_body_eval_fn: BodyEvalFn | None = field(
+        default=None, repr=False, compare=False, hash=False
+    )
     # Private: source spec retained for pickling. ``compile_rhs`` populates
     # this; direct constructions without ``_rhs`` are not picklable (the
     # ``eval_fn`` closure cannot be serialized) and will raise from
@@ -405,6 +417,8 @@ class CompiledRhs:
         object.__setattr__(self, "history_requirements", rebuilt.history_requirements)
         object.__setattr__(self, "history_eval_fn", rebuilt.history_eval_fn)
         object.__setattr__(self, "body_eval_fn", rebuilt.body_eval_fn)
+        object.__setattr__(self, "block_history_eval_fn", rebuilt.block_history_eval_fn)
+        object.__setattr__(self, "block_body_eval_fn", rebuilt.block_body_eval_fn)
         object.__setattr__(self, "_rhs", rhs)
 
 
@@ -1448,6 +1462,22 @@ def _build_history_artifacts(
     return history_requirements, history_eval_fn, _make_body_eval_fn(history_eval_fn)
 
 
+def _build_block_history_artifacts(
+    *,
+    block_pytree_eval_fn: PytreeEvalFn | None,
+    history_requirements: tuple[dict[str, object], ...],
+) -> tuple[HistoryEvalFn | None, BodyEvalFn | None]:
+    """Build per-block history/body evaluators when available.
+
+    Returns:
+        Tuple of ``(block_history_eval_fn, block_body_eval_fn)``.
+    """
+    if block_pytree_eval_fn is None or not history_requirements:
+        return None, None
+    blk_hist_fn = _make_history_eval_fn(block_pytree_eval_fn)
+    return blk_hist_fn, _make_body_eval_fn(blk_hist_fn)
+
+
 def _wrap_time_varying_artifacts(
     *,
     rhs: NormalizedRhs,
@@ -1636,6 +1666,26 @@ def compile_rhs(rhs: NormalizedRhs, *, xp: object | None = None) -> CompiledRhs:
         rhs
     )
 
+    # Apply both time-varying and synth-const wrappers to ``pytree_eval_fn``
+    # BEFORE ``_build_history_artifacts`` consumes it.  history_eval_fn /
+    # body_eval_fn capture the pytree_eval_fn reference at construction
+    # time, so any later re-wrapping would not propagate into them; that
+    # would leave runtime history-body calls missing time-varying param
+    # slicing and synthesized constants (e.g. __op_system_mask__* one-hot
+    # arrays for pinned transition selectors).
+    synth_consts: Mapping[str, object] | None = None
+    if eval_fn is not None:
+        eval_fn, pytree_eval_fn = _wrap_time_varying_artifacts(
+            rhs=rhs,
+            eval_fn=eval_fn,
+            pytree_eval_fn=pytree_eval_fn,
+        )
+        eval_fn, pytree_eval_fn, synth_consts = _apply_synth_const_wrappers(
+            rhs=rhs,
+            eval_fn=eval_fn,
+            pytree_eval_fn=pytree_eval_fn,
+        )
+
     history_requirements, history_eval_fn, body_eval_fn = _build_history_artifacts(
         rhs=rhs,
         plan=plan,
@@ -1646,17 +1696,6 @@ def compile_rhs(rhs: NormalizedRhs, *, xp: object | None = None) -> CompiledRhs:
         rhs=rhs,
         eval_fn=eval_fn,
         history_requirements=history_requirements,
-    )
-
-    eval_fn, pytree_eval_fn = _wrap_time_varying_artifacts(
-        rhs=rhs,
-        eval_fn=eval_fn,
-        pytree_eval_fn=pytree_eval_fn,
-    )
-    eval_fn, pytree_eval_fn, synth_consts = _apply_synth_const_wrappers(
-        rhs=rhs,
-        eval_fn=eval_fn,
-        pytree_eval_fn=pytree_eval_fn,
     )
 
     block_axes = analyze_block_axes(rhs)
@@ -1675,6 +1714,14 @@ def compile_rhs(rhs: NormalizedRhs, *, xp: object | None = None) -> CompiledRhs:
         synth_consts=synth_consts,
     )
 
+    # Build per-block history / body eval fns when both the block compile and
+    # history path succeeded.  These wrap ``block_pytree_eval_fn`` exactly as
+    # ``history_eval_fn`` / ``body_eval_fn`` wrap ``pytree_eval_fn``.
+    block_history_eval_fn, block_body_eval_fn = _build_block_history_artifacts(
+        block_pytree_eval_fn=block_pytree_eval_fn,
+        history_requirements=history_requirements,
+    )
+
     return CompiledRhs(
         state_names=rhs.state_names,
         param_names=tuple(rhs.param_names),
@@ -1690,5 +1737,7 @@ def compile_rhs(rhs: NormalizedRhs, *, xp: object | None = None) -> CompiledRhs:
         history_requirements=history_requirements,
         history_eval_fn=history_eval_fn,
         body_eval_fn=body_eval_fn,
+        block_history_eval_fn=block_history_eval_fn,
+        block_body_eval_fn=block_body_eval_fn,
         _rhs=rhs,
     )

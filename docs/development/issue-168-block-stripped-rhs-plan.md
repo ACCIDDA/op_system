@@ -1,4 +1,4 @@
-# Issue #168 — Block-stripped `pytree_eval_fn` for `factorize_axes` vmap
+*issu# Issue #168 — Block-stripped `pytree_eval_fn` for `factorize_axes` vmap
 
 **Repo**: ACCIDDA/op_system
 **Branch convention**: `feat/168-<slug>`
