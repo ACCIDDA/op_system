@@ -1325,6 +1325,71 @@ def _lower_apply(  # noqa: PLR0913
 # ---------------------------------------------------------------------------
 
 
+def _validate_lift_cell_conflicts(
+    *,
+    expr: Expr,
+    cell_to_template: Mapping[str, tuple[str, tuple[str, ...]]],
+) -> set[str]:
+    """Collect referenced cells and reject incompatible same-base combinations.
+
+    Returns:
+        Set of expanded cell names referenced by ``expr`` that are present in
+        ``cell_to_template``.
+
+    Raises:
+        UnsupportedIRLoweringError: If two distinct per-cell symbols sharing the
+            same template base co-occur in ``expr``.
+    """
+    seen_bases: dict[str, str] = {}
+    referenced_cells: set[str] = set()
+    for node in walk(expr):
+        if not isinstance(node, Sym):
+            continue
+        entry = cell_to_template.get(node.name)
+        if entry is None:
+            continue
+        referenced_cells.add(node.name)
+        base, axes = entry
+        if not axes:
+            continue
+        prior = seen_bases.get(base)
+        if prior is None:
+            seen_bases[base] = node.name
+            continue
+        if prior != node.name:
+            msg = (
+                f"cannot lift per-cell IR for buffer {base!r}: multiple "
+                f"distinct cells co-occur ({prior!r} and {node.name!r}); "
+                "this signals a string-expanded axis reduction"
+            )
+            raise UnsupportedIRLoweringError(msg)
+    return referenced_cells
+
+
+def _build_lift_cell_mapping(
+    *,
+    referenced_cells: set[str],
+    cell_to_template: Mapping[str, tuple[str, tuple[str, ...]]],
+) -> dict[str, Expr]:
+    """Build ``substitute`` mapping for per-cell symbol to template-form IR node.
+
+    Returns:
+        Mapping from expanded per-cell symbol names to rewritten template-form
+        IR nodes used by :func:`substitute`.
+    """
+    mapping: dict[str, Expr] = {}
+    for cell_name in referenced_cells:
+        base, axes = cell_to_template[cell_name]
+        if not axes:
+            mapping[cell_name] = Sym(name=f"{base}_buf")
+            continue
+        mapping[cell_name] = Subscript(
+            name=base,
+            indices=tuple(AxisIndex(axis=ax, kind=AxisKind.FREE) for ax in axes),
+        )
+    return mapping
+
+
 def lift_cell_ir_to_template(
     expr: Expr,
     *,
@@ -1341,8 +1406,8 @@ def lift_cell_ir_to_template(
     :class:`Subscript` against the buffer's base name, suitable as input to
     :func:`lower_to_vector_ast`.
 
-    Symbols not in ``cell_to_template`` — scalar parameters or unbound
-    names — are left unchanged. Mappings whose template has ``axes == ()``
+    Symbols not in ``cell_to_template`` - scalar parameters or unbound
+    names - are left unchanged. Mappings whose template has ``axes == ()``
     (e.g. scalar aliases) rewrite the symbol to a bare ``Sym(f"{base}_buf")``
     leaf so the result evaluates against the runtime's ``<base>_buf``
     binding.
@@ -1359,49 +1424,31 @@ def lift_cell_ir_to_template(
 
     Returns:
         A new IR expression equivalent to ``expr`` but with all matched
-        cell-name :class:`Sym` leaves replaced — by FREE-index
+        cell-name :class:`Sym` leaves replaced - by FREE-index
         :class:`Subscript` nodes (templated buffers) or scalar-buffer
         :class:`Sym` leaves (scalar aliases).
-
-    Raises:
-        UnsupportedIRLoweringError: If two distinct per-cell symbols
-            sharing the same templated ``base`` co-occur in ``expr``
-            (signals a string-expanded axis reduction that cannot be
-            represented as a single FREE-axis subscript).
     """
-    mapping: dict[str, Expr] = {}
-    for cell_name, (base, axes) in cell_to_template.items():
-        if not axes:
-            mapping[cell_name] = Sym(name=f"{base}_buf")
-            continue
-        mapping[cell_name] = Subscript(
-            name=base,
-            indices=tuple(AxisIndex(axis=ax, kind=AxisKind.FREE) for ax in axes),
-        )
-    if not mapping:
+    if not cell_to_template:
         return expr
-    # Refuse the lift when multiple distinct per-cell symbols of the same
-    # templated buffer co-occur in ``expr``: that signals an axis reduction
-    # (e.g. ``apply_along`` or ``sum_over``) that the normalizer expanded
-    # to a per-cell sum at the string level. Collapsing those cells back to
-    # a single FREE-axis subscript would silently broadcast instead of
-    # reduce, producing wrong results.
-    seen_bases: dict[str, str] = {}
-    for node in walk(expr):
-        if not isinstance(node, Sym):
-            continue
-        entry = cell_to_template.get(node.name)
-        if entry is None or not entry[1]:
-            continue
-        base = entry[0]
-        prior = seen_bases.get(base)
-        if prior is None:
-            seen_bases[base] = node.name
-        elif prior != node.name:
-            msg = (
-                f"cannot lift per-cell IR for buffer {base!r}: multiple "
-                f"distinct cells co-occur ({prior!r} and {node.name!r}); "
-                "this signals a string-expanded axis reduction"
-            )
-            raise UnsupportedIRLoweringError(msg)
+
+    # Build the substitution mapping lazily: walk ``expr`` once collecting
+    # the set of Sym names present, then only construct replacement nodes
+    # for the cell-names that actually appear. The previous implementation
+    # eagerly materialized one Subscript+AxisIndex tuple per entry in
+    # ``cell_to_template`` on every call, which is O(N_cells) per history
+    # node and becomes the dominant compile-time cost on large models
+    # (e.g. 6k+ history-node visits x 24k-entry cell_to_template => ~150M
+    # allocations). In practice each per-cell IR body references only a
+    # handful of distinct Sym names, so the lazy form is bounded by body
+    # size rather than total cell count.
+    referenced_cells = _validate_lift_cell_conflicts(
+        expr=expr,
+        cell_to_template=cell_to_template,
+    )
+    if not referenced_cells:
+        return expr
+    mapping = _build_lift_cell_mapping(
+        referenced_cells=referenced_cells,
+        cell_to_template=cell_to_template,
+    )
     return substitute(expr, mapping)

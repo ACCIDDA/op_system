@@ -133,6 +133,17 @@ class OpSystemSystem(SystemABC, module="flepimop2.system.op_system"):  # noqa: D
         self.options["body_eval_fn"] = self._stepper_body_eval
 
         self._compiled_rhs = compiled  # handy for debugging/adapters
+        self._stepper_block_history = self._maybe_make_block_history_stepper(
+            compiled=compiled,
+            mixing_kernels=mixing_kernels,
+        )
+        self.options["block_history_stepper_fn"] = self._stepper_block_history
+
+        self._stepper_block_body_eval = self._maybe_make_block_body_eval(
+            compiled=compiled,
+            mixing_kernels=mixing_kernels,
+        )
+        self.options["block_body_eval_fn"] = self._stepper_block_body_eval
 
     @staticmethod
     def _extract_axis_labels(compiled: CompiledRhs) -> dict[str, tuple[str, ...]]:
@@ -204,6 +215,8 @@ class OpSystemSystem(SystemABC, module="flepimop2.system.op_system"):  # noqa: D
             "history_requirements": compiled.history_requirements,
             "history_stepper_fn": None,
             "body_eval_fn": None,
+            "block_history_stepper_fn": None,
+            "block_body_eval_fn": None,
         }
 
     @staticmethod
@@ -342,6 +355,63 @@ class OpSystemSystem(SystemABC, module="flepimop2.system.op_system"):  # noqa: D
             return body_eval_fn(time, state_dict, **params)
 
         return _stepper_body_eval
+
+    @staticmethod
+    def _maybe_make_block_history_stepper(
+        *,
+        compiled: CompiledRhs,
+        mixing_kernels: Mapping[str, np.ndarray],
+    ) -> Callable[..., dict[str, Any]] | None:
+        """Build optional per-block history-provider-aware stepper wrapper.
+
+        Returns:
+            Block-history stepper callable when available, otherwise ``None``.
+        """
+        block_history_eval_fn = compiled.block_history_eval_fn
+        if block_history_eval_fn is None:
+            return None
+
+        def _stepper_block_history(
+            time: np.float64,
+            state_dict: dict[str, Any],
+            *,
+            history_provider: object,
+            **kwargs: Any,  # noqa: ANN401
+        ) -> dict[str, Any]:
+            params = OpSystemSystem._merged_params(mixing_kernels, kwargs)
+            return block_history_eval_fn(
+                time,
+                state_dict,
+                history_provider=history_provider,
+                **params,
+            )
+
+        return _stepper_block_history
+
+    @staticmethod
+    def _maybe_make_block_body_eval(
+        *,
+        compiled: CompiledRhs,
+        mixing_kernels: Mapping[str, np.ndarray],
+    ) -> Callable[..., dict[int, object]] | None:
+        """Build optional per-block body-eval wrapper for history engines.
+
+        Returns:
+            Block-body-eval callable when available, otherwise ``None``.
+        """
+        block_body_eval_fn = compiled.block_body_eval_fn
+        if block_body_eval_fn is None:
+            return None
+
+        def _stepper_block_body_eval(
+            time: np.float64,
+            state_dict: dict[str, Any],
+            **kwargs: Any,  # noqa: ANN401
+        ) -> dict[int, object]:
+            params = OpSystemSystem._merged_params(mixing_kernels, kwargs)
+            return block_body_eval_fn(time, state_dict, **params)
+
+        return _stepper_block_body_eval
 
     @override
     def _bind_impl(
