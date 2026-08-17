@@ -11,7 +11,7 @@ authors = [
 ]
 license = { file = "LICENSE" }
 dependencies = [
-  "op-system>=0.1.0",
+  "op-system>=0.2.0",
   "flepimop2>=0.2.0",
   "pydantic>=2.0,<3",
   "numpy>=1.26",
@@ -36,10 +36,10 @@ Repository = "https://github.com/ACCIDDA/op_system"
 
 [project.optional-dependencies]
 jax = [
-  "op-system[jax]>=0.1.0",
+  "op-system[jax]>=0.2.0",
 ]
 jax-inference = [
-  "op-system[jax-inference]>=0.1.0",
+  "op-system[jax-inference]>=0.2.0",
 ]
 
 [build-system]

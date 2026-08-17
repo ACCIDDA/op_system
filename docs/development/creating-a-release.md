@@ -12,8 +12,8 @@ The release workflow treats them as a single release unit. Both package versions
 - You have write access to the [`ACCIDDA/op_system`](https://github.com/ACCIDDA/op_system) repository.
 - The release version has already been updated everywhere it is declared:
   - `pyproject.toml`
-  - `src/op_system/__init__.py`
   - `flepimop2-op_system/pyproject.toml`
+- The `CHANGELOG.md` has a section for the new version.
 - Your local environment is synced with a supported Python version.
 - You have [GitHub's `gh` CLI](https://cli.github.com/) installed and authenticated if you plan to dispatch workflows from the command line.
 
@@ -21,13 +21,15 @@ The release workflow treats them as a single release unit. Both package versions
 
 The release workflow validates that all version declarations match before it builds or publishes anything.
 
-Today that means these three files must contain the same semantic version:
+Today that means these two files must contain the same semantic version:
 
 - `pyproject.toml`
-- `src/op_system/__init__.py`
 - `flepimop2-op_system/pyproject.toml`
 
-If any of them differ, the `validate` job fails immediately.
+If they differ, the `validate` job fails immediately. `op_system.__version__`
+is read dynamically from installed package metadata
+(`importlib.metadata.version("op_system")`), so it does not need a separate
+manual edit.
 
 ## 2. Run The Local Release Preflight
 
@@ -41,7 +43,6 @@ That command does two things:
 
 - Validates that the release version matches in:
   - `pyproject.toml`
-  - `src/op_system/__init__.py`
   - `flepimop2-op_system/pyproject.toml`
 - Runs `just build-all` to execute the clean-room build and install tests for both packages.
 
