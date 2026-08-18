@@ -54,7 +54,9 @@ jobs:
         env:
           ACTOR: "${{ github.actor }}"
       - name: 'Install just'
-        uses: 'extractions/setup-just@v3'
+        uses: 'taiki-e/install-action@v2'
+        with:
+          tool: 'just'
       - name: 'Setup uv with python ${{ matrix.python-version }}'
         uses: 'astral-sh/setup-uv@v7'
         with:
