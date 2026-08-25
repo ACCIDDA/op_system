@@ -234,6 +234,19 @@ class PytreeEvalFn(Protocol):
     ) -> StateDict: ...
 
 
+class ReactionPropensityFn(Protocol):
+    """Callable propensity evaluator for one named reaction/transition.
+
+    Accepts ``y`` as a ``StateDict`` and returns an array shaped like the
+    reaction's ``from_axes`` (one independent rate per source cell) --
+    see :class:`CompiledReaction`.
+    """
+
+    def __call__(  # noqa: D102
+        self, t: object, y: StateDict, **params: object
+    ) -> object: ...
+
+
 class HistoryEvalFn(Protocol):
     """Callable RHS evaluator with history provider support.
 
@@ -256,6 +269,41 @@ class BodyEvalFn(Protocol):
     def __call__(  # noqa: D102
         self, t: object, y: StateDict, **params: object
     ) -> dict[int, object]: ...
+
+
+@dataclass(frozen=True, slots=True)
+class CompiledReaction:
+    """Compiled propensity + axis bookkeeping for one named transition.
+
+    Produced from :class:`op_system._reactions.ReactionArtifactIR` at
+    compile time. A firing event at from-cell index ``i`` (in the natural
+    N-D shape given by ``from_axes``) depletes 1 from ``from_base`` at that
+    cell and adds 1 to ``to_base`` at the cell obtained by: keeping every
+    axis in ``to_axes`` at ``i``'s value for that axis, and using the fixed
+    coordinate index from ``pinned`` for every axis in ``sum_axes``.
+    Consumers that need a single combined scatter/reduce target (e.g. an
+    engine applying many simultaneous firings) sum over ``sum_axes`` when
+    depositing into ``to_base`` -- op_system does not do that summation
+    itself, since whether/how to combine simultaneous firings across a
+    summed axis is an execution-semantics decision for the consumer, not
+    a compile-time one.
+    """
+
+    name: str
+    from_base: str
+    from_axes: tuple[str, ...]
+    to_base: str
+    to_axes: tuple[str, ...]
+    #: Axes present in ``from_axes`` but not ``to_axes`` -- i.e. axes that
+    #: get summed away when a firing event is deposited into ``to_base``.
+    sum_axes: tuple[str, ...]
+    #: ``(axis, coord_index)`` pairs -- the fixed to-side coordinate index
+    #: for each axis in ``sum_axes``. Coordinate indices, not strings, so
+    #: consumers can index directly without a second coord->index lookup.
+    pinned: tuple[tuple[str, int], ...]
+    #: Propensity evaluator: ``(t, y, **params) -> array`` shaped like
+    #: ``from_axes`` -- one independent rate per source cell.
+    propensity_fn: ReactionPropensityFn
 
 
 @dataclass(frozen=True, slots=True)
@@ -349,6 +397,14 @@ class CompiledRhs:
     block_body_eval_fn: BodyEvalFn | None = field(
         default=None, repr=False, compare=False, hash=False
     )
+    # ``reactions`` holds one CompiledReaction per in-scope named
+    # transition (see TransitionsRhs.reactions_ir / op_system._reactions).
+    # Empty for ExprRhs and for transitions specs with no in-scope named
+    # transitions. Excluded from equality, repr, and hash -- derived from
+    # ``_rhs``, rebuilt during ``__setstate__``.
+    reactions: tuple[CompiledReaction, ...] = field(
+        default_factory=tuple, repr=False, compare=False, hash=False
+    )
     # Private: source spec retained for pickling. ``compile_rhs`` populates
     # this; direct constructions without ``_rhs`` are not picklable (the
     # ``eval_fn`` closure cannot be serialized) and will raise from
@@ -419,6 +475,7 @@ class CompiledRhs:
         object.__setattr__(self, "body_eval_fn", rebuilt.body_eval_fn)
         object.__setattr__(self, "block_history_eval_fn", rebuilt.block_history_eval_fn)
         object.__setattr__(self, "block_body_eval_fn", rebuilt.block_body_eval_fn)
+        object.__setattr__(self, "reactions", rebuilt.reactions)
         object.__setattr__(self, "_rhs", rhs)
 
 
@@ -1424,6 +1481,165 @@ def _build_primary_eval_artifacts(
     return vec, plan, eval_fn, pytree_eval_fn, template_shapes
 
 
+def _make_propensity_fn(
+    code: CodeType,
+    *,
+    param_recipes: tuple[tuple[str, tuple[str, ...], tuple[int, ...]], ...],
+    extra_param_buffers: tuple[tuple[str, tuple[str, ...], tuple[int, ...]], ...],
+    state_bases: tuple[str, ...],
+) -> ReactionPropensityFn:
+    """Wrap a compiled propensity code object as a callable.
+
+    Mirrors the env-assembly convention ``_vectorize.make_pytree_eval_fn``
+    uses (``{base}_buf`` for state/shaped-param buffers, ``t``/params
+    merged directly), so propensity expressions compose with the same
+    parameter-passing contract as the deterministic eval fns.
+
+    Returns:
+        A :class:`ReactionPropensityFn` evaluating ``code`` against ``y``
+        and ``params``.
+    """
+
+    def propensity_fn(  # noqa: PLR0914
+        t: object, y: StateDict, **params: object
+    ) -> object:
+        first_val = y[state_bases[0]] if state_bases else next(iter(params.values()))
+        xp = _namespace_of(first_val)
+        env: dict[str, object] = {"np": xp, "t": xp.asarray(t)}
+        env.update(params)
+        for base, names, shape in param_recipes:
+            if all(n in params for n in names):
+                env[f"{base}_buf"] = xp.reshape(
+                    xp.asarray([params[n] for n in names]), shape
+                )
+            elif base in params:
+                env[f"{base}_buf"] = xp.reshape(xp.asarray(params[base]), shape)
+        for base, _axes, shape in extra_param_buffers:
+            if base in params:
+                env[f"{base}_buf"] = xp.reshape(xp.asarray(params[base]), shape)
+        for base in state_bases:
+            if base in y:
+                env[f"{base}_buf"] = y[base]
+        try:
+            return eval(code, {"__builtins__": _SAFE_BUILTINS}, env)  # noqa: S307
+        except (NameError, ValueError, TypeError, ArithmeticError) as exc:
+            msg = f"reaction propensity evaluation failed: {exc!r}"
+            raise ValueError(msg) from exc
+
+    return propensity_fn
+
+
+def _build_reaction_artifacts(  # noqa: C901, PLR0914
+    *,
+    rhs: NormalizedRhs,
+    plan: Any,  # noqa: ANN401
+    vec: Any,  # noqa: ANN401
+) -> tuple[CompiledReaction, ...]:
+    """Compile each in-scope named transition's reaction artifact.
+
+    Opportunistic like ``_build_history_artifacts``: a reaction whose
+    propensity fails to lower/compile is silently omitted rather than
+    failing the whole compile (matches how ``TransitionsRhs.reactions_ir``
+    itself already omits out-of-scope transitions -- see
+    ``op_system._reactions``).
+
+    Returns:
+        One :class:`CompiledReaction` per successfully-compiled reaction,
+        in declaration order. Empty when ``rhs`` has no reactions_ir (e.g.
+        ``ExprRhs``, or a transitions spec with no in-scope transitions)
+        or when the vector plan is unavailable.
+    """
+    reactions_ir = getattr(rhs, "reactions_ir", ())
+    if not reactions_ir or plan is None:
+        return ()
+
+    axes_meta = rhs.meta.get("axes") if isinstance(rhs.meta, _MappingABC) else None
+    if not axes_meta:
+        return ()
+
+    axis_coords: dict[str, tuple[str, ...]] = {}
+    axis_types: dict[str, str] = {}
+    axis_weights: dict[str, tuple[float, ...]] = {}
+    reducible_axes_set: set[str] = set()
+    for ax in axes_meta:
+        if not isinstance(ax, _MappingABC):
+            continue
+        coords = ax.get("coords")
+        if not coords:
+            continue
+        name = ax["name"]
+        axis_coords[name] = tuple(str(c) for c in coords)
+        ax_type = str(ax.get("type", "categorical")).strip().lower()
+        axis_types[name] = ax_type
+        if ax_type in {"categorical", "ordinal"}:
+            reducible_axes_set.add(name)
+        deltas = ax.get("deltas")
+        if deltas:
+            axis_weights[name] = tuple(float(d) for d in deltas)
+
+    buffer_axes: dict[str, tuple[str, ...]] = {
+        tpl.base: tpl.axes for tpl in rhs.state_templates
+    }
+    shaped_param_axes: dict[str, tuple[str, ...]] = {
+        name: tuple(ax_tuple) for name, ax_tuple in rhs.shaped_params if ax_tuple
+    }
+
+    context = vec._LoweringContext(  # noqa: SLF001
+        buffer_axes=buffer_axes,
+        axis_names=frozenset(axis_coords),
+        reducible_axes=frozenset(reducible_axes_set),
+        axis_weights=axis_weights or None,
+        axis_coords=axis_coords,
+        axis_types=axis_types,
+        shaped_param_axes=shaped_param_axes or None,
+    )
+
+    param_recipes = tuple(
+        (buf.base, buf.expanded_names, buf.shape)
+        for buf in plan.param_templates
+        if buf.axes
+    )
+    extra_param_buffers = plan.extra_param_buffers
+    state_bases = tuple(tpl.base for tpl in rhs.state_templates)
+
+    out: list[CompiledReaction] = []
+    for r in reactions_ir:
+        code = vec._compile_ir_expr(  # noqa: SLF001
+            r.propensity_ir_full,
+            target_axes=r.from_axes,
+            context=context,
+            filename="<op_system_reaction>",
+        )
+        if code is None:
+            continue  # opportunistic: omit, don't fail the whole compile.
+
+        try:
+            pinned = tuple(
+                (axis, axis_coords[axis].index(coord)) for axis, coord in r.pinned
+            )
+        except (KeyError, ValueError):
+            continue  # axis/coord not resolvable against this spec's axes.
+
+        out.append(
+            CompiledReaction(
+                name=r.name,
+                from_base=r.from_base,
+                from_axes=r.from_axes,
+                to_base=r.to_base,
+                to_axes=r.to_axes,
+                sum_axes=tuple(ax for ax in r.from_axes if ax not in r.to_axes),
+                pinned=pinned,
+                propensity_fn=_make_propensity_fn(
+                    code,
+                    param_recipes=param_recipes,
+                    extra_param_buffers=extra_param_buffers,
+                    state_bases=state_bases,
+                ),
+            )
+        )
+    return tuple(out)
+
+
 def _cell_to_template_from_plan(plan: Any) -> dict[str, tuple[str, tuple[str, ...]]]:  # noqa: ANN401
     """Build mapping from expanded cell names to ``(template_base, axes)``.
 
@@ -1739,5 +1955,6 @@ def compile_rhs(rhs: NormalizedRhs, *, xp: object | None = None) -> CompiledRhs:
         body_eval_fn=body_eval_fn,
         block_history_eval_fn=block_history_eval_fn,
         block_body_eval_fn=block_body_eval_fn,
+        reactions=_build_reaction_artifacts(rhs=rhs, plan=plan, vec=vec),
         _rhs=rhs,
     )

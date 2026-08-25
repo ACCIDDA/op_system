@@ -41,7 +41,15 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from op_system._helpers import _get_required_str
-from op_system._ir import Expr, iter_subscripts, parse_expr_to_ir, unparse_ir
+from op_system._ir import (
+    Apply,
+    AxisIndex,
+    Expr,
+    Subscript,
+    iter_subscripts,
+    parse_expr_to_ir,
+    unparse_ir,
+)
 from op_system._ir_expand import expand_reduce_pointwise
 from op_system._ir_templates import expand_inline_templates
 from op_system._templates import (
@@ -73,11 +81,19 @@ class ReactionArtifactIR:
             pinned to a fixed coordinate on ``to`` (e.g. a transition that
             always deposits into ``vax=full`` regardless of the firing
             cell's own vax value).
-        rate_ir_full: Template-form propensity IR (axes symbolic), fully
-            expanded (Reduce nodes resolved) -- ready to compile.
-        rate_ir_reduce: Same, with Reduce nodes preserved (for the vector
-            compile path, consistent with the rest of this package).
+        rate_ir_full: Template-form per-capita RATE IR (axes symbolic,
+            Reduce nodes resolved) -- the bare rate expression as written
+            in the transition's ``rate:`` field, kept for display/
+            debugging. NOT what gets compiled as the propensity (see
+            ``propensity_ir_full``).
         rate_string: Unparsed ``rate_ir_full``, for display/debugging.
+        propensity_ir_full: Template-form PROPENSITY IR -- ``rate *
+            from_state``, i.e. the actual per-cell hazard (events per unit
+            time), matching the standard CTMC/tau-leaping definition. This
+            is what compile-time lowering compiles.
+        propensity_ir_reduce: Same, with Reduce nodes preserved (for the
+            vector compile path, consistent with the rest of this
+            package).
     """
 
     name: str
@@ -87,8 +103,9 @@ class ReactionArtifactIR:
     to_axes: tuple[str, ...]
     pinned: tuple[tuple[str, str], ...]
     rate_ir_full: Expr
-    rate_ir_reduce: Expr
     rate_string: str
+    propensity_ir_full: Expr
+    propensity_ir_reduce: Expr
 
 
 def _in_order_wildcard_axes(tokens: list[Any]) -> list[str]:
@@ -107,7 +124,7 @@ def _in_order_wildcard_axes(tokens: list[Any]) -> list[str]:
     return axes
 
 
-def build_reaction_artifacts_ir(
+def build_reaction_artifacts_ir(  # noqa: PLR0914
     transitions_raw: list[Mapping[str, Any]],
     *,
     axes: list[dict[str, Any]],
@@ -187,6 +204,16 @@ def build_reaction_artifacts_ir(
             axis_coords=axis_lookup,
         )
 
+        # Propensity = rate * from_state (the actual per-cell hazard), NOT
+        # the bare rate -- mirrors the deterministic path's tpl_flow_full
+        # construction in _normalize._build_transition_equations_ir.
+        from_sub = Subscript(
+            name=frm_base,
+            indices=tuple(AxisIndex(axis=ax, coord=None) for ax in frm_wc_axes),
+        )
+        propensity_ir_full = Apply(op="*", args=(rate_ir_full, from_sub))
+        propensity_ir_reduce = Apply(op="*", args=(rate_ir_reduce, from_sub))
+
         pinned = tuple(
             (tok.axis, tok.coord)
             for tok in to_tokens
@@ -202,8 +229,9 @@ def build_reaction_artifacts_ir(
                 to_axes=tuple(to_wc_axes),
                 pinned=pinned,
                 rate_ir_full=rate_ir_full,
-                rate_ir_reduce=rate_ir_reduce,
                 rate_string=unparse_ir(rate_ir_full),
+                propensity_ir_full=propensity_ir_full,
+                propensity_ir_reduce=propensity_ir_reduce,
             )
         )
 
