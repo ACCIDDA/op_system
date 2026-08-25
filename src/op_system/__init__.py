@@ -34,9 +34,11 @@ from op_system._typing import Array
 
 from .compile import (
     BodyEvalFn,
+    CompiledReaction,
     CompiledRhs,
     EvalFn,
     PytreeEvalFn,
+    ReactionPropensityFn,
     StateDict,
     compile_rhs,
 )
@@ -122,6 +124,7 @@ __all__ = [
     "Array",
     "BlockAxisInfo",
     "BodyEvalFn",
+    "CompiledReaction",
     "CompiledRhs",
     "EvalFn",
     "ExprRhs",
@@ -130,6 +133,7 @@ __all__ = [
     "NormalizedRhs",
     "OperatorDescriptor",
     "PytreeEvalFn",
+    "ReactionPropensityFn",
     "StateDict",
     "StateString",
     "TransitionsRhs",
