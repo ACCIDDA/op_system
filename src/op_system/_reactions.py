@@ -72,15 +72,32 @@ class ReactionArtifactIR:
         from_base: State base name the reaction depletes.
         from_axes: Wildcard axes of the ``from`` template, in declaration
             order -- this is the shape of the compiled propensity.
+        full_axes: EVERY axis of ``from_base``'s true (unreduced) template,
+            in declaration order, whether wildcard or pinned on this
+            transition's ``from``-side selector -- i.e. ``from_axes`` plus
+            any axis this transition pins on the from-side (e.g. a
+            vaccination-dose-progression transition pinned at
+            ``vax=unvaccinated`` on ``from``). Used to correctly reference
+            ``from_base``'s true shape (see ``propensity_ir_full``) and,
+            by a consumer, to build a complete scatter-target index into
+            ``to_base`` (assumed to share this same axis order -- see
+            ``run_hybrid_ctmc`` in diphtheria_outbreakvacc for the one
+            current consumer's validation of that assumption).
         to_base: State base name the reaction replenishes.
         to_axes: Wildcard axes of the ``to`` template, in declaration
             order. Always a subset of ``from_axes`` (enforced at build
             time) -- axes in ``from_axes`` but not here are summed away
             when a firing event is scattered onto the destination.
-        pinned: ``(axis, coord)`` pairs for axes present on ``from`` but
-            pinned to a fixed coordinate on ``to`` (e.g. a transition that
-            always deposits into ``vax=full`` regardless of the firing
-            cell's own vax value).
+        pinned: ``(axis, coord)`` pairs for every axis pinned on the
+            ``to``-side selector -- both axes that are wildcard on
+            ``from`` and pinned on ``to`` (a "collapse to a fixed target"
+            transition, e.g. recovery landing in a single ``vax=full``
+            stratum regardless of the firing cell's own vax value) and
+            axes that are ALSO pinned on ``from`` (a "point-to-point"
+            transition between two specific coordinates on the same axis,
+            e.g. ``vax=unvaccinated -> vax=partial`` dose progression --
+            not a collapse, just a fixed single-cell shift, but the
+            scatter target still needs this axis's coordinate fixed).
         rate_ir_full: Template-form per-capita RATE IR (axes symbolic,
             Reduce nodes resolved) -- the bare rate expression as written
             in the transition's ``rate:`` field, kept for display/
@@ -99,6 +116,7 @@ class ReactionArtifactIR:
     name: str
     from_base: str
     from_axes: tuple[str, ...]
+    full_axes: tuple[str, ...]
     to_base: str
     to_axes: tuple[str, ...]
     pinned: tuple[tuple[str, str], ...]
@@ -207,17 +225,34 @@ def build_reaction_artifacts_ir(  # noqa: PLR0914
         # Propensity = rate * from_state (the actual per-cell hazard), NOT
         # the bare rate -- mirrors the deterministic path's tpl_flow_full
         # construction in _normalize._build_transition_equations_ir.
+        #
+        # from_sub must reference from_base's TRUE full shape, not just its
+        # wildcard axes: a from-side PinnedToken (e.g. `S[age, vax=u, loc]`)
+        # still needs that coordinate baked into the Subscript, or the
+        # reference silently points at the wrong (or a shape-mismatched)
+        # slice. full_axes -- every token's axis, wildcard or pinned, in
+        # the selector's own declared order -- is exactly from_base's true
+        # axis order (a well-formed selector mentions every axis of the
+        # state it references), so build indices from ALL of frm_tokens,
+        # not just the wildcard subset.
+        full_axes = tuple(tok.axis for tok in frm_tokens)
         from_sub = Subscript(
             name=frm_base,
-            indices=tuple(AxisIndex(axis=ax, coord=None) for ax in frm_wc_axes),
+            indices=tuple(
+                AxisIndex(axis=tok.axis, coord=(tok.coord if isinstance(tok, PinnedToken) else None))
+                for tok in frm_tokens
+            ),
         )
         propensity_ir_full = Apply(op="*", args=(rate_ir_full, from_sub))
         propensity_ir_reduce = Apply(op="*", args=(rate_ir_reduce, from_sub))
 
+        # Every to-side pinned axis needs a fixed scatter-target coordinate,
+        # not just ones that are wildcard on from (the "collapse" case) --
+        # an axis pinned on BOTH sides (e.g. vax=unvaccinated -> vax=partial
+        # dose progression) is a "point-to-point" shift on that axis, not a
+        # collapse, but the target coordinate still needs recording.
         pinned = tuple(
-            (tok.axis, tok.coord)
-            for tok in to_tokens
-            if isinstance(tok, PinnedToken) and tok.axis in frm_wc_set
+            (tok.axis, tok.coord) for tok in to_tokens if isinstance(tok, PinnedToken)
         )
 
         out.append(
@@ -225,6 +260,7 @@ def build_reaction_artifacts_ir(  # noqa: PLR0914
                 name=name_s,
                 from_base=frm_base,
                 from_axes=tuple(frm_wc_axes),
+                full_axes=full_axes,
                 to_base=to_base,
                 to_axes=tuple(to_wc_axes),
                 pinned=pinned,

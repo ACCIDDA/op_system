@@ -280,26 +280,44 @@ class CompiledReaction:
     N-D shape given by ``from_axes``) depletes 1 from ``from_base`` at that
     cell and adds 1 to ``to_base`` at the cell obtained by: keeping every
     axis in ``to_axes`` at ``i``'s value for that axis, and using the fixed
-    coordinate index from ``pinned`` for every axis in ``sum_axes``.
-    Consumers that need a single combined scatter/reduce target (e.g. an
-    engine applying many simultaneous firings) sum over ``sum_axes`` when
-    depositing into ``to_base`` -- op_system does not do that summation
-    itself, since whether/how to combine simultaneous firings across a
-    summed axis is an execution-semantics decision for the consumer, not
-    a compile-time one.
+    coordinate index from ``pinned`` for every axis in ``pinned`` (this
+    includes both axes that are wildcard on ``from_axes`` and pinned on
+    ``to`` -- a "collapse to a fixed target" transition, where multiple
+    source cells share one destination and the axis also appears in
+    ``sum_axes`` -- and axes pinned on BOTH ``from`` and ``to``, a
+    "point-to-point" shift between two specific coordinates on the same
+    axis, e.g. a vaccination-dose-progression transition, which do NOT
+    appear in ``sum_axes`` since there's only ever one source value on
+    that axis). Consumers that need a single combined scatter/reduce
+    target (e.g. an engine applying many simultaneous firings) sum over
+    ``sum_axes`` when depositing into ``to_base`` -- op_system does not do
+    that summation itself, since whether/how to combine simultaneous
+    firings across a summed axis is an execution-semantics decision for
+    the consumer, not a compile-time one.
     """
 
     name: str
     from_base: str
     from_axes: tuple[str, ...]
+    #: Every axis of ``from_base``'s true (unreduced) template, in
+    #: declaration order, whether wildcard or pinned on this transition's
+    #: ``from``-side selector -- ``from_axes`` plus any from-pinned axes.
+    #: Consumers building a scatter-target index into ``to_base`` (assumed
+    #: to share this axis order) should iterate ``full_axes``, not
+    #: ``from_axes``, so a from-pinned axis's ``pinned`` entry is included.
+    full_axes: tuple[str, ...]
     to_base: str
     to_axes: tuple[str, ...]
-    #: Axes present in ``from_axes`` but not ``to_axes`` -- i.e. axes that
-    #: get summed away when a firing event is deposited into ``to_base``.
+    #: Axes present in ``from_axes`` but not ``to_axes`` -- i.e. axes with
+    #: multiple source values that get summed together when a firing event
+    #: is deposited into ``to_base``. A from-pinned axis in ``pinned`` is
+    #: NOT in ``sum_axes`` -- it has only one source value, nothing to sum.
     sum_axes: tuple[str, ...]
     #: ``(axis, coord_index)`` pairs -- the fixed to-side coordinate index
-    #: for each axis in ``sum_axes``. Coordinate indices, not strings, so
-    #: consumers can index directly without a second coord->index lookup.
+    #: for every axis pinned on ``to`` (both ``sum_axes`` entries and
+    #: from-pinned "point-to-point" axes, see the class docstring).
+    #: Coordinate indices, not strings, so consumers can index directly
+    #: without a second coord->index lookup.
     pinned: tuple[tuple[str, int], ...]
     #: Propensity evaluator: ``(t, y, **params) -> array`` shaped like
     #: ``from_axes`` -- one independent rate per source cell.
@@ -1635,6 +1653,7 @@ def _build_reaction_artifacts(  # noqa: C901, PLR0914
                 name=r.name,
                 from_base=r.from_base,
                 from_axes=r.from_axes,
+                full_axes=r.full_axes,
                 to_base=r.to_base,
                 to_axes=r.to_axes,
                 sum_axes=tuple(ax for ax in r.from_axes if ax not in r.to_axes),
