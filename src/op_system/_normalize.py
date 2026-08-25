@@ -90,6 +90,7 @@ from op_system._normalize_kernels import (
     _normalize_operators,
     _normalize_state_axes,
 )
+from op_system._reactions import ReactionArtifactIR, build_reaction_artifacts_ir
 from op_system._templates import (
     PinnedToken,
     WildcardToken,
@@ -160,6 +161,13 @@ class TransitionsRhs(_RhsBase):
     Produced by :func:`normalize_transitions_rhs`.  Use :data:`NormalizedRhs`
     as the union type when you need to accept both kinds.
     """
+
+    #: Per-named-transition reaction artifacts (propensity IR + axis
+    #: bookkeeping), built independently of the summed per-state
+    #: ``equations``/``equations_ir`` -- see :mod:`op_system._reactions`.
+    #: Only in-scope named transitions are present; see that module's
+    #: docstring for exactly which transitions are included.
+    reactions_ir: tuple[ReactionArtifactIR, ...] = ()
 
 
 #: Discriminated union of the two normalized-RHS kinds.
@@ -1491,6 +1499,14 @@ def normalize_transitions_rhs(  # noqa: C901, PLR0912, PLR0914, PLR0915
     )
     all_syms |= rate_syms
 
+    reactions_ir = build_reaction_artifacts_ir(
+        transitions_raw,
+        axes=axes_meta,
+        axis_lookup=axis_lookup_dict,
+        shaped_params=shaped_params,
+        time_axis_name=time_axis_name,
+    )
+
     _maybe_attach_initial_state(
         meta,
         spec.get("initial_state"),
@@ -1600,6 +1616,7 @@ def normalize_transitions_rhs(  # noqa: C901, PLR0912, PLR0914, PLR0915
         equations_ir_built_list.append(result_expr)
     equations_ir_built = tuple(equations_ir_built_list)
     return TransitionsRhs(
+        reactions_ir=reactions_ir,
         state_names=tuple(state_expanded),
         equations=eqs_tuple,
         aliases=_derive_alias_strings(
