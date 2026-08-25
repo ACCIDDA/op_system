@@ -923,17 +923,50 @@ def test_option_reactions_exposes_named_transition() -> None:
     np.testing.assert_allclose(got, np.array([0.5, 1.0, 1.5]))
 
 
-# NOTE: no dedicated "reactions merges mixing_kernels" test here. Both this
-# wrapper and `_maybe_make_pytree_stepper` etc. call the exact same
-# `OpSystemSystem._merged_params`, already covered for the other steppers
-# (see `test_option_mixing_kernels_with_kernel` above) -- the merge itself
-# isn't reaction-specific. A real attempt at one surfaced a genuine, separate
-# finding instead: a transition rate that references a mixing kernel through
-# an `apply_along` reduction (e.g. a spatial force-of-infection term) is NOT
-# yet supported by the v1 reaction-artifact scope -- `_compile_ir_expr`
-# raised "axes don't match array" trying to lower a Reduce-bearing propensity
-# against a from-axes-only target shape. Rates that only reference from-side
-# axis-indexed shaped params (as tested above) work; rates requiring a
-# Reduce/apply_along contraction do not yet. Tracked as a known limitation,
-# not fixed here -- see the CTMC design doc in diphtheria_outbreakvacc for
-# how this bounds which transitions can be marked stochastic today.
+def test_option_reactions_merges_mixing_kernels() -> None:
+    """A reaction's propensity_fn merges mixing_kernels into params.
+
+    Confirmed with a real (non-degenerate) kernel contraction via
+    apply_along, matching a spatial force-of-infection term, merged the same
+    way the other steppers already do.
+
+    This exact case initially surfaced op_system#186 ("axes don't match
+    array" for a Reduce-bearing propensity) -- fixed upstream in op_system
+    PR #187; this test exercises the fix end to end through the adapter.
+    """
+    spec: dict[str, object] = {
+        "kind": "transitions",
+        "axes": [{"name": "age", "coords": ["a", "b"]}],
+        "state": ["S[age]", "I[age]"],
+        "kernels": [
+            {
+                "name": "k",
+                "axes": ["age"],
+                "form": "gaussian",
+                "params": {"scale": 1.0, "sigma": 0.5},
+            },
+        ],
+        "transitions": [
+            {
+                "name": "infect",
+                "from": "S[age]",
+                "to": "I[age]",
+                "rate": "apply_along(k[age, age:ap] * S[age:ap], age=ap)",
+            },
+        ],
+    }
+    sys = OpSystemSystem(spec=spec)
+    mk = sys.option("mixing_kernels", None)
+    assert isinstance(mk, dict)
+    assert "k" in mk
+
+    reactions = sys.option("reactions", None)
+    assert len(reactions) == 1
+
+    y = {"S": np.array([2.0, 3.0]), "I": np.zeros(2)}
+    # Kernel NOT passed explicitly here -- confirms it's coming from the
+    # merged mixing_kernels default, the same way _maybe_make_pytree_stepper
+    # already merges it for the main RHS.
+    got = np.asarray(reactions[0].propensity_fn(np.float64(0.0), y))
+    expected = (mk["k"] @ y["S"]) * y["S"]
+    np.testing.assert_allclose(got, expected)
