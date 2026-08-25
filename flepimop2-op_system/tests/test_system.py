@@ -872,3 +872,101 @@ def test_bind_exposes_body_eval_for_history_specs() -> None:
     )
     assert values.keys() == {0}
     np.testing.assert_allclose(np.asarray(values[0]), np.array([3.0, 6.0]))
+
+
+def test_option_reactions_empty_for_expr_spec(sir_spec: dict[str, object]) -> None:
+    """`reactions` option is an empty tuple for kind: expr specs."""
+    sys = OpSystemSystem(spec=sir_spec)
+    assert sys.option("reactions", None) == ()
+
+
+def test_option_reactions_empty_for_transitions_with_no_named_transitions() -> None:
+    """`reactions` option is empty when no transition has a `name:`."""
+    spec: dict[str, object] = {
+        "kind": "transitions",
+        "state": ["S", "I", "R"],
+        "transitions": [
+            {"from": "S", "to": "I", "rate": "beta * I / (S + I + R)"},
+            {"from": "I", "to": "R", "rate": "gamma"},
+        ],
+    }
+    sys = OpSystemSystem(spec=spec)
+    assert sys.option("reactions", None) == ()
+
+
+def test_option_reactions_exposes_named_transition() -> None:
+    """`reactions` surfaces a compiled propensity for each named transition.
+
+    Mixing_kernels get merged into params the same way the other steppers do.
+    """
+    spec: dict[str, object] = {
+        "kind": "transitions",
+        "axes": [{"name": "vax", "coords": ["u", "p", "f"]}],
+        "state": ["S[vax]", "C[vax]"],
+        "transitions": [
+            {"name": "recover", "from": "C[vax]", "to": "S[vax=f]", "rate": "g"},
+        ],
+    }
+    sys = OpSystemSystem(spec=spec)
+    reactions = sys.option("reactions", None)
+    assert len(reactions) == 1
+    reaction = reactions[0]
+    assert reaction.name == "recover"
+    assert reaction.from_base == "C"
+    assert reaction.from_axes == ("vax",)
+    assert reaction.to_base == "S"
+    assert reaction.sum_axes == ("vax",)
+    assert reaction.pinned == (("vax", 2),)
+
+    y = {"S": np.zeros(3), "C": np.array([10.0, 20.0, 30.0])}
+    got = np.asarray(reaction.propensity_fn(np.float64(0.0), y, g=np.float64(0.05)))
+    np.testing.assert_allclose(got, np.array([0.5, 1.0, 1.5]))
+
+
+def test_option_reactions_merges_mixing_kernels() -> None:
+    """A reaction's propensity_fn merges mixing_kernels into params.
+
+    Confirmed with a real (non-degenerate) kernel contraction via
+    apply_along, matching a spatial force-of-infection term, merged the same
+    way the other steppers already do.
+
+    This exact case initially surfaced op_system#186 ("axes don't match
+    array" for a Reduce-bearing propensity) -- fixed upstream in op_system
+    PR #187; this test exercises the fix end to end through the adapter.
+    """
+    spec: dict[str, object] = {
+        "kind": "transitions",
+        "axes": [{"name": "age", "coords": ["a", "b"]}],
+        "state": ["S[age]", "I[age]"],
+        "kernels": [
+            {
+                "name": "k",
+                "axes": ["age"],
+                "form": "gaussian",
+                "params": {"scale": 1.0, "sigma": 0.5},
+            },
+        ],
+        "transitions": [
+            {
+                "name": "infect",
+                "from": "S[age]",
+                "to": "I[age]",
+                "rate": "apply_along(k[age, age:ap] * S[age:ap], age=ap)",
+            },
+        ],
+    }
+    sys = OpSystemSystem(spec=spec)
+    mk = sys.option("mixing_kernels", None)
+    assert isinstance(mk, dict)
+    assert "k" in mk
+
+    reactions = sys.option("reactions", None)
+    assert len(reactions) == 1
+
+    y = {"S": np.array([2.0, 3.0]), "I": np.zeros(2)}
+    # Kernel NOT passed explicitly here -- confirms it's coming from the
+    # merged mixing_kernels default, the same way _maybe_make_pytree_stepper
+    # already merges it for the main RHS.
+    got = np.asarray(reactions[0].propensity_fn(np.float64(0.0), y))
+    expected = (mk["k"] @ y["S"]) * y["S"]
+    np.testing.assert_allclose(got, expected)

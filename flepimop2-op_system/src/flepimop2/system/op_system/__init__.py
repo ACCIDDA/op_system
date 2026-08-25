@@ -26,6 +26,7 @@ pydantic BaseModel subclass is defined here, flepimop2 auto-generates a
 
 from __future__ import annotations
 
+import dataclasses
 import functools
 import sys
 from collections.abc import Mapping
@@ -51,7 +52,7 @@ else:
     from typing_extensions import override
 from pydantic import ConfigDict, Field
 
-from op_system import CompiledRhs, compile_spec
+from op_system import CompiledReaction, CompiledRhs, compile_spec
 
 __version__ = "0.2.0"
 
@@ -145,6 +146,11 @@ class OpSystemSystem(SystemABC, module="flepimop2.system.op_system"):  # noqa: D
         )
         self.options["block_body_eval_fn"] = self._stepper_block_body_eval
 
+        self.options["reactions"] = self._make_reaction_steppers(
+            compiled=compiled,
+            mixing_kernels=mixing_kernels,
+        )
+
     @staticmethod
     def _extract_axis_labels(compiled: CompiledRhs) -> dict[str, tuple[str, ...]]:
         """Preserve declared axis coordinate labels for shaped-IC resolution.
@@ -217,6 +223,7 @@ class OpSystemSystem(SystemABC, module="flepimop2.system.op_system"):  # noqa: D
             "body_eval_fn": None,
             "block_history_stepper_fn": None,
             "block_body_eval_fn": None,
+            "reactions": (),
         }
 
     @staticmethod
@@ -248,6 +255,42 @@ class OpSystemSystem(SystemABC, module="flepimop2.system.op_system"):  # noqa: D
             return compiled.eval_fn(time, state, **params)
 
         return _stepper
+
+    @staticmethod
+    def _make_reaction_steppers(
+        *,
+        compiled: CompiledRhs,
+        mixing_kernels: Mapping[str, np.ndarray],
+    ) -> tuple[CompiledReaction, ...]:
+        """Wrap each compiled reaction's propensity_fn with kernel-merged params.
+
+        Mirrors ``_maybe_make_pytree_stepper``'s ``mixing_kernels`` merging so
+        a reaction's rate expression can reference kernel-derived values the
+        same way the main RHS can. ``compiled.reactions`` is empty for
+        ``kind: expr`` specs and for transitions specs with no in-scope named
+        transitions (see ``op_system._reactions``), in which case this
+        returns ``()``.
+
+        Returns:
+            One kernel-merged-params ``CompiledReaction`` per entry in
+            ``compiled.reactions``, same order, same metadata -- only
+            ``propensity_fn`` differs.
+        """
+
+        def _wrap(reaction: CompiledReaction) -> CompiledReaction:
+            propensity_fn = reaction.propensity_fn
+
+            def _propensity(
+                time: np.float64,
+                state_dict: dict[str, Any],
+                **kwargs: Any,  # noqa: ANN401
+            ) -> Any:  # noqa: ANN401
+                params = OpSystemSystem._merged_params(mixing_kernels, kwargs)
+                return propensity_fn(time, state_dict, **params)
+
+            return dataclasses.replace(reaction, propensity_fn=_propensity)
+
+        return tuple(_wrap(r) for r in compiled.reactions)
 
     @staticmethod
     def _maybe_make_pytree_stepper(
