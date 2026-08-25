@@ -635,6 +635,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#op_system.CompiledReaction" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CompiledReaction
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#op_system.CompiledRhs" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -761,6 +772,17 @@
     <span class="md-ellipsis">
       
         PytreeEvalFn
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#op_system.ReactionPropensityFn" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ReactionPropensityFn
       
     </span>
   </a>
@@ -1032,6 +1054,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#op_system.CompiledReaction" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CompiledReaction
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#op_system.CompiledRhs" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1158,6 +1191,17 @@
     <span class="md-ellipsis">
       
         PytreeEvalFn
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#op_system.ReactionPropensityFn" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ReactionPropensityFn
       
     </span>
   </a>
@@ -1610,6 +1654,67 @@ fully pickle-stable.</p>
 
         <p>Callable that evaluates history signal bodies at <code>(t, y, **params)</code>.</p>
 <p>Returns a mapping from <code>signal_id</code> to the evaluated body array/value.</p>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="op_system.CompiledReaction" class="doc doc-heading">
+              <code class="highlight language-python"><span class="n">CompiledReaction</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">from_base</span><span class="p">,</span> <span class="n">from_axes</span><span class="p">,</span> <span class="n">to_base</span><span class="p">,</span> <span class="n">to_axes</span><span class="p">,</span> <span class="n">sum_axes</span><span class="p">,</span> <span class="n">pinned</span><span class="p">,</span> <span class="n">propensity_fn</span><span class="p">)</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-dataclass"><code>dataclass</code></small>
+  </span>
+
+<a href="#op_system.CompiledReaction" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+
+
+        <p>Compiled propensity + axis bookkeeping for one named transition.</p>
+<p>Produced from :class:<code>op_system._reactions.ReactionArtifactIR</code> at
+compile time. A firing event at from-cell index <code>i</code> (in the natural
+N-D shape given by <code>from_axes</code>) depletes 1 from <code>from_base</code> at that
+cell and adds 1 to <code>to_base</code> at the cell obtained by: keeping every
+axis in <code>to_axes</code> at <code>i</code>'s value for that axis, and using the fixed
+coordinate index from <code>pinned</code> for every axis in <code>sum_axes</code>.
+Consumers that need a single combined scatter/reduce target (e.g. an
+engine applying many simultaneous firings) sum over <code>sum_axes</code> when
+depositing into <code>to_base</code> -- op_system does not do that summation
+itself, since whether/how to combine simultaneous firings across a
+summed axis is an execution-semantics decision for the consumer, not
+a compile-time one.</p>
 
 
 
@@ -2456,6 +2561,57 @@ expose the full tensor structure to JAX/XLA.</p>
 
 
 
+<h3 id="op_system.ReactionPropensityFn" class="doc doc-heading">
+            <code>ReactionPropensityFn</code>
+
+
+<a href="#op_system.ReactionPropensityFn" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="typing.Protocol">Protocol</span></code></p>
+
+
+
+        <p>Callable propensity evaluator for one named reaction/transition.</p>
+<p>Accepts <code>y</code> as a <code>StateDict</code> and returns an array shaped like the
+reaction's <code>from_axes</code> (one independent rate per source cell) --
+see :class:<code>CompiledReaction</code>.</p>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
 <h3 id="op_system.StateString" class="doc doc-heading">
             <code>StateString</code>
 
@@ -3204,9 +3360,7 @@ removed in a future release.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/op_system/__init__.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"> 70</span>
-<span class="normal"> 71</span>
-<span class="normal"> 72</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"> 72</span>
 <span class="normal"> 73</span>
 <span class="normal"> 74</span>
 <span class="normal"> 75</span>
@@ -3245,7 +3399,9 @@ removed in a future release.</p>
 <span class="normal">108</span>
 <span class="normal">109</span>
 <span class="normal">110</span>
-<span class="normal">111</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">compile_spec</span><span class="p">(</span>  <span class="c1"># noqa: RUF067</span>
+<span class="normal">111</span>
+<span class="normal">112</span>
+<span class="normal">113</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">compile_spec</span><span class="p">(</span>  <span class="c1"># noqa: RUF067</span>
     <span class="n">spec</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">object</span><span class="p">],</span>
     <span class="o">*</span><span class="p">,</span>
     <span class="n">xp</span><span class="p">:</span> <span class="nb">object</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
