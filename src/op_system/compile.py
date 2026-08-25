@@ -1500,9 +1500,7 @@ def _make_propensity_fn(
         and ``params``.
     """
 
-    def propensity_fn(  # noqa: PLR0914
-        t: object, y: StateDict, **params: object
-    ) -> object:
+    def propensity_fn(t: object, y: StateDict, **params: object) -> object:
         first_val = y[state_bases[0]] if state_bases else next(iter(params.values()))
         xp = _namespace_of(first_val)
         env: dict[str, object] = {"np": xp, "t": xp.asarray(t)}
@@ -1604,8 +1602,20 @@ def _build_reaction_artifacts(  # noqa: C901, PLR0914
 
     out: list[CompiledReaction] = []
     for r in reactions_ir:
+        # Reduce-preserving form, NOT propensity_ir_full: lower_to_vector_ast
+        # has native Reduce-node lowering (the same path the deterministic
+        # equations use for e.g. apply_along-over-a-kernel force-of-infection
+        # terms). propensity_ir_full is pre-expanded via
+        # expand_reduce_pointwise at template-symbolic scope (no concrete
+        # lhs_assignment coordinate), which produces malformed
+        # AxisIndex(axis='', ...) subscripts for a Reduce whose bound axis
+        # coincides with the target's own free axis -- confirmed by
+        # comparing against the deterministic tpl_uniform path, which
+        # compiles correctly for the identical rate expression because it
+        # never uses propensity_ir_full's equivalent for Reduce-bearing
+        # rates in the first place.
         code = vec._compile_ir_expr(  # noqa: SLF001
-            r.propensity_ir_full,
+            r.propensity_ir_reduce,
             target_axes=r.from_axes,
             context=context,
             filename="<op_system_reaction>",

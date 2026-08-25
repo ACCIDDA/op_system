@@ -9,6 +9,8 @@ These tests cover:
 - axis bookkeeping (from_axes/to_axes/sum_axes/pinned) for both the
   same-axes case and the collapse-to-a-pinned-target-coordinate case
 - factorize_axes + a shaped-param (axis-indexed) rate, matching real usage
+- a rate referencing a mixing kernel via apply_along (regression, see
+  test_reduce_bearing_kernel_rate_propensity below)
 """
 
 from __future__ import annotations
@@ -228,3 +230,54 @@ def test_expr_kind_has_no_reactions() -> None:
     }
     c = compile_spec(spec)
     assert c.reactions == ()
+
+
+def test_reduce_bearing_kernel_rate_propensity() -> None:
+    """A rate referencing a mixing kernel via apply_along compiles correctly.
+
+    Regression test: compiling propensity_ir_full (rather than
+    propensity_ir_reduce) produced a malformed AxisIndex(axis='', ...)
+    subscript for this case, because expand_reduce_pointwise's
+    template-symbolic (empty lhs_assignment) expansion doesn't handle a
+    Reduce whose bound axis coincides with the target's own free axis. The
+    deterministic path never hits this because it uses the Reduce-preserving
+    form for exactly this kind of expression; _build_reaction_artifacts now
+    does too.
+    """
+    spec: dict[str, object] = {
+        "kind": "transitions",
+        "axes": [{"name": "age", "coords": ["a", "b"]}],
+        "state": ["S[age]", "I[age]"],
+        "kernels": [
+            {
+                "name": "k",
+                "axes": ["age"],
+                "form": "gaussian",
+                "params": {"scale": 1.0, "sigma": 0.5},
+            },
+        ],
+        "transitions": [
+            {
+                "name": "infect",
+                "from": "S[age]",
+                "to": "I[age]",
+                "rate": "apply_along(k[age, age:ap] * S[age:ap], age=ap)",
+            },
+        ],
+    }
+    c = compile_spec(spec)
+    assert len(c.reactions) == 1
+    reaction = c.reactions[0]
+
+    y = {"S": np.array([2.0, 3.0]), "I": np.zeros(2)}
+    k = np.array([[1.0, 0.5], [0.5, 1.0]])
+    got = np.asarray(reaction.propensity_fn(0.0, y, k=k))
+
+    # hand-computed: propensity = (k @ S) * S, elementwise
+    expected = (k @ y["S"]) * y["S"]
+    np.testing.assert_allclose(got, expected)
+
+    assert c.pytree_eval_fn is not None
+    dy = c.pytree_eval_fn(np.asarray(0.0), y, k=k)
+    np.testing.assert_allclose(dy["S"], -got)
+    np.testing.assert_allclose(dy["I"], got)
