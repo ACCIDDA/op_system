@@ -89,8 +89,8 @@ def test_lower_subscript_broadcasts_missing_target_axis() -> None:
     assert np.array_equal(got[:, 0], p_buf)
 
 
-def test_lower_subscript_rejects_coord_literal() -> None:
-    """Coord indices are out of scope for v1 and raise."""
+def test_lower_subscript_rejects_coord_literal_without_axis_coords() -> None:
+    """A coord index needs ``axis_coords`` supplied to resolve it."""
     sub = Subscript(
         name="S",
         indices=(
@@ -98,13 +98,53 @@ def test_lower_subscript_rejects_coord_literal() -> None:
             AxisIndex(axis="vax", coord="unvac", kind=AxisKind.COORD),
         ),
     )
-    with pytest.raises(UnsupportedIRLoweringError, match="non-FREE"):
+    with pytest.raises(UnsupportedIRLoweringError, match="axis_coords"):
         lower_subscript_to_buffer(
             sub,
             src_axes=("age", "vax"),
             target_axes=("age", "vax"),
             axis_names=frozenset({"age", "vax"}),
         )
+
+
+def test_lower_subscript_rejects_unresolvable_coord_literal() -> None:
+    """A coord literal absent from the axis's declared coords raises."""
+    sub = Subscript(
+        name="S",
+        indices=(
+            AxisIndex(axis="age", kind=AxisKind.FREE),
+            AxisIndex(axis="vax", coord="not_a_coord", kind=AxisKind.COORD),
+        ),
+    )
+    with pytest.raises(UnsupportedIRLoweringError, match="not a declared coord"):
+        lower_subscript_to_buffer(
+            sub,
+            src_axes=("age", "vax"),
+            target_axes=("age", "vax"),
+            axis_names=frozenset({"age", "vax"}),
+            axis_coords={"vax": ("unvac", "partial", "full")},
+        )
+
+
+def test_lower_subscript_resolves_coord_literal_with_axis_coords() -> None:
+    """A pinned-coord index slices the buffer down to just the FREE axes."""
+    sub = Subscript(
+        name="S",
+        indices=(
+            AxisIndex(axis="age", kind=AxisKind.FREE),
+            AxisIndex(axis="vax", coord="partial", kind=AxisKind.COORD),
+        ),
+    )
+    node = lower_subscript_to_buffer(
+        sub,
+        src_axes=("age", "vax"),
+        target_axes=("age",),
+        axis_names=frozenset({"age", "vax"}),
+        axis_coords={"vax": ("unvac", "partial", "full")},
+    )
+    s_buf = np.arange(6).reshape(2, 3)  # (age=2, vax=3)
+    got = _eval(node, {"S_buf": s_buf, "np": np})
+    assert np.array_equal(got, s_buf[:, 1])
 
 
 def test_lower_subscript_rejects_arity_mismatch() -> None:

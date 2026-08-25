@@ -217,6 +217,59 @@ def test_reactions_with_factorize_axes_and_shaped_param_rate() -> None:
     np.testing.assert_allclose(dy["E"], -p_carrier)
 
 
+def _vax_progression_spec() -> dict[str, object]:
+    return {
+        "kind": "transitions",
+        "axes": [
+            {"name": "age", "coords": ["a0", "a1"]},
+            {"name": "vax", "coords": ["u", "p", "f"]},
+        ],
+        "state": ["S[age,vax]"],
+        "transitions": [
+            {
+                "name": "dose1",
+                "from": "S[age,vax=u]",
+                "to": "S[age,vax=p]",
+                "rate": "v_p",
+            },
+        ],
+    }
+
+
+def test_from_pinned_transition_metadata_and_propensity() -> None:
+    """A from-side-pinned (point-to-point) transition compiles correctly.
+
+    Regression test: ``S[age,vax=u] -> S[age,vax=p]`` pins a coordinate on
+    the *from*-side selector, which previously made
+    ``_in_order_wildcard_axes`` silently drop that axis from the
+    propensity's ``Subscript`` reference, producing a shape-mismatched
+    reference that failed to lower and dropped the reaction from
+    ``c.reactions`` entirely (no error, just silently absent).
+    """
+    c = compile_spec(_vax_progression_spec())
+    dose1 = next(r for r in c.reactions if r.name == "dose1")
+    assert dose1.from_base == "S"
+    assert dose1.from_axes == ("age",)
+    assert dose1.full_axes == ("age", "vax")
+    assert dose1.to_base == "S"
+    assert dose1.to_axes == ("age",)
+    assert dose1.sum_axes == ()
+    assert dose1.pinned == (("vax", 1),)  # "p" is coord index 1
+
+    y = {"S": np.array([[100.0, 200.0, 300.0], [10.0, 20.0, 30.0]])}
+    params = {"v_p": np.asarray(0.02)}
+    got = np.asarray(dose1.propensity_fn(0.0, y, **params))
+    # Only the vax="u" (coord 0) column feeds this propensity -- it must
+    # NOT be the bare rate, and must NOT include the vax="p"/"f" columns.
+    np.testing.assert_allclose(got, 0.02 * y["S"][:, 0])
+
+    dy = c.pytree_eval_fn(np.asarray(0.0), y, **params)
+    expected_s = np.zeros_like(y["S"])
+    expected_s[:, 0] = -got
+    expected_s[:, 1] = got
+    np.testing.assert_allclose(dy["S"], expected_s)
+
+
 def test_expr_kind_has_no_reactions() -> None:
     """ExprRhs specs (no transitions grammar) compile with empty reactions."""
     spec: dict[str, object] = {

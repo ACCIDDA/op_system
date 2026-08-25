@@ -15,10 +15,11 @@ v1 scope (intentionally narrow; callers fall back on
   unary / comparison :class:`Apply` nodes, and :class:`Subscript`
   references to declared templated buffers.
 - Every :class:`Subscript` must reference a known templated buffer name
-  and use only FREE-axis indices (no coord literals, no placeholders, no
-  COORD_SYMBOL bindings). The subscript's axis set must equal the
-  buffer's declared axes (in any order) and be a subset of
-  ``target_axes``.
+  and use only FREE-axis and COORD (pinned-coord literal) indices (no
+  placeholders, no COORD_SYMBOL bindings). The subscript's axis set must
+  equal the buffer's declared axes (in any order); the FREE subset must
+  be a subset of ``target_axes``, and each COORD axis is sliced out of
+  the buffer (contributing no dimension to the result).
 - :class:`Reduce` nodes, function-call ``Apply`` nodes whose ``op`` isn't
   a recognized arithmetic/comparison operator, and any unsupported
   subscript shape raise :class:`UnsupportedIRLowering`.
@@ -107,6 +108,7 @@ def lower_subscript_to_buffer(  # noqa: C901
     target_axes: tuple[str, ...],
     axis_names: frozenset[str],
     axis_alias: Mapping[str, str] | None = None,
+    axis_coords: Mapping[str, tuple[str, ...]] | None = None,
 ) -> ast.expr:
     """Lower a wildcard IR :class:`Subscript` to a buffer-access AST.
 
@@ -116,10 +118,20 @@ def lower_subscript_to_buffer(  # noqa: C901
     present in the subscript and is transposed so kept axes appear in
     ``target_axes`` order.
 
+    A subscript may mix :class:`AxisKind.FREE` indices with
+    :class:`AxisKind.COORD` ones (e.g. ``S[age, vax=unvaccinated]``): each
+    COORD axis is resolved to an integer position via ``axis_coords`` and
+    sliced out of the buffer before the FREE axes are aligned to
+    ``target_axes`` — it contributes no dimension to the result. This is
+    what lets a from-side-pinned reaction propensity (see
+    ``op_system._reactions``) reference a single fixed coordinate on one
+    axis while remaining wildcard over the rest.
+
     Args:
-        sub: IR subscript to lower. Must have one :class:`AxisKind.FREE`
-            index per element, and its axis set must equal ``src_axes`` as
-            a set (any permutation accepted).
+        sub: IR subscript to lower. Every index must be
+            :class:`AxisKind.FREE` or :class:`AxisKind.COORD`; the FREE
+            subset's axis set, together with the COORD subset's axes,
+            must equal ``src_axes`` as a set (any permutation accepted).
         src_axes: Declared axis order of the source buffer
             (the ordering used to flatten ``<name>_buf``).
         target_axes: Axis order of the cell layout the result must
@@ -130,15 +142,22 @@ def lower_subscript_to_buffer(  # noqa: C901
             bindings) back to their real axis name. Used to match
             subscript labels against ``src_axes`` while preserving the
             synthetic label for ``target_axes`` alignment.
+        axis_coords: Optional mapping from axis name to its declared coord
+            labels (as strings). Required when ``sub`` has any COORD-kind
+            index, to resolve the literal coord to an integer buffer
+            position.
 
     Returns:
         An ``ast.expr`` accessing ``<sub.name>_buf`` with the necessary
-        transpose / size-1 insertions to align with ``target_axes``.
+        coord slicing / transpose / size-1 insertions to align with
+        ``target_axes``.
 
     Raises:
-        UnsupportedIRLoweringError: If any index is non-FREE, the index axis
-            set doesn't match ``src_axes``, or ``src_axes`` is not a
-            subset of ``target_axes``.
+        UnsupportedIRLoweringError: If any index is neither FREE nor COORD,
+            a COORD index's coord can't be resolved against
+            ``axis_coords``, the index axis set doesn't match
+            ``src_axes``, or the FREE axes are not a subset of
+            ``target_axes``.
     """
     alias = axis_alias or {}
     if len(sub.indices) != len(src_axes):
@@ -150,22 +169,27 @@ def lower_subscript_to_buffer(  # noqa: C901
 
     sub_axes: list[str] = []
     real_sub_axes: list[str] = []
+    pinned: dict[str, str] = {}
     for idx in sub.indices:
         kind = idx.kind or classify_axis_index(idx, axis_names=axis_names)
-        if kind is not AxisKind.FREE:
+        real_axis = alias.get(idx.axis, idx.axis)
+        if kind is AxisKind.FREE:
+            sub_axes.append(idx.axis)
+            real_sub_axes.append(real_axis)
+        elif kind is AxisKind.COORD:
+            pinned[real_axis] = idx.coord  # type: ignore[assignment]
+        else:
             msg = (
-                f"subscript {sub.name!r} has non-FREE index "
-                f"({kind.value}) — v1 lowering supports only wildcard "
-                "axis references"
+                f"subscript {sub.name!r} has non-FREE/COORD index "
+                f"({kind.value}) — v1 lowering supports only wildcard and "
+                "pinned-coord axis references"
             )
             raise UnsupportedIRLoweringError(msg)
-        sub_axes.append(idx.axis)
-        real_sub_axes.append(alias.get(idx.axis, idx.axis))
 
-    if set(real_sub_axes) != set(src_axes):
+    if set(real_sub_axes) | set(pinned) != set(src_axes):
         msg = (
-            f"subscript {sub.name!r} axes {tuple(sub_axes)} do not match "
-            f"buffer axes {tuple(src_axes)} as a set"
+            f"subscript {sub.name!r} axes {(*sub_axes, *pinned)} do not "
+            f"match buffer axes {tuple(src_axes)} as a set"
         )
         raise UnsupportedIRLoweringError(msg)
 
@@ -177,6 +201,37 @@ def lower_subscript_to_buffer(  # noqa: C901
         raise UnsupportedIRLoweringError(msg)
 
     buf: ast.expr = _name(f"{sub.name}_buf")
+
+    if pinned:
+        if axis_coords is None:
+            msg = (
+                f"subscript {sub.name!r} has a pinned-coord index but no "
+                "axis_coords was supplied to resolve it"
+            )
+            raise UnsupportedIRLoweringError(msg)
+        idx_elts: list[ast.expr] = []
+        for ax in src_axes:
+            if ax not in pinned:
+                idx_elts.append(ast.Slice(lower=None, upper=None, step=None))
+                continue
+            coord = pinned[ax]
+            coords_for_axis = axis_coords.get(ax)
+            if coords_for_axis is None or coord not in coords_for_axis:
+                msg = (
+                    f"subscript {sub.name!r} pins axis {ax!r} to coord "
+                    f"{coord!r}, which is not a declared coord for that axis"
+                )
+                raise UnsupportedIRLoweringError(msg)
+            idx_elts.append(ast.Constant(value=coords_for_axis.index(coord)))
+        buf = ast.Subscript(
+            value=buf,
+            slice=ast.Tuple(elts=idx_elts, ctx=ast.Load()),
+            ctx=ast.Load(),
+        )
+        # The pinned axes no longer exist as dimensions of ``buf`` -- the
+        # remaining transpose/broadcast logic below operates purely over
+        # the FREE axes, so drop pinned entries from src_axes accordingly.
+        src_axes = tuple(ax for ax in src_axes if ax not in pinned)
 
     # Reorder buffer (stored in src_axes order) to sub_axes order if the
     # user wrote them out of declaration order (e.g. ``S[vax, age]``
@@ -611,6 +666,7 @@ def lower_to_vector_ast(  # noqa: PLR0913
                 target_axes=target_axes,
                 axis_names=axis_names,
                 axis_alias=axis_alias,
+                axis_coords=axis_coords,
             )
         else:
             shaped_axes = (shaped_param_axes or {}).get(expr.name)
