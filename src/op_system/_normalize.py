@@ -1505,6 +1505,7 @@ def normalize_transitions_rhs(  # noqa: C901, PLR0912, PLR0914, PLR0915
         axis_lookup=axis_lookup_dict,
         shaped_params=shaped_params,
         time_axis_name=time_axis_name,
+        aliases_raw=aliases_raw_map,
     )
 
     _maybe_attach_initial_state(
