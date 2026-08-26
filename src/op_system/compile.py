@@ -1259,6 +1259,69 @@ def _wrap_pytree_eval_fn_for_time_varying(
     return wrapped
 
 
+def _wrap_propensity_fn_for_time_varying(
+    propensity_fn: ReactionPropensityFn,
+    *,
+    time_varying_params: tuple[tuple[str, tuple[str, ...]], ...],
+    time_axis_name: str,
+    axes_meta: tuple[Mapping[str, Any], ...],
+) -> ReactionPropensityFn:
+    """Interpolate time-varying params before a reaction's propensity_fn runs.
+
+    ``_build_reaction_artifacts`` compiles each reaction's propensity
+    independently of ``_wrap_eval_fn_for_time_varying`` /
+    ``_wrap_pytree_eval_fn_for_time_varying`` (it never calls either), so a
+    rate referencing a ``[time, ...]``-shaped parameter (declared
+    time-varying by subscripting it with the time axis, e.g.
+    ``rate: "lambda_import[time, loc]"``) would otherwise reach the
+    compiled propensity code as the raw, un-interpolated full grid array
+    -- a shape mismatch against what that code actually expects (the
+    time-stripped reduced shape, since ``_strip_time_axis_in_expr``
+    already rewrote the expression to ``lambda_import[loc]`` upstream, the
+    same rewrite the two eval_fn wrappers exist to make good on). Confirmed
+    via a failing call before this fix: ``ValueError: cannot reshape
+    array of size N into shape (...)``.
+
+    Same signature/behavior contract as :func:`_wrap_eval_fn_for_time_varying`,
+    just wrapping a :class:`ReactionPropensityFn` (``(t, y, **params) ->
+    array``) instead of an :class:`EvalFn` -- every registered
+    time-varying param present in a given call's ``params`` gets
+    interpolated down to its current-``t`` slice before delegating; a
+    reaction whose own compiled code doesn't reference a given name simply
+    never uses the (harmlessly) interpolated value.
+    """
+    if not time_varying_params:
+        return propensity_fn
+    ts_lookup = {
+        ax["name"]: np.asarray(ax["coords"], dtype=np.float64)
+        for ax in axes_meta
+        if ax.get("name") == time_axis_name
+    }
+    if time_axis_name not in ts_lookup:
+        _raise_parameter_error(
+            detail=(
+                f"time-varying parameters declared but the configured time "
+                f"axis {time_axis_name!r} is missing from the spec axes."
+            )
+        )
+    ts = ts_lookup[time_axis_name]
+    plan = tuple(
+        (name, full_axes.index(time_axis_name))
+        for name, full_axes in time_varying_params
+    )
+
+    def wrapped(t: object, y: StateDict, **params: object) -> object:
+        first_val = next(iter(y.values()))
+        xp = _namespace_of(first_val)
+        for name, axis_pos in plan:
+            if name in params:
+                grid = params.pop(name)
+                params[name] = _interp_along_axis(t, ts, grid, axis=axis_pos, xp=xp)
+        return propensity_fn(t, y, **params)
+
+    return wrapped
+
+
 def _parse_operator_descriptors(
     meta: Mapping[str, Any],
 ) -> tuple[OperatorDescriptor, ...]:
@@ -1620,6 +1683,9 @@ def _build_reaction_artifacts(  # noqa: C901, PLR0914
     if not axes_meta:
         return ()
 
+    time_varying_params = rhs.time_varying_params
+    time_axis_name = str(rhs.meta.get("time_axis", "time"))
+
     axis_coords: dict[str, tuple[str, ...]] = {}
     axis_types: dict[str, str] = {}
     axis_weights: dict[str, tuple[float, ...]] = {}
@@ -1709,16 +1775,21 @@ def _build_reaction_artifacts(  # noqa: C901, PLR0914
                 sum_axes=tuple(ax for ax in r.from_axes if ax not in r.to_axes),
                 pinned=pinned,
                 from_pinned=from_pinned,
-                propensity_fn=_make_propensity_fn(
-                    code,
-                    param_recipes=param_recipes,
-                    extra_param_buffers=extra_param_buffers,
-                    state_bases=state_bases,
-                    broadcast_shape=(
-                        tuple(len(axis_coords[axis]) for axis in r.from_axes)
-                        if r.from_base is None
-                        else None
+                propensity_fn=_wrap_propensity_fn_for_time_varying(
+                    _make_propensity_fn(
+                        code,
+                        param_recipes=param_recipes,
+                        extra_param_buffers=extra_param_buffers,
+                        state_bases=state_bases,
+                        broadcast_shape=(
+                            tuple(len(axis_coords[axis]) for axis in r.from_axes)
+                            if r.from_base is None
+                            else None
+                        ),
                     ),
+                    time_varying_params=time_varying_params,
+                    time_axis_name=time_axis_name,
+                    axes_meta=tuple(axes_meta),
                 ),
             )
         )

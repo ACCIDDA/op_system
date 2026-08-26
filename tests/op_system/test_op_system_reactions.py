@@ -375,6 +375,30 @@ def _importation_spec() -> dict[str, object]:
     }
 
 
+def _time_varying_rate_spec() -> dict[str, object]:
+    return {
+        "kind": "transitions",
+        "axes": [
+            {"name": "loc", "coords": ["d1", "d2", "d3"]},
+            {
+                "name": "time",
+                "type": "continuous",
+                "domain": {"lb": 0.0, "ub": 4.0},
+                "size": 5,
+            },
+        ],
+        "state": ["S[loc]", "E[loc]"],
+        "transitions": [
+            {
+                "name": "expose",
+                "from": "S[loc]",
+                "to": "E[loc]",
+                "rate": "lambda_import[time, loc]",
+            },
+        ],
+    }
+
+
 def test_source_only_transition_metadata_and_propensity() -> None:
     """A source-only reaction's propensity is the bare rate, no from_state factor."""
     c = compile_spec(_importation_spec())
@@ -417,6 +441,50 @@ def test_source_only_transition_matches_deterministic_inflow_no_depletion() -> N
     # importation inflow, and dS should be exactly zero (nothing depleted).
     np.testing.assert_allclose(dy["E"], p_import)
     np.testing.assert_allclose(dy["S"], np.zeros((2, 3)))
+
+
+def test_time_varying_rate_propensity_matches_deterministic() -> None:
+    """A rate referencing a ``[time, ...]``-shaped param interpolates correctly.
+
+    Regression test: ``_build_reaction_artifacts`` compiles each reaction's
+    propensity independently of ``_wrap_eval_fn_for_time_varying`` /
+    ``_wrap_pytree_eval_fn_for_time_varying`` -- before this fix, a rate
+    like ``lambda_import[time, loc]`` (declaring a time-varying parameter
+    by subscripting it with the time axis) compiled fine but reached
+    ``propensity_fn`` expecting the raw, un-interpolated full ``(time,
+    loc)`` grid array where its compiled code actually expected the
+    already-time-stripped, current-timestep ``(loc,)``-shaped slice --
+    ``ValueError: cannot reshape array of size N into shape (...)``. The
+    correctness oracle here is the same pattern as
+    ``test_reactions_reconstruct_deterministic_eval_fn``: the propensity
+    must agree with the deterministic path's own (already-correct)
+    time-interpolated inflow at a fractional (off-grid) ``t``.
+    """
+    c = compile_spec(_time_varying_rate_spec())
+    expose = next((r for r in c.reactions if r.name == "expose"), None)
+    assert expose is not None
+
+    y = {"S": np.array([100.0, 100.0, 100.0]), "E": np.zeros(3)}
+    # (time=5, loc=3) grid -- values jump between t=1 and t=2, so t=1.5
+    # below exercises genuine linear interpolation, not just an exact
+    # grid-point lookup.
+    lam = np.array(
+        [
+            [0.1, 0.2, 0.3],
+            [0.1, 0.2, 0.3],
+            [0.5, 0.5, 0.5],
+            [0.5, 0.5, 0.5],
+            [0.5, 0.5, 0.5],
+        ]
+    )
+    got = np.asarray(expose.propensity_fn(1.5, y, lambda_import=lam))
+
+    assert c.pytree_eval_fn is not None
+    dy = c.pytree_eval_fn(np.asarray(1.5), y, lambda_import=lam)
+    np.testing.assert_allclose(got, np.asarray(dy["E"]))
+    # Sanity: genuinely interpolated (halfway between [0.1,0.2,0.3]*100 and
+    # [0.5,0.5,0.5]*100), not just clamped to one grid point's value.
+    np.testing.assert_allclose(got, [30.0, 35.0, 40.0])
 
 
 def test_expr_kind_has_no_reactions() -> None:
