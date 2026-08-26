@@ -24,15 +24,23 @@ doesn't reference any axis outside that set), it captures:
   at a given source cell maps onto the destination state.
 
 This is deliberately narrower than the full transitions grammar (no
-``from: null`` source-only transitions, no ``to``-side axis not present on
-``from``, no rate expression referencing an axis absent from ``from``) --
-see ``docs`` / the originating issue for why: a stochastic/CTMC consumer
-needs "how many independent source cells are firing, and where does each
-firing land", which these excluded shapes don't have a well-defined answer
-for without design work beyond this artifact's scope. Transitions outside
-this scope are simply omitted from the artifact tuple, not an error --
-mirrors how ``history_requirements`` is built opportunistically elsewhere
-in this package.
+``to``-side axis not present on ``from``, no rate expression referencing
+an axis absent from ``from``) -- see ``docs`` / the originating issue for
+why: a stochastic/CTMC consumer needs "how many independent source cells
+are firing, and where does each firing land", which these excluded shapes
+don't have a well-defined answer for without design work beyond this
+artifact's scope. Transitions outside this scope are simply omitted from
+the artifact tuple, not an error -- mirrors how ``history_requirements``
+is built opportunistically elsewhere in this package.
+
+``from: null`` SOURCE-ONLY transitions (an exogenous hazard with no
+compartment to deplete -- e.g. cross-district case importation) ARE in
+scope: unlike the narrowing above, a source-only transition's firing-cell
+count has a perfectly well-defined answer -- one independent Poisson
+process per DESTINATION cell, with no source population to bound it
+against. ``from_base`` is ``None`` and ``from_axes``/``full_axes`` are
+taken from the ``to``-side template instead of a nonexistent ``from``-side
+one; see ``ReactionArtifactIR``'s own field docs.
 """
 
 from __future__ import annotations
@@ -73,9 +81,19 @@ class ReactionArtifactIR:
     Attributes:
         name: The transition's own ``name:`` (required -- unnamed
             transitions are never included).
-        from_base: State base name the reaction depletes.
+        from_base: State base name the reaction depletes, or ``None`` for a
+            SOURCE-ONLY (``from: null``) transition -- an exogenous
+            hazard (e.g. cross-district case importation) with no
+            compartment to deplete, only a ``to_base`` to increment. A
+            consumer must special-case ``from_base is None`` (skip every
+            depletion/clamp step; only the ``to_base`` scatter applies) --
+            see ``run_hybrid_ctmc`` in diphtheria_outbreakvacc.
         from_axes: Wildcard axes of the ``from`` template, in declaration
-            order -- this is the shape of the compiled propensity.
+            order -- this is the shape of the compiled propensity. For a
+            source-only transition (no ``from`` template to speak of),
+            this is instead the ``to`` template's own wildcard axes: the
+            propensity is one independent hazard per DESTINATION cell,
+            with no source population to multiply by.
         full_axes: EVERY axis of ``from_base``'s true (unreduced) template,
             in declaration order, whether wildcard or pinned on this
             transition's ``from``-side selector -- i.e. ``from_axes`` plus
@@ -86,7 +104,9 @@ class ReactionArtifactIR:
             by a consumer, to build a complete scatter-target index into
             ``to_base`` (assumed to share this same axis order -- see
             ``run_hybrid_ctmc`` in diphtheria_outbreakvacc for the one
-            current consumer's validation of that assumption).
+            current consumer's validation of that assumption). For a
+            source-only transition this is the ``to`` template's own full
+            axis order (there is no ``from`` template at all).
         to_base: State base name the reaction replenishes.
         to_axes: Wildcard axes of the ``to`` template, in declaration
             order. Always a subset of ``from_axes`` (enforced at build
@@ -112,7 +132,9 @@ class ReactionArtifactIR:
             deplete -- the compiled ``propensity_fn`` already reads from
             this coordinate internally (see ``propensity_ir_full``), but
             that isn't otherwise visible from the propensity array's own
-            shape (``from_axes``), which carries no trace of it.
+            shape (``from_axes``), which carries no trace of it. Always
+            ``()`` for a source-only transition (nothing to deplete, so
+            nothing to pin on a from-side that doesn't exist).
         rate_ir_full: Template-form per-capita RATE IR (axes symbolic,
             Reduce nodes resolved) -- the bare rate expression as written
             in the transition's ``rate:`` field, kept for display/
@@ -120,16 +142,20 @@ class ReactionArtifactIR:
             ``propensity_ir_full``).
         rate_string: Unparsed ``rate_ir_full``, for display/debugging.
         propensity_ir_full: Template-form PROPENSITY IR -- ``rate *
-            from_state``, i.e. the actual per-cell hazard (events per unit
-            time), matching the standard CTMC/tau-leaping definition. This
-            is what compile-time lowering compiles.
+            from_state`` for a normal transition, matching the standard
+            CTMC/tau-leaping per-cell hazard definition. For a
+            source-only transition there is no ``from_state`` to
+            multiply by, so this is just ``rate`` itself -- the hazard
+            IS the rate, one independent Poisson process per destination
+            cell (a genuine exogenous/immigration-style process). This is
+            what compile-time lowering compiles.
         propensity_ir_reduce: Same, with Reduce nodes preserved (for the
             vector compile path, consistent with the rest of this
             package).
     """
 
     name: str
-    from_base: str
+    from_base: str | None
     from_axes: tuple[str, ...]
     full_axes: tuple[str, ...]
     to_base: str
@@ -289,12 +315,14 @@ def build_reaction_artifacts_ir(  # noqa: PLR0913, PLR0914
 
     Returns:
         One :class:`ReactionArtifactIR` per named, in-scope transition, in
-        declaration order. Transitions without a ``name:``, source-only
-        (``from: null``) transitions, transitions whose ``to``-side
-        introduces a wildcard axis absent from ``from``, and transitions
-        whose rate (after single-level alias inlining) references an axis
-        outside the ``from``-side wildcard set are silently omitted (not
-        an error -- see module docstring).
+        declaration order. Transitions without a ``name:``, transitions
+        whose ``to``-side introduces a wildcard axis absent from ``from``
+        (not applicable to a source-only transition, which has no
+        ``from``-side to compare against), and transitions whose rate
+        (after single-level alias inlining) references an axis outside the
+        from-side wildcard set (the to-side wildcard set, for a
+        source-only transition) are silently omitted (not an error -- see
+        module docstring).
     """
     shaped = shaped_params or {}
     alias_bodies = _build_single_level_alias_bodies(
@@ -310,23 +338,31 @@ def build_reaction_artifacts_ir(  # noqa: PLR0913, PLR0914
             continue  # unnamed: not addressable, skip.
 
         frm_raw = tr_map.get("from")
-        if frm_raw is None:
-            continue  # source-only: out of scope for v1, see module docstring.
+        source_only = frm_raw is None
 
         to_s = _get_required_str(tr_map, idx=-1, key="to")
         rate_s = _get_required_str(tr_map, idx=-1, key="rate")
-        frm_s = _get_required_str(tr_map, idx=-1, key="from")
-
-        frm_base, frm_tokens = parse_selector(frm_s)
         to_base, to_tokens = parse_selector(to_s)
-
-        frm_wc_axes = _in_order_wildcard_axes(list(frm_tokens))
         to_wc_axes = _in_order_wildcard_axes(list(to_tokens))
-        frm_wc_set = set(frm_wc_axes)
 
-        # to-side must not introduce a wildcard axis absent from from-side.
-        if any(ax not in frm_wc_set for ax in to_wc_axes):
-            continue
+        if source_only:
+            # No from-side template at all -- the propensity's shape is
+            # the destination's own wildcard axes (one independent hazard
+            # per destination cell), and there's nothing to check the
+            # to-side against.
+            frm_base = None
+            frm_tokens: list[Any] = []
+            frm_wc_axes = to_wc_axes
+            frm_wc_set = set(to_wc_axes)
+        else:
+            frm_s = _get_required_str(tr_map, idx=-1, key="from")
+            frm_base, frm_tokens = parse_selector(frm_s)
+            frm_wc_axes = _in_order_wildcard_axes(list(frm_tokens))
+            frm_wc_set = set(frm_wc_axes)
+
+            # to-side must not introduce a wildcard axis absent from from-side.
+            if any(ax not in frm_wc_set for ax in to_wc_axes):
+                continue
 
         ir_rate_raw = parse_expr_to_ir(rate_s, lower_helpers=True)
         if alias_bodies:
@@ -360,32 +396,57 @@ def build_reaction_artifacts_ir(  # noqa: PLR0913, PLR0914
             axis_coords=axis_lookup,
         )
 
-        # Propensity = rate * from_state (the actual per-cell hazard), NOT
-        # the bare rate -- mirrors the deterministic path's tpl_flow_full
-        # construction in _normalize._build_transition_equations_ir.
-        #
-        # from_sub must reference from_base's TRUE full shape, not just its
-        # wildcard axes: a from-side PinnedToken (e.g. `S[age, vax=u, loc]`)
-        # still needs that coordinate baked into the Subscript, or the
-        # reference silently points at the wrong (or a shape-mismatched)
-        # slice. full_axes -- every token's axis, wildcard or pinned, in
-        # the selector's own declared order -- is exactly from_base's true
-        # axis order (a well-formed selector mentions every axis of the
-        # state it references), so build indices from ALL of frm_tokens,
-        # not just the wildcard subset.
-        full_axes = tuple(tok.axis for tok in frm_tokens)
-        from_sub = Subscript(
-            name=frm_base,
-            indices=tuple(
-                AxisIndex(
-                    axis=tok.axis,
-                    coord=(tok.coord if isinstance(tok, PinnedToken) else None),
-                )
+        if source_only:
+            # No from_state to multiply by -- the propensity IS the rate
+            # itself (one independent Poisson hazard per destination
+            # cell). full_axes is the to-side template's own full axis
+            # order (there is no from-side template at all).
+            full_axes = tuple(tok.axis for tok in to_tokens)
+            propensity_ir_full = rate_ir_full
+            propensity_ir_reduce = rate_ir_reduce
+            from_pinned: tuple[tuple[str, str], ...] = ()
+        else:
+            # Propensity = rate * from_state (the actual per-cell hazard),
+            # NOT the bare rate -- mirrors the deterministic path's
+            # tpl_flow_full construction in
+            # _normalize._build_transition_equations_ir.
+            #
+            # from_sub must reference from_base's TRUE full shape, not just
+            # its wildcard axes: a from-side PinnedToken (e.g.
+            # `S[age, vax=u, loc]`) still needs that coordinate baked into
+            # the Subscript, or the reference silently points at the wrong
+            # (or a shape-mismatched) slice. full_axes -- every token's
+            # axis, wildcard or pinned, in the selector's own declared
+            # order -- is exactly from_base's true axis order (a
+            # well-formed selector mentions every axis of the state it
+            # references), so build indices from ALL of frm_tokens, not
+            # just the wildcard subset.
+            full_axes = tuple(tok.axis for tok in frm_tokens)
+            assert frm_base is not None  # noqa: S101  # narrows for mypy: not source_only here
+            from_sub = Subscript(
+                name=frm_base,
+                indices=tuple(
+                    AxisIndex(
+                        axis=tok.axis,
+                        coord=(tok.coord if isinstance(tok, PinnedToken) else None),
+                    )
+                    for tok in frm_tokens
+                ),
+            )
+            propensity_ir_full = Apply(op="*", args=(rate_ir_full, from_sub))
+            propensity_ir_reduce = Apply(op="*", args=(rate_ir_reduce, from_sub))
+
+            # Every from-side pinned axis (full_axes minus from_axes) needs
+            # its own coordinate recorded separately from `pinned` -- for a
+            # point-to-point transition the same axis is pinned on both
+            # sides but to DIFFERENT coordinates (e.g. vax=unvaccinated
+            # here vs. vax=partial in `pinned`), so this can't be derived
+            # from `pinned`.
+            from_pinned = tuple(
+                (tok.axis, tok.coord)
                 for tok in frm_tokens
-            ),
-        )
-        propensity_ir_full = Apply(op="*", args=(rate_ir_full, from_sub))
-        propensity_ir_reduce = Apply(op="*", args=(rate_ir_reduce, from_sub))
+                if isinstance(tok, PinnedToken)
+            )
 
         # Every to-side pinned axis needs a fixed scatter-target coordinate,
         # not just ones that are wildcard on from (the "collapse" case) --
@@ -394,14 +455,6 @@ def build_reaction_artifacts_ir(  # noqa: PLR0913, PLR0914
         # collapse, but the target coordinate still needs recording.
         pinned = tuple(
             (tok.axis, tok.coord) for tok in to_tokens if isinstance(tok, PinnedToken)
-        )
-        # Every from-side pinned axis (full_axes minus from_axes) needs its
-        # own coordinate recorded separately from `pinned` -- for a
-        # point-to-point transition the same axis is pinned on both sides
-        # but to DIFFERENT coordinates (e.g. vax=unvaccinated here vs.
-        # vax=partial in `pinned`), so this can't be derived from `pinned`.
-        from_pinned = tuple(
-            (tok.axis, tok.coord) for tok in frm_tokens if isinstance(tok, PinnedToken)
         )
 
         out.append(

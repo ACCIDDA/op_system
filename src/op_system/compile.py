@@ -294,10 +294,18 @@ class CompiledReaction:
     that summation itself, since whether/how to combine simultaneous
     firings across a summed axis is an execution-semantics decision for
     the consumer, not a compile-time one.
+
+    ``from_base`` is ``None`` for a SOURCE-ONLY (``from: null``) reaction
+    -- an exogenous hazard with no compartment to deplete (e.g.
+    cross-district case importation). A consumer must special-case this:
+    skip every from-side depletion/clamp step and apply only the
+    ``to_base`` scatter, using ``from_axes``/``full_axes`` (which are the
+    ``to``-side template's own axes in this case, not a nonexistent
+    ``from``-side one -- see ``ReactionArtifactIR``).
     """
 
     name: str
-    from_base: str
+    from_base: str | None
     from_axes: tuple[str, ...]
     #: Every axis of ``from_base``'s true (unreduced) template, in
     #: declaration order, whether wildcard or pinned on this transition's
@@ -1516,6 +1524,7 @@ def _make_propensity_fn(
     param_recipes: tuple[tuple[str, tuple[str, ...], tuple[int, ...]], ...],
     extra_param_buffers: tuple[tuple[str, tuple[str, ...], tuple[int, ...]], ...],
     state_bases: tuple[str, ...],
+    broadcast_shape: tuple[int, ...] | None = None,
 ) -> ReactionPropensityFn:
     """Wrap a compiled propensity code object as a callable.
 
@@ -1523,6 +1532,30 @@ def _make_propensity_fn(
     uses (``{base}_buf`` for state/shaped-param buffers, ``t``/params
     merged directly), so propensity expressions compose with the same
     parameter-passing contract as the deterministic eval fns.
+
+    Args:
+        code: Compiled propensity code object.
+        param_recipes: Shaped-parameter buffer recipes.
+        extra_param_buffers: Extra shaped-parameter buffer recipes.
+        state_bases: Every state base name in the spec (used only to find
+            an array to detect numpy vs. jax from -- see ``xp`` below).
+        broadcast_shape: For a SOURCE-ONLY reaction only (``from_base is
+            None``), the resolved ``(len(coord) for axis in from_axes)``
+            shape to force the result to. A normal (depleting) reaction's
+            propensity is ``rate * from_state``, and ``from_state`` is
+            always full-shaped, so ordinary broadcasting during that
+            multiplication already guarantees a full-shaped result. A
+            source-only reaction's propensity is the bare rate with no
+            such multiplication -- if the rate expression doesn't
+            reference every axis in ``from_axes`` (e.g. an importation
+            hazard that varies by ``loc`` but not ``age``),
+            ``lower_to_vector_ast``'s result is only broadcastABLE
+            against ``from_axes`` (per its own docstring), not
+            necessarily shaped exactly like it, which would silently
+            violate ``CompiledReaction.from_axes``'s "shape of the
+            compiled propensity" contract for exactly this case. ``None``
+            for every other reaction (the ordinary case needs no explicit
+            broadcast).
 
     Returns:
         A :class:`ReactionPropensityFn` evaluating ``code`` against ``y``
@@ -1548,10 +1581,13 @@ def _make_propensity_fn(
             if base in y:
                 env[f"{base}_buf"] = y[base]
         try:
-            return eval(code, {"__builtins__": _SAFE_BUILTINS}, env)  # noqa: S307
+            result = eval(code, {"__builtins__": _SAFE_BUILTINS}, env)  # noqa: S307
         except (NameError, ValueError, TypeError, ArithmeticError) as exc:
             msg = f"reaction propensity evaluation failed: {exc!r}"
             raise ValueError(msg) from exc
+        if broadcast_shape is not None:
+            result = xp.broadcast_to(xp.asarray(result), broadcast_shape)
+        return result
 
     return propensity_fn
 
@@ -1678,6 +1714,11 @@ def _build_reaction_artifacts(  # noqa: C901, PLR0914
                     param_recipes=param_recipes,
                     extra_param_buffers=extra_param_buffers,
                     state_bases=state_bases,
+                    broadcast_shape=(
+                        tuple(len(axis_coords[axis]) for axis in r.from_axes)
+                        if r.from_base is None
+                        else None
+                    ),
                 ),
             )
         )
