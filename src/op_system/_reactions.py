@@ -40,15 +40,19 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from op_system._axes import _normalize_bracket_key
 from op_system._helpers import _get_required_str
 from op_system._ir import (
     Apply,
     AxisIndex,
     Expr,
     Subscript,
+    Sym,
+    _map_children,
     iter_subscripts,
     parse_expr_to_ir,
     unparse_ir,
+    walk,
 )
 from op_system._ir_expand import expand_reduce_pointwise
 from op_system._ir_templates import expand_inline_templates
@@ -154,28 +158,148 @@ def _in_order_wildcard_axes(tokens: list[Any]) -> list[str]:
     return axes
 
 
-def build_reaction_artifacts_ir(  # noqa: PLR0914
+def _references_any_name(expr: Expr, names: frozenset[str]) -> bool:
+    """Return True if any ``Sym``/``Subscript`` node in ``expr`` names one of ``names``.
+
+    Returns:
+        Whether ``expr`` references one of ``names`` as a base name.
+    """
+    return any(
+        isinstance(node, (Sym, Subscript)) and node.name in names for node in walk(expr)
+    )
+
+
+def _build_single_level_alias_bodies(
+    aliases_raw: Mapping[str, Any],
+    *,
+    shaped_params: Mapping[str, tuple[str, ...]],
+    axis_lookup: dict[str, list[str]],
+) -> dict[str, tuple[frozenset[str], Expr]]:
+    """Build template-symbolic bodies for aliases that don't reference another alias.
+
+    op_system's alias-inlining machinery (``inline_aliases`` /
+    ``_build_aliases_ir_from_raw``) only ever operates on fully
+    per-cell-expanded alias names -- there is no template-symbolic
+    (axes-still-free) form of a templated alias body anywhere else in the
+    package. This builds one locally, independent of that per-cell
+    machinery, so a rate expression referencing an alias (e.g. this
+    package's own ``foi[age, loc]`` force-of-infection alias) can be
+    inlined at template scope, matching how this module already treats
+    rate expressions in general.
+
+    Deliberately single-level only (issue tracked for full chain support):
+    an alias whose own body references another alias is excluded from the
+    returned map entirely, so a rate referencing it is simply left
+    unresolved -- same silent-omission behavior as before this function
+    existed, not a regression.
+
+    Returns:
+        Mapping from alias base name to ``(declared_axes, body)``, where
+        ``declared_axes`` is the set of axes the alias's own selector
+        declares (e.g. ``{"age", "loc"}`` for ``foi[age, loc]``) and
+        ``body`` is its Reduce-preserving, axes-still-symbolic IR.
+        Aliases with a non-string body, a non-wildcard LHS token, or a
+        body referencing another alias are omitted.
+    """
+    alias_base_names = frozenset(
+        parse_selector(_normalize_bracket_key(k))[0] for k in aliases_raw
+    )
+    out: dict[str, tuple[frozenset[str], Expr]] = {}
+    for raw_key, expr_val in aliases_raw.items():
+        if not isinstance(expr_val, str) or not expr_val.strip():
+            continue
+        base, tokens = parse_selector(_normalize_bracket_key(raw_key))
+        tokens = list(tokens)
+        if any(not isinstance(tok, WildcardToken) for tok in tokens):
+            continue  # pinned-axis alias declaration: out of scope here.
+        declared_axes = frozenset(_in_order_wildcard_axes(tokens))
+
+        ir_raw = parse_expr_to_ir(expr_val, lower_helpers=True)
+        if _references_any_name(ir_raw, alias_base_names - {base}):
+            continue  # references another alias: multi-level, out of scope.
+
+        ir_reduce = expand_inline_templates(
+            ir_raw,
+            assignment={},
+            shaped_params=shaped_params,
+            axis_lookup=axis_lookup,
+        )
+        out[base] = (declared_axes, ir_reduce)
+    return out
+
+
+def _inline_single_level_alias_refs(
+    expr: Expr, alias_bodies: Mapping[str, tuple[frozenset[str], Expr]]
+) -> Expr:
+    """Replace fully-wildcard alias ``Subscript`` references with their body.
+
+    Only a "fully wildcard" reference (every index FREE, and the exact
+    axis set the alias declares) is substituted -- a partially-pinned
+    reference (e.g. ``foi[age, loc=d1]``) is left unresolved, same as if
+    ``alias_bodies`` didn't have an entry for it at all (out of scope, not
+    an error).
+
+    Returns:
+        A new IR expression with in-scope alias references inlined;
+        structurally equal to ``expr`` when no replacements occur.
+    """
+    if isinstance(expr, Subscript) and expr.name in alias_bodies:
+        declared_axes, body = alias_bodies[expr.name]
+        ref_axes = frozenset(ix.axis for ix in expr.indices if ix.coord is None)
+        if len(expr.indices) == len(declared_axes) and ref_axes == declared_axes:
+            return body
+        return expr
+    return _map_children(
+        expr, lambda e: _inline_single_level_alias_refs(e, alias_bodies)
+    )
+
+
+def build_reaction_artifacts_ir(  # noqa: PLR0913, PLR0914
     transitions_raw: list[Mapping[str, Any]],
     *,
     axes: list[dict[str, Any]],
     axis_lookup: dict[str, list[str]],
     shaped_params: Mapping[str, tuple[str, ...]] | None = None,
     time_axis_name: str | None = None,
+    aliases_raw: Mapping[str, Any] | None = None,
 ) -> tuple[ReactionArtifactIR, ...]:
     """Build per-transition reaction artifacts for in-scope named transitions.
 
     Runs independently of (and has no effect on) the deterministic
     per-state equation construction in ``_build_transition_equations_ir``.
 
+    Args:
+        transitions_raw: The spec's raw (pre-expansion) ``transitions:``
+            entries.
+        axes: The spec's raw (pre-expansion) ``axes:`` entries.
+        axis_lookup: Mapping from axis name to its declared coord list.
+        shaped_params: Optional mapping from shaped-parameter base name to
+            its registered axis tuple (see ``expand_inline_templates``).
+        time_axis_name: Optional name of the spec's time axis, if any --
+            excluded from the from-side wildcard-axis scope check since
+            the engine handles it separately.
+        aliases_raw: Optional raw ``aliases:`` mapping from the spec (LHS
+            selector string, e.g. ``"foi[age, loc]"``, to RHS expression
+            string). A rate referencing a single-level alias (one that
+            doesn't itself reference another alias) has that alias's
+            template-symbolic body inlined before the axis-scope check
+            below -- see :func:`_build_single_level_alias_bodies`. A rate
+            referencing a multi-level alias chain is unaffected and stays
+            out of scope, same as when this argument is omitted.
+
     Returns:
         One :class:`ReactionArtifactIR` per named, in-scope transition, in
         declaration order. Transitions without a ``name:``, source-only
         (``from: null``) transitions, transitions whose ``to``-side
         introduces a wildcard axis absent from ``from``, and transitions
-        whose rate references an axis outside the ``from``-side wildcard
-        set are silently omitted (not an error -- see module docstring).
+        whose rate (after single-level alias inlining) references an axis
+        outside the ``from``-side wildcard set are silently omitted (not
+        an error -- see module docstring).
     """
     shaped = shaped_params or {}
+    alias_bodies = _build_single_level_alias_bodies(
+        aliases_raw or {}, shaped_params=shaped, axis_lookup=axis_lookup
+    )
     out: list[ReactionArtifactIR] = []
 
     for tr_map in transitions_raw:
@@ -205,6 +329,8 @@ def build_reaction_artifacts_ir(  # noqa: PLR0914
             continue
 
         ir_rate_raw = parse_expr_to_ir(rate_s, lower_helpers=True)
+        if alias_bodies:
+            ir_rate_raw = _inline_single_level_alias_refs(ir_rate_raw, alias_bodies)
         # Rate must not reference an axis outside the from-side wildcard
         # set (other than the time axis, which is handled separately by
         # the engine, not baked into the propensity template).

@@ -271,6 +271,72 @@ def test_from_pinned_transition_metadata_and_propensity() -> None:
     np.testing.assert_allclose(dy["S"], expected_s)
 
 
+def _foi_like_alias_spec() -> dict[str, object]:
+    return {
+        "kind": "transitions",
+        "axes": [
+            {"name": "age", "coords": ["a0", "a1"]},
+            {"name": "loc", "coords": ["d1", "d2"]},
+        ],
+        "aliases": {"foi[age, loc]": "r0 * S[age, loc] + 1.0"},
+        "state": ["S[age,loc]", "E[age,loc]"],
+        "transitions": [
+            {
+                "name": "expose",
+                "from": "S[age,loc]",
+                "to": "E[age,loc]",
+                "rate": "foi[age, loc]",
+            },
+        ],
+    }
+
+
+def test_single_level_alias_reference_compiles_and_matches_deterministic() -> None:
+    """A rate referencing a non-chained alias (issue #189) gets a reaction.
+
+    Regression test: a rate like ``foi[age, loc]`` referencing a
+    spec-level alias used to compile-fail silently (``foi`` isn't a
+    registered buffer or shaped param at the vector-lowering stage) and
+    be dropped from ``c.reactions`` with no error -- the real diphtheria
+    config's ``expose`` transition hit exactly this.
+    """
+    c = compile_spec(_foi_like_alias_spec())
+    expose = next((r for r in c.reactions if r.name == "expose"), None)
+    assert expose is not None
+
+    y = {"S": np.array([[10.0, 20.0], [30.0, 40.0]]), "E": np.zeros((2, 2))}
+    params = {"r0": np.asarray(0.5)}
+    got = np.asarray(expose.propensity_fn(0.0, y, **params))
+    expected = (0.5 * y["S"] + 1.0) * y["S"]
+    np.testing.assert_allclose(got, expected)
+
+    dy = c.pytree_eval_fn(np.asarray(0.0), y, **params)
+    np.testing.assert_allclose(dy["S"], -expected)
+    np.testing.assert_allclose(dy["E"], expected)
+
+
+def test_multi_level_alias_chain_stays_out_of_scope() -> None:
+    """A rate referencing an alias that itself references another alias.
+
+    Still excluded -- single-level inlining only (deferred, tracked
+    separately; not a regression from before alias inlining existed).
+    """
+    spec: dict[str, object] = {
+        "kind": "transitions",
+        "axes": [{"name": "age", "coords": ["a0", "a1"]}],
+        "aliases": {
+            "bar[age]": "2.0 * age",
+            "foi[age]": "bar[age] + 1.0",
+        },
+        "state": ["S[age]", "E[age]"],
+        "transitions": [
+            {"name": "expose", "from": "S[age]", "to": "E[age]", "rate": "foi[age]"},
+        ],
+    }
+    c = compile_spec(spec)
+    assert c.reactions == ()
+
+
 def test_expr_kind_has_no_reactions() -> None:
     """ExprRhs specs (no transitions grammar) compile with empty reactions."""
     spec: dict[str, object] = {
