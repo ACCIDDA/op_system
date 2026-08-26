@@ -98,6 +98,17 @@ class ReactionArtifactIR:
             e.g. ``vax=unvaccinated -> vax=partial`` dose progression --
             not a collapse, just a fixed single-cell shift, but the
             scatter target still needs this axis's coordinate fixed).
+        from_pinned: ``(axis, coord)`` pairs for every axis pinned on the
+            ``from``-side selector -- i.e. every axis in ``full_axes`` but
+            not ``from_axes``. Distinct from ``pinned``: for a
+            point-to-point transition, the same axis appears in both, but
+            with DIFFERENT coordinates (e.g. ``vax=unvaccinated`` here vs.
+            ``vax=partial`` in ``pinned``). A consumer needs this to know
+            which single coordinate of ``from_base``'s true shape to
+            deplete -- the compiled ``propensity_fn`` already reads from
+            this coordinate internally (see ``propensity_ir_full``), but
+            that isn't otherwise visible from the propensity array's own
+            shape (``from_axes``), which carries no trace of it.
         rate_ir_full: Template-form per-capita RATE IR (axes symbolic,
             Reduce nodes resolved) -- the bare rate expression as written
             in the transition's ``rate:`` field, kept for display/
@@ -120,6 +131,7 @@ class ReactionArtifactIR:
     to_base: str
     to_axes: tuple[str, ...]
     pinned: tuple[tuple[str, str], ...]
+    from_pinned: tuple[tuple[str, str], ...]
     rate_ir_full: Expr
     rate_string: str
     propensity_ir_full: Expr
@@ -239,7 +251,10 @@ def build_reaction_artifacts_ir(  # noqa: PLR0914
         from_sub = Subscript(
             name=frm_base,
             indices=tuple(
-                AxisIndex(axis=tok.axis, coord=(tok.coord if isinstance(tok, PinnedToken) else None))
+                AxisIndex(
+                    axis=tok.axis,
+                    coord=(tok.coord if isinstance(tok, PinnedToken) else None),
+                )
                 for tok in frm_tokens
             ),
         )
@@ -254,6 +269,14 @@ def build_reaction_artifacts_ir(  # noqa: PLR0914
         pinned = tuple(
             (tok.axis, tok.coord) for tok in to_tokens if isinstance(tok, PinnedToken)
         )
+        # Every from-side pinned axis (full_axes minus from_axes) needs its
+        # own coordinate recorded separately from `pinned` -- for a
+        # point-to-point transition the same axis is pinned on both sides
+        # but to DIFFERENT coordinates (e.g. vax=unvaccinated here vs.
+        # vax=partial in `pinned`), so this can't be derived from `pinned`.
+        from_pinned = tuple(
+            (tok.axis, tok.coord) for tok in frm_tokens if isinstance(tok, PinnedToken)
+        )
 
         out.append(
             ReactionArtifactIR(
@@ -264,6 +287,7 @@ def build_reaction_artifacts_ir(  # noqa: PLR0914
                 to_base=to_base,
                 to_axes=tuple(to_wc_axes),
                 pinned=pinned,
+                from_pinned=from_pinned,
                 rate_ir_full=rate_ir_full,
                 rate_string=unparse_ir(rate_ir_full),
                 propensity_ir_full=propensity_ir_full,

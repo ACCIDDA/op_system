@@ -255,6 +255,7 @@ def test_from_pinned_transition_metadata_and_propensity() -> None:
     assert dose1.to_axes == ("age",)
     assert dose1.sum_axes == ()
     assert dose1.pinned == (("vax", 1),)  # "p" is coord index 1
+    assert dose1.from_pinned == (("vax", 0),)  # "u" is coord index 0
 
     y = {"S": np.array([[100.0, 200.0, 300.0], [10.0, 20.0, 30.0]])}
     params = {"v_p": np.asarray(0.02)}
