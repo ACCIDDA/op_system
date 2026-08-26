@@ -67,8 +67,8 @@ spec = {
     "aliases": {"N": "S + I + R"},
     "equations": {
         "S": "-beta * S * I / N",
-        "I":  "beta * S * I / N - gamma * I",
-        "R":  "gamma * I",
+        "I": "beta * S * I / N - gamma * I",
+        "R": "gamma * I",
     },
 }
 
@@ -219,16 +219,21 @@ spec:
 
 ```python
 from op_system import (
-    compile_spec,            # validate + normalize + compile
-    compile_rhs,             # compile a pre-normalized NormalizedRhs
-    normalize_rhs,           # validate + normalize only
+    compile_spec,  # validate + normalize + compile
+    compile_rhs,  # compile a pre-normalized NormalizedRhs
+    normalize_rhs,  # validate + normalize only
     normalize_expr_rhs,
     normalize_transitions_rhs,
     CompiledRhs,
-    NormalizedRhs, ExprRhs, TransitionsRhs,
+    NormalizedRhs,
+    ExprRhs,
+    TransitionsRhs,
     BodyEvalFn,
-    EvalFn, PytreeEvalFn, StateDict,
-    OperatorDescriptor, BlockAxisInfo,
+    EvalFn,
+    PytreeEvalFn,
+    StateDict,
+    OperatorDescriptor,
+    BlockAxisInfo,
 )
 ```
 
@@ -269,12 +274,10 @@ import numpy as np
 from op_system import compile_spec
 
 spec = {
-  "kind": "expr",
-  "axes": [{"name": "loc", "coords": ["a", "b"]}],
-  "state": ["x[loc]"],
-  "equations": {
-    "x[loc]": "convolve_history(inflow[loc], kernel=gamma, window=14)"
-  },
+    "kind": "expr",
+    "axes": [{"name": "loc", "coords": ["a", "b"]}],
+    "state": ["x[loc]"],
+    "equations": {"x[loc]": "convolve_history(inflow[loc], kernel=gamma, window=14)"},
 }
 compiled = compile_spec(spec)
 
@@ -284,17 +287,17 @@ print(compiled.history_requirements)
 
 
 class ZeroHistoryProvider:
-  def query(self, signal_id: int, body: object, **options: object) -> object:
-    # Runtime contract from lowering: __hist_query(signal_id, body, **options)
-    return np.zeros_like(body)
+    def query(self, signal_id: int, body: object, **options: object) -> object:
+        # Runtime contract from lowering: __hist_query(signal_id, body, **options)
+        return np.zeros_like(body)
 
 
 state = {"x": np.array([1.0, 2.0], dtype=np.float64)}
 out = compiled.history_eval_fn(
-  0.0,
-  state,
-  history_provider=ZeroHistoryProvider(),
-  inflow=np.array([0.2, 0.4], dtype=np.float64),
+    0.0,
+    state,
+    history_provider=ZeroHistoryProvider(),
+    inflow=np.array([0.2, 0.4], dtype=np.float64),
 )
 print(out["x"])  # [0. 0.]
 ```

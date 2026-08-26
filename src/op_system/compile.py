@@ -319,6 +319,17 @@ class CompiledReaction:
     #: Coordinate indices, not strings, so consumers can index directly
     #: without a second coord->index lookup.
     pinned: tuple[tuple[str, int], ...]
+    #: ``(axis, coord_index)`` pairs -- the fixed from-side coordinate
+    #: index for every axis in ``full_axes`` but not ``from_axes`` (i.e.
+    #: every axis this transition pins on its ``from``-side selector).
+    #: Distinct from ``pinned``: for a point-to-point transition the same
+    #: axis appears in both, but with DIFFERENT coordinate indices (the
+    #: from-side one here, the to-side one there). A consumer needs this
+    #: to build a depletion-target index into ``from_base`` -- the
+    #: compiled ``propensity_fn`` already reads from this coordinate
+    #: internally, but that isn't otherwise visible from the propensity
+    #: array's own shape (``from_axes``).
+    from_pinned: tuple[tuple[str, int], ...]
     #: Propensity evaluator: ``(t, y, **params) -> array`` shaped like
     #: ``from_axes`` -- one independent rate per source cell.
     propensity_fn: ReactionPropensityFn
@@ -1645,6 +1656,9 @@ def _build_reaction_artifacts(  # noqa: C901, PLR0914
             pinned = tuple(
                 (axis, axis_coords[axis].index(coord)) for axis, coord in r.pinned
             )
+            from_pinned = tuple(
+                (axis, axis_coords[axis].index(coord)) for axis, coord in r.from_pinned
+            )
         except (KeyError, ValueError):
             continue  # axis/coord not resolvable against this spec's axes.
 
@@ -1658,6 +1672,7 @@ def _build_reaction_artifacts(  # noqa: C901, PLR0914
                 to_axes=r.to_axes,
                 sum_axes=tuple(ax for ax in r.from_axes if ax not in r.to_axes),
                 pinned=pinned,
+                from_pinned=from_pinned,
                 propensity_fn=_make_propensity_fn(
                     code,
                     param_recipes=param_recipes,
