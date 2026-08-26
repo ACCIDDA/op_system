@@ -49,16 +49,29 @@ def test_unnamed_transition_excluded_from_reactions_ir() -> None:
     assert names == ["recover"]
 
 
-def test_source_only_transition_excluded_from_reactions_ir() -> None:
-    """`from: null` transitions have no well-defined firing-cell count."""
+def test_source_only_transition_included_in_reactions_ir() -> None:
+    """`from: null` transitions DO get a reaction artifact (exogenous hazard).
+
+    Unlike the depleting-transition exclusions below, a source-only
+    transition's firing-cell count is well-defined: one independent
+    Poisson process per destination cell, no source population involved.
+    """
     spec = _sir_like_spec()
     transitions = spec["transitions"]
     assert isinstance(transitions, list)
     transitions.append({"name": "seed", "to": "S[age,vax]", "rate": "lambda_seed"})
     rhs = normalize_transitions_rhs(spec)
     names = {r.name for r in rhs.reactions_ir}
-    assert "seed" not in names
-    assert names == {"expose", "recover"}
+    assert names == {"expose", "recover", "seed"}
+
+    seed = next(r for r in rhs.reactions_ir if r.name == "seed")
+    assert seed.from_base is None
+    assert seed.from_axes == ("age", "vax")  # taken from the to-side template
+    assert seed.full_axes == ("age", "vax")
+    assert seed.to_base == "S"
+    assert seed.to_axes == ("age", "vax")
+    assert seed.pinned == ()
+    assert seed.from_pinned == ()
 
 
 def test_to_side_extra_axis_excluded_from_reactions_ir() -> None:
@@ -335,6 +348,75 @@ def test_multi_level_alias_chain_stays_out_of_scope() -> None:
     }
     c = compile_spec(spec)
     assert c.reactions == ()
+
+
+def _importation_spec() -> dict[str, object]:
+    return {
+        "kind": "transitions",
+        "factorize_axes": ["loc"],
+        "axes": [
+            {"name": "age", "coords": ["a0", "a1"]},
+            {"name": "loc", "coords": ["d1", "d2", "d3"]},
+        ],
+        "state": ["S[age,loc]", "E[age,loc]"],
+        "transitions": [
+            {
+                "name": "expose",
+                "from": "S[age,loc]",
+                "to": "E[age,loc]",
+                "rate": "foi",
+            },
+            {
+                "name": "import_case",
+                "to": "E[age,loc]",
+                "rate": "lambda_import[loc]",
+            },
+        ],
+    }
+
+
+def test_source_only_transition_metadata_and_propensity() -> None:
+    """A source-only reaction's propensity is the bare rate, no from_state factor."""
+    c = compile_spec(_importation_spec())
+    import_case = next(r for r in c.reactions if r.name == "import_case")
+    assert import_case.from_base is None
+    assert import_case.from_axes == ("age", "loc")
+    assert import_case.to_base == "E"
+    assert import_case.to_axes == ("age", "loc")
+    assert import_case.sum_axes == ()
+    assert import_case.pinned == ()
+
+    y = {"S": np.ones((2, 3)) * 100.0, "E": np.zeros((2, 3))}
+    params = {"foi": np.asarray(0.0), "lambda_import": np.array([0.01, 0.02, 0.03])}
+    got = np.asarray(import_case.propensity_fn(0.0, y, **params))
+    # Bare rate, broadcast to (age, loc) -- NOT multiplied by any state.
+    expected = np.broadcast_to(params["lambda_import"], (2, 3))
+    np.testing.assert_allclose(got, expected)
+
+
+def test_source_only_transition_matches_deterministic_inflow_no_depletion() -> None:
+    """The source-only reaction's propensity matches the deterministic E inflow.
+
+    Correctness oracle, same pattern as
+    ``test_reactions_reconstruct_deterministic_eval_fn``: the deterministic
+    path already supports ``from: null`` (see ``_normalize.py``), so
+    agreement here confirms the independent reaction artifact adds the
+    SAME inflow to E, and -- critically -- doesn't erroneously deplete any
+    compartment (there is no from_base to deplete).
+    """
+    c = compile_spec(_importation_spec())
+    assert c.pytree_eval_fn is not None
+    y = {"S": np.ones((2, 3)) * 100.0, "E": np.zeros((2, 3))}
+    params = {"foi": np.asarray(0.0), "lambda_import": np.array([0.01, 0.02, 0.03])}
+    dy = c.pytree_eval_fn(np.asarray(0.0), y, **params)
+
+    import_case = next(r for r in c.reactions if r.name == "import_case")
+    p_import = np.asarray(import_case.propensity_fn(0.0, y, **params))
+
+    # foi=0, so "expose" contributes nothing -- dE should be exactly the
+    # importation inflow, and dS should be exactly zero (nothing depleted).
+    np.testing.assert_allclose(dy["E"], p_import)
+    np.testing.assert_allclose(dy["S"], np.zeros((2, 3)))
 
 
 def test_expr_kind_has_no_reactions() -> None:
