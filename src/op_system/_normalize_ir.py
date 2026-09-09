@@ -23,6 +23,7 @@ from op_system._errors import InvalidRhsSpecError
 from op_system._ir import Expr, free_symbols, parse_expr_to_ir, unparse_ir
 from op_system._ir_templates import (
     _detect_alias_cycle,
+    _InlineMemo,
     expand_inline_templates,
     inline_aliases,
 )
@@ -480,7 +481,7 @@ def _build_aliases_ir(
         parsed: dict[str, Expr] = {}
         for name, body in aliases.items():
             parsed[name] = parse_expr_to_ir(body, lower_helpers=lower_helpers)
-        memo: dict[int, frozenset[str]] = {}
+        memo = _InlineMemo()
         cycle_validated = False
         try:
             cycle = _detect_alias_cycle(parsed, memo=memo)
@@ -515,7 +516,7 @@ def _build_equations_ir(
     old_limit = sys.getrecursionlimit()
     needed = max(old_limit, 10_000)
     with _raise_recursion_limit(needed, old_limit):
-        memo: dict[int, frozenset[str]] = {}
+        memo = _InlineMemo()
         cycle_validated = False
         if aliases_ir:
             try:
@@ -760,7 +761,7 @@ def _build_aliases_ir_from_raw(
         has_cross_refs = any(refs for refs in template_refs.values())
 
         def _inline_all(parsed: dict[str, Expr], *, cycle_ok: bool) -> dict[str, Expr]:
-            memo: dict[int, frozenset[str]] = {}
+            memo = _InlineMemo()
             # ``result_memo`` keyed on ``id(expr)`` lets ``inline_aliases``
             # share the final substituted IR across alias entries that pass
             # the same sub-IR object (e.g. the 21 per-age expansions of one
@@ -788,7 +789,7 @@ def _build_aliases_ir_from_raw(
         # ``Reduce`` aggregator nodes verbatim) and reuse the result when
         # inlining the larger ``full_parsed`` bodies. This avoids walking the
         # 6500-node continuum alias bodies twice (issue #145).
-        cycle_memo: dict[int, frozenset[str]] = {}
+        cycle_memo = _InlineMemo()
         cycle_ok = False
         with contextlib.suppress(ValueError, RecursionError):
             cycle_ok = _detect_alias_cycle(reduce_parsed, memo=cycle_memo) is None
@@ -872,7 +873,7 @@ def _build_equations_ir_from_raw(  # ruff: ignore[too-many-arguments]
         for cell in state_expanded
     }
 
-    alias_memo: dict[int, frozenset[str]] = {}
+    alias_memo = _InlineMemo()
     alias_cycle_ok = False
     if aliases_ir:
         with contextlib.suppress(ValueError, RecursionError):

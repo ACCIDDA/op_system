@@ -544,6 +544,45 @@ def expand_over_axes(
     return out
 
 
+def _discard(expr: Expr) -> None:
+    """Ignore ``expr``: the retain hook for a memo that is a plain ``dict``."""
+
+
+# Subclasses ``dict`` rather than ``UserDict``: this is the hottest cache in
+# the compiler (millions of lookups on large specs) and ``UserDict`` routes
+# every one through a pure-Python ``__getitem__``.
+class _InlineMemo(dict[int, frozenset[str]]):  # ruff: ignore[subclass-builtin]
+    """A ``free_symbols`` memo that is safe to share across inline calls.
+
+    :func:`op_system._ir.free_symbols` caches subtree results under
+    ``id(node)``, which is unique only among *live* objects. That is sound
+    for the alias bodies a caller holds for the memo's whole lifetime, but
+    NOT for the intermediate trees :func:`inline_aliases` builds on its way
+    to a fixed point: each round's tree is freed as soon as the next round
+    supersedes it, and a later allocation can land on the same address and
+    inherit the stale entry. The observable symptom is an alias reference
+    silently left un-inlined -- nondeterministically, and for only some
+    cells of a template (issue #197).
+
+    Retaining those intermediates for as long as the memo lives keeps every
+    memoized address unique, so a cached entry always describes the node it
+    was computed for. This subclasses ``dict`` so it drops into every
+    existing ``memo=`` parameter unchanged; a plain ``dict`` still works but
+    reintroduces the collision, so any memo shared across
+    :func:`inline_aliases` calls should be an ``_InlineMemo``.
+    """
+
+    __slots__ = ("_retained",)
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._retained: list[Expr] = []
+
+    def retain(self, expr: Expr) -> None:
+        """Keep ``expr`` alive for the remaining lifetime of this memo."""
+        self._retained.append(expr)
+
+
 def _detect_alias_cycle(
     aliases: Mapping[str, Expr],
     *,
@@ -619,9 +658,11 @@ def inline_aliases(  # ruff: ignore[complex-structure, too-many-arguments]
             template expansion), and bodies are expected to be IR.
         max_depth: Safety bound on the number of substitution rounds.
         memo: Optional identity-keyed cache shared with
-            :func:`op_system._ir.free_symbols`. Pass a single dict across
+            :func:`op_system._ir.free_symbols`. Pass a single memo across
             many inline calls that share the same alias bodies to avoid
-            re-walking each body per equation.
+            re-walking each body per equation. A memo shared this way must
+            be an :class:`_InlineMemo`, not a plain ``dict`` -- see that
+            class for why (issue #197).
         skip_cycle_check: If ``True``, bypass :func:`_detect_alias_cycle`.
             Callers that batch-inline many expressions against the same
             ``aliases`` mapping should validate once and set this flag on
@@ -653,7 +694,7 @@ def inline_aliases(  # ruff: ignore[complex-structure, too-many-arguments]
             raise ValueError(msg)
 
     if memo is None:
-        memo = {}
+        memo = _InlineMemo()
     keys = set(aliases)
     # Precompute, for each alias body, which other alias names it references.
     # The next "live" set after a substitution is exactly the union of these
@@ -685,6 +726,10 @@ def inline_aliases(  # ruff: ignore[complex-structure, too-many-arguments]
         body_refs[name] = refs
         return refs
 
+    # Every tree walked with ``memo`` must outlive it -- see
+    # :class:`_InlineMemo`. ``expr`` and the alias bodies are held by the
+    # caller; the intermediates below are ours to retain.
+    retain = getattr(memo, "retain", _discard)
     current = expr
     live = free_symbols(current, memo) & keys
     for _ in range(max_depth):
@@ -694,6 +739,7 @@ def inline_aliases(  # ruff: ignore[complex-structure, too-many-arguments]
             return current
         mapping = {name: aliases[name] for name in live}
         current = substitute(current, mapping, memo)
+        retain(current)
         next_live: set[str] = set()
         for name in live:
             next_live |= _refs_for(name)
