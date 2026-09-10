@@ -59,6 +59,7 @@ from op_system._ir import (
     walk,
 )
 from op_system._ir_templates import (
+    _InlineMemo,
     expand_inline_templates,
     inline_aliases,
 )
@@ -1552,7 +1553,7 @@ def normalize_transitions_rhs(  # ruff: ignore[complex-structure, too-many-branc
     # term-by-term with a shared ``result_memo`` keyed on ``id(term)``
     # collapses the alias-substitution work from O(n_state) to
     # O(n_unique_terms) (issue #145).
-    alias_inline_memo: dict[int, frozenset[str]] = {}
+    alias_inline_memo = _InlineMemo()
     alias_inline_result_memo: dict[int, Expr] = {}
 
     def _inline_one(expr: Expr) -> Expr:

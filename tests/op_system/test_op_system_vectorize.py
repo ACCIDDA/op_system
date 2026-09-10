@@ -21,9 +21,10 @@ if TYPE_CHECKING:
 
     import pytest
 
+from op_system._ir import Subscript, Sym, walk
 from op_system._vectorize import build_vector_plan, last_vector_plan_bail_reason
 from op_system.compile import _make_eval_fn, compile_rhs
-from op_system.specs import normalize_rhs
+from op_system.specs import normalize_rhs, normalize_transitions_rhs
 
 
 def _sir_two_axis_spec() -> dict[str, object]:
@@ -1061,3 +1062,100 @@ def test_low_rank_bare_label_numerical_parity() -> None:
     assert np.allclose(out, expected, atol=1e-12, rtol=0.0), (
         f"max abs diff = {np.max(np.abs(out - expected))}"
     )
+
+
+def _gravity_chain_spec() -> dict[str, object]:
+    """Build a multi-level alias chain that ends in a divided axis-reduction.
+
+    Modelled on the spatial force-of-infection in
+    HopkinsIVAC/diphtheria_outbreakvacc: ``foi`` -> ``gravity_pressure`` ->
+    ``{infectious_weighted, total_pop}`` -> states, with ``gravity_pressure``
+    normalising by a second ``[loc]``-reduction alias (issue #197).
+
+    Returns:
+        A ``transitions`` spec whose single ``expose`` rate walks the chain.
+    """
+    inf = "I[age:{a}, vax:v, loc{sfx}]"
+    pop = (
+        "(S[age:{a}, vax:v, loc{sfx}] + E[age:{a}, vax:v, loc{sfx}]"
+        " + I[age:{a}, vax:v, loc{sfx}])"
+    )
+    infectious_weighted = (
+        f"apply_along(apply_along({inf.format(a='a', sfx=':lp')}"
+        " * (1.0 - trv[v]), vax=v), age=a)"
+    )
+    total_pop = (
+        f"apply_along(apply_along({pop.format(a='a', sfx=':lp')}, vax=v), age=a)"
+    )
+    local = (
+        "apply_along(beta * contact_kernel[age, age:ap] *"
+        f" apply_along({inf.format(a='ap', sfx='')}, vax=v)"
+        f" / apply_along({pop.format(a='ap', sfx='')}, vax=v), age=ap)"
+    )
+    return {
+        "kind": "transitions",
+        "axes": [
+            {"name": "age", "type": "continuous", "coords": [0.0, 1.0]},
+            {"name": "vax", "coords": ["u", "f"]},
+            {"name": "loc", "coords": ["d0", "d1", "d2", "d3"]},
+        ],
+        "state": ["S[age,vax,loc]", "E[age,vax,loc]", "I[age,vax,loc]"],
+        "aliases": {
+            "trv[vax]": "transmission_reduction[vax]",
+            "gravity_norm[loc]": (
+                "apply_along(1.0 / (distance[loc, loc:lp] ** alpha), loc=lp)"
+            ),
+            "gravity_pressure[loc]": (
+                f"apply_along(({infectious_weighted} / {total_pop})"
+                " / (distance[loc, loc:lp] ** alpha), loc=lp) / gravity_norm[loc]"
+            ),
+            "foi[age, loc]": f"{local} + beta * kappa * gravity_pressure[loc]",
+        },
+        "transitions": [
+            {
+                "name": "expose",
+                "from": "S[age,vax,loc]",
+                "to": "E[age,vax,loc]",
+                "rate": "foi[age, loc]",
+            },
+        ],
+    }
+
+
+def test_multi_level_alias_chain_is_fully_inlined_per_cell() -> None:
+    """Every expanded ``foi`` cell resolves its whole alias chain.
+
+    Before the ``_InlineMemo`` fix a nondeterministic subset of cells kept a
+    dangling ``gravity_norm`` / ``trv`` reference, because the shared
+    ``free_symbols`` memo was poisoned by ``id()`` reuse (issue #197).
+    """
+    rhs = normalize_transitions_rhs(_gravity_chain_spec())
+    # Only per-cell EXPANDED references (``gravity_norm__loc_d0``) get
+    # inlined here. A reference carrying a reduction binding variable
+    # (``trv[v]`` inside ``apply_along(..., vax=v)``) stays a ``Subscript``
+    # by design and is resolved later against the alias buffer, so it is
+    # not evidence of the bug.
+    stems = tuple(f"{name}__" for name in ("trv", "gravity_norm", "gravity_pressure"))
+    dangling = {
+        cell
+        for cell, ir in rhs.aliases_ir_reduce.items()
+        if cell.startswith("foi__")
+        and any(
+            isinstance(node, (Sym, Subscript)) and node.name.startswith(stems)
+            for node in walk(ir)
+        )
+    }
+    assert not dangling, f"alias chain left un-inlined in cells: {sorted(dangling)}"
+
+
+def test_multi_level_alias_chain_builds_a_vector_plan() -> None:
+    """The chain above builds a plan instead of bailing.
+
+    Partial inlining made one cell's rewritten tree differ from another's,
+    tripping the ``first/last cell trees differ`` guard -- and because
+    axis-indexed specs must vectorize, that failed the whole compile
+    (issue #197).
+    """
+    rhs = normalize_transitions_rhs(_gravity_chain_spec())
+    plan = build_vector_plan(rhs)
+    assert plan is not None, last_vector_plan_bail_reason()

@@ -11,9 +11,11 @@ from op_system._ir import (
     Reduce,
     Subscript,
     Sym,
+    free_symbols,
     parse_expr_to_ir,
 )
 from op_system._ir_templates import (
+    _InlineMemo,
     expand_inline_templates,
     expand_over_axes,
     free_axes,
@@ -342,3 +344,36 @@ def test_alias_template_expansion_matches_string_path() -> None:
             axis_lookup=AXIS_LOOKUP,
         )
         assert ir_expr == parse_expr_to_ir(string_expr)
+
+
+def test_shared_memo_survives_intermediate_tree_id_reuse() -> None:
+    """A memo shared across calls must not be poisoned by freed intermediates.
+
+    ``free_symbols`` caches by ``id(node)``, and the trees ``inline_aliases``
+    builds between fixed-point rounds are freed as soon as the next round
+    supersedes them -- so a later allocation can reuse an address and inherit
+    a stale, too-small free-symbol set. The visible symptom is an alias
+    reference silently left un-inlined (issue #197). Inlining many distinct
+    expressions against one shared memo is what makes the collision likely;
+    with a plain ``dict`` memo this leaks on the large majority of them.
+    """
+    aliases = {
+        f"lvl1_{i}": parse_expr_to_ir(f"beta_{i} * gamma_{i}") for i in range(40)
+    }
+    aliases.update({
+        f"lvl2_{i}": parse_expr_to_ir(f"lvl1_{i} + lvl1_{(i + 1) % 40}")
+        for i in range(40)
+    })
+    aliases.update({
+        f"lvl3_{i}": parse_expr_to_ir(f"lvl2_{i} * lvl2_{(i + 7) % 40}")
+        for i in range(40)
+    })
+    memo = _InlineMemo()
+    for i in range(40):
+        out = inline_aliases(
+            parse_expr_to_ir(f"lvl3_{i} + lvl2_{i} + lvl1_{i}"),
+            aliases,
+            memo=memo,
+        )
+        residual = free_symbols(out) & set(aliases)
+        assert not residual, f"lvl3_{i} left un-inlined: {sorted(residual)}"
