@@ -280,13 +280,18 @@ class OpSystemSystem(SystemABC, module="flepimop2.system.op_system"):  # ruff: i
         def _wrap(reaction: CompiledReaction) -> CompiledReaction:
             propensity_fn = reaction.propensity_fn
 
+            # Parameter names and types mirror ``ReactionPropensityFn``
+            # exactly: it is a Protocol, so a positional-or-keyword
+            # parameter renamed here (``time``/``state_dict``) or narrowed
+            # (``np.float64`` is not a supertype of ``object``) no longer
+            # satisfies it.
             def _propensity(
-                time: np.float64,
-                state_dict: dict[str, Any],
-                **kwargs: Any,  # ruff: ignore[any-type]
-            ) -> Any:  # ruff: ignore[any-type]
-                params = OpSystemSystem._merged_params(mixing_kernels, kwargs)
-                return propensity_fn(time, state_dict, **params)
+                t: object,
+                y: dict[str, Any],
+                **params: object,
+            ) -> object:
+                merged = OpSystemSystem._merged_params(mixing_kernels, params)
+                return propensity_fn(t, y, **merged)
 
             return dataclasses.replace(reaction, propensity_fn=_propensity)
 
