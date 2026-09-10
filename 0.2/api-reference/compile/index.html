@@ -1892,13 +1892,7 @@ from the input <code>y</code>. Will be removed in a future release.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/op_system/compile.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1997</span>
-<span class="normal">1998</span>
-<span class="normal">1999</span>
-<span class="normal">2000</span>
-<span class="normal">2001</span>
-<span class="normal">2002</span>
-<span class="normal">2003</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">2003</span>
 <span class="normal">2004</span>
 <span class="normal">2005</span>
 <span class="normal">2006</span>
@@ -2011,7 +2005,13 @@ from the input <code>y</code>. Will be removed in a future release.</p>
 <span class="normal">2113</span>
 <span class="normal">2114</span>
 <span class="normal">2115</span>
-<span class="normal">2116</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">compile_rhs</span><span class="p">(</span><span class="n">rhs</span><span class="p">:</span> <span class="n">NormalizedRhs</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">xp</span><span class="p">:</span> <span class="nb">object</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">CompiledRhs</span><span class="p">:</span>
+<span class="normal">2116</span>
+<span class="normal">2117</span>
+<span class="normal">2118</span>
+<span class="normal">2119</span>
+<span class="normal">2120</span>
+<span class="normal">2121</span>
+<span class="normal">2122</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">compile_rhs</span><span class="p">(</span><span class="n">rhs</span><span class="p">:</span> <span class="n">NormalizedRhs</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">xp</span><span class="p">:</span> <span class="nb">object</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">CompiledRhs</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Compile a normalized RHS into a runnable evaluation function.</span>
 
 <span class="sd">    Always uses the vectorized eval path that operates on shaped buffers</span>

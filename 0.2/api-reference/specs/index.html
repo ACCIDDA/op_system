@@ -1847,7 +1847,7 @@ as the union type when you need to accept both kinds.</p>
 <span class="normal">502</span>
 <span class="normal">503</span>
 <span class="normal">504</span>
-<span class="normal">505</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">normalize_expr_rhs</span><span class="p">(</span><span class="n">spec</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">ExprRhs</span><span class="p">:</span>  <span class="c1"># noqa: C901, PLR0914, PLR0915</span>
+<span class="normal">505</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">normalize_expr_rhs</span><span class="p">(</span><span class="n">spec</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">ExprRhs</span><span class="p">:</span>  <span class="c1"># ruff: ignore[complex-structure, too-many-locals, too-many-statements]</span>
 <span class="w">    </span><span class="sd">"""Normalize an expression-based RHS specification.</span>
 
 <span class="sd">    Args:</span>
@@ -2622,7 +2622,7 @@ as the union type when you need to accept both kinds.</p>
 <span class="normal">1653</span>
 <span class="normal">1654</span>
 <span class="normal">1655</span>
-<span class="normal">1656</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">normalize_transitions_rhs</span><span class="p">(</span>  <span class="c1"># noqa: C901, PLR0912, PLR0914, PLR0915</span>
+<span class="normal">1656</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">normalize_transitions_rhs</span><span class="p">(</span>  <span class="c1"># ruff: ignore[complex-structure, too-many-branches, too-many-locals, too-many-statements]</span>
     <span class="n">spec</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TransitionsRhs</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Normalize a transition-based RHS specification (diagram/hazard semantics).</span>
