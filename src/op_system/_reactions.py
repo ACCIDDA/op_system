@@ -54,8 +54,8 @@ from op_system._ir import (
     Apply,
     AxisIndex,
     Expr,
+    Reduce,
     Subscript,
-    Sym,
     _map_children,
     iter_subscripts,
     parse_expr_to_ir,
@@ -184,100 +184,353 @@ def _in_order_wildcard_axes(tokens: list[Any]) -> list[str]:
     return axes
 
 
-def _references_any_name(expr: Expr, names: frozenset[str]) -> bool:
-    """Return True if any ``Sym``/``Subscript`` node in ``expr`` names one of ``names``.
+@dataclass(frozen=True, slots=True)
+class _AliasTemplate:
+    """One alias declaration in template-symbolic (axes-still-free) form.
 
-    Returns:
-        Whether ``expr`` references one of ``names`` as a base name.
+    Attributes:
+        axes: The axes the alias's own selector declares, in selector
+            order -- ``("age", "loc")`` for ``foi[age, loc]``. Order
+            matters: a reference is matched to these positionally, so
+            ``foi[age, loc:d1]`` binds ``loc`` and leaves ``age`` free.
+        body: The alias's Reduce-preserving, axes-still-symbolic IR.
     """
-    return any(
-        isinstance(node, (Sym, Subscript)) and node.name in names for node in walk(expr)
-    )
+
+    axes: tuple[str, ...]
+    body: Expr
 
 
-def _build_single_level_alias_bodies(
+def _parse_alias_templates(
     aliases_raw: Mapping[str, Any],
     *,
     shaped_params: Mapping[str, tuple[str, ...]],
     axis_lookup: dict[str, list[str]],
-) -> dict[str, tuple[frozenset[str], Expr]]:
-    """Build template-symbolic bodies for aliases that don't reference another alias.
+) -> dict[str, _AliasTemplate]:
+    """Parse each alias declaration into template-symbolic form.
 
     op_system's alias-inlining machinery (``inline_aliases`` /
     ``_build_aliases_ir_from_raw``) only ever operates on fully
-    per-cell-expanded alias names -- there is no template-symbolic
-    (axes-still-free) form of a templated alias body anywhere else in the
-    package. This builds one locally, independent of that per-cell
-    machinery, so a rate expression referencing an alias (e.g. this
-    package's own ``foi[age, loc]`` force-of-infection alias) can be
-    inlined at template scope, matching how this module already treats
-    rate expressions in general.
+    per-cell-expanded alias names -- there is no template-symbolic form of
+    a templated alias body anywhere else in the package. This builds one
+    locally, so a rate expression referencing an alias can be inlined at
+    template scope, matching how this module already treats rate
+    expressions in general.
 
-    Deliberately single-level only (issue tracked for full chain support):
-    an alias whose own body references another alias is excluded from the
-    returned map entirely, so a rate referencing it is simply left
-    unresolved -- same silent-omission behavior as before this function
-    existed, not a regression.
+    Bodies are NOT yet resolved against one another; see
+    :func:`_resolve_alias_templates`.
 
     Returns:
-        Mapping from alias base name to ``(declared_axes, body)``, where
-        ``declared_axes`` is the set of axes the alias's own selector
-        declares (e.g. ``{"age", "loc"}`` for ``foi[age, loc]``) and
-        ``body`` is its Reduce-preserving, axes-still-symbolic IR.
-        Aliases with a non-string body, a non-wildcard LHS token, or a
-        body referencing another alias are omitted.
+        Mapping from alias base name to its :class:`_AliasTemplate`.
+        Aliases with a non-string body or a non-wildcard LHS token (a
+        pinned-axis alias declaration, e.g. ``foi[age, loc=d1]:``) are
+        omitted -- out of scope here, not an error.
     """
-    alias_base_names = frozenset(
-        parse_selector(_normalize_bracket_key(k))[0] for k in aliases_raw
-    )
-    out: dict[str, tuple[frozenset[str], Expr]] = {}
+    out: dict[str, _AliasTemplate] = {}
     for raw_key, expr_val in aliases_raw.items():
         if not isinstance(expr_val, str) or not expr_val.strip():
             continue
         base, tokens = parse_selector(_normalize_bracket_key(raw_key))
-        tokens = list(tokens)
-        if any(not isinstance(tok, WildcardToken) for tok in tokens):
-            continue  # pinned-axis alias declaration: out of scope here.
-        declared_axes = frozenset(_in_order_wildcard_axes(tokens))
-
-        ir_raw = parse_expr_to_ir(expr_val, lower_helpers=True)
-        if _references_any_name(ir_raw, alias_base_names - {base}):
-            continue  # references another alias: multi-level, out of scope.
-
-        ir_reduce = expand_inline_templates(
-            ir_raw,
+        token_list = list(tokens)
+        if any(not isinstance(tok, WildcardToken) for tok in token_list):
+            continue
+        body = expand_inline_templates(
+            parse_expr_to_ir(expr_val, lower_helpers=True),
             assignment={},
             shaped_params=shaped_params,
             axis_lookup=axis_lookup,
         )
-        out[base] = (declared_axes, ir_reduce)
+        out[base] = _AliasTemplate(
+            axes=tuple(_in_order_wildcard_axes(token_list)), body=body
+        )
     return out
 
 
-def _inline_single_level_alias_refs(
-    expr: Expr, alias_bodies: Mapping[str, tuple[frozenset[str], Expr]]
-) -> Expr:
-    """Replace fully-wildcard alias ``Subscript`` references with their body.
+def _alias_index_substitution(
+    declared_axes: tuple[str, ...],
+    ref_indices: tuple[AxisIndex, ...],
+    *,
+    axis_names: frozenset[str],
+) -> dict[str, AxisIndex] | None:
+    """Map an alias's declared axes onto the indices a reference supplies.
 
-    Only a "fully wildcard" reference (every index FREE, and the exact
-    axis set the alias declares) is substituted -- a partially-pinned
-    reference (e.g. ``foi[age, loc=d1]``) is left unresolved, same as if
-    ``alias_bodies`` didn't have an entry for it at all (out of scope, not
-    an error).
+    Three reference shapes occur in practice, distinguished exactly as
+    :func:`op_system._ir.classify_axis_index` does:
+
+    * FREE on its own axis (``gravity_pressure[loc]``) -- the body is used
+      as written, no rewrite.
+    * COORD (``infectious_weighted[loc:lp]``) -- the declared axis is
+      bound to ``lp``. Covers both a reduction binding variable and a
+      literal coordinate pin (``foi[age, loc:d1]``); they share this IR
+      shape and want the same rewrite.
+    * COORD_SYMBOL (``trv[v]`` inside ``apply_along(..., vax=v)``) -- the
+      reference labels the position with the reduction's binding variable
+      instead of the axis name, so the declared axis is bound to that
+      variable.
+
+    Returns:
+        Mapping from declared axis name to the :class:`AxisIndex` every
+        FREE occurrence of that axis in the body must become, or ``None``
+        when the reference is out of scope (wrong arity, or renaming one
+        registered axis to another -- the body's own buffer references
+        need not carry the new axis at all, so that is not substitution
+        this pass can safely perform).
+    """
+    if len(ref_indices) != len(declared_axes):
+        return None
+    subst: dict[str, AxisIndex] = {}
+    for axis, idx in zip(declared_axes, ref_indices, strict=True):
+        if idx.coord is not None:
+            subst[axis] = AxisIndex(axis=axis, coord=idx.coord)
+        elif idx.axis == axis:
+            continue
+        elif idx.axis in axis_names:
+            return None
+        else:
+            subst[axis] = AxisIndex(axis=axis, coord=idx.axis)
+    return subst
+
+
+def _apply_axis_substitution(expr: Expr, subst: Mapping[str, AxisIndex]) -> Expr:
+    """Bind an alias body's FREE axis indices per ``subst``.
+
+    A ``Reduce`` binding does NOT shadow here: in
+    ``apply_along(X[loc], loc=lp)`` the bare ``X[loc]`` still denotes the
+    outer free axis (the bound form is ``X[loc:lp]``), which is precisely
+    the co-occurrence ``_ir_lower._binding_collides_with_free_index``
+    exists to detect. So every FREE occurrence is substituted regardless
+    of enclosing bindings.
+
+    Returns:
+        A new IR expression with the substitution applied; ``expr``
+        itself when nothing matches.
+    """
+    if isinstance(expr, Subscript):
+        new_indices: list[AxisIndex] = []
+        changed = False
+        for idx in expr.indices:
+            repl = subst.get(idx.axis) if idx.coord is None else None
+            if repl is None:
+                new_indices.append(idx)
+                continue
+            new_indices.append(repl)
+            changed = True
+        if changed:
+            return Subscript(name=expr.name, indices=tuple(new_indices))
+        return expr
+    return _map_children(expr, lambda e: _apply_axis_substitution(e, subst))
+
+
+def _rename_bound_vars(expr: Expr, renames: Mapping[str, str]) -> Expr:
+    """Alpha-rename reduction binding variables, respecting their scopes.
+
+    Only names actually bound by a ``Reduce`` inside ``expr`` are
+    renamed, and only within that ``Reduce``'s own body -- a name that is
+    merely referenced (bound by an enclosing scope outside ``expr``) is
+    left alone.
+
+    Returns:
+        A new IR expression with the renames applied; ``expr`` itself
+        when no enclosing binding matches.
+    """
+    if isinstance(expr, Reduce):
+        active = {var: renames[var] for _, var in expr.bindings if var in renames}
+        if not active:
+            return _map_children(expr, lambda e: _rename_bound_vars(e, renames))
+        bindings = tuple((axis, active.get(var, var)) for axis, var in expr.bindings)
+        return Reduce(
+            kind=expr.kind,
+            bindings=bindings,
+            body=_rename_bound_vars(_rename_var_references(expr.body, active), renames),
+            filters=expr.filters,
+            kernel=expr.kernel,
+        )
+    return _map_children(expr, lambda e: _rename_bound_vars(e, renames))
+
+
+def _rename_var_references(expr: Expr, renames: Mapping[str, str]) -> Expr:
+    """Rewrite subscript positions that name a renamed binding variable.
+
+    A binding variable reaches a ``Subscript`` in two forms: as the coord
+    of a bound position (``I[vax:v]``) and as a bare axis label where the
+    spec uses the variable itself (``I[ap]``) -- both are rewritten, the
+    same pair ``_ir_lower._lower_reduce`` accounts for.
+
+    Returns:
+        A new IR expression with matching positions renamed; ``expr``
+        itself when nothing matches.
+    """
+    if isinstance(expr, Subscript):
+        new_indices: list[AxisIndex] = []
+        changed = False
+        for idx in expr.indices:
+            if idx.coord is not None and idx.coord in renames:
+                new_indices.append(AxisIndex(axis=idx.axis, coord=renames[idx.coord]))
+                changed = True
+            elif idx.coord is None and idx.axis in renames:
+                new_indices.append(AxisIndex(axis=renames[idx.axis]))
+                changed = True
+            else:
+                new_indices.append(idx)
+        if changed:
+            return Subscript(name=expr.name, indices=tuple(new_indices))
+        return expr
+    return _map_children(expr, lambda e: _rename_var_references(e, renames))
+
+
+def _bound_vars(expr: Expr) -> frozenset[str]:
+    """Return every reduction binding variable bound anywhere under ``expr``.
+
+    Returns:
+        The set of binding variable names.
+    """
+    return frozenset(
+        var
+        for node in walk(expr)
+        if isinstance(node, Reduce)
+        for _, var in node.bindings
+    )
+
+
+def _inline_alias_body(
+    template: _AliasTemplate,
+    ref: Subscript,
+    *,
+    axis_names: frozenset[str],
+) -> Expr | None:
+    """Instantiate one alias reference against the alias's resolved body.
+
+    Returns:
+        The alias body rewritten for this reference site, or ``None``
+        when the reference shape is out of scope.
+    """
+    subst = _alias_index_substitution(template.axes, ref.indices, axis_names=axis_names)
+    if subst is None:
+        return None
+    body = template.body
+    # Capture avoidance: the coord symbols we are about to substitute in
+    # (e.g. the ``lp`` of ``infectious_weighted[loc:lp]``) belong to a
+    # reduction enclosing the REFERENCE. If the body happens to bind the
+    # same name itself, the substituted ``loc:lp`` would be captured by
+    # that inner binding instead. Rename the body's colliding bindings.
+    incoming = {idx.coord for idx in subst.values() if idx.coord is not None}
+    clashing = incoming & _bound_vars(body)
+    if clashing:
+        body = _rename_bound_vars(
+            body, {var: f"{var}__op_alias{n}" for n, var in enumerate(sorted(clashing))}
+        )
+    return _apply_axis_substitution(body, subst)
+
+
+def _substitute_alias_refs(
+    expr: Expr,
+    templates: Mapping[str, _AliasTemplate],
+    *,
+    axis_names: frozenset[str],
+) -> Expr:
+    """Replace in-scope alias ``Subscript`` references with their bodies.
+
+    ``templates`` bodies are expected to be already resolved (free of
+    alias references themselves), so this performs a single pass.
 
     Returns:
         A new IR expression with in-scope alias references inlined;
         structurally equal to ``expr`` when no replacements occur.
     """
-    if isinstance(expr, Subscript) and expr.name in alias_bodies:
-        declared_axes, body = alias_bodies[expr.name]
-        ref_axes = frozenset(ix.axis for ix in expr.indices if ix.coord is None)
-        if len(expr.indices) == len(declared_axes) and ref_axes == declared_axes:
-            return body
-        return expr
+    if isinstance(expr, Subscript):
+        template = templates.get(expr.name)
+        if template is None:
+            return expr
+        inlined = _inline_alias_body(template, expr, axis_names=axis_names)
+        return expr if inlined is None else inlined
     return _map_children(
-        expr, lambda e: _inline_single_level_alias_refs(e, alias_bodies)
+        expr, lambda e: _substitute_alias_refs(e, templates, axis_names=axis_names)
     )
+
+
+def _resolve_alias_templates(
+    parsed: Mapping[str, _AliasTemplate],
+    *,
+    axis_names: frozenset[str],
+) -> dict[str, _AliasTemplate]:
+    """Inline alias-to-alias references so every body stands alone.
+
+    Resolves the whole chain (issue #193), not just one level: an alias
+    whose body references an alias that itself references a third is
+    fully expanded. Bodies are resolved depth-first and memoized, so each
+    is expanded once regardless of how many aliases reference it.
+
+    Cycle detection mirrors ``_ir_templates._detect_alias_cycle`` but
+    operates at template-symbolic scope, where a reference is a
+    ``Subscript`` with symbolic axes rather than the fully-expanded
+    per-cell ``Sym`` that function expects. An alias on a cycle -- and
+    any alias that transitively references one -- is dropped from the
+    result, so a rate referencing it is simply left unresolved (the same
+    silent-omission behavior applied to every other out-of-scope shape
+    here, not an error).
+
+    Returns:
+        Mapping from alias base name to a template whose body contains no
+        remaining alias references.
+    """
+    resolved: dict[str, _AliasTemplate] = {}
+    visiting: set[str] = set()
+    failed: set[str] = set()
+
+    def _resolve(name: str) -> _AliasTemplate | None:
+        if name in resolved:
+            return resolved[name]
+        if name in failed or name in visiting:
+            failed.add(name)  # cycle, or already known unresolvable
+            return None
+        template = parsed.get(name)
+        if template is None:
+            return None
+        visiting.add(name)
+        try:
+            deps = {
+                sub.name
+                for sub in iter_subscripts(template.body)
+                if sub.name in parsed and sub.name != name
+            }
+            usable: dict[str, _AliasTemplate] = {}
+            for dep in deps:
+                dep_template = _resolve(dep)
+                if dep_template is None:
+                    failed.add(name)
+                    return None
+                usable[dep] = dep_template
+            body = (
+                _substitute_alias_refs(template.body, usable, axis_names=axis_names)
+                if usable
+                else template.body
+            )
+        finally:
+            visiting.discard(name)
+        out = _AliasTemplate(axes=template.axes, body=body)
+        resolved[name] = out
+        return out
+
+    for name in parsed:
+        _resolve(name)
+    return resolved
+
+
+def _build_alias_bodies(
+    aliases_raw: Mapping[str, Any],
+    *,
+    shaped_params: Mapping[str, tuple[str, ...]],
+    axis_lookup: dict[str, list[str]],
+) -> dict[str, _AliasTemplate]:
+    """Build fully-resolved template-symbolic bodies for every alias.
+
+    Returns:
+        Mapping from alias base name to a template whose body contains no
+        remaining alias references.
+    """
+    parsed = _parse_alias_templates(
+        aliases_raw, shaped_params=shaped_params, axis_lookup=axis_lookup
+    )
+    return _resolve_alias_templates(parsed, axis_names=frozenset(axis_lookup))
 
 
 def build_reaction_artifacts_ir(  # ruff: ignore[too-many-arguments, too-many-locals]
@@ -306,12 +559,13 @@ def build_reaction_artifacts_ir(  # ruff: ignore[too-many-arguments, too-many-lo
             the engine handles it separately.
         aliases_raw: Optional raw ``aliases:`` mapping from the spec (LHS
             selector string, e.g. ``"foi[age, loc]"``, to RHS expression
-            string). A rate referencing a single-level alias (one that
-            doesn't itself reference another alias) has that alias's
+            string). A rate referencing an alias has that alias's
             template-symbolic body inlined before the axis-scope check
-            below -- see :func:`_build_single_level_alias_bodies`. A rate
-            referencing a multi-level alias chain is unaffected and stays
-            out of scope, same as when this argument is omitted.
+            below, following the whole chain when that alias references
+            further aliases -- see :func:`_build_alias_bodies`. An alias
+            on a reference cycle, or one whose reference shape is out of
+            scope, is left unresolved, same as when this argument is
+            omitted.
 
     Returns:
         One :class:`ReactionArtifactIR` per named, in-scope transition, in
@@ -319,15 +573,16 @@ def build_reaction_artifacts_ir(  # ruff: ignore[too-many-arguments, too-many-lo
         whose ``to``-side introduces a wildcard axis absent from ``from``
         (not applicable to a source-only transition, which has no
         ``from``-side to compare against), and transitions whose rate
-        (after single-level alias inlining) references an axis outside the
+        (after alias inlining) references an axis outside the
         from-side wildcard set (the to-side wildcard set, for a
         source-only transition) are silently omitted (not an error -- see
         module docstring).
     """
     shaped = shaped_params or {}
-    alias_bodies = _build_single_level_alias_bodies(
+    alias_bodies = _build_alias_bodies(
         aliases_raw or {}, shaped_params=shaped, axis_lookup=axis_lookup
     )
+    axis_names = frozenset(axis_lookup)
     out: list[ReactionArtifactIR] = []
 
     for tr_map in transitions_raw:
@@ -366,7 +621,9 @@ def build_reaction_artifacts_ir(  # ruff: ignore[too-many-arguments, too-many-lo
 
         ir_rate_raw = parse_expr_to_ir(rate_s, lower_helpers=True)
         if alias_bodies:
-            ir_rate_raw = _inline_single_level_alias_refs(ir_rate_raw, alias_bodies)
+            ir_rate_raw = _substitute_alias_refs(
+                ir_rate_raw, alias_bodies, axis_names=axis_names
+            )
         # Rate must not reference an axis outside the from-side wildcard
         # set (other than the time axis, which is handled separately by
         # the engine, not baked into the propensity template).

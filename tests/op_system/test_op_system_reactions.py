@@ -330,17 +330,17 @@ def test_single_level_alias_reference_compiles_and_matches_deterministic() -> No
     np.testing.assert_allclose(dy["E"], expected)
 
 
-def test_multi_level_alias_chain_stays_out_of_scope() -> None:
+def test_multi_level_alias_chain_is_inlined() -> None:
     """A rate referencing an alias that itself references another alias.
 
-    Still excluded -- single-level inlining only (deferred, tracked
-    separately; not a regression from before alias inlining existed).
+    The whole chain resolves (issue #193); this asserted exclusion until
+    single-level inlining was generalised.
     """
     spec: dict[str, object] = {
         "kind": "transitions",
         "axes": [{"name": "age", "coords": ["a0", "a1"]}],
         "aliases": {
-            "bar[age]": "2.0 * age",
+            "bar[age]": "2.0 * k[age]",
             "foi[age]": "bar[age] + 1.0",
         },
         "state": ["S[age]", "E[age]"],
@@ -349,7 +349,25 @@ def test_multi_level_alias_chain_stays_out_of_scope() -> None:
         ],
     }
     c = compile_spec(spec)
-    assert c.reactions == ()
+    expose = next(r for r in c.reactions if r.name == "expose")
+    y = {"S": np.array([10.0, 20.0]), "E": np.zeros(2)}
+    k = np.array([3.0, 5.0])
+    got = np.asarray(expose.propensity_fn(0.0, y, k=k))
+    np.testing.assert_allclose(got, (2.0 * k + 1.0) * y["S"])
+
+
+def test_alias_reference_cycle_stays_out_of_scope() -> None:
+    """Mutually-referencing aliases resolve to nothing, rather than hanging."""
+    spec: dict[str, object] = {
+        "kind": "transitions",
+        "axes": [{"name": "age", "coords": ["a0", "a1"]}],
+        "aliases": {"foi[age]": "ping[age]", "ping[age]": "foi[age] + 1.0"},
+        "state": ["S[age]", "E[age]"],
+        "transitions": [
+            {"name": "expose", "from": "S[age]", "to": "E[age]", "rate": "foi[age]"},
+        ],
+    }
+    assert compile_spec(spec).reactions == ()
 
 
 def _importation_spec() -> dict[str, object]:
@@ -551,3 +569,139 @@ def test_reduce_bearing_kernel_rate_propensity() -> None:
     dy = c.pytree_eval_fn(np.asarray(0.0), y, k=k)
     np.testing.assert_allclose(dy["S"], -got)
     np.testing.assert_allclose(dy["I"], got)
+
+
+def test_alias_reference_using_a_binding_variable_as_axis_label() -> None:
+    """``trv[v]`` inside ``apply_along(..., vax=v)`` resolves.
+
+    The reference labels the position with the reduction's binding
+    variable rather than the axis name, so the alias's declared ``vax``
+    must be bound to ``v`` when its body is inlined (issue #193).
+    """
+    spec: dict[str, object] = {
+        "kind": "transitions",
+        "axes": [
+            {"name": "age", "coords": ["a0", "a1"]},
+            {"name": "vax", "coords": ["u", "f", "b"]},
+        ],
+        "state": ["S[age,vax]", "E[age,vax]", "I[age,vax]"],
+        "aliases": {
+            "trv[vax]": "tr[vax]",
+            "foi[age]": "apply_along(I[age, vax:v] * (1.0 - trv[v]), vax=v)",
+        },
+        "transitions": [
+            {
+                "name": "expose",
+                "from": "S[age,vax]",
+                "to": "E[age,vax]",
+                "rate": "foi[age]",
+            },
+        ],
+    }
+    c = compile_spec(spec)
+    expose = next(r for r in c.reactions if r.name == "expose")
+    rng = np.random.default_rng(0)
+    y = {n: rng.uniform(1.0, 9.0, size=(2, 3)) for n in ("S", "E", "I")}
+    tr = np.array([0.0, 0.25, 0.6])
+    got = np.asarray(expose.propensity_fn(0.0, y, tr=tr))
+    expected = (y["I"] * (1.0 - tr)).sum(axis=1)[:, None] * y["S"]
+    np.testing.assert_allclose(got, expected)
+
+
+def test_alias_reference_bound_to_a_reduction_coord() -> None:
+    """``pool[loc:lp]`` inside ``apply_along(..., loc=lp)`` resolves.
+
+    The alias's declared ``loc`` is bound to the reduction variable, so
+    its body's free ``loc`` references must be rewritten to ``loc:lp``.
+    """
+    spec: dict[str, object] = {
+        "kind": "transitions",
+        "axes": [{"name": "loc", "coords": ["d0", "d1", "d2"]}],
+        "state": ["S[loc]", "E[loc]", "I[loc]"],
+        "aliases": {
+            "pool[loc]": "I[loc]",
+            "tot[loc]": "S[loc] + I[loc]",
+            "press[loc]": (
+                "apply_along(w[loc, loc:lp] * (pool[loc:lp] / tot[loc:lp]), loc=lp)"
+            ),
+        },
+        "transitions": [
+            {"name": "expose", "from": "S[loc]", "to": "E[loc]", "rate": "press[loc]"},
+        ],
+    }
+    c = compile_spec(spec)
+    expose = next(r for r in c.reactions if r.name == "expose")
+    rng = np.random.default_rng(1)
+    y = {n: rng.uniform(1.0, 9.0, size=3) for n in ("S", "E", "I")}
+    w = rng.uniform(size=(3, 3))
+    got = np.asarray(expose.propensity_fn(0.0, y, w=w))
+    expected = (w @ (y["I"] / (y["S"] + y["I"]))) * y["S"]
+    np.testing.assert_allclose(got, expected)
+
+
+def test_alias_inlining_avoids_capturing_a_reused_binding_variable() -> None:
+    """An alias that binds the same variable name as its reference site.
+
+    ``inner`` binds ``lp`` itself and is referenced as ``inner[loc:lp]``
+    from inside another ``apply_along(..., loc=lp)``. Substituting
+    naively would let ``inner``'s own binding capture the incoming
+    ``loc:lp``, silently collapsing a double sum into a single one.
+    """
+    spec: dict[str, object] = {
+        "kind": "transitions",
+        "axes": [{"name": "loc", "coords": ["d0", "d1", "d2"]}],
+        "state": ["S[loc]", "E[loc]", "I[loc]"],
+        "aliases": {
+            "inner[loc]": "apply_along(w[loc, loc:lp] * I[loc:lp], loc=lp)",
+            "outer[loc]": "apply_along(w[loc, loc:lp] * inner[loc:lp], loc=lp)",
+        },
+        "transitions": [
+            {"name": "expose", "from": "S[loc]", "to": "E[loc]", "rate": "outer[loc]"},
+        ],
+    }
+    c = compile_spec(spec)
+    expose = next(r for r in c.reactions if r.name == "expose")
+    rng = np.random.default_rng(2)
+    y = {n: rng.uniform(1.0, 9.0, size=3) for n in ("S", "E", "I")}
+    w = rng.uniform(size=(3, 3))
+    got = np.asarray(expose.propensity_fn(0.0, y, w=w))
+    np.testing.assert_allclose(got, (w @ (w @ y["I"])) * y["S"])
+
+
+def test_alias_reference_pinned_to_a_literal_coord() -> None:
+    """``foi[age, loc:d1]`` resolves, pinning the body to that coordinate.
+
+    A literal pin shares the COORD index shape with a reduction binding,
+    so it falls out of the same substitution; the single-level pass
+    rejected it. Cross-checked against the deterministic RHS, whose
+    ``dE/dt`` is exactly this transition's inflow.
+    """
+    spec: dict[str, object] = {
+        "kind": "transitions",
+        "axes": [
+            {"name": "age", "coords": ["a0", "a1"]},
+            {"name": "loc", "coords": ["d0", "d1", "d2"]},
+        ],
+        "state": ["S[age,loc]", "E[age,loc]", "I[age,loc]"],
+        "aliases": {"foi[age, loc]": "beta * I[age, loc]"},
+        "transitions": [
+            {
+                "name": "expose",
+                "from": "S[age,loc]",
+                "to": "E[age,loc]",
+                "rate": "foi[age, loc:d1]",
+            },
+        ],
+    }
+    c = compile_spec(spec)
+    expose = next(r for r in c.reactions if r.name == "expose")
+    rng = np.random.default_rng(3)
+    y = {n: rng.uniform(1.0, 9.0, size=(2, 3)) for n in ("S", "E", "I")}
+    expected = (0.5 * y["I"][:, 1])[:, None] * y["S"]
+    np.testing.assert_allclose(
+        np.asarray(expose.propensity_fn(0.0, y, beta=0.5)), expected
+    )
+    assert c.pytree_eval_fn is not None
+    np.testing.assert_allclose(
+        np.asarray(c.pytree_eval_fn(0.0, y, beta=0.5)["E"]), expected
+    )
