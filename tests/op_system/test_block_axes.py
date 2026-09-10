@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import pickle  # noqa: S403
+import pickle  # ruff: ignore[suspicious-pickle-import]
 
 import pytest
 
@@ -78,7 +78,7 @@ def test_block_axis_info_is_picklable() -> None:
         state_axis_pos={"S": 0},
         param_axis_pos={},
     )
-    restored = pickle.loads(pickle.dumps(info))  # noqa: S301
+    restored = pickle.loads(pickle.dumps(info))  # ruff: ignore[suspicious-pickle-usage]
     assert restored.name == info.name
     assert restored.size == info.size
     assert restored.state_axis_pos == info.state_axis_pos
@@ -184,7 +184,7 @@ def test_compiled_rhs_pickle_round_trip_preserves_block_axes() -> None:
     """CompiledRhs pickles and restores with correct block_axes."""
     rhs = normalize_rhs(_sep_spec(factorize=["loc"]))
     compiled = compile_rhs(rhs)
-    restored = pickle.loads(pickle.dumps(compiled))  # noqa: S301
+    restored = pickle.loads(pickle.dumps(compiled))  # ruff: ignore[suspicious-pickle-usage]
     assert len(restored.block_axes) == 1
     info = restored.block_axes[0]
     assert info.name == "loc"
@@ -395,7 +395,7 @@ def test_analyze_multiple_factorize_axes() -> None:
 # ---------------------------------------------------------------------------
 
 
-from op_system._normalize_block import strip_block_axis  # noqa: E402
+from op_system._normalize_block import strip_block_axis  # ruff: ignore[module-import-not-at-top-of-file]
 
 
 def test_strip_block_axis_removes_axis_from_template_shapes() -> None:
@@ -514,7 +514,7 @@ def test_block_template_shapes_have_no_block_axis() -> None:
 
 def test_block_pytree_eval_fn_is_callable() -> None:
     """block_pytree_eval_fn accepts a per-block state dict and returns derivatives."""
-    import numpy as np  # noqa: PLC0415
+    import numpy as np  # ruff: ignore[import-outside-top-level]
 
     rhs = normalize_rhs(_sep_spec(factorize=["loc"]))
     compiled = compile_rhs(rhs)
@@ -533,11 +533,11 @@ def test_block_pytree_eval_fn_is_callable() -> None:
 
 def test_block_pytree_eval_fn_pickle_round_trip() -> None:
     """CompiledRhs with block_pytree_eval_fn survives a pickle round-trip."""
-    import numpy as np  # noqa: PLC0415
+    import numpy as np  # ruff: ignore[import-outside-top-level]
 
     rhs = normalize_rhs(_sep_spec(factorize=["loc"]))
     compiled = compile_rhs(rhs)
-    restored = pickle.loads(pickle.dumps(compiled))  # noqa: S301
+    restored = pickle.loads(pickle.dumps(compiled))  # ruff: ignore[suspicious-pickle-usage]
     assert restored.block_pytree_eval_fn is not None
     assert restored.block_template_shapes == compiled.block_template_shapes
     # Functional check

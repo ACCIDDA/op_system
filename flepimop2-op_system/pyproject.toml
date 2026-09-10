@@ -73,15 +73,15 @@ docstring-code-line-length = 72
 preview = true
 select = ["ALL"]
 ignore = [
-  "COM812",
-  "D203",
-  "D212",
-  "PLR2004",
+  "missing-trailing-comma",
+  "incorrect-blank-line-before-class",
+  "multi-line-summary-first-line",
+  "magic-value-comparison",
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**/*" = ["INP001", "S101"]
-"src/flepimop2/system/op_system/__init__.py" = ["RUF067"]
+"tests/**/*" = ["implicit-namespace-package", "assert"]
+"src/flepimop2/system/op_system/__init__.py" = ["non-empty-init-module"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
@@ -89,7 +89,7 @@ convention = "google"
 [dependency-groups]
 dev = [
   "pytest>=8.4.2",
-  "ruff>=0.13.3",
+  "ruff==0.16.6",
   "mypy>=1.20.2",
 ]
 

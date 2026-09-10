@@ -445,7 +445,7 @@ def _apply_coord_shifts(
         i += len(concrete)
 
 
-def _build_templated_coord_shift_transition(  # noqa: PLR0913
+def _build_templated_coord_shift_transition(  # ruff: ignore[too-many-arguments]
     *,
     base: str,
     axis_name: str,

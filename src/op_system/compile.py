@@ -79,7 +79,7 @@ class _HistoryCollectContext:
     lift_cell_ir_to_template: Any
 
 
-def _namespace_of(y: object) -> Any:  # noqa: ANN401
+def _namespace_of(y: object) -> Any:  # ruff: ignore[any-type]
     """Return the Array-API namespace of ``y``.
 
     Raises:
@@ -99,7 +99,7 @@ def _namespace_of(y: object) -> Any:  # noqa: ANN401
     return ns_fn()
 
 
-def _check_numeric_dtype(xp: Any, dtype: object) -> None:  # noqa: ANN401
+def _check_numeric_dtype(xp: Any, dtype: object) -> None:  # ruff: ignore[any-type]
     """Validate that ``dtype`` is numeric in the Array-API sense.
 
     Mirrors :meth:`flepimop2.parameter.abc.ParameterValue.__post_init__`:
@@ -214,7 +214,7 @@ class EvalFn(Protocol):
     ``(n_state,)`` derivative array in the same array namespace.
     """
 
-    def __call__(  # noqa: D102
+    def __call__(  # ruff: ignore[undocumented-public-method]
         self, t: object, y: object, **params: object
     ) -> Float64Array: ...
 
@@ -229,7 +229,7 @@ class PytreeEvalFn(Protocol):
     expose the full tensor structure to JAX/XLA.
     """
 
-    def __call__(  # noqa: D102
+    def __call__(  # ruff: ignore[undocumented-public-method]
         self, t: object, y: StateDict, **params: object
     ) -> StateDict: ...
 
@@ -242,7 +242,7 @@ class ReactionPropensityFn(Protocol):
     see :class:`CompiledReaction`.
     """
 
-    def __call__(  # noqa: D102
+    def __call__(  # ruff: ignore[undocumented-public-method]
         self, t: object, y: StateDict, **params: object
     ) -> object: ...
 
@@ -255,7 +255,7 @@ class HistoryEvalFn(Protocol):
     Returns a ``StateDict`` of derivatives.
     """
 
-    def __call__(  # noqa: D102
+    def __call__(  # ruff: ignore[undocumented-public-method]
         self, t: object, y: StateDict, *, history_provider: object, **params: object
     ) -> StateDict: ...
 
@@ -266,7 +266,7 @@ class BodyEvalFn(Protocol):
     Returns a mapping from ``signal_id`` to the evaluated body array/value.
     """
 
-    def __call__(  # noqa: D102
+    def __call__(  # ruff: ignore[undocumented-public-method]
         self, t: object, y: StateDict, **params: object
     ) -> dict[int, object]: ...
 
@@ -736,7 +736,7 @@ def _collect_eq_code(
             reserved_names=reserved_names,
         )
         cse_code = tuple((name, _compile_expr(name, expr)) for name, expr in bindings)
-        eq_code = [  # noqa: FURB140
+        eq_code = [  # ruff: ignore[reimplemented-starmap]
             _compile_expr(expr_s, expr_ir)
             for expr_s, expr_ir in zip(equations, rewritten, strict=True)
         ]
@@ -752,7 +752,7 @@ def _evaluate_cse_bindings(
     """Evaluate CSE temporaries into ``env`` before equation evaluation."""
     for name, codeobj in cse_code:
         try:
-            env[name] = eval(  # noqa: S307
+            env[name] = eval(  # ruff: ignore[suspicious-eval-usage]
                 codeobj,
                 {"__builtins__": _SAFE_BUILTINS},
                 env,
@@ -787,7 +787,7 @@ def _resolve_aliases(
         progressed = False
         for name, codeobj in list(pending.items()):
             try:
-                val = eval(  # noqa: S307
+                val = eval(  # ruff: ignore[suspicious-eval-usage]
                     codeobj,
                     {"__builtins__": _SAFE_BUILTINS},
                     {**base_env, **out},
@@ -829,7 +829,7 @@ def _evaluate_equations(
     *,
     eq_code: list[CodeType],
     env: Mapping[str, object],
-    xp: Any,  # noqa: ANN401
+    xp: Any,  # ruff: ignore[any-type]
 ) -> Float64Array:
     """Evaluate equation code objects against an environment.
 
@@ -840,7 +840,7 @@ def _evaluate_equations(
     out_vals: list[object] = []
     for codeobj in eq_code:
         try:
-            val = eval(codeobj, {"__builtins__": _SAFE_BUILTINS}, env)  # noqa: S307
+            val = eval(codeobj, {"__builtins__": _SAFE_BUILTINS}, env)  # ruff: ignore[suspicious-eval-usage]
         except NameError as exc:
             _raise_parameter_error(detail=f"unknown symbol in equation: {exc!s}")
         except (ValueError, TypeError, ArithmeticError) as exc:
@@ -943,7 +943,7 @@ def _normalize_history_node(
     node: HistoryOp,
     *,
     cell_to_template: Mapping[str, tuple[str, tuple[str, ...]]] | None,
-    lift_cell_ir_to_template: Any,  # noqa: ANN401
+    lift_cell_ir_to_template: Any,  # ruff: ignore[any-type]
 ) -> HistoryOp:
     """Lift a per-cell history node to template form when mappings exist.
 
@@ -1039,7 +1039,7 @@ def _history_requirements_from_ir(
     """
     lift_cell_ir_to_template = None
     if cell_to_template:
-        from op_system._ir_lower import (  # noqa: PLC0415
+        from op_system._ir_lower import (  # ruff: ignore[import-outside-top-level]
             lift_cell_ir_to_template as _lift_cell_ir,
         )
 
@@ -1081,7 +1081,7 @@ def _interp_along_axis(
     grid: object,
     *,
     axis: int,
-    xp: Any,  # noqa: ANN401
+    xp: Any,  # ruff: ignore[any-type]
 ) -> object:
     """Linearly interpolate ``grid`` along axis ``axis`` at scalar ``t``.
 
@@ -1289,6 +1289,12 @@ def _wrap_propensity_fn_for_time_varying(
     interpolated down to its current-``t`` slice before delegating; a
     reaction whose own compiled code doesn't reference a given name simply
     never uses the (harmlessly) interpolated value.
+
+    Returns:
+        ``propensity_fn`` unchanged when no time-varying parameters are
+        registered, otherwise a wrapper with the same signature that
+        replaces each registered parameter with its interpolated
+        current-``t`` slice before delegating.
     """
     if not time_varying_params:
         return propensity_fn
@@ -1524,7 +1530,7 @@ def _validate_history_kinds(
 def _enforce_vector_plan_for_axes(
     *,
     rhs: NormalizedRhs,
-    vec: Any,  # noqa: ANN401
+    vec: Any,  # ruff: ignore[any-type]
     plan: object,
 ) -> None:
     """Raise when an axis-indexed spec fails vector-plan construction."""
@@ -1581,7 +1587,7 @@ def _build_primary_eval_artifacts(
     return vec, plan, eval_fn, pytree_eval_fn, template_shapes
 
 
-def _make_propensity_fn(
+def _make_propensity_fn(  # ruff: ignore[complex-structure]
     code: CodeType,
     *,
     param_recipes: tuple[tuple[str, tuple[str, ...], tuple[int, ...]], ...],
@@ -1644,7 +1650,7 @@ def _make_propensity_fn(
             if base in y:
                 env[f"{base}_buf"] = y[base]
         try:
-            result = eval(code, {"__builtins__": _SAFE_BUILTINS}, env)  # noqa: S307
+            result = eval(code, {"__builtins__": _SAFE_BUILTINS}, env)  # ruff: ignore[suspicious-eval-usage]
         except (NameError, ValueError, TypeError, ArithmeticError) as exc:
             msg = f"reaction propensity evaluation failed: {exc!r}"
             raise ValueError(msg) from exc
@@ -1655,11 +1661,11 @@ def _make_propensity_fn(
     return propensity_fn
 
 
-def _build_reaction_artifacts(  # noqa: C901, PLR0914
+def _build_reaction_artifacts(  # ruff: ignore[complex-structure, too-many-locals]
     *,
     rhs: NormalizedRhs,
-    plan: Any,  # noqa: ANN401
-    vec: Any,  # noqa: ANN401
+    plan: Any,  # ruff: ignore[any-type]
+    vec: Any,  # ruff: ignore[any-type]
 ) -> tuple[CompiledReaction, ...]:
     """Compile each in-scope named transition's reaction artifact.
 
@@ -1713,7 +1719,7 @@ def _build_reaction_artifacts(  # noqa: C901, PLR0914
         name: tuple(ax_tuple) for name, ax_tuple in rhs.shaped_params if ax_tuple
     }
 
-    context = vec._LoweringContext(  # noqa: SLF001
+    context = vec._LoweringContext(  # ruff: ignore[private-member-access]
         buffer_axes=buffer_axes,
         axis_names=frozenset(axis_coords),
         reducible_axes=frozenset(reducible_axes_set),
@@ -1745,7 +1751,7 @@ def _build_reaction_artifacts(  # noqa: C901, PLR0914
         # compiles correctly for the identical rate expression because it
         # never uses propensity_ir_full's equivalent for Reduce-bearing
         # rates in the first place.
-        code = vec._compile_ir_expr(  # noqa: SLF001
+        code = vec._compile_ir_expr(  # ruff: ignore[private-member-access]
             r.propensity_ir_reduce,
             target_axes=r.from_axes,
             context=context,
@@ -1796,7 +1802,7 @@ def _build_reaction_artifacts(  # noqa: C901, PLR0914
     return tuple(out)
 
 
-def _cell_to_template_from_plan(plan: Any) -> dict[str, tuple[str, tuple[str, ...]]]:  # noqa: ANN401
+def _cell_to_template_from_plan(plan: Any) -> dict[str, tuple[str, tuple[str, ...]]]:  # ruff: ignore[any-type]
     """Build mapping from expanded cell names to ``(template_base, axes)``.
 
     Returns:
@@ -1815,7 +1821,7 @@ def _cell_to_template_from_plan(plan: Any) -> dict[str, tuple[str, tuple[str, ..
 def _build_history_artifacts(
     *,
     rhs: NormalizedRhs,
-    plan: Any,  # noqa: ANN401
+    plan: Any,  # ruff: ignore[any-type]
     pytree_eval_fn: PytreeEvalFn | None,
 ) -> tuple[tuple[dict[str, object], ...], HistoryEvalFn | None, BodyEvalFn | None]:
     """Build history requirements and optional history/body evaluators.
@@ -1952,7 +1958,7 @@ def _resolve_eval_fn(
 def _build_block_pytree_artifacts(
     *,
     rhs: NormalizedRhs,
-    vec: Any,  # noqa: ANN401
+    vec: Any,  # ruff: ignore[any-type]
     pytree_eval_fn: PytreeEvalFn | None,
     block_axes: tuple[BlockAxisInfo, ...],
     synth_consts: Mapping[str, object] | None,
@@ -1967,7 +1973,7 @@ def _build_block_pytree_artifacts(
     if pytree_eval_fn is None or not block_axes:
         return block_pytree_eval_fn, block_template_shapes
 
-    from op_system._normalize_block import strip_block_axis  # noqa: PLC0415
+    from op_system._normalize_block import strip_block_axis  # ruff: ignore[import-outside-top-level]
 
     stripped = strip_block_axis(rhs, block_axes[0].name)
     stripped_plan = vec.build_vector_plan(stripped)

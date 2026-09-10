@@ -209,7 +209,7 @@ def _extract_filter_from_value(value: Expr) -> tuple[str, tuple[str, ...]] | Non
     return var_node.name, tuple(coords)
 
 
-def _lower_single_helper(node: Apply) -> Expr:  # noqa: C901, PLR0912
+def _lower_single_helper(node: Apply) -> Expr:  # ruff: ignore[complex-structure, too-many-branches]
     if node.op not in _HELPER_REDUCE_OPS | _HELPER_HISTORY_OPS:
         return node
 
@@ -365,7 +365,7 @@ def _parse_subscript_indices(slc: ast.expr) -> tuple[AxisIndex, ...]:
     return (_parse_subscript_index_element(slc),)
 
 
-def to_ir(node: ast.AST) -> Expr:  # noqa: C901, PLR0911, PLR0912
+def to_ir(node: ast.AST) -> Expr:  # ruff: ignore[complex-structure, too-many-return-statements, too-many-branches]
     """Convert a Python AST node (expression) into typed IR.
 
     Args:
@@ -557,7 +557,7 @@ def _compare_ast(op: str) -> ast.cmpop:
     _invalid(detail=f"unsupported comparison IR op: {op}")
 
 
-def ir_to_ast_expr(expr: Expr) -> ast.expr:  # noqa: C901, PLR0911, PLR0912
+def ir_to_ast_expr(expr: Expr) -> ast.expr:  # ruff: ignore[complex-structure, too-many-return-statements, too-many-branches]
     """Convert typed IR back to a Python AST expression node.
 
     Args:
@@ -654,7 +654,7 @@ def ir_to_ast_expr(expr: Expr) -> ast.expr:  # noqa: C901, PLR0911, PLR0912
 _IDENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
-def _render_coord(coord: object) -> str:  # noqa: PLR0911
+def _render_coord(coord: object) -> str:  # ruff: ignore[too-many-return-statements]
     """Render an ``AxisIndex.coord`` value for source-text unparsing.
 
     Integer-like coords render as bare integers, identifier-like coords render
@@ -807,7 +807,7 @@ def _unparse_binary(
     return _wrap(rendered, need=need_parens)
 
 
-def _unparse_ir(  # noqa: C901, PLR0911, PLR0912, PLR0914, PLR0915
+def _unparse_ir(  # ruff: ignore[complex-structure, too-many-return-statements, too-many-branches, too-many-locals, too-many-statements]
     expr: Expr,
     *,
     parent_prec: int,
@@ -1152,7 +1152,7 @@ def substitute(
     _invalid(detail=f"unsupported IR node in substitute: {type(expr).__name__}")
 
 
-def _map_children(expr: Expr, fn: Callable[[Expr], Expr]) -> Expr:  # noqa: PLR0911
+def _map_children(expr: Expr, fn: Callable[[Expr], Expr]) -> Expr:  # ruff: ignore[too-many-return-statements]
     if isinstance(expr, Apply):
         new_args = tuple(fn(arg) for arg in expr.args)
         if new_args == expr.args:
@@ -1288,7 +1288,7 @@ def _resolve_index(idx: AxisIndex, *, axis_names: frozenset[str]) -> AxisIndex:
     return AxisIndex(axis=idx.axis, coord=idx.coord, kind=kind)
 
 
-def resolve_axis_kinds(expr: Expr, *, axis_names: frozenset[str]) -> Expr:  # noqa: PLR0911
+def resolve_axis_kinds(expr: Expr, *, axis_names: frozenset[str]) -> Expr:  # ruff: ignore[too-many-return-statements]
     """Return a copy of ``expr`` with every ``AxisIndex.kind`` populated.
 
     Walks the IR tree and rewrites each :class:`AxisIndex` so its ``kind``

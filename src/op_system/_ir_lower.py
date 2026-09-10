@@ -101,7 +101,7 @@ def _name(ident: str) -> ast.Name:
 # ---------------------------------------------------------------------------
 
 
-def lower_subscript_to_buffer(  # noqa: C901
+def lower_subscript_to_buffer(  # ruff: ignore[complex-structure, too-many-arguments, too-many-branches, too-many-statements]
     sub: Subscript,
     *,
     src_axes: tuple[str, ...],
@@ -281,7 +281,7 @@ def _transpose(node: ast.expr, perm: tuple[int, ...]) -> ast.expr:
     )
 
 
-def _lower_shaped_param_subscript(  # noqa: C901, PLR0911, PLR0912, PLR0915
+def _lower_shaped_param_subscript(  # ruff: ignore[complex-structure, too-many-return-statements, too-many-branches, too-many-statements]
     sub: Subscript,
     *,
     src_axes: tuple[str, ...],
@@ -458,7 +458,7 @@ def _lower_shaped_param_subscript(  # noqa: C901, PLR0911, PLR0912, PLR0915
 # ---------------------------------------------------------------------------
 
 
-def _lower_history_op(  # noqa: PLR0913
+def _lower_history_op(  # ruff: ignore[too-many-arguments]
     expr: HistoryOp,
     *,
     target_axes: tuple[str, ...],
@@ -573,7 +573,7 @@ def _lower_history_op(  # noqa: PLR0913
     )
 
 
-def lower_to_vector_ast(  # noqa: PLR0913
+def lower_to_vector_ast(  # ruff: ignore[too-many-arguments]
     expr: Expr,
     *,
     target_axes: tuple[str, ...],
@@ -778,7 +778,7 @@ def _resolve_ordinal_range_filter(
     return tuple(range(lo_idx, hi_idx + 1))
 
 
-def _resolve_continuous_range_filter(  # noqa: C901
+def _resolve_continuous_range_filter(  # ruff: ignore[complex-structure]
     axis: str,
     declared: tuple[str, ...],
     filt: tuple[str, ...],
@@ -867,7 +867,7 @@ def _resolve_continuous_range_filter(  # noqa: C901
     return indices, tuple(sub_weights)
 
 
-def _lower_reduce(  # noqa: C901, PLR0912, PLR0913, PLR0914, PLR0915
+def _lower_reduce(  # ruff: ignore[complex-structure, too-many-branches, too-many-arguments, too-many-locals, too-many-statements]
     expr: Reduce,
     *,
     target_axes: tuple[str, ...],
@@ -1242,7 +1242,7 @@ def _binding_collides_with_free_index(
     return False
 
 
-def _rebind_subscript_indices(  # noqa: PLR0911
+def _rebind_subscript_indices(  # ruff: ignore[too-many-return-statements]
     expr: Expr,
     *,
     rebind: Mapping[str, str],
@@ -1309,7 +1309,7 @@ def _rebind_subscript_indices(  # noqa: PLR0911
     return expr
 
 
-def _lower_apply(  # noqa: PLR0913
+def _lower_apply(  # ruff: ignore[too-many-arguments]
     expr: Apply,
     *,
     target_axes: tuple[str, ...],

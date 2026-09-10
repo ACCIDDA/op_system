@@ -34,7 +34,7 @@ if TYPE_CHECKING:
     from op_system._normalize_ir import StateTemplate
 
 
-def _strip_axis_from_ir(  # noqa: C901, PLR0911
+def _strip_axis_from_ir(  # ruff: ignore[complex-structure, too-many-return-statements]
     expr: Expr,
     axis_name: str,
     shaped_param_axes: Mapping[str, tuple[str, ...]] | None = None,
@@ -140,7 +140,7 @@ def _strip_template(
         and with ``expanded_names`` narrowed to the reference slice.
     """
     # Lazy import avoids circular dependency at module level.
-    from op_system._normalize_ir import StateTemplate  # noqa: PLC0415
+    from op_system._normalize_ir import StateTemplate  # ruff: ignore[import-outside-top-level]
 
     if axis_name not in tpl.axes:
         return tpl
@@ -193,7 +193,7 @@ def _assign_offsets(templates: tuple[StateTemplate, ...]) -> tuple[StateTemplate
     return tuple(out)
 
 
-def strip_block_axis(rhs: NormalizedRhs, axis_name: str) -> NormalizedRhs:  # noqa: PLR0914
+def strip_block_axis(rhs: NormalizedRhs, axis_name: str) -> NormalizedRhs:  # ruff: ignore[too-many-locals]
     """Return a copy of *rhs* with *axis_name* removed.
 
     The stripped :class:`~op_system._normalize.NormalizedRhs` covers only

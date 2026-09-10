@@ -298,7 +298,7 @@ def normalize_rhs(spec: Mapping[str, Any] | None) -> NormalizedRhs:
     )
 
 
-def normalize_expr_rhs(spec: Mapping[str, Any]) -> ExprRhs:  # noqa: C901, PLR0914, PLR0915
+def normalize_expr_rhs(spec: Mapping[str, Any]) -> ExprRhs:  # ruff: ignore[complex-structure, too-many-locals, too-many-statements]
     """Normalize an expression-based RHS specification.
 
     Args:
@@ -510,7 +510,7 @@ def normalize_expr_rhs(spec: Mapping[str, Any]) -> ExprRhs:  # noqa: C901, PLR09
 # ---------------------------------------------------------------------------
 
 
-def _discover_pinned_token_masks(  # noqa: C901
+def _discover_pinned_token_masks(  # ruff: ignore[complex-structure]
     transitions_raw: list[Mapping[str, Any]],
     *,
     axis_lookup: dict[str, list[str]],
@@ -628,7 +628,7 @@ def _rate_references_alias(ir_rate_raw: Expr, alias_base_set: Collection[str]) -
     )
 
 
-def _rate_ir_for_combo(  # noqa: PLR0913
+def _rate_ir_for_combo(  # ruff: ignore[too-many-arguments]
     *,
     rate_key: tuple[str, ...],
     combo: tuple[str, ...],
@@ -648,7 +648,7 @@ def _rate_ir_for_combo(  # noqa: PLR0913
         is materialized lazily on memo miss and threaded back to the caller
         so it can be reused for subsequent renderings.
     """
-    from op_system._ir_expand import expand_reduce_pointwise  # noqa: PLC0415
+    from op_system._ir_expand import expand_reduce_pointwise  # ruff: ignore[import-outside-top-level]
 
     cached_rate_reduce = rate_ir_reduce_memo.get(rate_key)
     if cached_rate_reduce is None:
@@ -674,7 +674,7 @@ def _rate_ir_for_combo(  # noqa: PLR0913
     return cached_rate_reduce, cached_rate_full, assignment
 
 
-def _synthesize_template_uniform(  # noqa: PLR0913
+def _synthesize_template_uniform(  # ruff: ignore[too-many-arguments]
     *,
     frm_base: str,
     frm_tokens: list[Any],
@@ -707,7 +707,7 @@ def _synthesize_template_uniform(  # noqa: PLR0913
 
     Mutates ``d_ir_reduce``, ``d_ir_full``, and ``all_syms`` in place.
     """
-    from op_system._ir_expand import expand_reduce_pointwise  # noqa: PLC0415
+    from op_system._ir_expand import expand_reduce_pointwise  # ruff: ignore[import-outside-top-level]
 
     to_names_for_synthesis = set(
         _enumerate_template_cell_names(
@@ -803,7 +803,7 @@ def _synthesize_template_uniform(  # noqa: PLR0913
         d_ir_full[from_name].append(synth_neg_full)
 
 
-def _build_transition_equations_ir(  # noqa: C901, PLR0912, PLR0913, PLR0914, PLR0915
+def _build_transition_equations_ir(  # ruff: ignore[complex-structure, too-many-branches, too-many-arguments, too-many-locals, too-many-statements]
     transitions_raw: list[Mapping[str, Any]],
     *,
     state_set: set[str],
@@ -829,7 +829,7 @@ def _build_transition_equations_ir(  # noqa: C901, PLR0912, PLR0913, PLR0914, PL
     Raises:
         InvalidRhsSpecError: If any transition is invalid.
     """
-    from op_system._ir_expand import expand_reduce_pointwise  # noqa: PLC0415
+    from op_system._ir_expand import expand_reduce_pointwise  # ruff: ignore[import-outside-top-level]
 
     shaped = shaped_params or {}
     masks = mask_names or {}
@@ -862,7 +862,7 @@ def _build_transition_equations_ir(  # noqa: C901, PLR0912, PLR0913, PLR0914, PL
 
     old_limit = sys.getrecursionlimit()
     needed = max(old_limit, 10_000)
-    with _raise_recursion_limit(needed, old_limit):  # noqa: PLR1702
+    with _raise_recursion_limit(needed, old_limit):  # ruff: ignore[too-many-nested-blocks]
         for tr_idx, tr_map in enumerate(transitions_raw):
             tr_valid = _validate_transition_mapping(dict(tr_map), idx=tr_idx)
             to_s = _get_required_str(tr_valid, idx=tr_idx, key="to")
@@ -1319,7 +1319,7 @@ def _build_transition_equations_ir(  # noqa: C901, PLR0912, PLR0913, PLR0914, PL
     return equations_ir_pre, equations_ir_reduce_pre, transitions_expanded_out, all_syms
 
 
-def normalize_transitions_rhs(  # noqa: C901, PLR0912, PLR0914, PLR0915
+def normalize_transitions_rhs(  # ruff: ignore[complex-structure, too-many-branches, too-many-locals, too-many-statements]
     spec: Mapping[str, Any],
 ) -> TransitionsRhs:
     """Normalize a transition-based RHS specification (diagram/hazard semantics).

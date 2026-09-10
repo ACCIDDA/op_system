@@ -58,18 +58,18 @@ from .specs import (
 
 __version__ = version("op_system")
 
-SUPPORTED_RHS_KINDS: tuple[str, ...] = ("expr", "transitions")  # noqa: RUF067
-DEFAULT_ARRAY_BACKEND: Final[Literal["numpy", "jax"]] = "numpy"  # noqa: RUF067
+SUPPORTED_RHS_KINDS: tuple[str, ...] = ("expr", "transitions")  # ruff: ignore[non-empty-init-module]
+DEFAULT_ARRAY_BACKEND: Final[Literal["numpy", "jax"]] = "numpy"  # ruff: ignore[non-empty-init-module]
 
 # Reserved for forward compatibility
-EXPERIMENTAL_FEATURES: frozenset[str] = frozenset()  # noqa: RUF067
+EXPERIMENTAL_FEATURES: frozenset[str] = frozenset()  # ruff: ignore[non-empty-init-module]
 
 # -----------------------------------------------------------------------------
 # High-level public façade
 # -----------------------------------------------------------------------------
 
 
-def compile_spec(  # noqa: RUF067
+def compile_spec(  # ruff: ignore[non-empty-init-module]
     spec: dict[str, object],
     *,
     xp: object | None = None,

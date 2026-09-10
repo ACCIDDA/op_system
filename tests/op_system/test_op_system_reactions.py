@@ -468,15 +468,13 @@ def test_time_varying_rate_propensity_matches_deterministic() -> None:
     # (time=5, loc=3) grid -- values jump between t=1 and t=2, so t=1.5
     # below exercises genuine linear interpolation, not just an exact
     # grid-point lookup.
-    lam = np.array(
-        [
-            [0.1, 0.2, 0.3],
-            [0.1, 0.2, 0.3],
-            [0.5, 0.5, 0.5],
-            [0.5, 0.5, 0.5],
-            [0.5, 0.5, 0.5],
-        ]
-    )
+    lam = np.array([
+        [0.1, 0.2, 0.3],
+        [0.1, 0.2, 0.3],
+        [0.5, 0.5, 0.5],
+        [0.5, 0.5, 0.5],
+        [0.5, 0.5, 0.5],
+    ])
     got = np.asarray(expose.propensity_fn(1.5, y, lambda_import=lam))
 
     assert c.pytree_eval_fn is not None

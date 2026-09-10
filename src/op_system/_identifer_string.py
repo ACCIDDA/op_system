@@ -51,7 +51,7 @@ def _validate_identifier_string(value: str) -> str:
         Traceback (most recent call last):
             ...
         ValueError: IdentifierString must contain only alphanumerical characters and start with a letter.
-    """  # noqa: E501
+    """  # ruff: ignore[line-too-long]
     if not isinstance(value, str):
         msg = "IdentifierString must be a string."
         raise TypeError(msg)
@@ -100,4 +100,4 @@ Examples:
     identifier
     Value error, IdentifierString must not be empty. [...]
         For further information visit ...
-"""  # noqa: E501
+"""  # ruff: ignore[line-too-long]

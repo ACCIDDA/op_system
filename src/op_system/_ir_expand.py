@@ -150,7 +150,7 @@ def _expand_one_reduce(
     """
     # Late import to avoid a hard cycle: _normalize_ir imports _ir_expand
     # for its IR-build path.
-    from op_system._normalize_kernels import (  # noqa: PLC0415
+    from op_system._normalize_kernels import (  # ruff: ignore[import-outside-top-level]
         _build_apply_along_axis_options,
         _select_apply_along_kernel,
     )
@@ -217,7 +217,7 @@ def _expand_one_reduce(
     return Apply(op="+", args=tuple(terms))
 
 
-def _substitute_in_body(  # noqa: PLR0911, PLR0913
+def _substitute_in_body(  # ruff: ignore[too-many-return-statements, too-many-arguments]
     body: Expr,
     *,
     var_to_coord: Mapping[str, str],
@@ -304,7 +304,7 @@ def _substitute_in_body(  # noqa: PLR0911, PLR0913
     return body  # pragma: no cover - exhaustive over Expr union
 
 
-def _rewrite_subscript(  # noqa: C901, PLR0912, PLR0913, PLR0915
+def _rewrite_subscript(  # ruff: ignore[complex-structure, too-many-branches, too-many-arguments, too-many-statements]
     sub: Subscript,
     *,
     var_to_coord: Mapping[str, str],

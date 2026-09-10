@@ -39,13 +39,13 @@ class Array(Protocol):
     @property
     def dtype(self) -> object: ...
 
-    def __array_namespace__(  # noqa: PLW3201
+    def __array_namespace__(  # ruff: ignore[bad-dunder-method-name]
         self,
         *,
-        api_version: Any = None,  # noqa: ANN401
+        api_version: Any = None,  # ruff: ignore[any-type]
     ) -> object: ...
 
-    def item(self) -> Any: ...  # noqa: ANN401
+    def item(self) -> Any: ...  # ruff: ignore[any-type]
 
 
 __all__ = ["Array"]
