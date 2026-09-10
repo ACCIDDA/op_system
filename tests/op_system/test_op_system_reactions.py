@@ -277,6 +277,7 @@ def test_from_pinned_transition_metadata_and_propensity() -> None:
     # NOT be the bare rate, and must NOT include the vax="p"/"f" columns.
     np.testing.assert_allclose(got, 0.02 * y["S"][:, 0])
 
+    assert c.pytree_eval_fn is not None
     dy = c.pytree_eval_fn(np.asarray(0.0), y, **params)
     expected_s = np.zeros_like(y["S"])
     expected_s[:, 0] = -got
@@ -323,6 +324,7 @@ def test_single_level_alias_reference_compiles_and_matches_deterministic() -> No
     expected = (0.5 * y["S"] + 1.0) * y["S"]
     np.testing.assert_allclose(got, expected)
 
+    assert c.pytree_eval_fn is not None
     dy = c.pytree_eval_fn(np.asarray(0.0), y, **params)
     np.testing.assert_allclose(dy["S"], -expected)
     np.testing.assert_allclose(dy["E"], expected)
