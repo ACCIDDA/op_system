@@ -540,7 +540,7 @@ def test_requested_parameters_excludes_synth_mask_constants() -> None:
     }
     sys = OpSystemSystem(spec=spec)
     # Sanity: the compiled spec actually synthesized at least one mask.
-    synth = sys._compiled_rhs.meta.get("op_system_synth_constants") or {}  # type: ignore[attr-defined]  # noqa: SLF001
+    synth = sys._compiled_rhs.meta.get("op_system_synth_constants") or {}  # type: ignore[attr-defined]  # ruff: ignore[private-member-access]
     assert synth, "expected pinned-coord mask synthesis for this spec"
     requested = set(sys.requested_parameters(AxisCollection()).keys())
     for name in synth:

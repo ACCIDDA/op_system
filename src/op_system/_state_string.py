@@ -7,7 +7,7 @@ from typing import Any, Final, TypedDict
 
 from pydantic import BaseModel, model_serializer, model_validator
 
-from op_system._identifer_string import IdentifierString  # noqa: TC001
+from op_system._identifer_string import IdentifierString  # ruff: ignore[typing-only-first-party-import]
 
 _STATE_STRING_RE: Final[re.Pattern[str]] = re.compile(
     r"^(?P<name>[A-Za-z][A-Za-z0-9]*)(?:\[(?P<dims>.*)\])?$"
@@ -56,7 +56,7 @@ class StateString(BaseModel, frozen=True, str_strip_whitespace=False):
 
     @model_validator(mode="before")
     @classmethod
-    def _parse_state_string(cls, value: Any) -> Any:  # noqa: ANN401
+    def _parse_state_string(cls, value: Any) -> Any:  # ruff: ignore[any-type]
         """
         Parse compact state-string input before model validation.
 
@@ -111,7 +111,7 @@ class StateString(BaseModel, frozen=True, str_strip_whitespace=False):
             Traceback (most recent call last):
                 ...
             ValueError: Invalid state string. Expected 'Name' or 'Name[dim1,dim2]' with no whitespace before '['.
-        """  # noqa: E501
+        """  # ruff: ignore[line-too-long]
         stripped_value = value.strip()
         match = _STATE_STRING_RE.fullmatch(stripped_value)
         if match is None:

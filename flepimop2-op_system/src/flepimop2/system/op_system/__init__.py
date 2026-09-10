@@ -71,7 +71,7 @@ class _AxesMeta(NamedTuple):
     axis_coords: dict[str, np.ndarray]
 
 
-class OpSystemSystem(SystemABC, module="flepimop2.system.op_system"):  # noqa: D101
+class OpSystemSystem(SystemABC, module="flepimop2.system.op_system"):  # ruff: ignore[undocumented-public-class]
     state_change: StateChangeEnum = StateChangeEnum.FLOW
 
     spec: dict[str, object] = Field(
@@ -80,7 +80,7 @@ class OpSystemSystem(SystemABC, module="flepimop2.system.op_system"):  # noqa: D
 
     model_config = ConfigDict(extra="allow")
 
-    def model_post_init(self, context: Any) -> None:  # noqa: ANN401
+    def model_post_init(self, context: Any) -> None:  # ruff: ignore[any-type]
         """Compile `op_system` specification and prepare stepper and shape helpers.
 
         The compiled ``eval_fn`` is **namespace-polymorphic**: it infers
@@ -242,7 +242,7 @@ class OpSystemSystem(SystemABC, module="flepimop2.system.op_system"):  # noqa: D
         def _stepper(
             time: np.float64,
             state: Float64NDArray,
-            **kwargs: Any,  # noqa: ANN401
+            **kwargs: Any,  # ruff: ignore[any-type]
         ) -> Float64NDArray:
             shape = getattr(state, "shape", None)
             if shape != (n_state,):
@@ -283,8 +283,8 @@ class OpSystemSystem(SystemABC, module="flepimop2.system.op_system"):  # noqa: D
             def _propensity(
                 time: np.float64,
                 state_dict: dict[str, Any],
-                **kwargs: Any,  # noqa: ANN401
-            ) -> Any:  # noqa: ANN401
+                **kwargs: Any,  # ruff: ignore[any-type]
+            ) -> Any:  # ruff: ignore[any-type]
                 params = OpSystemSystem._merged_params(mixing_kernels, kwargs)
                 return propensity_fn(time, state_dict, **params)
 
@@ -310,7 +310,7 @@ class OpSystemSystem(SystemABC, module="flepimop2.system.op_system"):  # noqa: D
         def _stepper_pytree(
             time: np.float64,
             state_dict: dict[str, Any],
-            **kwargs: Any,  # noqa: ANN401
+            **kwargs: Any,  # ruff: ignore[any-type]
         ) -> dict[str, Any]:
             params = OpSystemSystem._merged_params(mixing_kernels, kwargs)
             return pytree_eval_fn(time, state_dict, **params)
@@ -335,7 +335,7 @@ class OpSystemSystem(SystemABC, module="flepimop2.system.op_system"):  # noqa: D
         def _stepper_block_pytree(
             time: np.float64,
             state_dict: dict[str, Any],
-            **kwargs: Any,  # noqa: ANN401
+            **kwargs: Any,  # ruff: ignore[any-type]
         ) -> dict[str, Any]:
             params = OpSystemSystem._merged_params(mixing_kernels, kwargs)
             return block_pytree_eval_fn(time, state_dict, **params)
@@ -362,7 +362,7 @@ class OpSystemSystem(SystemABC, module="flepimop2.system.op_system"):  # noqa: D
             state_dict: dict[str, Any],
             *,
             history_provider: object,
-            **kwargs: Any,  # noqa: ANN401
+            **kwargs: Any,  # ruff: ignore[any-type]
         ) -> dict[str, Any]:
             params = OpSystemSystem._merged_params(mixing_kernels, kwargs)
             return history_eval_fn(
@@ -392,7 +392,7 @@ class OpSystemSystem(SystemABC, module="flepimop2.system.op_system"):  # noqa: D
         def _stepper_body_eval(
             time: np.float64,
             state_dict: dict[str, Any],
-            **kwargs: Any,  # noqa: ANN401
+            **kwargs: Any,  # ruff: ignore[any-type]
         ) -> dict[int, object]:
             params = OpSystemSystem._merged_params(mixing_kernels, kwargs)
             return body_eval_fn(time, state_dict, **params)
@@ -419,7 +419,7 @@ class OpSystemSystem(SystemABC, module="flepimop2.system.op_system"):  # noqa: D
             state_dict: dict[str, Any],
             *,
             history_provider: object,
-            **kwargs: Any,  # noqa: ANN401
+            **kwargs: Any,  # ruff: ignore[any-type]
         ) -> dict[str, Any]:
             params = OpSystemSystem._merged_params(mixing_kernels, kwargs)
             return block_history_eval_fn(
@@ -449,7 +449,7 @@ class OpSystemSystem(SystemABC, module="flepimop2.system.op_system"):  # noqa: D
         def _stepper_block_body_eval(
             time: np.float64,
             state_dict: dict[str, Any],
-            **kwargs: Any,  # noqa: ANN401
+            **kwargs: Any,  # ruff: ignore[any-type]
         ) -> dict[int, object]:
             params = OpSystemSystem._merged_params(mixing_kernels, kwargs)
             return block_body_eval_fn(time, state_dict, **params)
@@ -489,7 +489,7 @@ class OpSystemSystem(SystemABC, module="flepimop2.system.op_system"):  # noqa: D
         return cast("SystemProtocol", bound)
 
     @override
-    def requested_parameters(  # noqa: C901, PLR0912
+    def requested_parameters(  # ruff: ignore[complex-structure, too-many-branches]
         self,
         axes: AxisCollection,
     ) -> dict[IdentifierString, ParameterRequest]:

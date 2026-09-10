@@ -280,7 +280,7 @@ def _inline_single_level_alias_refs(
     )
 
 
-def build_reaction_artifacts_ir(  # noqa: PLR0913, PLR0914
+def build_reaction_artifacts_ir(  # ruff: ignore[too-many-arguments, too-many-locals]
     transitions_raw: list[Mapping[str, Any]],
     *,
     axes: list[dict[str, Any]],
@@ -422,7 +422,7 @@ def build_reaction_artifacts_ir(  # noqa: PLR0913, PLR0914
             # references), so build indices from ALL of frm_tokens, not
             # just the wildcard subset.
             full_axes = tuple(tok.axis for tok in frm_tokens)
-            assert frm_base is not None  # noqa: S101  # narrows for mypy: not source_only here
+            assert frm_base is not None  # ruff: ignore[assert]  # narrows for mypy: not source_only here
             from_sub = Subscript(
                 name=frm_base,
                 indices=tuple(

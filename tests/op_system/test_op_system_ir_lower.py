@@ -28,11 +28,11 @@ from op_system._ir_lower import (
 )
 
 
-def _eval(expr: ast.expr, env: dict[str, Any]) -> Any:  # noqa: ANN401
+def _eval(expr: ast.expr, env: dict[str, Any]) -> Any:  # ruff: ignore[any-type]
     tree = ast.Expression(body=expr)
     ast.fix_missing_locations(tree)
     code = compile(tree, "<test>", "eval")
-    return eval(code, {"__builtins__": {}}, env)  # noqa: S307
+    return eval(code, {"__builtins__": {}}, env)  # ruff: ignore[suspicious-eval-usage]
 
 
 def _make_subscript(name: str, axes: tuple[str, ...]) -> Subscript:

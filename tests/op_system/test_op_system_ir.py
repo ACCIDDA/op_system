@@ -103,7 +103,7 @@ def _eval_ir_expr(expr: str, **env: object) -> object:
     tree = ast.Expression(body=ir_to_ast_expr(parse_expr_to_ir(expr)))
     ast.fix_missing_locations(tree)
     code = compile(tree, filename="<test_ir_to_ast>", mode="eval")
-    return eval(code, {"__builtins__": {}, **env})  # noqa: S307
+    return eval(code, {"__builtins__": {}, **env})  # ruff: ignore[suspicious-eval-usage]
 
 
 def test_ir_to_ast_expr_evaluates_arithmetic_equivalently() -> None:

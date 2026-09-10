@@ -321,7 +321,7 @@ def expand_inline_templates(
     return result
 
 
-def _expand_apply(  # noqa: PLR0913
+def _expand_apply(  # ruff: ignore[too-many-arguments]
     expr: Apply,
     *,
     assignment: Mapping[str, str],
@@ -346,7 +346,7 @@ def _expand_apply(  # noqa: PLR0913
     return Apply(op=expr.op, args=new_args)
 
 
-def _expand_reduce(  # noqa: PLR0913
+def _expand_reduce(  # ruff: ignore[too-many-arguments]
     expr: Reduce,
     *,
     assignment: Mapping[str, str],
@@ -382,7 +382,7 @@ def _expand_reduce(  # noqa: PLR0913
     )
 
 
-def _expand_history_op(  # noqa: PLR0913
+def _expand_history_op(  # ruff: ignore[too-many-arguments]
     expr: HistoryOp,
     *,
     assignment: Mapping[str, str],
@@ -594,7 +594,7 @@ def _detect_alias_cycle(
     return None
 
 
-def inline_aliases(  # noqa: C901, PLR0913
+def inline_aliases(  # ruff: ignore[complex-structure, too-many-arguments]
     expr: Expr,
     aliases: Mapping[str, Expr],
     *,

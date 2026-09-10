@@ -314,7 +314,7 @@ def _compile_cse_eq_groups(
     return eq_groups
 
 
-def _try_ir_fast_path(  # noqa: PLR0913
+def _try_ir_fast_path(  # ruff: ignore[too-many-arguments]
     expr_ir: Expr,
     *,
     target_axes: tuple[str, ...],
@@ -434,7 +434,7 @@ def _try_collapse_to_full_sum(
     )
 
 
-def _lower_multicell_sym_ir_to_ast(  # noqa: C901
+def _lower_multicell_sym_ir_to_ast(  # ruff: ignore[complex-structure]
     expr_ir: Expr,
     *,
     name_to_template: Mapping[str, _BufferTemplate],
@@ -508,7 +508,7 @@ def _lower_multicell_sym_ir_to_ast(  # noqa: C901
     return _lower(expr_ir)
 
 
-def _rewrite_cell_to_vector(  # noqa: PLR0913
+def _rewrite_cell_to_vector(  # ruff: ignore[too-many-arguments]
     *,
     expr_ir: Expr | None = None,
     expr_ir_reduce: Expr | None = None,
@@ -588,7 +588,7 @@ def _rewrite_cell_to_vector(  # noqa: PLR0913
 # ---------------------------------------------------------------------------
 
 
-def _try_cse_eq_plan(  # noqa: C901, PLR0911, PLR0912, PLR0913
+def _try_cse_eq_plan(  # ruff: ignore[complex-structure, too-many-return-statements, too-many-branches, too-many-arguments]
     *,
     state_buffers: list[_BufferTemplate],
     rhs: NormalizedRhs,
@@ -706,7 +706,7 @@ def _try_cse_eq_plan(  # noqa: C901, PLR0911, PLR0912, PLR0913
     return tuple(cse_codes_list), eq_groups
 
 
-def _vectorize_template_equations(  # noqa: C901, PLR0912, PLR0913, PLR0914, PLR0915
+def _vectorize_template_equations(  # ruff: ignore[complex-structure, too-many-branches, too-many-arguments, too-many-locals, too-many-statements]
     *,
     template: _BufferTemplate,
     equations: tuple[str, ...],
@@ -903,7 +903,7 @@ def build_vector_plan(rhs: NormalizedRhs) -> _VectorPlan | None:
     return _build_vector_plan_inner(rhs)
 
 
-def _build_vector_plan_inner(  # noqa: C901, PLR0911, PLR0912, PLR0914, PLR0915
+def _build_vector_plan_inner(  # ruff: ignore[complex-structure, too-many-return-statements, too-many-branches, too-many-locals, too-many-statements]
     rhs: NormalizedRhs,
 ) -> _VectorPlan | None:
     """Vectorized-plan construction body (see ``build_vector_plan``).
@@ -1148,7 +1148,7 @@ def _build_vector_plan_inner(  # noqa: C901, PLR0911, PLR0912, PLR0914, PLR0915
 # ---------------------------------------------------------------------------
 
 
-def make_vectorized_eval_fn(plan: _VectorPlan) -> EvalFn:  # noqa: C901, PLR0915
+def make_vectorized_eval_fn(plan: _VectorPlan) -> EvalFn:  # ruff: ignore[complex-structure, too-many-statements]
     """Return a namespace-polymorphic ``eval_fn(t, y, **params)`` driven by ``plan``.
 
     The compiled function infers its array namespace from the input ``y``
@@ -1175,7 +1175,7 @@ def make_vectorized_eval_fn(plan: _VectorPlan) -> EvalFn:  # noqa: C901, PLR0915
     # passed under the bare base name.
     extra_param_buffers = plan.extra_param_buffers
 
-    def eval_fn(t: object, y: object, **params: object) -> Float64Array:  # noqa: C901, PLR0912, PLR0914, PLR0915
+    def eval_fn(t: object, y: object, **params: object) -> Float64Array:  # ruff: ignore[complex-structure, too-many-branches, too-many-locals, too-many-statements]
         xp = _namespace_of(y)
         _check_numeric_dtype(xp, getattr(y, "dtype", None))
         y_arr = _validate_state_vector(y, n_state=n_state)
@@ -1220,7 +1220,7 @@ def make_vectorized_eval_fn(plan: _VectorPlan) -> EvalFn:  # noqa: C901, PLR0915
         # Eval alias buffers in declaration order.
         for base, code, shape in alias_codes:
             try:
-                val = eval(  # noqa: S307
+                val = eval(  # ruff: ignore[suspicious-eval-usage]
                     code, {"__builtins__": _SAFE_BUILTINS}, env
                 )
             except (NameError, ValueError, TypeError, ArithmeticError) as exc:
@@ -1240,7 +1240,7 @@ def make_vectorized_eval_fn(plan: _VectorPlan) -> EvalFn:  # noqa: C901, PLR0915
         # expressions referencing alias buffers (e.g. I_total_buf) resolve.
         for name, code in cse_codes:
             try:
-                val = eval(  # noqa: S307
+                val = eval(  # ruff: ignore[suspicious-eval-usage]
                     code, {"__builtins__": _SAFE_BUILTINS}, env
                 )
             except (NameError, ValueError, TypeError, ArithmeticError) as exc:
@@ -1254,7 +1254,7 @@ def make_vectorized_eval_fn(plan: _VectorPlan) -> EvalFn:  # noqa: C901, PLR0915
             bin_results: list[object] = []
             for code in grp.codes:
                 try:
-                    val = eval(  # noqa: S307
+                    val = eval(  # ruff: ignore[suspicious-eval-usage]
                         code, {"__builtins__": _SAFE_BUILTINS}, env
                     )
                 except (NameError, ValueError, TypeError, ArithmeticError) as exc:
@@ -1279,7 +1279,7 @@ def make_vectorized_eval_fn(plan: _VectorPlan) -> EvalFn:  # noqa: C901, PLR0915
     return eval_fn
 
 
-def make_pytree_eval_fn(plan: _VectorPlan) -> PytreeEvalFn:  # noqa: C901, PLR0915
+def make_pytree_eval_fn(plan: _VectorPlan) -> PytreeEvalFn:  # ruff: ignore[complex-structure, too-many-statements]
     """Return a namespace-polymorphic ``pytree_eval_fn(t, y_dict, **params)``.
 
     Like :func:`make_vectorized_eval_fn` but the state is passed and returned
@@ -1304,7 +1304,7 @@ def make_pytree_eval_fn(plan: _VectorPlan) -> PytreeEvalFn:  # noqa: C901, PLR09
     ]
     extra_param_buffers = plan.extra_param_buffers
 
-    def pytree_eval_fn(  # noqa: C901, PLR0912, PLR0915
+    def pytree_eval_fn(  # ruff: ignore[complex-structure, too-many-branches, too-many-statements]
         t: object, y: StateDict, **params: object
     ) -> StateDict:
         # Obtain the array namespace from the first state value.
@@ -1347,7 +1347,7 @@ def make_pytree_eval_fn(plan: _VectorPlan) -> PytreeEvalFn:  # noqa: C901, PLR09
         # Eval alias buffers (identical to flat path).
         for base, code, shape in alias_codes:
             try:
-                val = eval(  # noqa: S307
+                val = eval(  # ruff: ignore[suspicious-eval-usage]
                     code, {"__builtins__": _SAFE_BUILTINS}, env
                 )
             except (NameError, ValueError, TypeError, ArithmeticError) as exc:
@@ -1365,7 +1365,7 @@ def make_pytree_eval_fn(plan: _VectorPlan) -> PytreeEvalFn:  # noqa: C901, PLR09
         # Eval CSE temporaries (identical to flat path).
         for name, code in cse_codes:
             try:
-                val = eval(  # noqa: S307
+                val = eval(  # ruff: ignore[suspicious-eval-usage]
                     code, {"__builtins__": _SAFE_BUILTINS}, env
                 )
             except (NameError, ValueError, TypeError, ArithmeticError) as exc:
@@ -1379,7 +1379,7 @@ def make_pytree_eval_fn(plan: _VectorPlan) -> PytreeEvalFn:  # noqa: C901, PLR09
             bin_results: list[object] = []
             for code in grp.codes:
                 try:
-                    val = eval(  # noqa: S307
+                    val = eval(  # ruff: ignore[suspicious-eval-usage]
                         code, {"__builtins__": _SAFE_BUILTINS}, env
                     )
                 except (NameError, ValueError, TypeError, ArithmeticError) as exc:

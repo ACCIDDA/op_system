@@ -491,7 +491,7 @@ def _prepare_template_substitutions(
     return tuple(prepared_list)
 
 
-def _render_shaped_inline(  # noqa: PLR0913
+def _render_shaped_inline(  # ruff: ignore[too-many-arguments]
     inner_base: str,
     phs: list[str],
     *,

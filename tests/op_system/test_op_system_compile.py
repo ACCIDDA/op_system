@@ -19,7 +19,7 @@ Note:
 
 from __future__ import annotations
 
-import pickle  # noqa: S403
+import pickle  # ruff: ignore[suspicious-pickle-import]
 import re
 from dataclasses import replace
 from typing import TYPE_CHECKING
@@ -876,7 +876,7 @@ def test_compiledrhs_pickle_roundtrip_scalar_path(
 ) -> None:
     """A CompiledRhs from the scalar path round-trips through pickle."""
     blob = pickle.dumps(compiled_xy)
-    restored = pickle.loads(blob)  # noqa: S301
+    restored = pickle.loads(blob)  # ruff: ignore[suspicious-pickle-usage]
 
     assert isinstance(restored, CompiledRhs)
     assert restored.state_names == compiled_xy.state_names
@@ -902,7 +902,7 @@ def test_compiledrhs_pickle_roundtrip_vectorized_path() -> None:
     }
     cr = compile_rhs(normalize_rhs(spec))
     blob = pickle.dumps(cr)
-    restored = pickle.loads(blob)  # noqa: S301
+    restored = pickle.loads(blob)  # ruff: ignore[suspicious-pickle-usage]
 
     assert restored.state_names == cr.state_names
     y = np.array([99.0, 99.0, 1.0, 1.0], dtype=np.float64)
@@ -1121,5 +1121,5 @@ def test_template_shapes_preserved_after_pickle() -> None:
         },
     }
     cr = compile_rhs(normalize_rhs(spec))
-    restored = pickle.loads(pickle.dumps(cr))  # noqa: S301
+    restored = pickle.loads(pickle.dumps(cr))  # ruff: ignore[suspicious-pickle-usage]
     assert restored.template_shapes == cr.template_shapes

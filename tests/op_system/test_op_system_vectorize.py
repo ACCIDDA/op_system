@@ -591,7 +591,7 @@ def test_uniform_weight_chain_collapses_without_inlined_array() -> None:
     )
     # The constant factor 0.25 must survive somewhere in co_consts.
     assert any(
-        isinstance(c, float) and c == 0.25  # noqa: RUF069
+        isinstance(c, float) and c == 0.25  # ruff: ignore[float-equality-comparison]
         for c in code.co_consts
     ), f"expected 0.25 constant in co_consts, got {code.co_consts}"
 

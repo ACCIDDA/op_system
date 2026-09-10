@@ -105,7 +105,7 @@ _SHAPED_PARAM_BUILTIN_NAMES: frozenset[str] = frozenset({
 })
 
 
-def _scan_shaped_param_refs(  # noqa: C901, PLR0912
+def _scan_shaped_param_refs(  # ruff: ignore[complex-structure, too-many-branches]
     expressions: Iterable[str],
     *,
     name_blocklist: set[str],
@@ -577,7 +577,7 @@ def _collect_template_refs(
     expand into thousands of cells.
     """
     # Local import to avoid module-level cycles.
-    from op_system._ir import Apply, Reduce, Subscript, Sym  # noqa: PLC0415
+    from op_system._ir import Apply, Reduce, Subscript, Sym  # ruff: ignore[import-outside-top-level]
 
     stack: list[Expr] = [node]
     while stack:
@@ -591,7 +591,7 @@ def _collect_template_refs(
             stack.append(cur.body)
 
 
-def _parse_alias_body(  # noqa: PLR0913
+def _parse_alias_body(  # ruff: ignore[too-many-arguments]
     raw_name: str,
     expr_str: object,
     *,
@@ -614,7 +614,7 @@ def _parse_alias_body(  # noqa: PLR0913
     Raises:
         InvalidRhsSpecError: If ``expr_str`` is empty or fails to parse.
     """
-    from op_system._ir_expand import expand_reduce_pointwise  # noqa: PLC0415
+    from op_system._ir_expand import expand_reduce_pointwise  # ruff: ignore[import-outside-top-level]
 
     canonical_name = _normalize_bracket_key(raw_name)
     expr_s = expr_str.strip() if isinstance(expr_str, str) else ""
@@ -841,7 +841,7 @@ def _lookup_cell_expr(
     raise InvalidRhsSpecError(detail=f"Missing equation for state {cell!r}")
 
 
-def _build_equations_ir_from_raw(  # noqa: PLR0913
+def _build_equations_ir_from_raw(  # ruff: ignore[too-many-arguments]
     *,
     state_expanded: Sequence[str],
     equations_map: Mapping[str, Any],
@@ -860,7 +860,7 @@ def _build_equations_ir_from_raw(  # noqa: PLR0913
     Returns:
         ``(equations_ir, equations_ir_reduce, all_syms)``
     """
-    from op_system._ir_expand import expand_reduce_pointwise  # noqa: PLC0415
+    from op_system._ir_expand import expand_reduce_pointwise  # ruff: ignore[import-outside-top-level]
 
     cell_to_assignment: dict[str, dict[str, str]] = {}
     for variants in template_map.values():
