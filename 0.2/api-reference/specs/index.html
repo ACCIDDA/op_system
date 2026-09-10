@@ -1643,8 +1643,7 @@ as the union type when you need to accept both kinds.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/op_system/_normalize.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">301</span>
-<span class="normal">302</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">302</span>
 <span class="normal">303</span>
 <span class="normal">304</span>
 <span class="normal">305</span>
@@ -1847,7 +1846,8 @@ as the union type when you need to accept both kinds.</p>
 <span class="normal">502</span>
 <span class="normal">503</span>
 <span class="normal">504</span>
-<span class="normal">505</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">normalize_expr_rhs</span><span class="p">(</span><span class="n">spec</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">ExprRhs</span><span class="p">:</span>  <span class="c1"># ruff: ignore[complex-structure, too-many-locals, too-many-statements]</span>
+<span class="normal">505</span>
+<span class="normal">506</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">normalize_expr_rhs</span><span class="p">(</span><span class="n">spec</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">ExprRhs</span><span class="p">:</span>  <span class="c1"># ruff: ignore[complex-structure, too-many-locals, too-many-statements]</span>
 <span class="w">    </span><span class="sd">"""Normalize an expression-based RHS specification.</span>
 
 <span class="sd">    Args:</span>
@@ -2161,8 +2161,7 @@ as the union type when you need to accept both kinds.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/op_system/_normalize.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">271</span>
-<span class="normal">272</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">272</span>
 <span class="normal">273</span>
 <span class="normal">274</span>
 <span class="normal">275</span>
@@ -2188,7 +2187,8 @@ as the union type when you need to accept both kinds.</p>
 <span class="normal">295</span>
 <span class="normal">296</span>
 <span class="normal">297</span>
-<span class="normal">298</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">normalize_rhs</span><span class="p">(</span><span class="n">spec</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">NormalizedRhs</span><span class="p">:</span>
+<span class="normal">298</span>
+<span class="normal">299</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">normalize_rhs</span><span class="p">(</span><span class="n">spec</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">NormalizedRhs</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Normalize a RHS specification dict into a backend-facing representation.</span>
 
 <span class="sd">    Args:</span>
@@ -2288,8 +2288,7 @@ as the union type when you need to accept both kinds.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/op_system/_normalize.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1322</span>
-<span class="normal">1323</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1323</span>
 <span class="normal">1324</span>
 <span class="normal">1325</span>
 <span class="normal">1326</span>
@@ -2622,7 +2621,8 @@ as the union type when you need to accept both kinds.</p>
 <span class="normal">1653</span>
 <span class="normal">1654</span>
 <span class="normal">1655</span>
-<span class="normal">1656</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">normalize_transitions_rhs</span><span class="p">(</span>  <span class="c1"># ruff: ignore[complex-structure, too-many-branches, too-many-locals, too-many-statements]</span>
+<span class="normal">1656</span>
+<span class="normal">1657</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">normalize_transitions_rhs</span><span class="p">(</span>  <span class="c1"># ruff: ignore[complex-structure, too-many-branches, too-many-locals, too-many-statements]</span>
     <span class="n">spec</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TransitionsRhs</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Normalize a transition-based RHS specification (diagram/hazard semantics).</span>
@@ -2855,7 +2855,7 @@ as the union type when you need to accept both kinds.</p>
     <span class="c1"># term-by-term with a shared ``result_memo`` keyed on ``id(term)``</span>
     <span class="c1"># collapses the alias-substitution work from O(n_state) to</span>
     <span class="c1"># O(n_unique_terms) (issue #145).</span>
-    <span class="n">alias_inline_memo</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">frozenset</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="n">alias_inline_memo</span> <span class="o">=</span> <span class="n">_InlineMemo</span><span class="p">()</span>
     <span class="n">alias_inline_result_memo</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">Expr</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_inline_one</span><span class="p">(</span><span class="n">expr</span><span class="p">:</span> <span class="n">Expr</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Expr</span><span class="p">:</span>
