@@ -705,3 +705,126 @@ def test_alias_reference_pinned_to_a_literal_coord() -> None:
     np.testing.assert_allclose(
         np.asarray(c.pytree_eval_fn(0.0, y, beta=0.5)["E"]), expected
     )
+
+
+def _reconstruct_rhs(
+    compiled: object, rhs: object, y: dict[str, np.ndarray], **params: object
+) -> dict[str, np.ndarray]:
+    """Sum every compiled reaction back into per-state rates.
+
+    Applies each reaction exactly as a CTMC consumer would: deplete
+    ``from_base`` at ``from_pinned``, sum the firing counts over
+    ``sum_axes``, and scatter into ``to_base`` at ``pinned``. The result
+    must equal the deterministic RHS -- that equality is the contract the
+    reaction artifact exists to provide, and the thing a stochastic run
+    silently violates if the propensities drift.
+
+    Returns:
+        Mapping from state base name to its reconstructed ``d/dt``.
+    """
+    template_axes = {t.base: t.axes for t in rhs.state_templates}  # type: ignore[attr-defined]
+    out = {name: np.zeros_like(buf) for name, buf in y.items()}
+    for reaction in compiled.reactions:  # type: ignore[attr-defined]
+        propensity = np.asarray(reaction.propensity_fn(0.0, y, **params))
+        if reaction.from_base is not None:
+            from_pinned = dict(reaction.from_pinned)
+            out[reaction.from_base][
+                tuple(
+                    from_pinned.get(axis, slice(None))
+                    for axis in template_axes[reaction.from_base]
+                )
+            ] -= propensity
+        value, remaining = propensity, list(reaction.from_axes)
+        for axis in reaction.sum_axes:
+            value = value.sum(axis=remaining.index(axis))
+            remaining.remove(axis)
+        pinned = dict(reaction.pinned)
+        to_axes = template_axes[reaction.to_base]
+        perm = tuple(remaining.index(a) for a in to_axes if a not in pinned)
+        out[reaction.to_base][
+            tuple(pinned.get(axis, slice(None)) for axis in to_axes)
+        ] += np.transpose(value, perm) if perm else value
+    return out
+
+
+def test_reactions_reconstruct_the_deterministic_rhs() -> None:
+    """Every compiled reaction, summed, equals ``pytree_eval_fn``.
+
+    Exercises the shapes that differ between the two paths at once: a
+    multi-level alias chain in a rate, a cross-``loc`` reduction, a
+    from-side pin, a collapse-to-a-pinned-target with a summed axis, and
+    a source-only transition.
+    """
+    spec: dict[str, object] = {
+        "kind": "transitions",
+        "axes": [
+            {"name": "age", "coords": ["a0", "a1"]},
+            {"name": "vax", "coords": ["u", "f"]},
+            {"name": "loc", "coords": ["d0", "d1", "d2"]},
+        ],
+        "state": ["S[age,vax,loc]", "E[age,vax,loc]", "I[age,vax,loc]"],
+        "aliases": {
+            "trv[vax]": "tr[vax]",
+            "infected[loc]": (
+                "apply_along(apply_along("
+                "I[age:a, vax:v, loc] * (1.0 - trv[v]), vax=v), age=a)"
+            ),
+            "pressure[loc]": "apply_along(w[loc, loc:lp] * infected[loc:lp], loc=lp)",
+            "foi[age, loc]": "beta * pressure[loc]",
+        },
+        "transitions": [
+            {
+                "name": "expose",
+                "from": "S[age,vax,loc]",
+                "to": "E[age,vax,loc]",
+                "rate": "foi[age, loc]",
+            },
+            {
+                "name": "infect",
+                "from": "E[age,vax,loc]",
+                "to": "I[age,vax,loc]",
+                "rate": "tau",
+            },
+            {
+                "name": "vaccinate",
+                "from": "S[age,vax=u,loc]",
+                "to": "S[age,vax=f,loc]",
+                "rate": "nu",
+            },
+            {
+                "name": "recover",
+                "from": "I[age,vax,loc]",
+                "to": "S[age,vax=f,loc]",
+                "rate": "gamma",
+            },
+            {"name": "seed", "to": "E[age,vax,loc]", "rate": "imp"},
+        ],
+    }
+    compiled = compile_spec(spec)
+    rhs = normalize_transitions_rhs(spec)
+    assert {r.name for r in compiled.reactions} == {
+        "expose",
+        "infect",
+        "vaccinate",
+        "recover",
+        "seed",
+    }
+
+    rng = np.random.default_rng(11)
+    y = {n: rng.uniform(1.0, 40.0, size=(2, 2, 3)) for n in ("S", "E", "I")}
+    params: dict[str, object] = {
+        "tr": np.array([0.0, 0.4]),
+        "w": rng.uniform(size=(3, 3)),
+        "beta": 0.3,
+        "tau": 0.2,
+        "nu": 0.05,
+        "gamma": 0.1,
+        "imp": 0.01,
+    }
+    assert compiled.pytree_eval_fn is not None
+    expected = compiled.pytree_eval_fn(0.0, y, **params)
+    got = _reconstruct_rhs(compiled, rhs, y, **params)
+    for name in sorted(expected):
+        np.testing.assert_allclose(
+            got[name], np.asarray(expected[name]), atol=0.0, rtol=0.0
+        )
