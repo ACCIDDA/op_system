@@ -15,6 +15,7 @@ from op_system._ir import (
     parse_expr_to_ir,
 )
 from op_system._ir_templates import (
+    _ExpandResultMemo,
     _InlineMemo,
     expand_inline_templates,
     expand_over_axes,
@@ -377,3 +378,39 @@ def test_shared_memo_survives_intermediate_tree_id_reuse() -> None:
         )
         residual = free_symbols(out) & set(aliases)
         assert not residual, f"lvl3_{i} left un-inlined: {sorted(residual)}"
+
+
+def test_expand_result_memo_rejects_an_entry_computed_for_another_node() -> None:
+    """A cache entry is reused only for the exact node it was computed for.
+
+    The key embeds ``id(node)``, which is unique only among live objects.
+    Retaining the node makes reuse of its address impossible, and the
+    identity re-check makes a hit for anything else impossible too --
+    without which a stale entry would be returned as a silently wrong
+    expansion rather than any kind of error (issue #200).
+    """
+    expr = parse_expr_to_ir("S[age] + 2.0 * S[age]")
+    assignment = {"age": "0_5"}
+    memo: _ExpandResultMemo = {}
+    expected = expand_inline_templates(
+        expr,
+        assignment=assignment,
+        axis_lookup=AXIS_LOOKUP,
+        _free_axes_memo={},
+        _expand_result_memo=memo,
+    )
+    assert memo, "expansion populated no cache entries to poison"
+
+    # Same keys, but every entry now claims to belong to a different node
+    # and carries a result that would be obviously wrong if returned.
+    poisoned: _ExpandResultMemo = {
+        key: (Sym(name="unrelated"), Literal(value=-999.0)) for key in memo
+    }
+    again = expand_inline_templates(
+        expr,
+        assignment=assignment,
+        axis_lookup=AXIS_LOOKUP,
+        _free_axes_memo={},
+        _expand_result_memo=poisoned,
+    )
+    assert again == expected

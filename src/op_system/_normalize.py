@@ -1553,6 +1553,10 @@ def normalize_transitions_rhs(  # ruff: ignore[complex-structure, too-many-branc
     # term-by-term with a shared ``result_memo`` keyed on ``id(term)``
     # collapses the alias-substitution work from O(n_state) to
     # O(n_unique_terms) (issue #145).
+    # Both memos key ``id()`` of terms owned by ``equations_ir_pre_inline``,
+    # which outlives them -- the invariant that makes an identity key sound
+    # (issue #200). Passing a freshly-built expression to either would
+    # silently return another expression's inlined result.
     alias_inline_memo = _InlineMemo()
     alias_inline_result_memo: dict[int, Expr] = {}
 

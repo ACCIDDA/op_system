@@ -23,6 +23,7 @@ from op_system._errors import InvalidRhsSpecError
 from op_system._ir import Expr, free_symbols, parse_expr_to_ir, unparse_ir
 from op_system._ir_templates import (
     _detect_alias_cycle,
+    _ExpandResultMemo,
     _InlineMemo,
     expand_inline_templates,
     inline_aliases,
@@ -684,8 +685,8 @@ def _parse_alias_body(  # ruff: ignore[too-many-arguments]
     # (issue #147).
     fa_raw_memo: dict[int, frozenset[str]] = {}
     fa_full_memo: dict[int, frozenset[str]] = {}
-    fa_raw_result_memo: dict[tuple[object, ...], Expr] = {}
-    fa_full_result_memo: dict[tuple[object, ...], Expr] = {}
+    fa_raw_result_memo: _ExpandResultMemo = {}
+    fa_full_result_memo: _ExpandResultMemo = {}
     for expanded_name, assignment in alias_template_map[canonical_name]:
         reduce_parsed[expanded_name] = expand_inline_templates(
             ir_raw,

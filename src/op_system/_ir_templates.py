@@ -22,7 +22,7 @@ template expansion in ``_normalize.py``.
 from __future__ import annotations
 
 from itertools import product
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypeAlias
 
 from ._ir import (
     Apply,
@@ -42,13 +42,14 @@ if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping, Sequence
 
 
-# Identity-keyed cache mapping ``id(aliases)`` -> ``(aliases, body_refs)``.
-# Many ``inline_aliases`` calls in batch passes share the same ``aliases``
-# mapping, and the ``body_refs`` precomputation is the dominant non-substitute
-# cost (free_symbols over each large alias body). Cache by identity but also
-# store the dict object so we can defensively guard against ``id()`` reuse
-# across distinct ``aliases`` instances (issue #145).
-_BODY_REFS_CACHE: dict[int, tuple[Mapping[str, Expr], dict[str, frozenset[str]]]] = {}
+#: Result cache for :func:`expand_inline_templates`, mapping a cache key to
+#: ``(key node, expanded result)``. Storing the node the entry was computed
+#: for is what makes an ``id()``-based key safe: it cannot be freed while
+#: the entry lives, so no later node can reuse its address, and the
+#: identity re-check catches any other way two keys could collide. A bare
+#: result here would be returned for the wrong node silently -- wrong
+#: equations, not a compile error (issue #200).
+_ExpandResultMemo: TypeAlias = dict[tuple[object, ...], tuple[Expr, Expr]]
 
 
 def _expandable_axes(indices: Sequence[AxisIndex]) -> list[str] | None:
@@ -199,7 +200,7 @@ def expand_inline_templates(
     shaped_params: Mapping[str, tuple[str, ...]] | None = None,
     axis_lookup: Mapping[str, Sequence[str]] | None = None,
     _free_axes_memo: dict[int, frozenset[str]] | None = None,
-    _expand_result_memo: dict[tuple[object, ...], Expr] | None = None,
+    _expand_result_memo: _ExpandResultMemo | None = None,
 ) -> Expr:
     """Expand placeholder subscripts in ``expr`` using ``assignment``.
 
@@ -230,7 +231,9 @@ def expand_inline_templates(
             subtrees when only a "thin" LHS axis (e.g. ``loc`` in
             ``foi[age, loc]``) changes between cells (issue #147).
             Caller-owned; pass an empty dict to enable.  Must NOT be
-            shared across calls with a different root template.
+            shared across calls with a different root template.  Each
+            entry stores the node it was computed for and is only reused
+            for that same object -- see :data:`_ExpandResultMemo`.
 
     Returns:
         A new IR expression with templated subscripts expanded. Subscripts
@@ -282,8 +285,8 @@ def expand_inline_templates(
             *sorted((k, assignment[k]) for k in relevant),
         )
         cached_result = _expand_result_memo.get(cache_key)
-        if cached_result is not None:
-            return cached_result
+        if cached_result is not None and cached_result[0] is expr:
+            return cached_result[1]
     else:
         cache_key = ()
     if isinstance(expr, Apply):
@@ -317,7 +320,7 @@ def expand_inline_templates(
         msg = f"unsupported IR node in expand_inline_templates: {type(expr).__name__}"
         raise TypeError(msg)
     if _expand_result_memo is not None and cache_key:
-        _expand_result_memo[cache_key] = result
+        _expand_result_memo[cache_key] = (expr, result)
     return result
 
 
@@ -328,7 +331,7 @@ def _expand_apply(  # ruff: ignore[too-many-arguments]
     shaped_params: Mapping[str, tuple[str, ...]],
     axis_lookup: Mapping[str, Sequence[str]] | None,
     free_axes_memo: dict[int, frozenset[str]] | None,
-    expand_result_memo: dict[tuple[object, ...], Expr] | None = None,
+    expand_result_memo: _ExpandResultMemo | None = None,
 ) -> Expr:
     new_args = tuple(
         expand_inline_templates(
@@ -353,7 +356,7 @@ def _expand_reduce(  # ruff: ignore[too-many-arguments]
     shaped_params: Mapping[str, tuple[str, ...]],
     axis_lookup: Mapping[str, Sequence[str]] | None,
     free_axes_memo: dict[int, frozenset[str]] | None,
-    expand_result_memo: dict[tuple[object, ...], Expr] | None = None,
+    expand_result_memo: _ExpandResultMemo | None = None,
 ) -> Expr:
     # Reduce bindings shadow outer names: a bound name in this
     # scope should not be substituted from the outer assignment.
@@ -389,7 +392,7 @@ def _expand_history_op(  # ruff: ignore[too-many-arguments]
     shaped_params: Mapping[str, tuple[str, ...]],
     axis_lookup: Mapping[str, Sequence[str]] | None,
     free_axes_memo: dict[int, frozenset[str]] | None,
-    expand_result_memo: dict[tuple[object, ...], Expr] | None = None,
+    expand_result_memo: _ExpandResultMemo | None = None,
 ) -> Expr:
     new_body = expand_inline_templates(
         expr.body,
@@ -572,15 +575,40 @@ class _InlineMemo(dict[int, frozenset[str]]):  # ruff: ignore[subclass-builtin]
     :func:`inline_aliases` calls should be an ``_InlineMemo``.
     """
 
-    __slots__ = ("_retained",)
+    __slots__ = ("_body_refs", "_retained")
 
     def __init__(self) -> None:
         super().__init__()
         self._retained: list[Expr] = []
+        self._body_refs: tuple[Mapping[str, Expr], dict[str, frozenset[str]]] | None = (
+            None
+        )
 
     def retain(self, expr: Expr) -> None:
         """Keep ``expr`` alive for the remaining lifetime of this memo."""
         self._retained.append(expr)
+
+    def body_refs_for(self, aliases: Mapping[str, Expr]) -> dict[str, frozenset[str]]:
+        """Return this batch's cross-reference cache for ``aliases``.
+
+        Which alias names each alias body references is the dominant
+        non-substitute cost of :func:`inline_aliases`, and batch passes
+        call it many times against one mapping -- so the result is worth
+        caching across calls, but only for as long as that batch runs.
+        Hanging it on the memo gives it exactly that lifetime; it used to
+        live in a module-level dict keyed by ``id(aliases)``, which never
+        evicted and so pinned every alias mapping any compile had ever
+        seen (issue #200).
+
+        Returns:
+            A dict cache, empty on first use, shared by every call that
+            passes this memo and the same ``aliases`` mapping.
+        """
+        entry = self._body_refs
+        if entry is None or entry[0] is not aliases:
+            entry = (aliases, {})
+            self._body_refs = entry
+        return entry[1]
 
 
 def _detect_alias_cycle(
@@ -672,6 +700,12 @@ def inline_aliases(  # ruff: ignore[complex-structure, too-many-arguments]
             many times against the same ``aliases`` (e.g. one template's
             synthesized IR shared across many state cells), pass a
             single dict to amortize the substitution work across calls.
+            Keys the ROOT passed in, which every caller holds for the
+            cache's whole lifetime (in ``parsed`` /
+            ``equations_ir_pre_inline``) -- that is what keeps an
+            ``id()`` key sound here, and a caller that ever passes a
+            freshly-built root instead would silently get another
+            expression's result back (issue #200).
 
     Returns:
         A new IR expression with all alias references resolved.
@@ -701,9 +735,10 @@ def inline_aliases(  # ruff: ignore[complex-structure, too-many-arguments]
     # entries over the just-inlined names, so we never need to re-walk the
     # substituted expression with ``free_symbols`` (which on large inlined
     # bodies dominates inline cost when many equations share one alias).
-    # Cache by ``id(aliases)`` so batch-inlining many expressions against the
+    # Cached on the memo so batch-inlining many expressions against the
     # same alias mapping pays this O(|aliases| * body_size) cost only once
-    # rather than once per call (issue #145).
+    # rather than once per call (issue #145), while still being released
+    # when the batch ends (issue #200).
     #
     # The precompute is LAZY: ``body_refs`` is built one alias at a time,
     # only for aliases that actually appear in the expression being inlined
@@ -711,12 +746,11 @@ def inline_aliases(  # ruff: ignore[complex-structure, too-many-arguments]
     # alias OOMs on continuum specs where ``aliases`` has O(thousands) of
     # per-cell entries, even when the expression being inlined references
     # only one of them (issue #147 followup).
-    cached_refs = _BODY_REFS_CACHE.get(id(aliases))
-    if cached_refs is None or cached_refs[0] is not aliases:
-        body_refs: dict[str, frozenset[str]] = {}
-        _BODY_REFS_CACHE[id(aliases)] = (aliases, body_refs)
-    else:
-        body_refs = cached_refs[1]
+    body_refs = (
+        memo.body_refs_for(aliases)
+        if isinstance(memo, _InlineMemo)
+        else {}  # plain-dict memo: correct, just unshared across calls
+    )
 
     def _refs_for(name: str) -> frozenset[str]:
         cached = body_refs.get(name)
