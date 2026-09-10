@@ -2622,7 +2622,11 @@ as the union type when you need to accept both kinds.</p>
 <span class="normal">1654</span>
 <span class="normal">1655</span>
 <span class="normal">1656</span>
-<span class="normal">1657</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">normalize_transitions_rhs</span><span class="p">(</span>  <span class="c1"># ruff: ignore[complex-structure, too-many-branches, too-many-locals, too-many-statements]</span>
+<span class="normal">1657</span>
+<span class="normal">1658</span>
+<span class="normal">1659</span>
+<span class="normal">1660</span>
+<span class="normal">1661</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">normalize_transitions_rhs</span><span class="p">(</span>  <span class="c1"># ruff: ignore[complex-structure, too-many-branches, too-many-locals, too-many-statements]</span>
     <span class="n">spec</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TransitionsRhs</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Normalize a transition-based RHS specification (diagram/hazard semantics).</span>
@@ -2855,6 +2859,10 @@ as the union type when you need to accept both kinds.</p>
     <span class="c1"># term-by-term with a shared ``result_memo`` keyed on ``id(term)``</span>
     <span class="c1"># collapses the alias-substitution work from O(n_state) to</span>
     <span class="c1"># O(n_unique_terms) (issue #145).</span>
+    <span class="c1"># Both memos key ``id()`` of terms owned by ``equations_ir_pre_inline``,</span>
+    <span class="c1"># which outlives them -- the invariant that makes an identity key sound</span>
+    <span class="c1"># (issue #200). Passing a freshly-built expression to either would</span>
+    <span class="c1"># silently return another expression's inlined result.</span>
     <span class="n">alias_inline_memo</span> <span class="o">=</span> <span class="n">_InlineMemo</span><span class="p">()</span>
     <span class="n">alias_inline_result_memo</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">Expr</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
 
