@@ -163,7 +163,8 @@ def _parameters(rhs: NormalizedRhs) -> dict[str, tuple[str, ...]]:
                 parameters[value] = tuple(
                     declared.get(value, parameters.get(value, ()))
                 )
-    return parameters
+    # Coordinate masks are synthesized by normalization, not supplied.
+    return {k: v for k, v in parameters.items() if not k.startswith("__op_system_")}
 
 
 def validate_spec(spec: Mapping[str, Any]) -> ValidationReport:
