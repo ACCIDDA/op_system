@@ -86,6 +86,9 @@ version; format loosely follows
 
 ### Fixed
 
+- `OperatorDescriptor` now preserves normalized operator names, expanded
+  `apply_to` state selections, jump directions, and symbolic or numeric
+  velocity/rate coefficients instead of silently dropping them (#210).
 - Several axis-handling edge cases: continuous-axis coordinate lookups,
   shaped-parameter subscript vectorization, bare axis-label binding
   variables in `apply_along` bodies, and reduced-target axis preservation

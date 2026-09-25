@@ -87,7 +87,7 @@ The compiled object exposes:
 | `factorize_axes`, `block_axes` | Axes the IR proved separable for block vmap. |
 | `block_pytree_eval_fn`, `block_template_shapes` | Per-block PyTree RHS with the first factorize axis stripped. |
 | `meta` | Normalized metadata (axes, state_axes, kernels, operators, reserved blocks). |
-| `operators` | Tuple of `OperatorDescriptor` (e.g. advection terms). |
+| `operators` | Tuple of `OperatorDescriptor` preserving normalized names, state selectors, coefficients, directions, boundary conditions, and kernel metadata. |
 
 `compile_spec` accepts legacy `backend=` / `xp=` keyword arguments but they
 are deprecated and ignored — the compiled callable infers its array

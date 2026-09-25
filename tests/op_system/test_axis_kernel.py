@@ -49,12 +49,14 @@ TRANSFER_KERNEL: dict[str, Any] = {
 
 def test_valid_axis_kernel_specs_normalize_and_compile() -> None:
     """Generator and transfer kernels normalize, compile, and keep their form."""
-    for kernel, extra in ((GENERATOR_KERNEL, {"velocity": "w"}), (TRANSFER_KERNEL, {})):
+    for kernel, extra in ((GENERATOR_KERNEL, {"velocity": 0.5}), (TRANSFER_KERNEL, {})):
         compiled = compile_spec(_spec(kernel, **extra))
         (operator,) = compiled.operators
         assert operator.kind == "axis_kernel"
         assert operator.kernel is not None
         assert operator.kernel["form"] == kernel["form"]
+        if kernel["form"] == "generator":
+            assert operator.velocity == pytest.approx(0.5)
 
 
 @pytest.mark.parametrize(

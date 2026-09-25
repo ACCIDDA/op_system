@@ -1348,6 +1348,9 @@ def _parse_operator_descriptors(
             continue
         kind_raw = op.get("kind")
         bc_raw = op.get("bc")
+        name_raw = op.get("name")
+        apply_to_raw = op.get("apply_to")
+        direction_raw = op.get("direction")
         velocity_raw = op.get("velocity")
         rate_raw = op.get("rate")
         kernel_raw = op.get("kernel")
@@ -1356,14 +1359,38 @@ def _parse_operator_descriptors(
             if isinstance(kernel_raw, _MappingABC)
             else None
         )
+        apply_to = (
+            tuple(apply_to_raw)
+            if isinstance(apply_to_raw, (list, tuple))
+            and all(isinstance(name, str) for name in apply_to_raw)
+            else None
+        )
+        velocity = (
+            velocity_raw
+            if isinstance(velocity_raw, str)
+            else float(velocity_raw)
+            if isinstance(velocity_raw, (int, float))
+            and not isinstance(velocity_raw, bool)
+            else None
+        )
+        rate = (
+            rate_raw
+            if isinstance(rate_raw, str)
+            else float(rate_raw)
+            if isinstance(rate_raw, (int, float)) and not isinstance(rate_raw, bool)
+            else None
+        )
         result.append(
             OperatorDescriptor(
                 axis=axis_raw,
                 kind=kind_raw if isinstance(kind_raw, str) else None,
                 bc=bc_raw if isinstance(bc_raw, str) else None,
-                velocity=velocity_raw if isinstance(velocity_raw, str) else None,
-                rate=rate_raw if isinstance(rate_raw, str) else None,
+                velocity=velocity,
+                rate=rate,
                 kernel=kernel,
+                name=name_raw if isinstance(name_raw, str) else None,
+                apply_to=apply_to,
+                direction=direction_raw if isinstance(direction_raw, str) else None,
             )
         )
     return tuple(result)
