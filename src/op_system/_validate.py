@@ -17,7 +17,7 @@ from __future__ import annotations
 import ast
 from collections.abc import Mapping as _MappingABC
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, override
+from typing import TYPE_CHECKING, Any
 
 from op_system._errors import UnsupportedFeatureError
 
@@ -70,16 +70,14 @@ class ValidationReport:
 class _ShapeNormalizer(ast.NodeTransformer):
     """Replace cell-specific names and numeric literals with placeholders."""
 
-    @override
-    def visit_Name(self, node: ast.Name) -> ast.AST:
+    def visit_Name(self, node: ast.Name) -> ast.AST:  # ruff: ignore[no-self-use]
         if "__" in node.id:
             return ast.copy_location(
                 ast.Name(id=node.id.split("__")[0] + "[cell]"), node
             )
         return node
 
-    @override
-    def visit_Constant(self, node: ast.Constant) -> ast.AST:
+    def visit_Constant(self, node: ast.Constant) -> ast.AST:  # ruff: ignore[no-self-use]
         if isinstance(node.value, (int, float)):
             return ast.copy_location(ast.Constant(value=0), node)
         return node
