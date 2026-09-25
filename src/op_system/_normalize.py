@@ -1368,7 +1368,10 @@ def normalize_transitions_rhs(  # ruff: ignore[complex-structure, too-many-branc
     if transitions_raw is None:
         transitions_raw = []
     elif isinstance(transitions_raw, list):
-        transitions_raw = list(transitions_raw)
+        # Copy each entry: time-axis stripping rewrites rates in place.
+        transitions_raw = [
+            dict(tr) if isinstance(tr, _MappingABC) else tr for tr in transitions_raw
+        ]
     else:
         raise InvalidRhsSpecError(detail="transitions must be a list")
 
