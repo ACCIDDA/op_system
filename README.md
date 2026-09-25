@@ -178,6 +178,35 @@ continuous axes use trapezoidal weights derived from axis spacing
 (non-uniform supported).  Bindings can be restricted with
 `axis=var in [...]` for sub-range integration.
 
+### Routing transitions with `axis:alias`
+
+```yaml
+spec:
+  kind: transitions
+  axes:
+    - {name: vax, coords: [u, v]}
+    - {name: imm, type: ordinal, coords: [x0, x1, x2, x3]}
+  state: [X[vax, imm]]
+  transitions:
+    - from: X[vax, imm:i]            # waning along a generator G
+      to:   X[vax, imm:j]
+      rate: waning_rate * G[imm:i, imm:j]
+    - from: X[vax=u, imm:i]          # vaccination with routing weights eta
+      to:   X[vax=v, imm:j]
+      rate: nu * eta[time, imm:i, imm:j]
+```
+
+Binding the same axis under one alias in `from` and another in `to` moves
+mass along that axis with a matrix-valued per-capita rate:
+`dX_from[i] -= r X_from[i] sum_j K[i, j]` and
+`dX_to[j] += r sum_i K[i, j] X_from[i]`. The rate must reference both
+aliases on that axis; other axes are shared or pinned as usual. When
+`from` and `to` are otherwise the same slice, the diagonal `K[i, i]` is a
+no-op. One routed axis per transition; it cannot be a `factorize_axes`
+block axis. Routing is lowered once per template, so its cost does not grow
+with the number of matrix entries. It has no per-transition `reactions`
+artifact yet.
+
 ### Chain helper
 
 ```yaml
