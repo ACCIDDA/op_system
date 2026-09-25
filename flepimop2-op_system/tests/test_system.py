@@ -515,6 +515,30 @@ def test_requested_parameters_uses_operator_param_axes() -> None:
     assert requests["speed"].axes == ()
 
 
+def test_requested_parameters_rejects_malformed_param_axes() -> None:
+    """``kernel.param_axes`` must map names to lists of axis names."""
+    spec: dict[str, object] = {
+        "kind": "expr",
+        "axes": [{"name": "imm", "coords": ["x0", "x1"]}],
+        "state": ["u[imm]"],
+        "equations": {"u[imm]": "-u[imm]"},
+        "operators": [
+            {
+                "kind": "custom",
+                "axis": "imm",
+                "kernel": {
+                    "form": "custom",
+                    "params": {"generator": "gen"},
+                    "param_axes": {"gen": "imm"},
+                },
+            },
+        ],
+    }
+    sys = OpSystemSystem(spec=spec)
+    with pytest.raises(TypeError, match="list of axis names"):
+        sys.requested_parameters(AxisCollection())
+
+
 def test_requested_parameters_includes_initial_state_seeds() -> None:
     """Seed parameter names appear in requested_parameters even if absent from rates."""
     spec: dict[str, object] = {

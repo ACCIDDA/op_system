@@ -612,7 +612,15 @@ class OpSystemSystem(SystemABC, module="flepimop2.system.op_system"):  # ruff: i
         op: OperatorDescriptor,
         requests: dict[IdentifierString, ParameterRequest],
     ) -> None:
-        """Add velocity/rate/kernel-param names referenced by `op` to `requests`."""
+        """Add velocity/rate/kernel-param names referenced by `op` to `requests`.
+
+        Kernel parameters listed in ``kernel.param_axes`` are requested with
+        the declared axes; all other operator parameters are scalar requests.
+
+        Raises:
+            TypeError: If ``kernel.param_axes`` is not a mapping of parameter
+                names to lists of axis names.
+        """
         for value in (op.velocity, op.rate):
             if (
                 value is not None
@@ -632,7 +640,7 @@ class OpSystemSystem(SystemABC, module="flepimop2.system.op_system"):  # ruff: i
         param_axes = op.kernel.get("param_axes") or {}
         if not isinstance(param_axes, Mapping):
             msg = "operator kernel.param_axes must map parameter names to axis lists"
-            raise ValueError(msg)
+            raise TypeError(msg)
         for value in kernel_params.values():
             if (
                 isinstance(value, str)
@@ -642,7 +650,7 @@ class OpSystemSystem(SystemABC, module="flepimop2.system.op_system"):  # ruff: i
                 axes = param_axes.get(value, ())
                 if isinstance(axes, str) or not all(isinstance(a, str) for a in axes):
                     msg = f"kernel.param_axes[{value!r}] must be a list of axis names"
-                    raise ValueError(msg)
+                    raise TypeError(msg)
                 requests[value] = ParameterRequest(name=value, axes=tuple(axes))
 
     @override
