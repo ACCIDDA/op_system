@@ -27,7 +27,7 @@ from op_system._errors import UnsupportedFeatureError
 from op_system._ir import Apply, Literal, Reduce, Subscript, Sym
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from collections.abc import Mapping, Sequence
 
     from op_system._ir import Expr
     from op_system._normalize import NormalizedRhs
@@ -193,6 +193,20 @@ def _assign_offsets(templates: tuple[StateTemplate, ...]) -> tuple[StateTemplate
     return tuple(out)
 
 
+class _PickCell:
+    """Build a kept cell by reading ``source[index]``, optionally transformed."""
+
+    __slots__ = ("_source", "_transform")
+
+    def __init__(self, source: Sequence[Any], transform: Any) -> None:  # ruff: ignore[any-type]
+        self._source = source
+        self._transform = transform
+
+    def __call__(self, _position: int, index: int) -> Any:  # ruff: ignore[any-type]
+        value = self._source[index]
+        return value if self._transform is None else self._transform(value)
+
+
 def strip_block_axis(rhs: NormalizedRhs, axis_name: str) -> NormalizedRhs:  # ruff: ignore[too-many-locals]
     """Return a copy of *rhs* with *axis_name* removed.
 
@@ -309,10 +323,16 @@ def strip_block_axis(rhs: NormalizedRhs, axis_name: str) -> NormalizedRhs:  # ru
             return None
         return _strip_axis_from_ir(ir, axis_name, orig_shaped_param_axes)
 
-    new_equations = tuple(rhs.equations[i] for i in eq_keep_indices)
-    new_equations_ir = tuple(_maybe_strip(rhs.equations_ir[i]) for i in eq_keep_indices)
-    new_equations_ir_reduce = tuple(
-        _maybe_strip(rhs.equations_ir_reduce[i]) for i in eq_keep_indices
+    from op_system._normalize_ir import _LazyCells  # ruff: ignore[import-outside-top-level]
+
+    # Kept cells are picked (and stripped) lazily: the block vectorizer
+    # reads only a few cells, and stripping every expanded cell dominated
+    # compile time for large specs (#88).
+    keep = tuple(eq_keep_indices)
+    new_equations = _LazyCells(keep, _PickCell(rhs.equations, None))
+    new_equations_ir = _LazyCells(keep, _PickCell(rhs.equations_ir, _maybe_strip))
+    new_equations_ir_reduce = _LazyCells(
+        keep, _PickCell(rhs.equations_ir_reduce, _maybe_strip)
     )
 
     # ------------------------------------------------------------------

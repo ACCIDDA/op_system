@@ -26,7 +26,7 @@ import ast
 import math
 import os
 import sys
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from itertools import combinations as _comb
 from typing import TYPE_CHECKING, Any, cast
@@ -709,9 +709,9 @@ def _try_cse_eq_plan(  # ruff: ignore[complex-structure, too-many-return-stateme
 def _vectorize_template_equations(  # ruff: ignore[complex-structure, too-many-branches, too-many-arguments, too-many-locals, too-many-statements]
     *,
     template: _BufferTemplate,
-    equations: tuple[str, ...],
-    equations_ir: tuple[Expr | None, ...] | None = None,
-    equations_ir_reduce: tuple[Expr | None, ...] | None = None,
+    equations: Sequence[str],
+    equations_ir: Sequence[Expr | None] | None = None,
+    equations_ir_reduce: Sequence[Expr | None] | None = None,
     name_to_template: Mapping[str, _BufferTemplate],
     axis_index: Mapping[str, Mapping[str, int]],
     reducible_axes: frozenset[str] = frozenset(),
@@ -746,8 +746,7 @@ def _vectorize_template_equations(  # ruff: ignore[complex-structure, too-many-b
         plan, or ``None`` if no candidate succeeds.
     """
     size = math.prod(template.shape) if template.shape else 1
-    cell_exprs = equations[template.offset : template.offset + size]
-    if len(cell_exprs) != size or size == 0:
+    if size == 0 or template.offset + size > len(equations):
         return None
     cell_irs = (
         equations_ir[template.offset : template.offset + size]

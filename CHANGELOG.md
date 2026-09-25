@@ -30,6 +30,21 @@ version; format loosely follows
   expression shapes with an example cell. `python -m op_system.validate`
   applies it to bare specs or flepimop2 configurations (#205).
 
+### Changed
+
+- Normalization no longer expands every cell's reductions or renders every
+  cell's equation string eagerly. `NormalizedRhs.equations`,
+  `equations_ir`, and `equations_ir_reduce` may be lazy sequences, built
+  on first access, that index, iterate, compare, hash, and pickle like
+  tuples; their annotations are now `Sequence`. The first cell of each
+  distinct equation is still expanded during normalization, so template
+  errors surface as before. Block-axis stripping is lazy, and compile skips
+  the history-operator scan when the spec calls no history helpers
+  (`meta["op_system_may_have_history"]`). A routing reduction over 61 immune
+  coordinates now normalizes and compiles in 1.5 s instead of 15.1 s, and
+  the production COVID loc3 spec in 0.8 s instead of 15.2 s, with an
+  identical compiled right-hand side (#88, step 1).
+
 ## [0.2.0] - 2026-08-17
 
 ### Added

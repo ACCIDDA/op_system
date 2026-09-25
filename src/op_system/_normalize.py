@@ -26,6 +26,7 @@ compatibility.
 from __future__ import annotations
 
 import contextlib
+import re
 import sys
 from collections.abc import Mapping as _MappingABC
 from dataclasses import dataclass, field
@@ -78,6 +79,7 @@ from op_system._normalize_ir import (
     _build_state_templates,
     _derive_alias_strings,
     _derive_equation_strings,
+    _derive_equation_strings_lazy,
     _expand_state_templates,
     _partition_time_varying_shaped,
     _reject_legacy_time_varying_field,
@@ -127,7 +129,9 @@ class _RhsBase:
     """
 
     state_names: tuple[str, ...]
-    equations: tuple[str, ...]
+    # Per-cell sequences may be lazy (built on first access; #88). They
+    # index, iterate, compare, and pickle like tuples.
+    equations: Sequence[str]
     aliases: Mapping[str, str]
     param_names: tuple[str, ...]
     all_symbols: frozenset[str]
@@ -138,11 +142,11 @@ class _RhsBase:
     # Post-expansion, alias-inlined IR (Reduce nodes expanded).
     # Used by the scalar compile path (``compile.py._make_eval_fn``).
     aliases_ir: Mapping[str, Expr] = field(default_factory=dict)
-    equations_ir: tuple[Expr | None, ...] = ()
+    equations_ir: Sequence[Expr | None] = ()
     # Reduce-bearing IR (Reduce nodes preserved).
     # Used by the vector compile path (``_vectorize.py``).
     aliases_ir_reduce: Mapping[str, Expr] = field(default_factory=dict)
-    equations_ir_reduce: tuple[Expr | None, ...] = ()
+    equations_ir_reduce: Sequence[Expr | None] = ()
     alias_templates: tuple[StateTemplate, ...] = ()
 
 
@@ -269,6 +273,30 @@ def _normalize_common_meta(
 # ---------------------------------------------------------------------------
 
 
+_HISTORY_CALL = re.compile(r"\b(?:history|delay|convolve_history)\s*\(")
+
+
+def _may_have_history(spec: Mapping[str, Any]) -> bool:
+    """Return whether any string in the raw spec could call a history helper.
+
+    A conservative text check: a false positive only costs a full IR scan at
+    compile time, and a history operator can't appear without one of these
+    helper calls in the source (#88).
+    """
+    stack: list[object] = [spec]
+    while stack:
+        value = stack.pop()
+        if isinstance(value, str):
+            if _HISTORY_CALL.search(value):
+                return True
+        elif isinstance(value, _MappingABC):
+            stack.extend(value.keys())
+            stack.extend(value.values())
+        elif isinstance(value, (list, tuple)):
+            stack.extend(value)
+    return False
+
+
 def normalize_rhs(spec: Mapping[str, Any] | None) -> NormalizedRhs:
     """Normalize a RHS specification dict into a backend-facing representation.
 
@@ -336,6 +364,7 @@ def normalize_expr_rhs(spec: Mapping[str, Any]) -> ExprRhs:  # ruff: ignore[comp
         "kernels": meta_parts[2],
         "operators": meta_parts[3],
     }
+    meta["op_system_may_have_history"] = _may_have_history(spec)
     for reserved_key in ("sources", "couplings", "constraints"):
         if reserved_key in spec:
             meta[reserved_key] = spec.get(reserved_key)
@@ -462,7 +491,7 @@ def normalize_expr_rhs(spec: Mapping[str, Any]) -> ExprRhs:  # ruff: ignore[comp
     # bodies and equations (e.g. coord-pinned copies of the same
     # alias template body) are rendered only once (issue #145).
     unparse_memo: dict[tuple[int, int, bool], str] = {}
-    equations_strings = _derive_equation_strings(
+    equations_strings = _derive_equation_strings_lazy(
         equations_ir_built, _unparse_memo=unparse_memo
     )
     aliases_strings = _derive_alias_strings(
@@ -1359,6 +1388,7 @@ def normalize_transitions_rhs(  # ruff: ignore[complex-structure, too-many-branc
         "kernels": meta_parts[2],
         "operators": meta_parts[3],
     }
+    meta["op_system_may_have_history"] = _may_have_history(spec)
     meta.update({
         k: spec[k] for k in ("sources", "couplings", "constraints") if k in spec
     })
