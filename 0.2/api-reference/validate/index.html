@@ -8,8 +8,10 @@
       
       
       
-        <link rel="canonical" href="https://accidda.github.io/op_system/0.2/development/block-axis-vmap-plan/">
+        <link rel="canonical" href="https://accidda.github.io/op_system/0.2/api-reference/validate/">
       
+      
+        <link rel="prev" href="../specs/">
       
       
       
@@ -21,7 +23,7 @@
     
     
       
-        <title>Plan: jax.vmap over block-diagonal axes (factorize_axes) - op_system Documentation</title>
+        <title>Validate - op_system Documentation</title>
       
     
     
@@ -64,7 +66,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#plan-jaxvmap-over-block-diagonal-axes-factorize_axes" class="md-skip">
+        <a href="#validate" class="md-skip">
           Skip to content
         </a>
       
@@ -116,7 +118,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Plan: jax.vmap over block-diagonal axes (factorize_axes)
+              Validate
             
           </span>
         </div>
@@ -310,7 +312,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../code-style/" class="md-nav__link">
+      <a href="../../development/code-style/" class="md-nav__link">
         
   
   
@@ -338,7 +340,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../creating-a-release/" class="md-nav__link">
+      <a href="../../development/creating-a-release/" class="md-nav__link">
         
   
   
@@ -452,18 +454,20 @@
       
   
   
+    
   
   
+  
     
     
     
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" checked>
         
           
           <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
@@ -484,7 +488,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_4">
             <span class="md-nav__icon md-icon"></span>
             
@@ -502,7 +506,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../api-reference/op-system/" class="md-nav__link">
+      <a href="../op-system/" class="md-nav__link">
         
   
   
@@ -530,7 +534,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../api-reference/compile/" class="md-nav__link">
+      <a href="../compile/" class="md-nav__link">
         
   
   
@@ -558,7 +562,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../api-reference/specs/" class="md-nav__link">
+      <a href="../specs/" class="md-nav__link">
         
   
   
@@ -583,10 +587,37 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../../api-reference/validate/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Validate
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -602,6 +633,65 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#op_system.validate" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        validate
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="validate">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#op_system.validate.main" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        main
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#op_system.validate.specs_from_file" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        specs_from_file
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -641,44 +731,22 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#1-whats-already-true-today" class="md-nav__link">
+  <a href="#op_system.validate" class="md-nav__link">
     <span class="md-ellipsis">
       
-        1. What's already true today
+        validate
       
     </span>
   </a>
   
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#2-concept-and-contract" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        2. Concept and contract
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#3-plan-by-layer" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        3. Plan, by layer
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="3. Plan, by layer">
+    <nav class="md-nav" aria-label="validate">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#31-op_system-promote-factorize_axes-from-advisory-to-checked" class="md-nav__link">
+  <a href="#op_system.validate.main" class="md-nav__link">
     <span class="md-ellipsis">
       
-        3.1 op_system — promote factorize_axes from advisory to checked
+        main
       
     </span>
   </a>
@@ -686,43 +754,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#32-flepimop2-op_system-connector-publish-the-new-info" class="md-nav__link">
+  <a href="#op_system.validate.specs_from_file" class="md-nav__link">
     <span class="md-ellipsis">
       
-        3.2 flepimop2-op_system connector — publish the new info
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#33-diffrax_engine-implement-the-partitioned-solve" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        3.3 diffrax_engine — implement the partitioned solve
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#34-configs-opt-in" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        3.4 Configs — opt in
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#35-flepimop2-core-no-changes" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        3.5 flepimop2 core — no changes
+        specs_from_file
       
     </span>
   </a>
@@ -731,28 +766,6 @@
         
       </ul>
     </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#4-order-of-work" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        4. Order of work
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#5-risks-and-open-questions" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        5. Risks and open questions
-      
-    </span>
-  </a>
   
 </li>
       
@@ -773,151 +786,226 @@
 
 
 
-<h1 id="plan-jaxvmap-over-block-diagonal-axes-factorize_axes">Plan: <code>jax.vmap</code> over block-diagonal axes (<code>factorize_axes</code>)<a class="headerlink" href="#plan-jaxvmap-over-block-diagonal-axes-factorize_axes" title="Permanent link">&para;</a></h1>
-<p><strong>Status</strong>: ✅ <strong>complete</strong> 2026-05-28. All four slices merged. Naming: keep <code>factorize_axes</code>.</p>
-<h2 id="1-whats-already-true-today">1. What's already true today<a class="headerlink" href="#1-whats-already-true-today" title="Permanent link">&para;</a></h2>
-<table>
-<thead>
-<tr>
-<th>Layer</th>
-<th>Status</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>op_system.compile_rhs</code></td>
-<td>Produces both <code>eval_fn</code> (flat) and <code>pytree_eval_fn</code> (<code>StateDict → StateDict</code>), plus <code>template_shapes</code> and a passthrough <code>factorize_axes: tuple[str, ...]</code> field.</td>
-</tr>
-<tr>
-<td><code>op_system</code> vectorizer</td>
-<td>Already emits one shaped tensor expression per state template; <code>factorize_axes</code> is <strong>not</strong> consumed by the vectorizer — it is advisory metadata.</td>
-</tr>
-<tr>
-<td><code>flepimop2-op_system</code> connector</td>
-<td>Exposes <code>pytree_stepper_fn</code>, <code>template_shapes</code>, <code>factorize_axes</code>, <code>axis_order</code>, <code>axis_sizes</code>, <code>axis_labels</code>, <code>axis_coords</code> on <code>options</code>.</td>
-</tr>
-<tr>
-<td><code>diffrax_engine.runner</code> / <code>runner_vmap</code></td>
-<td>One ODE solve per draw; <code>runner_vmap</code> already vmaps <strong>draws</strong>. No partitioning across model axes.</td>
-</tr>
-<tr>
-<td>Configs (<code>SMH_R19_op_system*</code>)</td>
-<td>FOI is per-<code>loc</code> (no cross-loc reads). All state templates contain <code>loc</code>. No params index <code>loc</code> except <code>rho_h[loc]</code>, <code>rho_d[loc]</code> (used only in the observation likelihood, not the RHS).</td>
-</tr>
-</tbody>
-</table>
-<p>So the runtime contract <code>pytree_stepper_fn(t, {base: y}, **params) → {base: dy}</code> is already block-diagonal-friendly <em>if</em> the RHS is structurally separable across the partition axis. The pieces that don't yet exist are: <strong>a structural separability check</strong>, <strong>declaration in the spec</strong>, and <strong>a vmap-over-partition-axis path in the engine.</strong></p>
-<h2 id="2-concept-and-contract">2. Concept and contract<a class="headerlink" href="#2-concept-and-contract" title="Permanent link">&para;</a></h2>
-<p>Introduce a single, narrow concept: a <strong>block axis</strong> — a model axis <code>a</code> such that for every state template the RHS at coord <code>a=i</code> depends only on values at coord <code>a=i</code> of every other buffer (state or param) that carries axis <code>a</code>, and on values at every coord of buffers that do not carry axis <code>a</code>.</p>
-<p>This is exactly what allows</p>
-<pre><code>dy/dt = f(t, y)   →    dy[..., i, ...]/dt = f_i(t, y[..., i, ...])
+<h1 id="validate">Validate<a class="headerlink" href="#validate" title="Permanent link">&para;</a></h1>
+
+
+<div class="doc doc-object doc-module">
+
+
+
+<h2 id="op_system.validate" class="doc doc-heading">
+            <code>validate</code>
+
+
+<a href="#op_system.validate" class="headerlink" title="Permanent link">&para;</a></h2>
+
+    <div class="doc doc-contents first">
+
+        <p>Command-line validation of op_system specifications.</p>
+<p>Usage::</p>
+<pre><code>python -m op_system.validate CONFIG.yml [CONFIG.yml ...] [--json]
 </code></pre>
-<p>and therefore allows the engine to evaluate <code>f</code> with <code>jax.vmap(in_axes=axis_position)</code> over coord <code>i</code>.</p>
-<p>Reuse the existing <code>factorize_axes</code> spec field as the <strong>block axis declaration</strong>. It already round-trips through normalize → compile → connector. We just give it real semantics in op_system and a real consumer in the engine.</p>
-<h2 id="3-plan-by-layer">3. Plan, by layer<a class="headerlink" href="#3-plan-by-layer" title="Permanent link">&para;</a></h2>
-<h3 id="31-op_system-promote-factorize_axes-from-advisory-to-checked">3.1 <code>op_system</code> — promote <code>factorize_axes</code> from advisory to checked<a class="headerlink" href="#31-op_system-promote-factorize_axes-from-advisory-to-checked" title="Permanent link">&para;</a></h3>
-<p>Goal: at compile time, prove the declared axes are block-diagonal in the IR; emit per-template metadata the engine can trust without re-inspecting the IR.</p>
-<ol>
-<li><strong>New IR pass</strong> <code>analyze_block_axes(rhs) -&gt; BlockAxisReport</code> in a new <code>_block_axes.py</code>:</li>
-<li>For each axis <code>a</code> in <code>meta["factorize_axes"]</code>:<ul>
-<li>For each <code>equations_ir</code> / <code>aliases_ir</code> expression: walk subscripts.</li>
-<li><strong>Reject</strong> if any <code>apply_along(..., a=...)</code> / <code>sum_over(a)</code> / <code>Reduce</code> mentions <code>a</code> (cross-coord reduction).</li>
-<li><strong>Reject</strong> if any subscript pins <code>a</code> to a literal coord (e.g. <code>loc=AK</code>) without that same coord being the equation's cell coord on <code>a</code>.</li>
-<li><strong>Reject</strong> if any subscript renames <code>a</code> to a fresh bound name and uses it elsewhere at a different cell coord (<code>I[..., loc:l] * J[..., loc:m]</code> with <code>l != m</code>).</li>
-<li><strong>Allow</strong> any expression that touches <code>a</code> only as the matching free position of the cell template, or never mentions <code>a</code>.</li>
-</ul>
-</li>
-<li>Also walk the <code>operators</code> list so a kernel keyed on <code>a</code> is rejected statically.</li>
-<li>Classify each <strong>parameter</strong> the RHS reads as <code>axis_kind ∈ {has_axis, lacks_axis}</code> for each block axis. (Already available via <code>time_varying_params</code> + <code>shaped_params</code> axes tuples.)</li>
-<li>
-<p>Output: <code>BlockAxisInfo(name, size, state_axis_pos: dict[base, int], param_axis_pos: dict[name, int|None])</code>.</p>
-</li>
-<li>
-<p><strong>Wire into <code>compile_rhs</code></strong>:</p>
-</li>
-<li>Call <code>analyze_block_axes(rhs)</code> for axes in <code>meta["factorize_axes"]</code>.</li>
-<li>On any failure: raise <code>UnsupportedFeatureError</code> with the specific equation/alias and offending subscript (fail loudly, like the existing vectorize bail).</li>
-<li>On success: attach to <code>CompiledRhs</code> as a new field <code>block_axes: tuple[BlockAxisInfo, ...]</code>. Keep it pickle-stable: plain dataclass with builtin types.</li>
-<li>
-<p>Continue exposing <code>factorize_axes</code> as the raw tuple for backwards compat.</p>
-</li>
-<li>
-<p><strong>Tests</strong> in <code>tests/op_system/test_block_axes.py</code>: separable RHS passes; cross-loc RHS rejects with named reason; mixed state where one template lacks the axis rejects; operator on partition axis rejects.</p>
-</li>
-<li>
-<p><strong>Docs</strong> in <code>docs/api-reference/specs.md</code>: short section on block axes.</p>
-</li>
-</ol>
-<p>LOC estimate: ~400 src + ~250 tests.</p>
-<h3 id="32-flepimop2-op_system-connector-publish-the-new-info">3.2 <code>flepimop2-op_system</code> connector — publish the new info<a class="headerlink" href="#32-flepimop2-op_system-connector-publish-the-new-info" title="Permanent link">&para;</a></h3>
-<p><code>src/flepimop2/system/op_system/__init__.py</code>:</p>
-<ol>
-<li>Forward <code>compiled.block_axes</code> onto <code>self.options["block_axes"]</code>.</li>
-<li>No behaviour change in <code>_bind_impl</code>.</li>
-<li>Tests in <code>flepimop2-op_system/tests/test_system.py</code>: round-trip for a config declaring <code>factorize_axes: [loc]</code>; empty otherwise.</li>
-</ol>
-<p>LOC estimate: ~30 src + ~50 tests.</p>
-<h3 id="33-diffrax_engine-implement-the-partitioned-solve">3.3 <code>diffrax_engine</code> — implement the partitioned solve<a class="headerlink" href="#33-diffrax_engine-implement-the-partitioned-solve" title="Permanent link">&para;</a></h3>
-<p><code>COVID19_USA/model_input/plugins/diffrax_engine.py</code>:</p>
-<ol>
-<li>
-<p><strong><code>_prepare_call</code> extension</strong>: read <code>stepper.option("block_axes")</code>. Pick one block axis for the run via a new opt key <code>block_solve_axis</code> (default: first entry of <code>block_axes</code>; <code>None</code> disables). Stash on <code>prep</code> as <code>block_axis: BlockAxisInfo | None</code>.</p>
-</li>
-<li>
-<p><strong>New solve closure</strong> when <code>block_axis</code> is set and we are on the pytree path:</p>
-</li>
-<li>Build <code>_solve_one_block</code> over the sliced state dict + sliced params.</li>
-<li><code>_solve = jax.vmap(_solve_one_block, in_axes=(per_base_axis_pos, per_param_axis_pos))</code> — positions from <code>block_axis.state_axis_pos</code> / <code>block_axis.param_axis_pos</code> (None ⇒ broadcast). Use <code>out_axes</code> so vmap re-inserts at the original axis position.</li>
-<li>
-<p>The inner <code>_solve_one_block</code> calls <code>pytree_stepper_fn</code> with the sliced <code>state_dict</code> and sliced params; diffrax solves a much smaller ODE.</p>
-</li>
-<li>
-<p><strong><code>runner</code> semantics</strong>: pytree return is still <code>{base: (T, *full_shape)}</code> — vmap reinserts the block axis automatically (use <code>out_axes</code> to land it at the original position; no reshape needed).</p>
-</li>
-<li>
-<p><strong><code>runner_vmap</code> semantics</strong>: nest as <code>jax.vmap(draws, jax.vmap(block_axis, _solve_one_block))</code>. Static signatures already match across draws, so the existing "same <code>_solve</code>" guard still works.</p>
-</li>
-<li>
-<p><strong>Operator-splitting</strong> (<code>_make_advection_term_pytree</code>, <code>_make_jump_term_pytree</code>): build operator terms inside <code>_solve_one_block</code> (after slicing) so they see the per-block shapes.</p>
-</li>
-<li>
-<p><strong>Fallback / safety</strong>:</p>
-</li>
-<li>If <code>block_axes</code> is empty or <code>pytree_mode</code> is False: behave exactly as today (no regression).</li>
-<li>
-<p>If a param the engine routes as dynamic carries the block axis but <code>block_axis.param_axis_pos[name]</code> is <code>None</code>: raise clearly.</p>
-</li>
-<li>
-<p><strong>Tests</strong> in <code>COVID19_USA/tests/test_diffrax_engine.py</code>:</p>
-</li>
-<li>Numerical equivalence: monolithic solve vs. block-partitioned solve on a tiny 2-loc separable config — must match to solver tolerance.</li>
-<li>Shape contract: <code>runner</code> output dict has correct full shapes.</li>
-<li>Negative: monolithic-only config (no <code>factorize_axes</code>) still passes through unmodified.</li>
-</ol>
-<p>LOC estimate: ~350 src + ~200 tests.</p>
-<h3 id="34-configs-opt-in">3.4 Configs — opt in<a class="headerlink" href="#34-configs-opt-in" title="Permanent link">&para;</a></h3>
-<p>In each config that should solve per-location, add at the spec level:</p>
-<pre><code class="language-yaml">spec:
-  kind: transitions
-  factorize_axes: [loc]
-  axes: ...
-</code></pre>
-<p>No other config changes needed — FOI is already loc-local in the continuum configs.</p>
-<h3 id="35-flepimop2-core-no-changes">3.5 <code>flepimop2</code> core — no changes<a class="headerlink" href="#35-flepimop2-core-no-changes" title="Permanent link">&para;</a></h3>
-<p><code>flepimop2</code>'s <code>EngineProtocol.runner / runner_vmap</code> signatures are unchanged. No core flepimop2 edits.</p>
-<h2 id="4-order-of-work">4. Order of work<a class="headerlink" href="#4-order-of-work" title="Permanent link">&para;</a></h2>
-<ol>
-<li>op_system: <code>analyze_block_axes</code> + <code>CompiledRhs.block_axes</code> + tests.</li>
-<li>Connector: forward <code>block_axes</code> to options + tests.</li>
-<li><code>diffrax_engine</code>: partitioned <code>_solve_one_block</code> + numerical-equivalence test.</li>
-<li>Opt configs into <code>factorize_axes: [loc]</code> and run prior-predictive smoke.</li>
-</ol>
-<h2 id="5-risks-and-open-questions">5. Risks and open questions<a class="headerlink" href="#5-risks-and-open-questions" title="Permanent link">&para;</a></h2>
-<ul>
-<li><strong>Operator terms with non-local kernels on the block axis</strong>: the separability analyzer rejects these — IR walk must include the <code>operators</code> list.</li>
-<li><strong><code>runner_vmap</code> × block-vmap memory</strong>: vmapping draws outside and block-axis inside means the inner solve has shapes <code>(D, n_loc, ...)</code>. Same total work as today but XLA may pick a different schedule; benchmark on GPU before committing nesting order.</li>
-<li><strong>Multiple block axes</strong>: spec already accepts a list. v1: support exactly one runtime block axis (pick first; engine opt overrides). Multi-axis nesting is a follow-up.</li>
-</ul>
+<p>Each file may be a bare op_system spec or a flepimop2 configuration whose
+<code>system</code> entries use <code>module: op_system</code>. The exit code is <code>0</code> when every
+spec passes and <code>1</code> otherwise. Reading YAML requires PyYAML.</p>
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="op_system.validate.main" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">main</span><span class="p">(</span><span class="n">argv</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
+
+<a href="#op_system.validate.main" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Validate every op_system spec in the given files.</p>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p><code>0</code> when every spec passes, otherwise <code>1</code>.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+            <details class="mkdocstrings-source">
+              <summary>Source code in <code>src/op_system/validate.py</code></summary>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">68</span>
+<span class="normal">69</span>
+<span class="normal">70</span>
+<span class="normal">71</span>
+<span class="normal">72</span>
+<span class="normal">73</span>
+<span class="normal">74</span>
+<span class="normal">75</span>
+<span class="normal">76</span>
+<span class="normal">77</span>
+<span class="normal">78</span>
+<span class="normal">79</span>
+<span class="normal">80</span>
+<span class="normal">81</span>
+<span class="normal">82</span>
+<span class="normal">83</span>
+<span class="normal">84</span>
+<span class="normal">85</span>
+<span class="normal">86</span>
+<span class="normal">87</span>
+<span class="normal">88</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">main</span><span class="p">(</span><span class="n">argv</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Validate every op_system spec in the given files.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        ``0`` when every spec passes, otherwise ``1``.</span>
+<span class="sd">    """</span>
+    <span class="n">parser</span> <span class="o">=</span> <span class="n">argparse</span><span class="o">.</span><span class="n">ArgumentParser</span><span class="p">(</span><span class="n">description</span><span class="o">=</span><span class="vm">__doc__</span><span class="p">)</span>
+    <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s2">"paths"</span><span class="p">,</span> <span class="n">nargs</span><span class="o">=</span><span class="s2">"+"</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="n">Path</span><span class="p">)</span>
+    <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s2">"--json"</span><span class="p">,</span> <span class="n">action</span><span class="o">=</span><span class="s2">"store_true"</span><span class="p">)</span>
+    <span class="n">args</span> <span class="o">=</span> <span class="n">parser</span><span class="o">.</span><span class="n">parse_args</span><span class="p">(</span><span class="n">argv</span><span class="p">)</span>
+    <span class="n">results</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="p">(</span><span class="n">label</span><span class="p">,</span> <span class="n">validate_spec</span><span class="p">(</span><span class="n">spec</span><span class="p">))</span>
+        <span class="k">for</span> <span class="n">path</span> <span class="ow">in</span> <span class="n">args</span><span class="o">.</span><span class="n">paths</span>
+        <span class="k">for</span> <span class="n">label</span><span class="p">,</span> <span class="n">spec</span> <span class="ow">in</span> <span class="n">specs_from_file</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+    <span class="p">]</span>
+    <span class="k">if</span> <span class="n">args</span><span class="o">.</span><span class="n">json</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">({</span><span class="n">label</span><span class="p">:</span> <span class="n">asdict</span><span class="p">(</span><span class="n">r</span><span class="p">)</span> <span class="k">for</span> <span class="n">label</span><span class="p">,</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">results</span><span class="p">},</span> <span class="n">indent</span><span class="o">=</span><span class="mi">2</span><span class="p">))</span>  <span class="c1"># ruff: ignore[print]</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">label</span><span class="p">,</span> <span class="n">report</span> <span class="ow">in</span> <span class="n">results</span><span class="p">:</span>
+            <span class="nb">print</span><span class="p">(</span><span class="s2">"</span><span class="se">\n</span><span class="s2">"</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">_describe</span><span class="p">(</span><span class="n">label</span><span class="p">,</span> <span class="n">report</span><span class="p">)))</span>  <span class="c1"># ruff: ignore[print]</span>
+    <span class="k">return</span> <span class="mi">0</span> <span class="k">if</span> <span class="nb">all</span><span class="p">(</span><span class="n">report</span><span class="o">.</span><span class="n">ok</span> <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">report</span> <span class="ow">in</span> <span class="n">results</span><span class="p">)</span> <span class="k">else</span> <span class="mi">1</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="op_system.validate.specs_from_file" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">specs_from_file</span><span class="p">(</span><span class="n">path</span><span class="p">)</span></code>
+
+<a href="#op_system.validate.specs_from_file" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Return <code>(label, spec)</code> pairs from a spec or flepimop2 config file.</p>
+
+
+<p><span class="doc-section-title">Raises:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="RuntimeError">RuntimeError</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>If PyYAML is not installed.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+            <details class="mkdocstrings-source">
+              <summary>Source code in <code>src/op_system/validate.py</code></summary>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">26</span>
+<span class="normal">27</span>
+<span class="normal">28</span>
+<span class="normal">29</span>
+<span class="normal">30</span>
+<span class="normal">31</span>
+<span class="normal">32</span>
+<span class="normal">33</span>
+<span class="normal">34</span>
+<span class="normal">35</span>
+<span class="normal">36</span>
+<span class="normal">37</span>
+<span class="normal">38</span>
+<span class="normal">39</span>
+<span class="normal">40</span>
+<span class="normal">41</span>
+<span class="normal">42</span>
+<span class="normal">43</span>
+<span class="normal">44</span>
+<span class="normal">45</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">specs_from_file</span><span class="p">(</span><span class="n">path</span><span class="p">:</span> <span class="n">Path</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]]:</span>
+<span class="w">    </span><span class="sd">"""Return ``(label, spec)`` pairs from a spec or flepimop2 config file.</span>
+
+<span class="sd">    Raises:</span>
+<span class="sd">        RuntimeError: If PyYAML is not installed.</span>
+<span class="sd">    """</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="kn">import</span><span class="w"> </span><span class="nn">yaml</span>  <span class="c1"># type: ignore[import-untyped]  # ruff: ignore[import-outside-top-level]</span>
+    <span class="k">except</span> <span class="ne">ImportError</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>  <span class="c1"># pragma: no cover - environment dependent</span>
+        <span class="n">msg</span> <span class="o">=</span> <span class="s2">"op_system.validate needs PyYAML to read configuration files"</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">exc</span>
+    <span class="n">loaded</span> <span class="o">=</span> <span class="n">yaml</span><span class="o">.</span><span class="n">safe_load</span><span class="p">(</span><span class="n">path</span><span class="o">.</span><span class="n">read_text</span><span class="p">(</span><span class="n">encoding</span><span class="o">=</span><span class="s2">"utf-8"</span><span class="p">))</span> <span class="ow">or</span> <span class="p">{}</span>
+    <span class="n">systems</span> <span class="o">=</span> <span class="n">loaded</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"system"</span><span class="p">)</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">loaded</span><span class="p">,</span> <span class="nb">dict</span><span class="p">)</span> <span class="k">else</span> <span class="kc">None</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">systems</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">[</span>
+            <span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">path</span><span class="si">}</span><span class="s2">[system </span><span class="si">{</span><span class="n">index</span><span class="si">}</span><span class="s2">]"</span><span class="p">,</span> <span class="nb">dict</span><span class="p">(</span><span class="n">entry</span><span class="p">[</span><span class="s2">"spec"</span><span class="p">]))</span>
+            <span class="k">for</span> <span class="n">index</span><span class="p">,</span> <span class="n">entry</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">systems</span><span class="p">)</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">entry</span><span class="p">,</span> <span class="nb">dict</span><span class="p">)</span> <span class="ow">and</span> <span class="n">entry</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"module"</span><span class="p">)</span> <span class="o">==</span> <span class="s2">"op_system"</span>
+        <span class="p">]</span>
+    <span class="k">return</span> <span class="p">[(</span><span class="nb">str</span><span class="p">(</span><span class="n">path</span><span class="p">),</span> <span class="nb">dict</span><span class="p">(</span><span class="n">loaded</span><span class="p">))]</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
 
 
 

@@ -790,6 +790,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#op_system.ShapeGroup" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ShapeGroup
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#op_system.StateString" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -825,6 +836,34 @@
       
     </span>
   </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#op_system.ValidationReport" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ValidationReport
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="ValidationReport">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#op_system.ValidationReport.ok" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ok
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
         
@@ -916,6 +955,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#op_system.validate_spec" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        validate_spec
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -973,6 +1023,34 @@
     
   
     Specs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../validate/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Validate
   
 
     
@@ -1242,6 +1320,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#op_system.ShapeGroup" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ShapeGroup
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#op_system.StateString" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1277,6 +1366,34 @@
       
     </span>
   </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#op_system.ValidationReport" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ValidationReport
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="ValidationReport">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#op_system.ValidationReport.ok" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ok
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
         
@@ -1362,6 +1479,17 @@
     <span class="md-ellipsis">
       
         validate_axis_kernel_matrix
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#op_system.validate_spec" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        validate_spec
       
     </span>
   </a>
@@ -2692,6 +2820,55 @@ see :class:<code>CompiledReaction</code>.</p>
 
 
 
+<h3 id="op_system.ShapeGroup" class="doc doc-heading">
+              <code class="highlight language-python"><span class="n">ShapeGroup</span><span class="p">(</span><span class="n">cells</span><span class="p">,</span> <span class="n">example_cell</span><span class="p">,</span> <span class="n">example_expression</span><span class="p">)</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-dataclass"><code>dataclass</code></small>
+  </span>
+
+<a href="#op_system.ShapeGroup" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+
+
+        <p>Cells of one state template that share an expression shape.</p>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
 <h3 id="op_system.StateString" class="doc doc-heading">
             <code>StateString</code>
 
@@ -2892,6 +3069,155 @@ as the union type when you need to accept both kinds.</p>
 
 
 
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="op_system.ValidationReport" class="doc doc-heading">
+              <code class="highlight language-python"><span class="n">ValidationReport</span><span class="p">(</span><span class="n">stages</span><span class="p">,</span> <span class="n">errors</span><span class="o">=</span><span class="nb">list</span><span class="p">(),</span> <span class="n">cost</span><span class="o">=</span><span class="nb">dict</span><span class="p">(),</span> <span class="n">parameters</span><span class="o">=</span><span class="nb">dict</span><span class="p">(),</span> <span class="n">shape_groups</span><span class="o">=</span><span class="nb">dict</span><span class="p">())</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-dataclass"><code>dataclass</code></small>
+  </span>
+
+<a href="#op_system.ValidationReport" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+
+
+        <p>Result of validating one op_system specification.</p>
+
+
+<p><span class="doc-section-title">Attributes:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code><span title="op_system.ValidationReport.stages">stages</span></code></td>
+            <td>
+                  <code><span title="dict">dict</span>[<span title="str">str</span>, <span title="str">str</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p><code>"passed"</code>, <code>"failed"</code>, or <code>"skipped"</code> for normalize,
+compile, and vectorize.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="op_system.ValidationReport.errors">errors</span></code></td>
+            <td>
+                  <code><span title="list">list</span>[<span title="str">str</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Error messages from the failed stage.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="op_system.ValidationReport.cost">cost</span></code></td>
+            <td>
+                  <code><span title="dict">dict</span>[<span title="str">str</span>, <span title="int">int</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Compile-cost drivers (expanded states, templates, transitions,
+coordinate-pinned transitions, operators).</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="op_system.ValidationReport.parameters">parameters</span></code></td>
+            <td>
+                  <code><span title="dict">dict</span>[<span title="str">str</span>, <span title="tuple">tuple</span>[<span title="str">str</span>, ...]]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Parameters the spec consumes, mapped to their declared
+axes (empty tuple for scalars); operator parameters use
+<code>kernel.param_axes</code> when declared.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="op_system.ValidationReport.shape_groups">shape_groups</span></code></td>
+            <td>
+                  <code><span title="dict">dict</span>[<span title="str">str</span>, <span title="list">list</span>[<a class="autorefs autorefs-internal" title="ShapeGroup(cells, example_cell, example_expression)
+
+  
+      dataclass
+   (op_system._validate.ShapeGroup)" href="#op_system.ShapeGroup">ShapeGroup</a>]]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>For templates whose cells have more than one expression
+shape, the distinct shapes with a count and an example cell.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="op_system.ValidationReport.ok" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">ok</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+<a href="#op_system.ValidationReport.ok" class="headerlink" title="Permanent link">&para;</a></h4>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Whether every stage passed.</p>
+
+    </div>
+
+</div>
 
 
 
@@ -3750,8 +4076,7 @@ removed in a future release.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/op_system/__init__.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"> 78</span>
-<span class="normal"> 79</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"> 79</span>
 <span class="normal"> 80</span>
 <span class="normal"> 81</span>
 <span class="normal"> 82</span>
@@ -3791,7 +4116,8 @@ removed in a future release.</p>
 <span class="normal">116</span>
 <span class="normal">117</span>
 <span class="normal">118</span>
-<span class="normal">119</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">compile_spec</span><span class="p">(</span>  <span class="c1"># ruff: ignore[non-empty-init-module]</span>
+<span class="normal">119</span>
+<span class="normal">120</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">compile_spec</span><span class="p">(</span>  <span class="c1"># ruff: ignore[non-empty-init-module]</span>
     <span class="n">spec</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">object</span><span class="p">],</span>
     <span class="o">*</span><span class="p">,</span>
     <span class="n">xp</span><span class="p">:</span> <span class="nb">object</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -5468,6 +5794,193 @@ removed in a future release.</p>
         <span class="k">if</span> <span class="nb">bool</span><span class="p">(</span><span class="n">xp</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">xp</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">row_sums</span> <span class="o">-</span> <span class="mf">1.0</span><span class="p">)</span> <span class="o">&gt;</span> <span class="n">tolerance</span><span class="p">)):</span>
             <span class="n">problems</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">"stochastic rows must sum to one"</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">problems</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="op_system.validate_spec" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">validate_spec</span><span class="p">(</span><span class="n">spec</span><span class="p">)</span></code>
+
+<a href="#op_system.validate_spec" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Validate an op_system specification without raising.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>spec</code>
+            </td>
+            <td>
+                  <code><span title="collections.abc.Mapping">Mapping</span>[<span title="str">str</span>, <span title="typing.Any">Any</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>A raw RHS specification mapping.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="ValidationReport(stages, errors=list(), cost=dict(), parameters=dict(), shape_groups=dict())
+
+  
+      dataclass
+   (op_system._validate.ValidationReport)" href="#op_system.ValidationReport">ValidationReport</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>A report with per-stage status, error messages, compile-cost drivers,</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="ValidationReport(stages, errors=list(), cost=dict(), parameters=dict(), shape_groups=dict())
+
+  
+      dataclass
+   (op_system._validate.ValidationReport)" href="#op_system.ValidationReport">ValidationReport</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>consumed parameters, and expression-shape groups for templates whose</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="ValidationReport(stages, errors=list(), cost=dict(), parameters=dict(), shape_groups=dict())
+
+  
+      dataclass
+   (op_system._validate.ValidationReport)" href="#op_system.ValidationReport">ValidationReport</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>cells differ.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+            <details class="mkdocstrings-source">
+              <summary>Source code in <code>src/op_system/_validate.py</code></summary>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">169</span>
+<span class="normal">170</span>
+<span class="normal">171</span>
+<span class="normal">172</span>
+<span class="normal">173</span>
+<span class="normal">174</span>
+<span class="normal">175</span>
+<span class="normal">176</span>
+<span class="normal">177</span>
+<span class="normal">178</span>
+<span class="normal">179</span>
+<span class="normal">180</span>
+<span class="normal">181</span>
+<span class="normal">182</span>
+<span class="normal">183</span>
+<span class="normal">184</span>
+<span class="normal">185</span>
+<span class="normal">186</span>
+<span class="normal">187</span>
+<span class="normal">188</span>
+<span class="normal">189</span>
+<span class="normal">190</span>
+<span class="normal">191</span>
+<span class="normal">192</span>
+<span class="normal">193</span>
+<span class="normal">194</span>
+<span class="normal">195</span>
+<span class="normal">196</span>
+<span class="normal">197</span>
+<span class="normal">198</span>
+<span class="normal">199</span>
+<span class="normal">200</span>
+<span class="normal">201</span>
+<span class="normal">202</span>
+<span class="normal">203</span>
+<span class="normal">204</span>
+<span class="normal">205</span>
+<span class="normal">206</span>
+<span class="normal">207</span>
+<span class="normal">208</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">validate_spec</span><span class="p">(</span><span class="n">spec</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">ValidationReport</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Validate an op_system specification without raising.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        spec: A raw RHS specification mapping.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        A report with per-stage status, error messages, compile-cost drivers,</span>
+<span class="sd">        consumed parameters, and expression-shape groups for templates whose</span>
+<span class="sd">        cells differ.</span>
+<span class="sd">    """</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">op_system</span><span class="w"> </span><span class="kn">import</span> <span class="n">compile_rhs</span><span class="p">,</span> <span class="n">normalize_rhs</span>  <span class="c1"># ruff: ignore[import-outside-top-level]</span>
+
+    <span class="n">stages</span> <span class="o">=</span> <span class="nb">dict</span><span class="o">.</span><span class="n">fromkeys</span><span class="p">(</span><span class="n">_STAGES</span><span class="p">,</span> <span class="s2">"skipped"</span><span class="p">)</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">rhs</span> <span class="o">=</span> <span class="n">normalize_rhs</span><span class="p">(</span><span class="n">spec</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>  <span class="c1"># ruff: ignore[blind-except] - reported, not raised</span>
+        <span class="n">stages</span><span class="p">[</span><span class="s2">"normalize"</span><span class="p">]</span> <span class="o">=</span> <span class="s2">"failed"</span>
+        <span class="k">return</span> <span class="n">ValidationReport</span><span class="p">(</span>
+            <span class="n">stages</span><span class="o">=</span><span class="n">stages</span><span class="p">,</span> <span class="n">errors</span><span class="o">=</span><span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">exc</span><span class="p">)],</span> <span class="n">cost</span><span class="o">=</span><span class="n">_cost</span><span class="p">(</span><span class="n">spec</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="p">)</span>
+    <span class="n">stages</span><span class="p">[</span><span class="s2">"normalize"</span><span class="p">]</span> <span class="o">=</span> <span class="s2">"passed"</span>
+    <span class="n">report_kwargs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s2">"cost"</span><span class="p">:</span> <span class="n">_cost</span><span class="p">(</span><span class="n">spec</span><span class="p">,</span> <span class="n">rhs</span><span class="p">),</span>
+        <span class="s2">"parameters"</span><span class="p">:</span> <span class="n">_parameters</span><span class="p">(</span><span class="n">rhs</span><span class="p">),</span>
+        <span class="s2">"shape_groups"</span><span class="p">:</span> <span class="n">_shape_groups</span><span class="p">(</span><span class="n">rhs</span><span class="p">),</span>
+    <span class="p">}</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">compile_rhs</span><span class="p">(</span><span class="n">rhs</span><span class="p">)</span>
+    <span class="k">except</span> <span class="n">UnsupportedFeatureError</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+        <span class="n">vectorize</span> <span class="o">=</span> <span class="s2">"vectorized eval path"</span> <span class="ow">in</span> <span class="nb">str</span><span class="p">(</span><span class="n">exc</span><span class="p">)</span>
+        <span class="n">stages</span><span class="p">[</span><span class="s2">"compile"</span><span class="p">]</span> <span class="o">=</span> <span class="s2">"passed"</span> <span class="k">if</span> <span class="n">vectorize</span> <span class="k">else</span> <span class="s2">"failed"</span>
+        <span class="n">stages</span><span class="p">[</span><span class="s2">"vectorize"</span><span class="p">]</span> <span class="o">=</span> <span class="s2">"failed"</span> <span class="k">if</span> <span class="n">vectorize</span> <span class="k">else</span> <span class="s2">"skipped"</span>
+        <span class="k">return</span> <span class="n">ValidationReport</span><span class="p">(</span><span class="n">stages</span><span class="o">=</span><span class="n">stages</span><span class="p">,</span> <span class="n">errors</span><span class="o">=</span><span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">exc</span><span class="p">)],</span> <span class="o">**</span><span class="n">report_kwargs</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>  <span class="c1"># ruff: ignore[blind-except]</span>
+        <span class="n">stages</span><span class="p">[</span><span class="s2">"compile"</span><span class="p">]</span> <span class="o">=</span> <span class="s2">"failed"</span>
+        <span class="k">return</span> <span class="n">ValidationReport</span><span class="p">(</span><span class="n">stages</span><span class="o">=</span><span class="n">stages</span><span class="p">,</span> <span class="n">errors</span><span class="o">=</span><span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">exc</span><span class="p">)],</span> <span class="o">**</span><span class="n">report_kwargs</span><span class="p">)</span>
+    <span class="n">stages</span><span class="p">[</span><span class="s2">"compile"</span><span class="p">]</span> <span class="o">=</span> <span class="s2">"passed"</span>
+    <span class="n">stages</span><span class="p">[</span><span class="s2">"vectorize"</span><span class="p">]</span> <span class="o">=</span> <span class="s2">"passed"</span>
+    <span class="k">return</span> <span class="n">ValidationReport</span><span class="p">(</span><span class="n">stages</span><span class="o">=</span><span class="n">stages</span><span class="p">,</span> <span class="o">**</span><span class="n">report_kwargs</span><span class="p">)</span>
 </code></pre></div></td></tr></table></div>
             </details>
     </div>
