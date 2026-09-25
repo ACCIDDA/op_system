@@ -253,7 +253,8 @@ def _strip_time_axis_in_expr(
         if full is None:
             return match.group(0)
         parts = tuple(p.strip() for p in match.group(2).split(","))
-        if parts != full:
+        # ``axis:alias`` subscripts match on the axis part.
+        if tuple(p.split(":", 1)[0].strip() for p in parts) != full:
             return match.group(0)
         reduced = tuple(p for p in parts if p != time_axis_name)
         if not reduced:

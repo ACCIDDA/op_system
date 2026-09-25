@@ -128,9 +128,15 @@ def _cost(spec: Mapping[str, Any], rhs: NormalizedRhs | None) -> dict[str, int]:
         if isinstance(t, _MappingABC)
         and any("=" in str(t.get(side, "")) for side in ("from", "to"))
     )
+    routing = sum(
+        1
+        for t in transitions
+        if isinstance(t, _MappingABC) and ":" in str(t.get("from") or "")
+    )
     cost = {
         "transitions": len(transitions),
         "coordinate_pinned_transitions": pinned,
+        "routing_transitions": routing,
         "operators": len(spec.get("operators") or []),
     }
     if rhs is not None:
