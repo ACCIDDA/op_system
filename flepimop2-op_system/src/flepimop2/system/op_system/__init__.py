@@ -626,13 +626,24 @@ class OpSystemSystem(SystemABC, module="flepimop2.system.op_system"):  # ruff: i
         kernel_params = op.kernel.get("params")
         if not isinstance(kernel_params, Mapping):
             return
+        # Operators whose parameters are arrays (e.g. an ``[imm, imm]`` matrix
+        # or a ``[time]`` series) declare their axes in ``kernel.param_axes``
+        # keyed by parameter name; undeclared names stay scalar requests.
+        param_axes = op.kernel.get("param_axes") or {}
+        if not isinstance(param_axes, Mapping):
+            msg = "operator kernel.param_axes must map parameter names to axis lists"
+            raise ValueError(msg)
         for value in kernel_params.values():
             if (
                 isinstance(value, str)
                 and value.isidentifier()
                 and value not in requests
             ):
-                requests[value] = ParameterRequest(name=value)
+                axes = param_axes.get(value, ())
+                if isinstance(axes, str) or not all(isinstance(a, str) for a in axes):
+                    msg = f"kernel.param_axes[{value!r}] must be a list of axis names"
+                    raise ValueError(msg)
+                requests[value] = ParameterRequest(name=value, axes=tuple(axes))
 
     @override
     def model_state(
