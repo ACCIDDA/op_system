@@ -263,6 +263,30 @@ def test_option_operators_present(
     assert ops[0].rate is None
 
 
+def test_option_operators_preserves_normalized_metadata() -> None:
+    """The provider exposes lossless typed operator metadata."""
+    spec = {
+        "kind": "expr",
+        "axes": [{"name": "loc", "coords": ["a", "b"]}],
+        "state": ["S", "I"],
+        "equations": {"S": "-S", "I": "-I"},
+        "operators": [
+            {
+                "name": "susceptible_drift",
+                "kind": "advection",
+                "axis": "loc",
+                "velocity": 0.25,
+                "apply_to": ["S"],
+            }
+        ],
+    }
+
+    (operator,) = OpSystemSystem(spec=spec).option("operators", ())
+    assert operator.name == "susceptible_drift"
+    assert operator.apply_to == ("S",)
+    assert operator.velocity == pytest.approx(0.25)
+
+
 def test_option_operators_returns_immutable(
     sir_with_operators_spec: dict[str, object],
 ) -> None:
@@ -661,6 +685,26 @@ def test_requested_parameters_includes_operator_velocity() -> None:
     sys = OpSystemSystem(spec=spec)
     requested = set(sys.requested_parameters(AxisCollection()).keys())
     assert "waning_rate" in requested
+
+
+def test_requested_parameters_ignores_numeric_operator_coefficients() -> None:
+    """Numeric operator velocity/rate values are constants, not parameter names."""
+    spec: dict[str, object] = {
+        "kind": "expr",
+        "axes": [{"name": "k", "coords": ["0", "1"]}],
+        "state": ["X"],
+        "equations": {"X": "-X"},
+        "operators": [
+            {
+                "kind": "advection",
+                "axis": "k",
+                "velocity": 0.25,
+            }
+        ],
+    }
+
+    requested = OpSystemSystem(spec=spec).requested_parameters(AxisCollection())
+    assert requested == {}
 
 
 def test_requested_parameters_emits_full_axes_for_time_varying() -> None:

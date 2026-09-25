@@ -26,9 +26,15 @@ class OperatorDescriptor:
             ``"transport"``, ``"jump_integral"``, or ``None`` if unspecified.
         bc: Boundary condition, e.g. ``"absorbing"``, ``"periodic"``,
             ``"neumann"``, ``"reflecting"``, or ``None`` if unspecified.
-        velocity: Parameter name for an advection velocity, or ``None``.
-        rate: Parameter name for a diffusion rate/coefficient, or ``None``.
+        velocity: Parameter name or numeric constant for an advection velocity,
+            or ``None``.
+        rate: Parameter name or numeric constant for a rate/coefficient, or
+            ``None``.
         kernel: Mixing-kernel sub-specification, or ``None``.
+        name: Optional operator name from the specification.
+        apply_to: Concrete state names selected by the operator, or ``None`` when
+            the operator applies to every compatible state.
+        direction: Optional normalized direction for a jump integral.
 
     Examples:
         >>> od = OperatorDescriptor(axis="loc")
@@ -44,22 +50,28 @@ class OperatorDescriptor:
         ...     axis="loc",
         ...     kind="advection",
         ...     bc="absorbing",
-        ...     velocity="v_advec",
-        ...     rate="diff_r",
+        ...     velocity=0.25,
+        ...     name="drift",
+        ...     apply_to=("S",),
         ... )
         >>> od2.kind
         'advection'
         >>> od2.bc
         'absorbing'
         >>> od2.velocity
-        'v_advec'
-        >>> od2.rate
-        'diff_r'
+        0.25
+        >>> od2.name
+        'drift'
+        >>> od2.apply_to
+        ('S',)
     """
 
     axis: str
     kind: str | None = None
     bc: str | None = None
-    velocity: str | None = None
-    rate: str | None = None
+    velocity: str | float | None = None
+    rate: str | float | None = None
     kernel: Mapping[str, Any] | None = None
+    name: str | None = None
+    apply_to: tuple[str, ...] | None = None
+    direction: str | None = None

@@ -623,7 +623,7 @@ class OpSystemSystem(SystemABC, module="flepimop2.system.op_system"):  # ruff: i
         """
         for value in (op.velocity, op.rate):
             if (
-                value is not None
+                isinstance(value, str)
                 and value.isidentifier()
                 and value != "t"
                 and value not in requests

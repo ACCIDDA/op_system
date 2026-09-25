@@ -930,23 +930,47 @@ def test_compiledrhs_pickle_rejects_direct_construction(
 
 
 def test_parse_operator_descriptor_kind_and_bc() -> None:
-    """_parse_operator_descriptors maps kind and bc onto OperatorDescriptor."""
+    """Operator descriptors retain normalized selectors and scalar metadata."""
     spec = {
         "kind": "expr",
         "axes": [{"name": "loc", "coords": ["a", "b"]}],
-        "state": ["S[loc]"],
-        "equations": {"S[loc]": "-S[loc]"},
+        "state": ["S", "I"],
+        "equations": {"S": "-S", "I": "-I"},
         "operators": [
-            {"kind": "advection", "axis": "loc", "bc": "absorbing", "velocity": "v"},
+            {
+                "name": "drift",
+                "kind": "advection",
+                "axis": "loc",
+                "bc": "absorbing",
+                "velocity": 0.25,
+                "apply_to": ["S"],
+            },
+            {
+                "name": "jumps",
+                "kind": "jump_integral",
+                "axis": "loc",
+                "rate": 2,
+                "direction": "UP",
+                "kernel": {"form": "gaussian", "params": {"sigma": 0.1}},
+                "apply_to": ["I"],
+            },
         ],
     }
     cr = compile_rhs(normalize_rhs(spec))
-    assert len(cr.operators) == 1
-    op = cr.operators[0]
-    assert op.kind == "advection"
-    assert op.bc == "absorbing"
-    assert op.velocity == "v"
-    assert op.axis == "loc"
+    assert len(cr.operators) == 2
+    advection, jump = cr.operators
+    assert advection.kind == "advection"
+    assert advection.bc == "absorbing"
+    assert advection.velocity == pytest.approx(0.25)
+    assert advection.axis == "loc"
+    assert advection.name == "drift"
+    assert advection.apply_to == ("S",)
+    assert isinstance(advection.apply_to, tuple)
+    assert jump.name == "jumps"
+    assert jump.rate == pytest.approx(2.0)
+    assert jump.direction == "up"
+    assert jump.apply_to == ("I",)
+    assert jump.kernel == {"form": "gaussian", "params": {"sigma": 0.1}}
 
 
 def test_operator_descriptor_kind_bc_default_none() -> None:
@@ -954,6 +978,9 @@ def test_operator_descriptor_kind_bc_default_none() -> None:
     od = OperatorDescriptor(axis="loc")
     assert od.kind is None
     assert od.bc is None
+    assert od.name is None
+    assert od.apply_to is None
+    assert od.direction is None
     # When kind IS provided but bc is not, bc also defaults to None.
     od2 = OperatorDescriptor(axis="loc", kind="diffusion")
     assert od2.bc is None
