@@ -38,6 +38,14 @@ version; format loosely follows
   Self-routing diagonals are no-ops, the routed axis cannot be a block axis,
   and routing transitions have no `reactions` artifact yet. `validate_spec`
   counts them under `routing_transitions` (#88, step 2).
+- `flepimop2-op_system` provides a `sparse_table` parameter module. It builds
+  a routing matrix such as `eta[time, imm, imm]` from a declared support
+  whose entries are numbers or nested parameter configurations (for example
+  one per-day CSV series per `(imm_from, imm_to)` pair), and it exposes the
+  support positions for inference. A full matrix remains a `fixed` parameter
+  with a shape. On the COVID loc3 production spec, one routing transition
+  plus a `sparse_table` reproduces the 17 coordinate-pinned vaccination
+  transitions to 1e-17 (#88, step 3).
 
 ### Changed
 
