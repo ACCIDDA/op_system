@@ -2552,7 +2552,7 @@ union type when you need to accept both kinds.</p>
 
 
 <h3 id="op_system.OperatorDescriptor" class="doc doc-heading">
-              <code class="highlight language-python"><span class="n">OperatorDescriptor</span><span class="p">(</span><span class="n">axis</span><span class="p">,</span> <span class="n">kind</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">bc</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">velocity</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">rate</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">kernel</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
+              <code class="highlight language-python"><span class="n">OperatorDescriptor</span><span class="p">(</span><span class="n">axis</span><span class="p">,</span> <span class="n">kind</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">bc</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">velocity</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">rate</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">kernel</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">apply_to</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">direction</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
 
   <span class="doc doc-labels">
       <small class="doc doc-label doc-label-dataclass"><code>dataclass</code></small>
@@ -2622,22 +2622,24 @@ the engine.</p>
           <tr class="doc-section-item">
             <td><code><span title="op_system.OperatorDescriptor.velocity">velocity</span></code></td>
             <td>
-                  <code><span title="str">str</span> | None</code>
+                  <code><span title="str">str</span> | <span title="float">float</span> | None</code>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Parameter name for an advection velocity, or <code>None</code>.</p>
+                <p>Parameter name or numeric constant for an advection velocity,
+or <code>None</code>.</p>
               </div>
             </td>
           </tr>
           <tr class="doc-section-item">
             <td><code><span title="op_system.OperatorDescriptor.rate">rate</span></code></td>
             <td>
-                  <code><span title="str">str</span> | None</code>
+                  <code><span title="str">str</span> | <span title="float">float</span> | None</code>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Parameter name for a diffusion rate/coefficient, or <code>None</code>.</p>
+                <p>Parameter name or numeric constant for a rate/coefficient, or
+<code>None</code>.</p>
               </div>
             </td>
           </tr>
@@ -2649,6 +2651,40 @@ the engine.</p>
             <td>
               <div class="doc-md-description">
                 <p>Mixing-kernel sub-specification, or <code>None</code>.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="op_system.OperatorDescriptor.name">name</span></code></td>
+            <td>
+                  <code><span title="str">str</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Optional operator name from the specification.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="op_system.OperatorDescriptor.apply_to">apply_to</span></code></td>
+            <td>
+                  <code><span title="tuple">tuple</span>[<span title="str">str</span>, ...] | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Concrete state names selected by the operator, or <code>None</code> when
+the operator applies to every compatible state.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="op_system.OperatorDescriptor.direction">direction</span></code></td>
+            <td>
+                  <code><span title="str">str</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Optional normalized direction for a jump integral.</p>
               </div>
             </td>
           </tr>
@@ -2670,17 +2706,20 @@ the engine.</p>
 <span class="gp">... </span>    <span class="n">axis</span><span class="o">=</span><span class="s2">"loc"</span><span class="p">,</span>
 <span class="gp">... </span>    <span class="n">kind</span><span class="o">=</span><span class="s2">"advection"</span><span class="p">,</span>
 <span class="gp">... </span>    <span class="n">bc</span><span class="o">=</span><span class="s2">"absorbing"</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="n">velocity</span><span class="o">=</span><span class="s2">"v_advec"</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="n">rate</span><span class="o">=</span><span class="s2">"diff_r"</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">velocity</span><span class="o">=</span><span class="mf">0.25</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">name</span><span class="o">=</span><span class="s2">"drift"</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">apply_to</span><span class="o">=</span><span class="p">(</span><span class="s2">"S"</span><span class="p">,),</span>
 <span class="gp">... </span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">od2</span><span class="o">.</span><span class="n">kind</span>
 <span class="go">'advection'</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">od2</span><span class="o">.</span><span class="n">bc</span>
 <span class="go">'absorbing'</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">od2</span><span class="o">.</span><span class="n">velocity</span>
-<span class="go">'v_advec'</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">od2</span><span class="o">.</span><span class="n">rate</span>
-<span class="go">'diff_r'</span>
+<span class="go">0.25</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">od2</span><span class="o">.</span><span class="n">name</span>
+<span class="go">'drift'</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">od2</span><span class="o">.</span><span class="n">apply_to</span>
+<span class="go">('S',)</span>
 </code></pre></div>
 
 
@@ -3715,34 +3754,7 @@ from the input <code>y</code>. Will be removed in a future release.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/op_system/compile.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">2003</span>
-<span class="normal">2004</span>
-<span class="normal">2005</span>
-<span class="normal">2006</span>
-<span class="normal">2007</span>
-<span class="normal">2008</span>
-<span class="normal">2009</span>
-<span class="normal">2010</span>
-<span class="normal">2011</span>
-<span class="normal">2012</span>
-<span class="normal">2013</span>
-<span class="normal">2014</span>
-<span class="normal">2015</span>
-<span class="normal">2016</span>
-<span class="normal">2017</span>
-<span class="normal">2018</span>
-<span class="normal">2019</span>
-<span class="normal">2020</span>
-<span class="normal">2021</span>
-<span class="normal">2022</span>
-<span class="normal">2023</span>
-<span class="normal">2024</span>
-<span class="normal">2025</span>
-<span class="normal">2026</span>
-<span class="normal">2027</span>
-<span class="normal">2028</span>
-<span class="normal">2029</span>
-<span class="normal">2030</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">2030</span>
 <span class="normal">2031</span>
 <span class="normal">2032</span>
 <span class="normal">2033</span>
@@ -3834,7 +3846,34 @@ from the input <code>y</code>. Will be removed in a future release.</p>
 <span class="normal">2119</span>
 <span class="normal">2120</span>
 <span class="normal">2121</span>
-<span class="normal">2122</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">compile_rhs</span><span class="p">(</span><span class="n">rhs</span><span class="p">:</span> <span class="n">NormalizedRhs</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">xp</span><span class="p">:</span> <span class="nb">object</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">CompiledRhs</span><span class="p">:</span>
+<span class="normal">2122</span>
+<span class="normal">2123</span>
+<span class="normal">2124</span>
+<span class="normal">2125</span>
+<span class="normal">2126</span>
+<span class="normal">2127</span>
+<span class="normal">2128</span>
+<span class="normal">2129</span>
+<span class="normal">2130</span>
+<span class="normal">2131</span>
+<span class="normal">2132</span>
+<span class="normal">2133</span>
+<span class="normal">2134</span>
+<span class="normal">2135</span>
+<span class="normal">2136</span>
+<span class="normal">2137</span>
+<span class="normal">2138</span>
+<span class="normal">2139</span>
+<span class="normal">2140</span>
+<span class="normal">2141</span>
+<span class="normal">2142</span>
+<span class="normal">2143</span>
+<span class="normal">2144</span>
+<span class="normal">2145</span>
+<span class="normal">2146</span>
+<span class="normal">2147</span>
+<span class="normal">2148</span>
+<span class="normal">2149</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">compile_rhs</span><span class="p">(</span><span class="n">rhs</span><span class="p">:</span> <span class="n">NormalizedRhs</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">xp</span><span class="p">:</span> <span class="nb">object</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">CompiledRhs</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Compile a normalized RHS into a runnable evaluation function.</span>
 
 <span class="sd">    Always uses the vectorized eval path that operates on shaped buffers</span>
