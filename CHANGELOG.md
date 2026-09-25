@@ -13,6 +13,15 @@ version; format loosely follows
   `kernel.param_axes` (for example an `[imm, imm]` generator or a `[time]`
   routing series). `flepimop2-op_system` requests those names with the
   declared axes; undeclared names stay scalar requests (#204).
+- `axis_kernel` operators move mass along one axis with a matrix-valued
+  parameter instead of one coordinate-pinned transition per coordinate pair,
+  whose compile cost grows with states times transitions. `kernel.form` is
+  `generator` (rows sum to zero, scaled by `velocity`) or `stochastic`
+  (row-stochastic redistribution of a flux, optionally tied to a `transfer`
+  between two coordinates of another axis). Specs are validated at
+  normalization, and `axis_kernel_generator_rhs`,
+  `axis_kernel_redistribute`, and `validate_axis_kernel_matrix` provide
+  shared backend-agnostic reference semantics for engines (#206).
 
 ## [0.2.0] - 2026-08-17
 

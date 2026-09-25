@@ -26,6 +26,12 @@ import warnings
 from importlib.metadata import version
 from typing import Final, Literal
 
+from op_system._axis_kernel import (
+    AXIS_KERNEL_FORMS,
+    axis_kernel_generator_rhs,
+    axis_kernel_redistribute,
+    validate_axis_kernel_matrix,
+)
 from op_system._block_axes import BlockAxisInfo
 from op_system._identifer_string import IdentifierString
 from op_system._operators import OperatorDescriptor
@@ -118,6 +124,7 @@ def compile_spec(  # ruff: ignore[non-empty-init-module]
 # -----------------------------------------------------------------------------
 
 __all__ = [
+    "AXIS_KERNEL_FORMS",
     "DEFAULT_ARRAY_BACKEND",
     "EXPERIMENTAL_FEATURES",
     "SUPPORTED_RHS_KINDS",
@@ -138,9 +145,12 @@ __all__ = [
     "StateString",
     "TransitionsRhs",
     "__version__",
+    "axis_kernel_generator_rhs",
+    "axis_kernel_redistribute",
     "compile_rhs",
     "compile_spec",
     "normalize_expr_rhs",
     "normalize_rhs",
     "normalize_transitions_rhs",
+    "validate_axis_kernel_matrix",
 ]

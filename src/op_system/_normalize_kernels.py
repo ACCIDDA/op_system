@@ -9,6 +9,7 @@ They are pure helpers — all public entry points remain in ``_normalize.py``.
 
 from __future__ import annotations
 
+from collections.abc import Mapping as _MappingABC
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -391,6 +392,123 @@ def _validate_op_jump_integral(op_map: Mapping[str, Any], idx: int) -> None:
             )
 
 
+def _validate_axis_kernel_matrix(
+    kernel: Mapping[str, Any], where: str, axis_name: str
+) -> Mapping[str, Any]:
+    """Validate the form, matrix parameter, and its declared axes.
+
+    Returns:
+        The kernel ``params`` mapping.
+
+    Raises:
+        InvalidRhsSpecError: If validation fails.
+    """
+    if kernel.get("form") not in {"generator", "stochastic"}:
+        raise InvalidRhsSpecError(
+            detail=f"{where}.kernel.form must be 'generator' or 'stochastic'"
+        )
+    params = kernel.get("params")
+    if not isinstance(params, _MappingABC):
+        params = {}
+    matrix = params.get("matrix")
+    if not isinstance(matrix, str) or not matrix.isidentifier():
+        raise InvalidRhsSpecError(
+            detail=f"{where}.kernel.params.matrix must name a parameter"
+        )
+    param_axes = kernel.get("param_axes")
+    declared = param_axes.get(matrix) if isinstance(param_axes, _MappingABC) else None
+    if declared is None or list(declared) != [axis_name, axis_name]:
+        raise InvalidRhsSpecError(
+            detail=(
+                f"{where}.kernel.param_axes[{matrix!r}] must be "
+                f"[{axis_name}, {axis_name}]"
+            )
+        )
+    return params
+
+
+def _validate_axis_kernel_transfer(
+    transfer: object,
+    where: str,
+    axis_name: str,
+    axes: list[dict[str, Any]] | None,
+    known_params: set[object],
+) -> None:
+    """Validate a stochastic kernel's transfer between two coordinates.
+
+    Raises:
+        InvalidRhsSpecError: If validation fails.
+    """
+    if not isinstance(transfer, _MappingABC):
+        raise InvalidRhsSpecError(detail=f"{where}.kernel.transfer must be a mapping")
+    coords: dict[str, list[str]] = {
+        str(ax.get("name")): [str(c) for c in (ax.get("coords") or [])]
+        for ax in axes or []
+    }
+    transfer_axis = transfer.get("axis")
+    if not isinstance(transfer_axis, str) or transfer_axis == axis_name:
+        raise InvalidRhsSpecError(
+            detail=f"{where}.kernel.transfer.axis must name a different axis"
+        )
+    if coords and transfer_axis not in coords:
+        raise InvalidRhsSpecError(
+            detail=f"{where}.kernel.transfer.axis {transfer_axis!r} is not defined"
+        )
+    allowed = coords.get(transfer_axis)
+    for side in ("source", "target"):
+        value = transfer.get(side)
+        if not isinstance(value, str) or (allowed and value not in allowed):
+            raise InvalidRhsSpecError(
+                detail=(
+                    f"{where}.kernel.transfer.{side} {value!r} is not a "
+                    f"coordinate of {transfer_axis!r}"
+                )
+            )
+    rate = transfer.get("rate")
+    if (
+        not isinstance(rate, list)
+        or not rate
+        or any(not isinstance(name, str) or name not in known_params for name in rate)
+    ):
+        raise InvalidRhsSpecError(
+            detail=(
+                f"{where}.kernel.transfer.rate must list parameter names "
+                "that also appear in kernel.params"
+            )
+        )
+
+
+def _validate_op_axis_kernel(
+    op_map: Mapping[str, Any],
+    idx: int,
+    axis_name: str,
+    axes: list[dict[str, Any]] | None,
+) -> None:
+    """Validate ``axis_kernel`` operator fields.
+
+    Raises:
+        InvalidRhsSpecError: If validation fails.
+    """
+    where = f"operators[{idx}]"
+    kernel = op_map.get("kernel")
+    if not isinstance(kernel, _MappingABC):
+        raise InvalidRhsSpecError(detail=f"{where}.kernel must be a mapping")
+    params = _validate_axis_kernel_matrix(kernel, where, axis_name)
+    velocity = op_map.get("velocity")
+    if velocity is not None:
+        _validate_scalar_or_expr(velocity, f"{where}.velocity")
+    transfer = kernel.get("transfer")
+    if transfer is None:
+        return
+    if kernel.get("form") != "stochastic":
+        raise InvalidRhsSpecError(
+            detail=f"{where}.kernel.transfer requires form 'stochastic'"
+        )
+    _validate_axis_kernel_transfer(
+        transfer, where, axis_name, axes, set(params.values())
+    )
+
+
 def _validate_op_header(
     op_map: Mapping[str, Any],
     idx: int,
@@ -492,6 +610,8 @@ def _normalize_single_operator(
         _validate_op_advection(op_map, idx, kind_s)
     elif kind_s == "jump_integral":
         _validate_op_jump_integral(op_map, idx)
+    elif kind_s == "axis_kernel":
+        _validate_op_axis_kernel(op_map, idx, axis_name_s, axes)
 
     op_out = dict(op_map)
     if op_name_s is not None:

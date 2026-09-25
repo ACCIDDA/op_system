@@ -539,6 +539,34 @@ def test_requested_parameters_rejects_malformed_param_axes() -> None:
         sys.requested_parameters(AxisCollection())
 
 
+def test_requested_parameters_for_axis_kernel_operator() -> None:
+    """An axis_kernel matrix is requested over its declared [axis, axis]."""
+    spec: dict[str, object] = {
+        "kind": "transitions",
+        "axes": [
+            {"name": "vax", "coords": ["u", "v"]},
+            {"name": "imm", "type": "ordinal", "coords": ["x0", "x1"]},
+        ],
+        "state": ["X[vax, imm]"],
+        "transitions": [{"from": "X[vax=u, imm]", "to": "X[vax=v, imm]", "rate": "k"}],
+        "operators": [
+            {
+                "kind": "axis_kernel",
+                "axis": "imm",
+                "velocity": "w",
+                "kernel": {
+                    "form": "generator",
+                    "params": {"matrix": "G"},
+                    "param_axes": {"G": ["imm", "imm"]},
+                },
+            },
+        ],
+    }
+    requests = OpSystemSystem(spec=spec).requested_parameters(AxisCollection())
+    assert requests["G"].axes == ("imm", "imm")
+    assert requests["w"].axes == ()
+
+
 def test_requested_parameters_includes_initial_state_seeds() -> None:
     """Seed parameter names appear in requested_parameters even if absent from rates."""
     spec: dict[str, object] = {
