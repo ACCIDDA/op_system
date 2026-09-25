@@ -37,6 +37,7 @@ from op_system._identifer_string import IdentifierString
 from op_system._operators import OperatorDescriptor
 from op_system._state_string import StateString
 from op_system._typing import Array
+from op_system._validate import ShapeGroup, ValidationReport, validate_spec
 
 from .compile import (
     BodyEvalFn,
@@ -141,9 +142,11 @@ __all__ = [
     "OperatorDescriptor",
     "PytreeEvalFn",
     "ReactionPropensityFn",
+    "ShapeGroup",
     "StateDict",
     "StateString",
     "TransitionsRhs",
+    "ValidationReport",
     "__version__",
     "axis_kernel_generator_rhs",
     "axis_kernel_redistribute",
@@ -153,4 +156,5 @@ __all__ = [
     "normalize_rhs",
     "normalize_transitions_rhs",
     "validate_axis_kernel_matrix",
+    "validate_spec",
 ]

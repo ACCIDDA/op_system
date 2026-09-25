@@ -22,6 +22,13 @@ version; format loosely follows
   normalization, and `axis_kernel_generator_rhs`,
   `axis_kernel_redistribute`, and `validate_axis_kernel_matrix` provide
   shared backend-agnostic reference semantics for engines (#206).
+- `op_system.validate_spec` returns a `ValidationReport` instead of raising:
+  per-stage status (normalize, compile, vectorize), errors, compile-cost
+  drivers (expanded states, coordinate-pinned transitions, operators),
+  consumed parameters with their axes (including operator
+  `kernel.param_axes`), and, for templates whose cells differ, the distinct
+  expression shapes with an example cell. `python -m op_system.validate`
+  applies it to bare specs or flepimop2 configurations (#205).
 
 ## [0.2.0] - 2026-08-17
 
