@@ -62,6 +62,9 @@ version; format loosely follows
   time-varying. Time stripping also matches `axis:alias` subscripts.
 - `validate_spec` no longer lists synthesized coordinate masks
   (`__op_system_mask__*`) among consumed parameters.
+- `validate_spec` computes `shape_groups` only when vectorization fails.
+  Comparing every cell's expanded equation took 77 s on the COVID loc3 spec
+  (131 million characters); a passing spec now validates in under a second.
 
 ## [0.2.0] - 2026-08-17
 

@@ -51,8 +51,10 @@ class ValidationReport:
         parameters: Parameters the spec consumes, mapped to their declared
             axes (empty tuple for scalars); operator parameters use
             ``kernel.param_axes`` when declared.
-        shape_groups: For templates whose cells have more than one expression
-            shape, the distinct shapes with a count and an example cell.
+        shape_groups: When vectorization fails, the templates whose cells
+            have more than one expression shape, with each distinct shape's
+            count and an example cell. Empty otherwise, because comparing
+            every cell's expanded equation is slow on large specs.
     """
 
     stages: dict[str, str]
@@ -198,7 +200,6 @@ def validate_spec(spec: Mapping[str, Any]) -> ValidationReport:
     report_kwargs: dict[str, Any] = {
         "cost": _cost(spec, rhs),
         "parameters": _parameters(rhs),
-        "shape_groups": _shape_groups(rhs),
     }
     try:
         compile_rhs(rhs)
@@ -206,6 +207,8 @@ def validate_spec(spec: Mapping[str, Any]) -> ValidationReport:
         vectorize = "vectorized eval path" in str(exc)
         stages["compile"] = "passed" if vectorize else "failed"
         stages["vectorize"] = "failed" if vectorize else "skipped"
+        if vectorize:
+            report_kwargs["shape_groups"] = _shape_groups(rhs)
         return ValidationReport(stages=stages, errors=[str(exc)], **report_kwargs)
     except Exception as exc:  # ruff: ignore[blind-except]
         stages["compile"] = "failed"
