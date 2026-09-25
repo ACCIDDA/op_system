@@ -829,6 +829,28 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#op_system.axis_kernel_generator_rhs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        axis_kernel_generator_rhs
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#op_system.axis_kernel_redistribute" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        axis_kernel_redistribute
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#op_system.compile_rhs" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -877,6 +899,17 @@
     <span class="md-ellipsis">
       
         normalize_transitions_rhs
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#op_system.validate_axis_kernel_matrix" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        validate_axis_kernel_matrix
       
     </span>
   </a>
@@ -1248,6 +1281,28 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#op_system.axis_kernel_generator_rhs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        axis_kernel_generator_rhs
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#op_system.axis_kernel_redistribute" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        axis_kernel_redistribute
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#op_system.compile_rhs" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1296,6 +1351,17 @@
     <span class="md-ellipsis">
       
         normalize_transitions_rhs
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#op_system.validate_axis_kernel_matrix" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        validate_axis_kernel_matrix
       
     </span>
   </a>
@@ -2842,6 +2908,316 @@ as the union type when you need to accept both kinds.</p>
 <div class="doc doc-object doc-function">
 
 
+<h3 id="op_system.axis_kernel_generator_rhs" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">axis_kernel_generator_rhs</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="n">generator</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">axis</span><span class="p">,</span> <span class="n">velocity</span><span class="o">=</span><span class="mf">1.0</span><span class="p">)</span></code>
+
+<a href="#op_system.axis_kernel_generator_rhs" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Return <code>velocity * state @ generator</code> applied along <code>axis</code>.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>state</code>
+            </td>
+            <td>
+                  <code><span title="typing.Any">Any</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Array with the kernel axis at position <code>axis</code>.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>generator</code>
+            </td>
+            <td>
+                  <code><span title="typing.Any">Any</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Square matrix over the kernel axis; rows are sources.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>axis</code>
+            </td>
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Position of the kernel axis in <code>state</code>.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>velocity</code>
+            </td>
+            <td>
+                  <code><span title="typing.Any">Any</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Scalar multiplier (for example a waning rate).</p>
+              </div>
+            </td>
+            <td>
+                  <code>1.0</code>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="typing.Any">Any</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The derivative contribution, with the same shape as <code>state</code>.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+            <details class="mkdocstrings-source">
+              <summary>Source code in <code>src/op_system/_axis_kernel.py</code></summary>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">40</span>
+<span class="normal">41</span>
+<span class="normal">42</span>
+<span class="normal">43</span>
+<span class="normal">44</span>
+<span class="normal">45</span>
+<span class="normal">46</span>
+<span class="normal">47</span>
+<span class="normal">48</span>
+<span class="normal">49</span>
+<span class="normal">50</span>
+<span class="normal">51</span>
+<span class="normal">52</span>
+<span class="normal">53</span>
+<span class="normal">54</span>
+<span class="normal">55</span>
+<span class="normal">56</span>
+<span class="normal">57</span>
+<span class="normal">58</span>
+<span class="normal">59</span>
+<span class="normal">60</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">axis_kernel_generator_rhs</span><span class="p">(</span>
+    <span class="n">state</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>  <span class="c1"># ruff: ignore[any-type]</span>
+    <span class="n">generator</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>  <span class="c1"># ruff: ignore[any-type]</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">axis</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">velocity</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span>  <span class="c1"># ruff: ignore[any-type]</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>  <span class="c1"># ruff: ignore[any-type]</span>
+<span class="w">    </span><span class="sd">"""Return ``velocity * state @ generator`` applied along ``axis``.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        state: Array with the kernel axis at position ``axis``.</span>
+<span class="sd">        generator: Square matrix over the kernel axis; rows are sources.</span>
+<span class="sd">        axis: Position of the kernel axis in ``state``.</span>
+<span class="sd">        velocity: Scalar multiplier (for example a waning rate).</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        The derivative contribution, with the same shape as ``state``.</span>
+<span class="sd">    """</span>
+    <span class="n">xp</span> <span class="o">=</span> <span class="n">_namespace</span><span class="p">(</span><span class="n">state</span><span class="p">)</span>
+    <span class="n">moved</span> <span class="o">=</span> <span class="n">xp</span><span class="o">.</span><span class="n">moveaxis</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="n">axis</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">xp</span><span class="o">.</span><span class="n">moveaxis</span><span class="p">(</span><span class="n">velocity</span> <span class="o">*</span> <span class="p">(</span><span class="n">moved</span> <span class="o">@</span> <span class="n">generator</span><span class="p">),</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">axis</span><span class="p">)</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="op_system.axis_kernel_redistribute" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">axis_kernel_redistribute</span><span class="p">(</span><span class="n">flux</span><span class="p">,</span> <span class="n">kernel</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">axis</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span></code>
+
+<a href="#op_system.axis_kernel_redistribute" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Return <code>flux @ kernel - flux</code> along <code>axis</code> for a transferred flux.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>flux</code>
+            </td>
+            <td>
+                  <code><span title="typing.Any">Any</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Per-coordinate flux already moved by an ordinary transfer.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>kernel</code>
+            </td>
+            <td>
+                  <code><span title="typing.Any">Any</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Row-stochastic matrix over the kernel axis.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>axis</code>
+            </td>
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Position of the kernel axis in <code>flux</code>.</p>
+              </div>
+            </td>
+            <td>
+                  <code>-1</code>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="typing.Any">Any</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The redistribution to add to the target slice.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+            <details class="mkdocstrings-source">
+              <summary>Source code in <code>src/op_system/_axis_kernel.py</code></summary>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">63</span>
+<span class="normal">64</span>
+<span class="normal">65</span>
+<span class="normal">66</span>
+<span class="normal">67</span>
+<span class="normal">68</span>
+<span class="normal">69</span>
+<span class="normal">70</span>
+<span class="normal">71</span>
+<span class="normal">72</span>
+<span class="normal">73</span>
+<span class="normal">74</span>
+<span class="normal">75</span>
+<span class="normal">76</span>
+<span class="normal">77</span>
+<span class="normal">78</span>
+<span class="normal">79</span>
+<span class="normal">80</span>
+<span class="normal">81</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">axis_kernel_redistribute</span><span class="p">(</span>
+    <span class="n">flux</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>  <span class="c1"># ruff: ignore[any-type]</span>
+    <span class="n">kernel</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>  <span class="c1"># ruff: ignore[any-type]</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">axis</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>  <span class="c1"># ruff: ignore[any-type]</span>
+<span class="w">    </span><span class="sd">"""Return ``flux @ kernel - flux`` along ``axis`` for a transferred flux.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        flux: Per-coordinate flux already moved by an ordinary transfer.</span>
+<span class="sd">        kernel: Row-stochastic matrix over the kernel axis.</span>
+<span class="sd">        axis: Position of the kernel axis in ``flux``.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        The redistribution to add to the target slice.</span>
+<span class="sd">    """</span>
+    <span class="n">xp</span> <span class="o">=</span> <span class="n">_namespace</span><span class="p">(</span><span class="n">flux</span><span class="p">)</span>
+    <span class="n">moved</span> <span class="o">=</span> <span class="n">xp</span><span class="o">.</span><span class="n">moveaxis</span><span class="p">(</span><span class="n">flux</span><span class="p">,</span> <span class="n">axis</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">xp</span><span class="o">.</span><span class="n">moveaxis</span><span class="p">(</span><span class="n">moved</span> <span class="o">@</span> <span class="n">kernel</span> <span class="o">-</span> <span class="n">moved</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">axis</span><span class="p">)</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
 <h3 id="op_system.compile_rhs" class="doc doc-heading">
             <code class="highlight language-python"><span class="n">compile_rhs</span><span class="p">(</span><span class="n">rhs</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">xp</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
 
@@ -3374,13 +3750,7 @@ removed in a future release.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/op_system/__init__.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"> 72</span>
-<span class="normal"> 73</span>
-<span class="normal"> 74</span>
-<span class="normal"> 75</span>
-<span class="normal"> 76</span>
-<span class="normal"> 77</span>
-<span class="normal"> 78</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"> 78</span>
 <span class="normal"> 79</span>
 <span class="normal"> 80</span>
 <span class="normal"> 81</span>
@@ -3415,7 +3785,13 @@ removed in a future release.</p>
 <span class="normal">110</span>
 <span class="normal">111</span>
 <span class="normal">112</span>
-<span class="normal">113</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">compile_spec</span><span class="p">(</span>  <span class="c1"># ruff: ignore[non-empty-init-module]</span>
+<span class="normal">113</span>
+<span class="normal">114</span>
+<span class="normal">115</span>
+<span class="normal">116</span>
+<span class="normal">117</span>
+<span class="normal">118</span>
+<span class="normal">119</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">compile_spec</span><span class="p">(</span>  <span class="c1"># ruff: ignore[non-empty-init-module]</span>
     <span class="n">spec</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">object</span><span class="p">],</span>
     <span class="o">*</span><span class="p">,</span>
     <span class="n">xp</span><span class="p">:</span> <span class="nb">object</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -4882,6 +5258,216 @@ removed in a future release.</p>
             <span class="n">alias_template_map</span><span class="o">=</span><span class="n">alias_template_map</span><span class="p">,</span>
         <span class="p">),</span>
     <span class="p">)</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="op_system.validate_axis_kernel_matrix" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">validate_axis_kernel_matrix</span><span class="p">(</span><span class="n">matrix</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">form</span><span class="p">,</span> <span class="n">tolerance</span><span class="o">=</span><span class="mf">1e-09</span><span class="p">)</span></code>
+
+<a href="#op_system.validate_axis_kernel_matrix" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Return problems with a numeric kernel matrix for <code>form</code> (empty if valid).</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>matrix</code>
+            </td>
+            <td>
+                  <code><span title="typing.Any">Any</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Candidate square matrix.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>form</code>
+            </td>
+            <td>
+                  <code><span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p><code>"generator"</code> or <code>"stochastic"</code>.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>tolerance</code>
+            </td>
+            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Absolute tolerance for sign and row-sum checks.</p>
+              </div>
+            </td>
+            <td>
+                  <code>1e-09</code>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="list">list</span>[<span title="str">str</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Human-readable problems; an empty list means the matrix is valid.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<p><span class="doc-section-title">Raises:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="ValueError">ValueError</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>If <code>form</code> is not a supported axis-kernel form.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+            <details class="mkdocstrings-source">
+              <summary>Source code in <code>src/op_system/_axis_kernel.py</code></summary>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"> 84</span>
+<span class="normal"> 85</span>
+<span class="normal"> 86</span>
+<span class="normal"> 87</span>
+<span class="normal"> 88</span>
+<span class="normal"> 89</span>
+<span class="normal"> 90</span>
+<span class="normal"> 91</span>
+<span class="normal"> 92</span>
+<span class="normal"> 93</span>
+<span class="normal"> 94</span>
+<span class="normal"> 95</span>
+<span class="normal"> 96</span>
+<span class="normal"> 97</span>
+<span class="normal"> 98</span>
+<span class="normal"> 99</span>
+<span class="normal">100</span>
+<span class="normal">101</span>
+<span class="normal">102</span>
+<span class="normal">103</span>
+<span class="normal">104</span>
+<span class="normal">105</span>
+<span class="normal">106</span>
+<span class="normal">107</span>
+<span class="normal">108</span>
+<span class="normal">109</span>
+<span class="normal">110</span>
+<span class="normal">111</span>
+<span class="normal">112</span>
+<span class="normal">113</span>
+<span class="normal">114</span>
+<span class="normal">115</span>
+<span class="normal">116</span>
+<span class="normal">117</span>
+<span class="normal">118</span>
+<span class="normal">119</span>
+<span class="normal">120</span>
+<span class="normal">121</span>
+<span class="normal">122</span>
+<span class="normal">123</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">validate_axis_kernel_matrix</span><span class="p">(</span>
+    <span class="n">matrix</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>  <span class="c1"># ruff: ignore[any-type]</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">form</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">tolerance</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1e-9</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Return problems with a numeric kernel matrix for ``form`` (empty if valid).</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        matrix: Candidate square matrix.</span>
+<span class="sd">        form: ``"generator"`` or ``"stochastic"``.</span>
+<span class="sd">        tolerance: Absolute tolerance for sign and row-sum checks.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        Human-readable problems; an empty list means the matrix is valid.</span>
+
+<span class="sd">    Raises:</span>
+<span class="sd">        ValueError: If ``form`` is not a supported axis-kernel form.</span>
+<span class="sd">    """</span>
+    <span class="k">if</span> <span class="n">form</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">AXIS_KERNEL_FORMS</span><span class="p">:</span>
+        <span class="n">msg</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"unknown axis_kernel form </span><span class="si">{</span><span class="n">form</span><span class="si">!r}</span><span class="s2">"</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+    <span class="n">xp</span> <span class="o">=</span> <span class="n">_namespace</span><span class="p">(</span><span class="n">matrix</span><span class="p">)</span>
+    <span class="n">problems</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">if</span> <span class="n">matrix</span><span class="o">.</span><span class="n">ndim</span> <span class="o">!=</span> <span class="mi">2</span> <span class="ow">or</span> <span class="n">matrix</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">!=</span> <span class="n">matrix</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]:</span>
+        <span class="k">return</span> <span class="p">[</span><span class="s2">"matrix must be square"</span><span class="p">]</span>
+    <span class="n">n</span> <span class="o">=</span> <span class="n">matrix</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="n">off_diagonal</span> <span class="o">=</span> <span class="n">matrix</span> <span class="o">*</span> <span class="p">(</span><span class="mf">1.0</span> <span class="o">-</span> <span class="n">xp</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">matrix</span><span class="o">.</span><span class="n">dtype</span><span class="p">))</span>
+    <span class="k">if</span> <span class="nb">bool</span><span class="p">(</span><span class="n">xp</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">off_diagonal</span> <span class="o">&lt;</span> <span class="o">-</span><span class="n">tolerance</span><span class="p">)):</span>
+        <span class="n">problems</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">"off-diagonal entries must be nonnegative"</span><span class="p">)</span>
+    <span class="n">row_sums</span> <span class="o">=</span> <span class="n">xp</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">matrix</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">form</span> <span class="o">==</span> <span class="s2">"generator"</span><span class="p">:</span>
+        <span class="k">if</span> <span class="nb">bool</span><span class="p">(</span><span class="n">xp</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">xp</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">row_sums</span><span class="p">)</span> <span class="o">&gt;</span> <span class="n">tolerance</span><span class="p">)):</span>
+            <span class="n">problems</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">"generator rows must sum to zero"</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">if</span> <span class="nb">bool</span><span class="p">(</span><span class="n">xp</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">xp</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">diagonal</span><span class="p">(</span><span class="n">matrix</span><span class="p">)</span> <span class="o">&lt;</span> <span class="o">-</span><span class="n">tolerance</span><span class="p">)):</span>
+            <span class="n">problems</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">"stochastic diagonal entries must be nonnegative"</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">bool</span><span class="p">(</span><span class="n">xp</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">xp</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">row_sums</span> <span class="o">-</span> <span class="mf">1.0</span><span class="p">)</span> <span class="o">&gt;</span> <span class="n">tolerance</span><span class="p">)):</span>
+            <span class="n">problems</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">"stochastic rows must sum to one"</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">problems</span>
 </code></pre></div></td></tr></table></div>
             </details>
     </div>
