@@ -5,6 +5,15 @@ in this file. The two packages are released together under one shared
 version; format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Added
+
+- Operators can declare the axes of array parameters they consume in
+  `kernel.param_axes` (for example an `[imm, imm]` generator or a `[time]`
+  routing series). `flepimop2-op_system` requests those names with the
+  declared axes; undeclared names stay scalar requests (#204).
+
 ## [0.2.0] - 2026-08-17
 
 ### Added
