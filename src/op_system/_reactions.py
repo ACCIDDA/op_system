@@ -533,7 +533,7 @@ def _build_alias_bodies(
     return _resolve_alias_templates(parsed, axis_names=frozenset(axis_lookup))
 
 
-def build_reaction_artifacts_ir(  # ruff: ignore[too-many-arguments, too-many-locals]
+def build_reaction_artifacts_ir(  # ruff: ignore[too-many-arguments, too-many-locals, too-many-statements]
     transitions_raw: list[Mapping[str, Any]],
     *,
     axes: list[dict[str, Any]],
@@ -617,6 +617,10 @@ def build_reaction_artifacts_ir(  # ruff: ignore[too-many-arguments, too-many-lo
 
             # to-side must not introduce a wildcard axis absent from from-side.
             if any(ax not in frm_wc_set for ax in to_wc_axes):
+                continue
+            # Routing transitions (``axis:alias``) scatter one source cell
+            # over many targets; they have no reaction artifact yet.
+            if any(":" in ax for ax in frm_wc_axes):
                 continue
 
         ir_rate_raw = parse_expr_to_ir(rate_s, lower_helpers=True)

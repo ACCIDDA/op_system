@@ -66,6 +66,7 @@ def test_valid_spec_reports_cost_and_parameters() -> None:
     assert report.parameters["G"] == ("imm", "imm")
     assert report.parameters["w"] == ()
     assert report.parameters["nu"] == ()
+    assert report.shape_groups == {}
 
 
 def test_vectorization_failure_reports_expression_shapes() -> None:

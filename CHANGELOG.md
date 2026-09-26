@@ -29,6 +29,15 @@ version; format loosely follows
   `kernel.param_axes`), and, for templates whose cells differ, the distinct
   expression shapes with an example cell. `python -m op_system.validate`
   applies it to bare specs or flepimop2 configurations (#205).
+- Routing transitions: a transition that binds one axis under an alias in
+  `from` (`X[vax=u, imm:i]`) and another in `to` (`X[vax=v, imm:j]`) moves
+  mass along that axis with a matrix-valued rate such as
+  `nu * eta[time, imm:i, imm:j]`. It is lowered once per template to a
+  contraction, so one transition replaces one coordinate-pinned transition
+  per matrix entry and compiles in milliseconds at hundreds of coordinates.
+  Self-routing diagonals are no-ops, the routed axis cannot be a block axis,
+  and routing transitions have no `reactions` artifact yet. `validate_spec`
+  counts them under `routing_transitions` (#88, step 2).
 
 ### Changed
 
@@ -44,6 +53,18 @@ version; format loosely follows
   coordinates now normalizes and compiles in 1.5 s instead of 15.1 s, and
   the production COVID loc3 spec in 0.8 s instead of 15.2 s, with an
   identical compiled right-hand side (#88, step 1).
+
+### Fixed
+
+- Normalizing a transitions spec no longer rewrites the caller's
+  `transitions` entries in place when stripping the time axis from rates,
+  so normalizing the same spec twice keeps time-varying parameters
+  time-varying. Time stripping also matches `axis:alias` subscripts.
+- `validate_spec` no longer lists synthesized coordinate masks
+  (`__op_system_mask__*`) among consumed parameters.
+- `validate_spec` computes `shape_groups` only when vectorization fails.
+  Comparing every cell's expanded equation took 77 s on the COVID loc3 spec
+  (131 million characters); a passing spec now validates in under a second.
 
 ## [0.2.0] - 2026-08-17
 
