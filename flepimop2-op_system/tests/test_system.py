@@ -1044,10 +1044,47 @@ def test_option_reactions_exposes_named_transition() -> None:
     assert reaction.to_base == "S"
     assert reaction.sum_axes == ("vax",)
     assert reaction.pinned == (("vax", 2),)
+    assert reaction.reactants_complete is False
+    assert len(reaction.reactants) == 1
+    assert reaction.reactants[0].state_base == "C"
+    assert reaction.reactants[0].order == 1
 
     y = {"S": np.zeros(3), "C": np.array([10.0, 20.0, 30.0])}
     got = np.asarray(reaction.propensity_fn(np.float64(0.0), y, g=np.float64(0.05)))
     np.testing.assert_allclose(got, np.array([0.5, 1.0, 1.5]))
+
+
+def test_option_reactions_publishes_explicit_catalytic_reactants() -> None:
+    """The provider exposes complete reactant-order metadata unchanged."""
+    spec: dict[str, object] = {
+        "kind": "transitions",
+        "axes": [
+            {"name": "age", "coords": ["young", "old"]},
+            {"name": "loc", "coords": ["a", "b"]},
+        ],
+        "state": ["S[age,loc]", "I[age]"],
+        "transitions": [
+            {
+                "name": "infect",
+                "from": "S[age,loc]",
+                "to": "I[age]",
+                "rate": "beta * I[age]",
+                "reactants": [
+                    {"state": "S[age,loc]", "order": 1},
+                    {"state": "I[age]", "order": 1},
+                ],
+            },
+        ],
+    }
+    (reaction,) = OpSystemSystem(spec=spec).option("reactions", ())
+    assert reaction.reactants_complete is True
+    assert tuple(
+        (r.state_base, r.state_axes, r.full_axes, r.pinned, r.order)
+        for r in reaction.reactants
+    ) == (
+        ("S", ("age", "loc"), ("age", "loc"), (), 1),
+        ("I", ("age",), ("age",), (), 1),
+    )
 
 
 def test_option_reactions_merges_mixing_kernels() -> None:

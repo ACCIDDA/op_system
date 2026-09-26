@@ -187,7 +187,9 @@ NormalizedRhs = ExprRhs | TransitionsRhs
 # ---------------------------------------------------------------------------
 
 
-def _validate_transition_mapping(tr: object, *, idx: int) -> Mapping[str, Any]:
+def _validate_transition_mapping(  # ruff: ignore[complex-structure]
+    tr: object, *, idx: int
+) -> Mapping[str, Any]:
     """Validate and return a transition mapping.
 
     Returns:
@@ -204,6 +206,31 @@ def _validate_transition_mapping(tr: object, *, idx: int) -> Mapping[str, Any]:
             raise InvalidRhsSpecError(
                 detail=f"transitions[{idx}].name must be a non-empty string"
             )
+    if "reactants" in tr:
+        reactants = tr.get("reactants")
+        if not isinstance(reactants, list):
+            raise InvalidRhsSpecError(
+                detail=f"transitions[{idx}].reactants must be a list"
+            )
+        for reactant_idx, reactant in enumerate(reactants):
+            field = f"transitions[{idx}].reactants[{reactant_idx}]"
+            if not isinstance(reactant, dict):
+                raise InvalidRhsSpecError(detail=f"{field} must be a mapping")
+            unknown = set(reactant) - {"state", "order"}
+            if unknown:
+                raise InvalidRhsSpecError(
+                    detail=f"{field} has unknown fields: {sorted(unknown)!r}"
+                )
+            state = reactant.get("state")
+            if not isinstance(state, str) or not state.strip():
+                raise InvalidRhsSpecError(
+                    detail=f"{field}.state must be a non-empty string"
+                )
+            order = reactant.get("order")
+            if not isinstance(order, int) or isinstance(order, bool) or order < 1:
+                raise InvalidRhsSpecError(
+                    detail=f"{field}.order must be a positive integer"
+                )
     return tr
 
 
@@ -1843,6 +1870,11 @@ def normalize_transitions_rhs(  # ruff: ignore[complex-structure, too-many-branc
         shaped_params=shaped_params,
         time_axis_name=time_axis_name,
         aliases_raw=aliases_raw_map,
+        state_axes={
+            base: tuple(tok.axis for tok in tokens)
+            for state_s in state_raw
+            for base, tokens in (parse_selector(state_s),)
+        },
     )
 
     _maybe_attach_initial_state(

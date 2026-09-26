@@ -49,6 +49,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from op_system._axes import _normalize_bracket_key
+from op_system._errors import InvalidRhsSpecError
 from op_system._helpers import _get_required_str
 from op_system._ir import (
     Apply,
@@ -72,6 +73,23 @@ from op_system._templates import (
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
+
+
+@dataclass(frozen=True, slots=True)
+class ReactionReactantIR:
+    """Array-neutral molecular reactant metadata for one reaction channel.
+
+    ``state_axes`` are the selector axes that vary with the enclosing
+    reaction channel. ``pinned`` carries fixed coordinates for the remaining
+    axes in ``full_axes``. ``order`` is molecular order, independent of the
+    reaction's net stoichiometric change, so catalytic reactants are retained.
+    """
+
+    state_base: str
+    state_axes: tuple[str, ...]
+    full_axes: tuple[str, ...]
+    pinned: tuple[tuple[str, str], ...]
+    order: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -152,6 +170,12 @@ class ReactionArtifactIR:
         propensity_ir_reduce: Same, with Reduce nodes preserved (for the
             vector compile path, consistent with the rest of this
             package).
+        reactants: Molecular reactants aligned to each expanded reaction
+            channel. Orders are independent of net stoichiometric change.
+        reactants_complete: Whether ``reactants`` came from an explicit,
+            authoritative ``reactants:`` list. When false, op_system only
+            supplies the backwards-compatible consumed-source fallback and
+            consumers must not assume catalytic reactants are absent.
     """
 
     name: str
@@ -166,6 +190,8 @@ class ReactionArtifactIR:
     rate_string: str
     propensity_ir_full: Expr
     propensity_ir_reduce: Expr
+    reactants: tuple[ReactionReactantIR, ...]
+    reactants_complete: bool
 
 
 def _in_order_wildcard_axes(tokens: list[Any]) -> list[str]:
@@ -182,6 +208,152 @@ def _in_order_wildcard_axes(tokens: list[Any]) -> list[str]:
             axes.append(tok.axis)
             seen.add(tok.axis)
     return axes
+
+
+def _build_reactants_ir(  # ruff: ignore[complex-structure, too-many-arguments, too-many-branches]
+    tr_map: Mapping[str, Any],
+    *,
+    transition_name: str,
+    source_only: bool,
+    from_base: str | None,
+    from_axes: tuple[str, ...],
+    full_axes: tuple[str, ...],
+    from_pinned: tuple[tuple[str, str], ...],
+    state_axes: Mapping[str, tuple[str, ...]],
+    axis_lookup: Mapping[str, list[str]],
+) -> tuple[tuple[ReactionReactantIR, ...], bool]:
+    """Build and validate molecular reactants for one reaction artifact.
+
+    Returns:
+        ``(reactants, complete)``. An omitted declaration synthesizes the
+        consumed source at order one for backwards compatibility, but marks
+        the result incomplete because catalysts cannot be inferred safely.
+
+    Raises:
+        InvalidRhsSpecError: If explicit reactant metadata cannot align with
+            the reaction-channel axes or declared state layout.
+    """
+    raw = tr_map.get("reactants")
+    if raw is None:
+        if source_only:
+            return (), False
+        assert from_base is not None  # ruff: ignore[assert]
+        return (
+            ReactionReactantIR(
+                state_base=from_base,
+                state_axes=from_axes,
+                full_axes=full_axes,
+                pinned=from_pinned,
+                order=1,
+            ),
+        ), False
+
+    # Basic shape/type validation happens in _validate_transition_mapping.
+    # Keep a defensive guard here because this internal builder also has a
+    # narrow direct-call surface.
+    if not isinstance(raw, list):
+        raise InvalidRhsSpecError(
+            detail=f"transition {transition_name!r} reactants must be a list"
+        )
+
+    reactants: list[ReactionReactantIR] = []
+    seen: set[tuple[str, tuple[str, ...], tuple[tuple[str, str], ...]]] = set()
+    channel_axes = set(from_axes)
+    for idx, entry in enumerate(raw):
+        if not isinstance(entry, dict):
+            raise InvalidRhsSpecError(
+                detail=(
+                    f"transition {transition_name!r} reactants[{idx}] must be a mapping"
+                )
+            )
+        state_s = entry.get("state")
+        order = entry.get("order")
+        if not isinstance(state_s, str) or not state_s.strip():
+            raise InvalidRhsSpecError(
+                detail=(
+                    f"transition {transition_name!r} reactants[{idx}].state "
+                    "must be a non-empty string"
+                )
+            )
+        if not isinstance(order, int) or isinstance(order, bool) or order < 1:
+            raise InvalidRhsSpecError(
+                detail=(
+                    f"transition {transition_name!r} reactants[{idx}].order "
+                    "must be a positive integer"
+                )
+            )
+
+        base, tokens = parse_selector(state_s)
+        expected_axes = state_axes.get(base)
+        if expected_axes is None:
+            raise InvalidRhsSpecError(
+                detail=(
+                    f"transition {transition_name!r} reactant state "
+                    f"{state_s!r} has unknown state base {base!r}"
+                )
+            )
+        reactant_full_axes = tuple(tok.axis for tok in tokens)
+        if reactant_full_axes != expected_axes:
+            raise InvalidRhsSpecError(
+                detail=(
+                    f"transition {transition_name!r} reactant state {state_s!r} "
+                    f"must select axes {expected_axes!r} in declaration order"
+                )
+            )
+        reactant_axes = tuple(
+            tok.axis for tok in tokens if isinstance(tok, WildcardToken)
+        )
+        extra_axes = tuple(axis for axis in reactant_axes if axis not in channel_axes)
+        if extra_axes:
+            raise InvalidRhsSpecError(
+                detail=(
+                    f"transition {transition_name!r} reactant state {state_s!r} "
+                    f"has wildcard axes outside reaction channels: {extra_axes!r}"
+                )
+            )
+        reactant_pinned = tuple(
+            (tok.axis, tok.coord) for tok in tokens if isinstance(tok, PinnedToken)
+        )
+        for axis, coord in reactant_pinned:
+            if axis not in axis_lookup or coord not in axis_lookup[axis]:
+                raise InvalidRhsSpecError(
+                    detail=(
+                        f"transition {transition_name!r} reactant state "
+                        f"{state_s!r} pins unknown coordinate {axis}={coord}"
+                    )
+                )
+
+        key = (base, reactant_axes, reactant_pinned)
+        if key in seen:
+            raise InvalidRhsSpecError(
+                detail=(
+                    f"transition {transition_name!r} repeats reactant state "
+                    f"{state_s!r}; express multiplicity with one order"
+                )
+            )
+        seen.add(key)
+        reactants.append(
+            ReactionReactantIR(
+                state_base=base,
+                state_axes=reactant_axes,
+                full_axes=reactant_full_axes,
+                pinned=reactant_pinned,
+                order=order,
+            )
+        )
+
+    if not source_only:
+        assert from_base is not None  # ruff: ignore[assert]
+        source_key = (from_base, from_axes, from_pinned)
+        if source_key not in seen:
+            raise InvalidRhsSpecError(
+                detail=(
+                    f"transition {transition_name!r} explicit reactants must "
+                    "include its consumed from-state selector"
+                )
+            )
+
+    return tuple(reactants), True
 
 
 @dataclass(frozen=True, slots=True)
@@ -541,6 +713,7 @@ def build_reaction_artifacts_ir(  # ruff: ignore[too-many-arguments, too-many-lo
     shaped_params: Mapping[str, tuple[str, ...]] | None = None,
     time_axis_name: str | None = None,
     aliases_raw: Mapping[str, Any] | None = None,
+    state_axes: Mapping[str, tuple[str, ...]] | None = None,
 ) -> tuple[ReactionArtifactIR, ...]:
     """Build per-transition reaction artifacts for in-scope named transitions.
 
@@ -566,6 +739,8 @@ def build_reaction_artifacts_ir(  # ruff: ignore[too-many-arguments, too-many-lo
             on a reference cycle, or one whose reference shape is out of
             scope, is left unresolved, same as when this argument is
             omitted.
+        state_axes: Mapping from state base to its full declared axis tuple,
+            used to validate explicit reactant selectors.
 
     Returns:
         One :class:`ReactionArtifactIR` per named, in-scope transition, in
@@ -579,6 +754,7 @@ def build_reaction_artifacts_ir(  # ruff: ignore[too-many-arguments, too-many-lo
         module docstring).
     """
     shaped = shaped_params or {}
+    declared_state_axes = state_axes or {}
     alias_bodies = _build_alias_bodies(
         aliases_raw or {}, shaped_params=shaped, axis_lookup=axis_lookup
     )
@@ -717,6 +893,17 @@ def build_reaction_artifacts_ir(  # ruff: ignore[too-many-arguments, too-many-lo
         pinned = tuple(
             (tok.axis, tok.coord) for tok in to_tokens if isinstance(tok, PinnedToken)
         )
+        reactants, reactants_complete = _build_reactants_ir(
+            tr_map,
+            transition_name=name_s,
+            source_only=source_only,
+            from_base=frm_base,
+            from_axes=tuple(frm_wc_axes),
+            full_axes=full_axes,
+            from_pinned=from_pinned,
+            state_axes=declared_state_axes,
+            axis_lookup=axis_lookup,
+        )
 
         out.append(
             ReactionArtifactIR(
@@ -732,10 +919,16 @@ def build_reaction_artifacts_ir(  # ruff: ignore[too-many-arguments, too-many-lo
                 rate_string=unparse_ir(rate_ir_full),
                 propensity_ir_full=propensity_ir_full,
                 propensity_ir_reduce=propensity_ir_reduce,
+                reactants=reactants,
+                reactants_complete=reactants_complete,
             )
         )
 
     return tuple(out)
 
 
-__all__ = ["ReactionArtifactIR", "build_reaction_artifacts_ir"]
+__all__ = [
+    "ReactionArtifactIR",
+    "ReactionReactantIR",
+    "build_reaction_artifacts_ir",
+]

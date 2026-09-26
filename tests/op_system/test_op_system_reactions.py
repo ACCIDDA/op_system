@@ -16,8 +16,10 @@ These tests cover:
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
 from op_system import compile_spec
+from op_system._errors import InvalidRhsSpecError
 from op_system.specs import normalize_transitions_rhs
 
 
@@ -106,6 +108,14 @@ def test_same_axes_reaction_metadata_and_propensity() -> None:
     assert expose.to_axes == ("age", "vax")
     assert expose.sum_axes == ()
     assert expose.pinned == ()
+    assert expose.reactants_complete is False
+    assert len(expose.reactants) == 1
+    source = expose.reactants[0]
+    assert source.state_base == "S"
+    assert source.state_axes == ("age", "vax")
+    assert source.full_axes == ("age", "vax")
+    assert source.pinned == ()
+    assert source.order == 1
 
     y = {
         "S": np.array([[10.0, 20.0, 30.0], [1.0, 2.0, 3.0]]),
@@ -116,6 +126,138 @@ def test_same_axes_reaction_metadata_and_propensity() -> None:
         expose.propensity_fn(0.0, y, foi=np.asarray(0.1), gamma_c=np.asarray(0.05))
     )
     np.testing.assert_allclose(got, 0.1 * y["S"])
+
+
+def test_explicit_reactants_preserve_catalysts_multiplicity_and_grouped_axes() -> None:
+    """Reactant order is independent of net change and channel axis count."""
+    spec: dict[str, object] = {
+        "kind": "transitions",
+        "axes": [
+            {"name": "age", "coords": ["a0", "a1"]},
+            {"name": "vax", "coords": ["u", "f"]},
+        ],
+        "state": ["S[age,vax]", "E[age,vax]", "I[age]"],
+        "transitions": [
+            {
+                "name": "infect",
+                "from": "S[age,vax]",
+                "to": "E[age,vax]",
+                "rate": "beta * I[age]",
+                "reactants": [
+                    {"state": "S[age,vax]", "order": 2},
+                    {"state": "I[age]", "order": 1},
+                ],
+            },
+        ],
+    }
+
+    rhs = normalize_transitions_rhs(spec)
+    (reaction_ir,) = rhs.reactions_ir
+    assert reaction_ir.reactants_complete is True
+    assert [r.order for r in reaction_ir.reactants] == [2, 1]
+    assert reaction_ir.reactants[1].state_axes == ("age",)
+
+    (reaction,) = compile_spec(spec).reactions
+    assert reaction.reactants_complete is True
+    source, catalyst = reaction.reactants
+    assert source.state_base == "S"
+    assert source.state_axes == ("age", "vax")
+    assert source.order == 2
+    assert catalyst.state_base == "I"
+    assert catalyst.state_axes == ("age",)
+    assert catalyst.full_axes == ("age",)
+    assert catalyst.pinned == ()
+    assert catalyst.order == 1
+
+
+def test_explicit_reactant_can_pin_a_state_axis() -> None:
+    """A fixed catalyst coordinate compiles to its integer coordinate index."""
+    spec: dict[str, object] = {
+        "kind": "transitions",
+        "axes": [
+            {"name": "age", "coords": ["a0", "a1"]},
+            {"name": "vax", "coords": ["u", "f"]},
+        ],
+        "state": ["S[age,vax]", "E[age,vax]", "I[age,vax]"],
+        "transitions": [
+            {
+                "name": "infect",
+                "from": "S[age,vax]",
+                "to": "E[age,vax]",
+                "rate": "beta",
+                "reactants": [
+                    {"state": "S[age,vax]", "order": 1},
+                    {"state": "I[age,vax=f]", "order": 1},
+                ],
+            },
+        ],
+    }
+
+    (reaction,) = compile_spec(spec).reactions
+    catalyst = reaction.reactants[1]
+    assert catalyst.state_axes == ("age",)
+    assert catalyst.full_axes == ("age", "vax")
+    assert catalyst.pinned == (("vax", 1),)
+
+
+def test_explicit_empty_reactants_marks_zero_order_source_complete() -> None:
+    """Source-only reactions can explicitly declare a complete empty set."""
+    spec: dict[str, object] = {
+        "kind": "transitions",
+        "axes": [{"name": "age", "coords": ["a0", "a1"]}],
+        "state": ["S[age]"],
+        "transitions": [
+            {
+                "name": "seed",
+                "to": "S[age]",
+                "rate": "seed_rate",
+                "reactants": [],
+            },
+        ],
+    }
+    (reaction,) = compile_spec(spec).reactions
+    assert reaction.from_base is None
+    assert reaction.reactants == ()
+    assert reaction.reactants_complete is True
+
+
+@pytest.mark.parametrize(
+    ("reactants", "match"),
+    [
+        ([{"state": "E[age]", "order": 1}], "include its consumed"),
+        ([{"state": "S[age]", "order": 0}], "positive integer"),
+        (
+            [
+                {"state": "S[age]", "order": 1},
+                {"state": "I[age,loc]", "order": 1},
+            ],
+            "outside reaction channels",
+        ),
+    ],
+)
+def test_invalid_explicit_reactants_are_rejected(
+    reactants: list[dict[str, object]], match: str
+) -> None:
+    """Unsafe or channel-misaligned molecular metadata fails normalization."""
+    spec: dict[str, object] = {
+        "kind": "transitions",
+        "axes": [
+            {"name": "age", "coords": ["a0", "a1"]},
+            {"name": "loc", "coords": ["x", "y"]},
+        ],
+        "state": ["S[age]", "E[age]", "I[age,loc]"],
+        "transitions": [
+            {
+                "name": "infect",
+                "from": "S[age]",
+                "to": "E[age]",
+                "rate": "beta",
+                "reactants": reactants,
+            },
+        ],
+    }
+    with pytest.raises(InvalidRhsSpecError, match=match):
+        normalize_transitions_rhs(spec)
 
 
 def test_collapse_to_pinned_target_metadata_and_propensity() -> None:
