@@ -133,7 +133,8 @@ def _cost(spec: Mapping[str, Any], rhs: NormalizedRhs | None) -> dict[str, int]:
     routing = sum(
         1
         for t in transitions
-        if isinstance(t, _MappingABC) and ":" in str(t.get("from") or "")
+        if isinstance(t, _MappingABC)
+        and any(":" in str(t.get(side) or "") for side in ("from", "to"))
     )
     cost = {
         "transitions": len(transitions),

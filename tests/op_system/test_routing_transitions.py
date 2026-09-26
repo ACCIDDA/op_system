@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 import pytest
 
-from op_system import CompiledRhs, compile_spec, validate_spec
+from op_system import Array, CompiledRhs, compile_spec, validate_spec
 from op_system._errors import InvalidRhsSpecError
 
 if TYPE_CHECKING:
@@ -78,6 +78,29 @@ def _params(n: int, seed: int = 0) -> tuple[np.ndarray, dict[str, np.ndarray]]:
     return rng.uniform(1, 2, (3, 2, n)), params
 
 
+def _fanout_spec(n_imm: int, transition: dict[str, str]) -> dict[str, Any]:
+    """Build a structured source-to-larger-target fanout spec.
+
+    Returns:
+        Transition spec with source ``I[age,loc]`` and target
+        ``X[age,loc,imm]``.
+    """
+    return {
+        "kind": "transitions",
+        "axes": [
+            {"name": "age", "coords": ["child", "adult"]},
+            {"name": "loc", "coords": ["a", "b", "c"]},
+            {
+                "name": "imm",
+                "type": "ordinal",
+                "coords": [f"x{i}" for i in range(n_imm)],
+            },
+        ],
+        "state": ["I[age,loc]", "X[age,loc,imm]"],
+        "transitions": [transition],
+    }
+
+
 @pytest.mark.parametrize("factorize", [None, ["loc"]])
 def test_routing_matches_matrix_flows_and_conserves_mass(
     factorize: list[str] | None,
@@ -91,6 +114,147 @@ def test_routing_matches_matrix_flows_and_conserves_mass(
     got = np.asarray(_eval(compiled)(0.0, {"X": y}, **params)["X"])
     np.testing.assert_allclose(got, _expected(y, params), rtol=0, atol=1e-13)
     assert abs(got.sum()) < 1e-12
+
+
+@pytest.mark.parametrize("factorize_axes", [(), ("loc",)])
+def test_target_only_fanout_matches_explicit_pinned_transitions(
+    factorize_axes: tuple[str, ...],
+) -> None:
+    """One target alias equals a coordinate-pinned transition family."""
+    n_imm = 5
+    fanout_spec = _fanout_spec(
+        n_imm,
+        {
+            "from": "I[age,loc]",
+            "to": "X[age,loc,imm:j]",
+            "rate": "reset_rate * weights[imm:j]",
+        },
+    )
+    explicit_spec = _fanout_spec(
+        n_imm,
+        {
+            "from": "I[age,loc]",
+            "to": "X[age,loc,imm=x0]",
+            "rate": "reset_rate * w0",
+        },
+    )
+    explicit_spec["transitions"] = [
+        {
+            "from": "I[age,loc]",
+            "to": f"X[age,loc,imm=x{index}]",
+            "rate": f"reset_rate * w{index}",
+        }
+        for index in range(n_imm)
+    ]
+    if factorize_axes:
+        fanout_spec["factorize_axes"] = list(factorize_axes)
+        explicit_spec["factorize_axes"] = list(factorize_axes)
+    fanout = compile_spec(fanout_spec)
+    explicit = compile_spec(explicit_spec)
+
+    rng = np.random.default_rng(9)
+    i_state = rng.uniform(1.0, 5.0, (2, 3))
+    x_state = rng.uniform(0.0, 1.0, (2, 3, n_imm))
+    weights = rng.uniform(0.0, 1.0, n_imm)
+    reset_rate = np.asarray(0.2)
+    fanout_result = _eval(fanout)(
+        0.0,
+        {"I": i_state, "X": x_state},
+        reset_rate=reset_rate,
+        weights=weights,
+    )
+    explicit_result = _eval(explicit)(
+        0.0,
+        {"I": i_state, "X": x_state},
+        reset_rate=reset_rate,
+        **{f"w{index}": weight for index, weight in enumerate(weights)},
+    )
+
+    np.testing.assert_allclose(
+        fanout_result["I"], explicit_result["I"], rtol=0.0, atol=1e-13
+    )
+    np.testing.assert_allclose(
+        fanout_result["X"], explicit_result["X"], rtol=0.0, atol=1e-13
+    )
+    assert abs(float(fanout_result["I"].sum() + fanout_result["X"].sum())) < 1e-12
+
+
+def test_target_only_fanout_numpy_jax_jit_and_gradient_agree() -> None:
+    """The lazy fanout IR remains namespace-polymorphic and differentiable."""
+    jax = pytest.importorskip("jax")
+    jnp = pytest.importorskip("jax.numpy")
+    n_imm = 4
+    compiled = compile_spec(
+        _fanout_spec(
+            n_imm,
+            {
+                "from": "I[age,loc]",
+                "to": "X[age,loc,imm:j]",
+                "rate": "reset_rate * weights[imm:j]",
+            },
+        )
+    )
+    evaluator = _eval(compiled)
+    i_state = np.arange(1.0, 7.0).reshape(2, 3)
+    weights = np.asarray([0.1, 0.2, 0.3, 0.4])
+    reset_rate = 0.25
+    numpy_result = evaluator(
+        np.asarray(0.0),
+        {"I": i_state, "X": np.zeros((2, 3, n_imm))},
+        reset_rate=np.asarray(reset_rate),
+        weights=weights,
+    )
+
+    def target_flow(source: Array, target_weights: Array) -> Array:
+        return evaluator(
+            jnp.asarray(0.0),
+            {
+                "I": source,  # type: ignore[dict-item]  # namespace-polymorphic
+                "X": jnp.zeros((2, 3, n_imm)),
+            },
+            reset_rate=jnp.asarray(reset_rate),
+            weights=target_weights,
+        )["X"]
+
+    jax_result = jax.jit(target_flow)(jnp.asarray(i_state), jnp.asarray(weights))
+    gradient = jax.grad(
+        lambda target_weights: jnp.sum(
+            target_flow(jnp.asarray(i_state), target_weights)
+        )
+    )(jnp.asarray(weights))
+
+    np.testing.assert_allclose(
+        np.asarray(jax_result), numpy_result["X"], rtol=1e-6, atol=1e-6
+    )
+    np.testing.assert_allclose(
+        np.asarray(gradient),
+        np.full(n_imm, reset_rate * i_state.sum()),
+        rtol=1e-6,
+        atol=1e-6,
+    )
+
+
+def test_target_only_fanout_stays_one_lazy_transition() -> None:
+    """Target-axis size does not create one normalized transition per cell."""
+    spec = _fanout_spec(
+        101,
+        {
+            "from": "I[age,loc]",
+            "to": "X[age,loc,imm:j]",
+            "rate": "reset_rate * weights[imm:j]",
+        },
+    )
+    start = time.perf_counter()
+    compiled = compile_spec(spec)
+    elapsed = time.perf_counter() - start
+    transitions = compiled.meta.get("transitions")
+
+    assert isinstance(transitions, list)
+    assert len(transitions) == 1
+    assert transitions[0]["routing"]["target_only"] is True
+    assert elapsed < 20.0
+    report = validate_spec(spec)
+    assert report.cost["routing_transitions"] == 1
 
 
 def test_time_varying_routing_matrix_interpolates() -> None:
@@ -221,6 +385,59 @@ def test_routing_validation_errors(transition: dict[str, Any], message: str) -> 
     """Invalid alias usage raises with a message naming the problem."""
     with pytest.raises(InvalidRhsSpecError, match=message):
         compile_spec(_spec(3, [transition]))
+
+
+@pytest.mark.parametrize(
+    ("transition", "message"),
+    [
+        (
+            {
+                "from": "I[age,loc]",
+                "to": "X[age,loc,imm:j]",
+                "rate": "weights[imm]",
+            },
+            "must reference imm:j",
+        ),
+        (
+            {
+                "from": "I[age,loc]",
+                "to": "X[age,loc,imm:j]",
+                "rate": "matrix[imm:i, imm:j]",
+            },
+            "unexpected aliases",
+        ),
+        (
+            {
+                "from": "I[age,loc]",
+                "to": "X[age,imm:j]",
+                "rate": "weights[imm:j]",
+            },
+            "same axes apart",
+        ),
+        (
+            {
+                "from": "X[age,loc,imm]",
+                "to": "X[age,loc,imm:j]",
+                "rate": "weights[imm:j]",
+            },
+            "also appears without an alias",
+        ),
+        (
+            {
+                "from": "I[age,loc]",
+                "to": "X[age,loc:k,imm:j]",
+                "rate": "weights[imm:j]",
+            },
+            "exactly one axis:alias",
+        ),
+    ],
+)
+def test_target_only_fanout_validation_errors(
+    transition: dict[str, str], message: str
+) -> None:
+    """Malformed target fanout fails with a structural routing error."""
+    with pytest.raises(InvalidRhsSpecError, match=message):
+        compile_spec(_fanout_spec(3, transition))
 
 
 def test_routing_along_block_axis_is_rejected() -> None:
