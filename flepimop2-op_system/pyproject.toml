@@ -54,10 +54,10 @@ include = ["src/flepimop2/system/op_system/py.typed"]
 # --- uv monorepo wiring: satisfy op-system from the sibling directory ---
 [tool.uv.sources]
 op-system = { path = ".." }
-# Development follows flepimop2 main so pending protocol changes are exercised
-# before release. Clean-wheel validation separately covers the published 0.3.0
-# minimum declared above.
-flepimop2 = { git = "https://github.com/ACCIDDA/flepimop2", branch = "main" }
+# Exercise the ArrayBackend producer-to-engine seam stacked in flepimop2
+# PRs #337 and #344 while those changes await review and merge. Clean-wheel
+# validation separately covers the published 0.3.0 minimum declared above.
+flepimop2 = { git = "https://github.com/ACCIDDA/flepimop2", rev = "58aa384f1f71abc367bf42c84890c7613c135757" }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
