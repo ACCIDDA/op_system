@@ -7,8 +7,18 @@ version; format loosely follows
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-09-26
+
 ### Added
 
+- Named transitions publish provider-neutral `CompiledReaction` artifacts
+  through `CompiledRhs.reactions` and the flepimop2 `reactions` system option.
+  Each artifact carries a namespace-preserving propensity callback plus typed
+  source, destination, free-axis, summed-axis, destination-pin, and source-pin
+  metadata. This covers ordinary, source-only, point-to-point pinned, and
+  collapse-to-fixed-target reactions; propensity expressions support mixing
+  kernels, time-varying parameters, reductions, and nested aliases (#185,
+  #187, #188, #191, #192, #194, #195, #196, #201).
 - Operators can declare the axes of array parameters they consume in
   `kernel.param_axes` (for example an `[imm, imm]` generator or a `[time]`
   routing series). `flepimop2-op_system` requests those names with the
