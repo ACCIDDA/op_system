@@ -865,7 +865,7 @@ class _RoutingParts:
     """Validated structure of one routing transition (#88)."""
 
     axis: str
-    source_alias: str
+    source_alias: str | None
     target_alias: str
     from_tokens: tuple[Any, ...]
     to_tokens: tuple[Any, ...]
@@ -890,9 +890,11 @@ def _routing_parts(  # ruff: ignore[complex-structure, too-many-branches, too-ma
 ) -> _RoutingParts | None:
     """Validate a routing transition; return ``None`` for ordinary transitions.
 
-    A routing transition binds one axis under two aliases, ``from`` with
-    ``axis:i`` and ``to`` with ``axis:j``, and its rate references both
-    (for example ``K[imm:i, imm:j]``). v1 allows one routed axis per
+    A matrix-routing transition binds one axis under two aliases, ``from``
+    with ``axis:i`` and ``to`` with ``axis:j``, and its rate references both
+    (for example ``K[imm:i, imm:j]``). A target-only fanout instead omits the
+    routed axis from ``from``, binds it only as ``axis:j`` on ``to``, and
+    references that target alias in the rate. v1 allows one routed axis per
     transition, and ``from``/``to`` must otherwise use the same axes.
 
     Returns:
@@ -911,28 +913,39 @@ def _routing_parts(  # ruff: ignore[complex-structure, too-many-branches, too-ma
         raise InvalidRhsSpecError(
             detail=f"{where}: routing with axis:alias requires a 'from' selector"
         )
-    if len(from_aliases) != 1 or len(to_aliases) != 1:
+    if len(from_aliases) > 1 or len(to_aliases) != 1:
         raise InvalidRhsSpecError(
             detail=(
                 f"{where}: a routing transition binds exactly one axis:alias in "
-                "each of 'from' and 'to' (one routed axis per transition)"
+                "'to' and at most one in 'from' (one routed axis per transition)"
             )
         )
-    (axis, source_alias), (to_axis, target_alias) = from_aliases[0], to_aliases[0]
-    if axis != to_axis:
+    to_axis, target_alias = to_aliases[0]
+    source_alias: str | None = None
+    axis = to_axis
+    if from_aliases:
+        from_axis, source_alias = from_aliases[0]
+    else:
+        from_axis = to_axis
+    if from_axis != to_axis:
         raise InvalidRhsSpecError(
-            detail=(f"{where}: 'from' routes axis {axis!r} but 'to' routes {to_axis!r}")
+            detail=(
+                f"{where}: 'from' routes axis {from_axis!r} but 'to' routes {to_axis!r}"
+            )
         )
     if axis not in axis_lookup:
         raise InvalidRhsSpecError(detail=f"{where}: unknown routed axis {axis!r}")
-    for alias in (source_alias, target_alias):
+    aliases = tuple(
+        alias for alias in (source_alias, target_alias) if alias is not None
+    )
+    for alias in aliases:
         if not alias.isidentifier() or alias in axis_lookup:
             raise InvalidRhsSpecError(
                 detail=(
                     f"{where}: alias {alias!r} must be an identifier, not an axis name"
                 )
             )
-    if source_alias == target_alias:
+    if source_alias is not None and source_alias == target_alias:
         raise InvalidRhsSpecError(
             detail=f"{where}: source and target aliases must differ"
         )
@@ -953,10 +966,11 @@ def _routing_parts(  # ruff: ignore[complex-structure, too-many-branches, too-ma
             )
         )
     referenced: set[str] = set()
+    unexpected: set[str] = set()
     for node in walk(ir_rate_raw):
         if isinstance(node, Subscript):
             for index in node.indices:
-                if index.coord in {source_alias, target_alias}:
+                if index.coord in aliases:
                     if index.axis != axis:
                         raise InvalidRhsSpecError(
                             detail=(
@@ -965,12 +979,25 @@ def _routing_parts(  # ruff: ignore[complex-structure, too-many-branches, too-ma
                             )
                         )
                     referenced.add(index.coord)
-    missing = [a for a in (source_alias, target_alias) if a not in referenced]
-    if missing:
+                elif index.axis == axis and index.coord is not None:
+                    unexpected.add(index.coord)
+    if unexpected:
         raise InvalidRhsSpecError(
             detail=(
-                f"{where}: routing rate must reference {axis}:{source_alias} and "
-                f"{axis}:{target_alias}; missing {missing}"
+                f"{where}: routing rate uses unexpected aliases on {axis!r}: "
+                f"{sorted(unexpected)}"
+            )
+        )
+    missing = [alias for alias in aliases if alias not in referenced]
+    if missing:
+        expected = (
+            f"{axis}:{source_alias} and {axis}:{target_alias}"
+            if source_alias is not None
+            else f"{axis}:{target_alias}"
+        )
+        raise InvalidRhsSpecError(
+            detail=(
+                f"{where}: routing rate must reference {expected}; missing {missing}"
             )
         )
     return _RoutingParts(
@@ -1034,12 +1061,14 @@ def _synthesize_routing(  # ruff: ignore[too-many-arguments, complex-structure]
     With routed axis ``a``, aliases ``i`` (source) and ``j`` (target), and
     per-capita rate ``R[i, j]``, every target cell gains
     ``sum_i R[i, a] X_S[i]`` and every source cell loses
-    ``X_S[a] sum_j R[a, j]``. Pinned source axes are bound inside the
-    reduction and selected with one-hot masks; pinned target axes multiply
-    the inflow. When source and target cells coincide the diagonal inflow
-    and outflow cancel exactly, so self-routing contributes nothing. Both
-    terms are expanded once at the template level and shared by identity
-    across cells, like ``_synthesize_template_uniform``.
+    ``X_S[a] sum_j R[a, j]``. For target-only fanout, the source lacks axis
+    ``a`` and ``source_alias`` is ``None``: the corresponding terms are
+    ``R[a] X_S`` and ``-X_S sum_j R[j]``. Pinned source axes are bound inside
+    the inflow reduction and selected with one-hot masks; pinned target axes
+    multiply the inflow. When matrix-routing source and target cells coincide,
+    diagonal inflow and outflow cancel exactly. Both terms are expanded once
+    at the template level and shared by identity across cells, like
+    ``_synthesize_template_uniform``.
     """
     from op_system._ir_expand import expand_reduce_pointwise  # ruff: ignore[import-outside-top-level]
 
@@ -1064,7 +1093,6 @@ def _synthesize_routing(  # ruff: ignore[too-many-arguments, complex-structure]
         return tuple(out)
 
     rate_in = _replace_alias(ir_rate_raw, axis, parts.target_alias)
-    rate_out = _replace_alias(ir_rate_raw, axis, parts.source_alias)
 
     inflow_body: Expr = Apply(
         op="*",
@@ -1072,12 +1100,29 @@ def _synthesize_routing(  # ruff: ignore[too-many-arguments, complex-structure]
     )
     for token in pinned_from:
         inflow_body = Apply(op="*", args=(inflow_body, _mask(token)))
-    inflow: Expr = Reduce(
-        kind="apply_along",
-        bindings=((axis, parts.source_alias), *((t.axis, t.axis) for t in pinned_from)),
-        body=inflow_body,
-        kernel="sum",
-    )
+    if parts.source_alias is None:
+        inflow: Expr = (
+            Reduce(
+                kind="apply_along",
+                bindings=tuple((t.axis, t.axis) for t in pinned_from),
+                body=inflow_body,
+                kernel="sum",
+            )
+            if pinned_from
+            else inflow_body
+        )
+        total_rate_body = ir_rate_raw
+    else:
+        inflow = Reduce(
+            kind="apply_along",
+            bindings=(
+                (axis, parts.source_alias),
+                *((t.axis, t.axis) for t in pinned_from),
+            ),
+            body=inflow_body,
+            kernel="sum",
+        )
+        total_rate_body = _replace_alias(ir_rate_raw, axis, parts.source_alias)
     for token in pinned_to:
         inflow = Apply(op="*", args=(inflow, _mask(token)))
 
@@ -1087,7 +1132,7 @@ def _synthesize_routing(  # ruff: ignore[too-many-arguments, complex-structure]
     total_rate = Reduce(
         kind="apply_along",
         bindings=((axis, parts.target_alias),),
-        body=rate_out,
+        body=total_rate_body,
         kernel="sum",
     )
     outflow: Expr = Apply(
@@ -1239,6 +1284,7 @@ def _build_transition_equations_ir(  # ruff: ignore[complex-structure, too-many-
                         "axis": routing.axis,
                         "source_alias": routing.source_alias,
                         "target_alias": routing.target_alias,
+                        "target_only": routing.source_alias is None,
                     },
                 })
                 continue

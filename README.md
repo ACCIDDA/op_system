@@ -235,6 +235,31 @@ block axis. Routing is lowered once per template, so its cost does not grow
 with the number of matrix entries. It has no per-transition `reactions`
 artifact yet.
 
+A target-only alias fans one source cell into a target axis the source does
+not own:
+
+```yaml
+spec:
+  kind: transitions
+  axes:
+    - {name: age, coords: [child, adult]}
+    - {name: imm, type: ordinal, coords: [x0, x1, x2]}
+  state: [I3[age], X[age,imm]]
+  transitions:
+    - from: I3[age]
+      to: X[age,imm:j]
+      rate: reset_rate * reset_kernel[imm:j]
+```
+
+This compiles as one lazy transition. Each target receives
+`reset_rate * reset_kernel[j] * I3`, while the source loses
+`reset_rate * sum_j(reset_kernel[j]) * I3` exactly once. The weights are
+arbitrary per-target rates; op_system does not force normalization. When they
+sum to one, `reset_rate` is the total departure hazard. In every case the
+generated source loss equals the summed target inflow, so the transition is
+mass-conserving algebraically. Physical rate non-negativity remains a model
+input responsibility, consistent with other transition rates.
+
 ### Chain helper
 
 ```yaml
