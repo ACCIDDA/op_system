@@ -833,6 +833,273 @@ def _synthesize_template_uniform(  # ruff: ignore[too-many-arguments]
         d_ir_full[from_name].append(synth_neg_full)
 
 
+@dataclass(frozen=True, slots=True)
+class _RoutingParts:
+    """Validated structure of one routing transition (#88)."""
+
+    axis: str
+    source_alias: str
+    target_alias: str
+    from_tokens: tuple[Any, ...]
+    to_tokens: tuple[Any, ...]
+
+
+def _routing_alias(token: Any) -> tuple[str, str] | None:  # ruff: ignore[any-type]
+    """Return ``(axis, alias)`` for an ``axis:alias`` selector token."""
+    if isinstance(token, WildcardToken) and ":" in token.axis:
+        axis, alias = (part.strip() for part in token.axis.split(":", 1))
+        return axis, alias
+    return None
+
+
+def _routing_parts(  # ruff: ignore[complex-structure, too-many-branches, too-many-arguments]
+    *,
+    frm_tokens: list[Any],
+    to_tokens: list[Any],
+    source_only: bool,
+    ir_rate_raw: Expr,
+    axis_lookup: Mapping[str, list[str]],
+    idx: int,
+) -> _RoutingParts | None:
+    """Validate a routing transition; return ``None`` for ordinary transitions.
+
+    A routing transition binds one axis under two aliases, ``from`` with
+    ``axis:i`` and ``to`` with ``axis:j``, and its rate references both
+    (for example ``K[imm:i, imm:j]``). v1 allows one routed axis per
+    transition, and ``from``/``to`` must otherwise use the same axes.
+
+    Returns:
+        The routed axis, aliases, and selector tokens, or ``None`` when
+        neither selector uses ``axis:alias``.
+
+    Raises:
+        InvalidRhsSpecError: If an ``axis:alias`` token is used invalidly.
+    """
+    where = f"transitions[{idx}]"
+    from_aliases = [a for a in (_routing_alias(t) for t in frm_tokens) if a]
+    to_aliases = [a for a in (_routing_alias(t) for t in to_tokens) if a]
+    if not from_aliases and not to_aliases:
+        return None
+    if source_only:
+        raise InvalidRhsSpecError(
+            detail=f"{where}: routing with axis:alias requires a 'from' selector"
+        )
+    if len(from_aliases) != 1 or len(to_aliases) != 1:
+        raise InvalidRhsSpecError(
+            detail=(
+                f"{where}: a routing transition binds exactly one axis:alias in "
+                "each of 'from' and 'to' (one routed axis per transition)"
+            )
+        )
+    (axis, source_alias), (to_axis, target_alias) = from_aliases[0], to_aliases[0]
+    if axis != to_axis:
+        raise InvalidRhsSpecError(
+            detail=(f"{where}: 'from' routes axis {axis!r} but 'to' routes {to_axis!r}")
+        )
+    if axis not in axis_lookup:
+        raise InvalidRhsSpecError(detail=f"{where}: unknown routed axis {axis!r}")
+    for alias in (source_alias, target_alias):
+        if not alias.isidentifier() or alias in axis_lookup:
+            raise InvalidRhsSpecError(
+                detail=(
+                    f"{where}: alias {alias!r} must be an identifier, not an axis name"
+                )
+            )
+    if source_alias == target_alias:
+        raise InvalidRhsSpecError(
+            detail=f"{where}: source and target aliases must differ"
+        )
+
+    def _plain_axes(tokens: list[Any]) -> list[str]:
+        return [t.axis for t in tokens if _routing_alias(t) is None]
+
+    from_axes, to_axes = _plain_axes(frm_tokens), _plain_axes(to_tokens)
+    if axis in from_axes or axis in to_axes:
+        raise InvalidRhsSpecError(
+            detail=f"{where}: routed axis {axis!r} also appears without an alias"
+        )
+    if sorted(from_axes) != sorted(to_axes):
+        raise InvalidRhsSpecError(
+            detail=(
+                f"{where}: routing 'from' and 'to' must use the same axes apart "
+                f"from {axis!r}; got {sorted(from_axes)} and {sorted(to_axes)}"
+            )
+        )
+    referenced: set[str] = set()
+    for node in walk(ir_rate_raw):
+        if isinstance(node, Subscript):
+            for index in node.indices:
+                if index.coord in {source_alias, target_alias}:
+                    if index.axis != axis:
+                        raise InvalidRhsSpecError(
+                            detail=(
+                                f"{where}: alias {index.coord!r} belongs to axis "
+                                f"{axis!r} but is used on {index.axis!r}"
+                            )
+                        )
+                    referenced.add(index.coord)
+    missing = [a for a in (source_alias, target_alias) if a not in referenced]
+    if missing:
+        raise InvalidRhsSpecError(
+            detail=(
+                f"{where}: routing rate must reference {axis}:{source_alias} and "
+                f"{axis}:{target_alias}; missing {missing}"
+            )
+        )
+    return _RoutingParts(
+        axis=axis,
+        source_alias=source_alias,
+        target_alias=target_alias,
+        from_tokens=tuple(frm_tokens),
+        to_tokens=tuple(to_tokens),
+    )
+
+
+def _replace_alias(expr: Expr, axis: str, alias: str) -> Expr:
+    """Replace ``axis:alias`` subscripts with the bare (cell) ``axis`` index.
+
+    Returns:
+        ``expr`` with every ``axis:alias`` subscript index made bare.
+    """
+    if isinstance(expr, Subscript):
+        return Subscript(
+            name=expr.name,
+            indices=tuple(
+                AxisIndex(axis=axis, coord=None, kind=index.kind)
+                if index.axis == axis and index.coord == alias
+                else index
+                for index in expr.indices
+            ),
+        )
+    if isinstance(expr, Apply):
+        return Apply(
+            op=expr.op, args=tuple(_replace_alias(a, axis, alias) for a in expr.args)
+        )
+    if isinstance(expr, Reduce):
+        return Reduce(
+            kind=expr.kind,
+            bindings=expr.bindings,
+            body=_replace_alias(expr.body, axis, alias),
+            filters=expr.filters,
+            kernel=expr.kernel,
+        )
+    return expr
+
+
+def _synthesize_routing(  # ruff: ignore[too-many-arguments, complex-structure]
+    *,
+    parts: _RoutingParts,
+    frm_base: str,
+    to_base: str,
+    ir_rate_raw: Expr,
+    masks: Mapping[tuple[str, str], str],
+    axes: list[dict[str, Any]],
+    shaped: Mapping[str, tuple[str, ...]],
+    ax_lookup_dict: dict[str, list[str]],
+    cells_by_base: Mapping[str, list[str]],
+    enum_cache: dict[tuple[str, tuple[Any, ...]], list[str]],
+    d_ir_reduce: dict[str, list[Expr]],
+    d_ir_full: dict[str, list[Expr]],
+    all_syms: set[str],
+) -> None:
+    """Install template-level inflow and outflow reductions for a routing transition.
+
+    With routed axis ``a``, aliases ``i`` (source) and ``j`` (target), and
+    per-capita rate ``R[i, j]``, every target cell gains
+    ``sum_i R[i, a] X_S[i]`` and every source cell loses
+    ``X_S[a] sum_j R[a, j]``. Pinned source axes are bound inside the
+    reduction and selected with one-hot masks; pinned target axes multiply
+    the inflow. When source and target cells coincide the diagonal inflow
+    and outflow cancel exactly, so self-routing contributes nothing. Both
+    terms are expanded once at the template level and shared by identity
+    across cells, like ``_synthesize_template_uniform``.
+    """
+    from op_system._ir_expand import expand_reduce_pointwise  # ruff: ignore[import-outside-top-level]
+
+    axis = parts.axis
+    pinned_from = [t for t in parts.from_tokens if isinstance(t, PinnedToken)]
+    pinned_to = [t for t in parts.to_tokens if isinstance(t, PinnedToken)]
+
+    def _mask(token: PinnedToken) -> Subscript:
+        return Subscript(
+            name=masks[token.axis, token.coord],
+            indices=(AxisIndex(axis=token.axis, coord=None),),
+        )
+
+    def _indices(alias: str | None) -> tuple[AxisIndex, ...]:
+        out: list[AxisIndex] = []
+        for token in parts.from_tokens:
+            routed = _routing_alias(token)
+            if routed is not None:
+                out.append(AxisIndex(axis=axis, coord=alias))
+            else:
+                out.append(AxisIndex(axis=token.axis, coord=None))
+        return tuple(out)
+
+    rate_in = _replace_alias(ir_rate_raw, axis, parts.target_alias)
+    rate_out = _replace_alias(ir_rate_raw, axis, parts.source_alias)
+
+    inflow_body: Expr = Apply(
+        op="*",
+        args=(rate_in, Subscript(name=frm_base, indices=_indices(parts.source_alias))),
+    )
+    for token in pinned_from:
+        inflow_body = Apply(op="*", args=(inflow_body, _mask(token)))
+    inflow: Expr = Reduce(
+        kind="apply_along",
+        bindings=((axis, parts.source_alias), *((t.axis, t.axis) for t in pinned_from)),
+        body=inflow_body,
+        kernel="sum",
+    )
+    for token in pinned_to:
+        inflow = Apply(op="*", args=(inflow, _mask(token)))
+
+    source_state: Expr = Subscript(name=frm_base, indices=_indices(None))
+    for token in pinned_from:
+        source_state = Apply(op="*", args=(source_state, _mask(token)))
+    total_rate = Reduce(
+        kind="apply_along",
+        bindings=((axis, parts.target_alias),),
+        body=rate_out,
+        kernel="sum",
+    )
+    outflow: Expr = Apply(
+        op="neg", args=(Apply(op="*", args=(source_state, total_rate)),)
+    )
+
+    all_syms |= free_symbols(inflow) | free_symbols(outflow)
+    inflow_full = expand_reduce_pointwise(
+        inflow,
+        axes=list(axes),
+        shaped_params=shaped,
+        lhs_assignment={},
+        axis_coords=ax_lookup_dict,
+    )
+    outflow_full = expand_reduce_pointwise(
+        outflow,
+        axes=list(axes),
+        shaped_params=shaped,
+        lhs_assignment={},
+        axis_coords=ax_lookup_dict,
+    )
+
+    def _cells(base: str, tokens: tuple[Any, ...]) -> list[str]:
+        plain = tuple(
+            WildcardToken(axis=axis) if _routing_alias(t) is not None else t
+            for t in tokens
+        )
+        return _enumerate_template_cell_names(
+            base, plain, cells_by_base=cells_by_base, enum_cache=enum_cache
+        )
+
+    for cell in _cells(to_base, parts.to_tokens):
+        d_ir_reduce[cell].append(inflow)
+        d_ir_full[cell].append(inflow_full)
+    for cell in _cells(frm_base, parts.from_tokens):
+        d_ir_reduce[cell].append(outflow)
+        d_ir_full[cell].append(outflow_full)
+
+
 def _build_transition_equations_ir(  # ruff: ignore[complex-structure, too-many-branches, too-many-arguments, too-many-locals, too-many-statements]
     transitions_raw: list[Mapping[str, Any]],
     *,
@@ -912,6 +1179,42 @@ def _build_transition_equations_ir(  # ruff: ignore[complex-structure, too-many-
                 frm_s = _get_required_str(tr_valid, idx=tr_idx, key="from")
                 frm_base, frm_tokens = parse_selector(frm_s)
             to_base, to_tokens = parse_selector(to_s)
+
+            routing = _routing_parts(
+                frm_tokens=frm_tokens,
+                to_tokens=to_tokens,
+                source_only=source_only,
+                ir_rate_raw=parse_expr_to_ir(rate_s, lower_helpers=True),
+                axis_lookup=ax_lookup_dict,
+                idx=tr_idx,
+            )
+            if routing is not None:
+                _synthesize_routing(
+                    parts=routing,
+                    frm_base=frm_base,
+                    to_base=to_base,
+                    ir_rate_raw=parse_expr_to_ir(rate_s, lower_helpers=True),
+                    masks=masks,
+                    axes=axes,
+                    shaped=shaped,
+                    ax_lookup_dict=ax_lookup_dict,
+                    cells_by_base=cells_by_base,
+                    enum_cache=enumerate_template_cell_names_cache,
+                    d_ir_reduce=d_ir_reduce,
+                    d_ir_full=d_ir_full,
+                    all_syms=all_syms,
+                )
+                transitions_expanded_out.append({
+                    "from": frm_s,
+                    "to": to_s,
+                    "rate": rate_s,
+                    "routing": {
+                        "axis": routing.axis,
+                        "source_alias": routing.source_alias,
+                        "target_alias": routing.target_alias,
+                    },
+                })
+                continue
 
             # Collect wildcard axes
             wildcard_axes: list[str] = []
@@ -1368,7 +1671,10 @@ def normalize_transitions_rhs(  # ruff: ignore[complex-structure, too-many-branc
     if transitions_raw is None:
         transitions_raw = []
     elif isinstance(transitions_raw, list):
-        transitions_raw = list(transitions_raw)
+        # Copy each entry: time-axis stripping rewrites rates in place.
+        transitions_raw = [
+            dict(tr) if isinstance(tr, _MappingABC) else tr for tr in transitions_raw
+        ]
     else:
         raise InvalidRhsSpecError(detail="transitions must be a list")
 
