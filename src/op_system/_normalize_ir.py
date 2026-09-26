@@ -10,13 +10,13 @@ from __future__ import annotations
 
 import contextlib
 import sys
-from collections.abc import Iterator, Mapping
+from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     import re
-    from collections.abc import Iterable, Sequence
+    from collections.abc import Iterable
 
 from op_system._axes import _normalize_bracket_key
 from op_system._errors import InvalidRhsSpecError
@@ -843,7 +843,7 @@ def _lookup_cell_expr(
     raise InvalidRhsSpecError(detail=f"Missing equation for state {cell!r}")
 
 
-def _build_equations_ir_from_raw(  # ruff: ignore[too-many-arguments]
+def _build_equations_ir_from_raw(  # ruff: ignore[too-many-arguments, too-many-locals]
     *,
     state_expanded: Sequence[str],
     equations_map: Mapping[str, Any],
@@ -853,17 +853,18 @@ def _build_equations_ir_from_raw(  # ruff: ignore[too-many-arguments]
     axis_lookup: Mapping[str, Sequence[str]],
     aliases_ir: Mapping[str, Expr] | None = None,
 ) -> tuple[
-    tuple[Expr | None, ...],
+    Sequence[Expr | None],
     tuple[Expr | None, ...],
     set[str],
 ]:
     """Build per-cell equation IR directly from raw spec expressions.
 
+    The pointwise-expanded IR is returned as a lazy sequence; see
+    ``_LazyCells``.
+
     Returns:
         ``(equations_ir, equations_ir_reduce, all_syms)``
     """
-    from op_system._ir_expand import expand_reduce_pointwise  # ruff: ignore[import-outside-top-level]
-
     cell_to_assignment: dict[str, dict[str, str]] = {}
     for variants in template_map.values():
         for cell, asgmt in variants:
@@ -881,12 +882,14 @@ def _build_equations_ir_from_raw(  # ruff: ignore[too-many-arguments]
             alias_cycle_ok = _detect_alias_cycle(aliases_ir, memo=alias_memo) is None
 
     out_reduce: list[Expr | None] = []
-    out_full: list[Expr | None] = []
+    assignments: list[dict[str, str]] = []
+    first_of_template: dict[str, int] = {}
     all_syms: set[str] = set()
+    fs_memo: dict[int, frozenset[str]] = {}
     old_limit = sys.getrecursionlimit()
     needed = max(old_limit, 10_000)
     with _raise_recursion_limit(needed, old_limit):
-        for cell in state_expanded:
+        for index, cell in enumerate(state_expanded):
             raw_expr = cell_to_expr[cell]
             assignment = cell_to_assignment.get(cell, {})
             ir = parse_expr_to_ir(raw_expr, lower_helpers=True)
@@ -897,33 +900,221 @@ def _build_equations_ir_from_raw(  # ruff: ignore[too-many-arguments]
                 axis_lookup=axis_lookup,
             )
             out_reduce.append(ir_tmpl)
-            ir_expanded = expand_reduce_pointwise(
-                ir_tmpl,
-                axes=list(axes),
-                shaped_params=shaped_params,
-                lhs_assignment=assignment,
-                axis_coords=dict(axis_lookup),
+            assignments.append(dict(assignment))
+            all_syms |= free_symbols(ir_tmpl, memo=fs_memo)
+            first_of_template.setdefault(str(raw_expr), index)
+    expander = _CellExpander(
+        axes=list(axes),
+        shaped_params=shaped_params,
+        axis_coords=dict(axis_lookup),
+        aliases_ir=aliases_ir,
+        alias_memo=alias_memo,
+        alias_cycle_ok=alias_cycle_ok,
+        assignments=assignments,
+    )
+    full = _LazyCells(tuple(out_reduce), expander)
+    # Expand the first cell of each distinct raw expression eagerly so
+    # template-level errors still surface during normalization; every
+    # other cell is expanded only when a consumer (the scalar fallback,
+    # block stripping, or a vectorizer probe) reads it.
+    for index in first_of_template.values():
+        _ = full[index]
+    return full, tuple(out_reduce), all_syms
+
+
+class _CellExpander:
+    """Expand one cell's reduce-form IR to pointwise IR with aliases inlined."""
+
+    __slots__ = (
+        "_alias_cycle_ok",
+        "_alias_memo",
+        "_aliases_ir",
+        "_assignments",
+        "_axes",
+        "_axis_coords",
+        "_shaped_params",
+    )
+
+    def __init__(  # ruff: ignore[too-many-arguments]
+        self,
+        *,
+        axes: list[Mapping[str, Any]],
+        shaped_params: Mapping[str, tuple[str, ...]],
+        axis_coords: dict[str, Sequence[str]],
+        aliases_ir: Mapping[str, Expr] | None,
+        alias_memo: Any,  # ruff: ignore[any-type]
+        alias_cycle_ok: bool,
+        assignments: list[dict[str, str]],
+    ) -> None:
+        self._axes = axes
+        self._shaped_params = shaped_params
+        self._axis_coords = axis_coords
+        self._aliases_ir = aliases_ir
+        self._alias_memo = alias_memo
+        self._alias_cycle_ok = alias_cycle_ok
+        self._assignments = assignments
+
+    def __call__(self, index: int, reduce_ir: Expr | None) -> Expr | None:
+        from op_system._ir_expand import expand_reduce_pointwise  # ruff: ignore[import-outside-top-level]
+
+        if reduce_ir is None:
+            return None
+        old_limit = sys.getrecursionlimit()
+        with _raise_recursion_limit(max(old_limit, 10_000), old_limit):
+            expanded = expand_reduce_pointwise(
+                reduce_ir,
+                axes=self._axes,
+                shaped_params=self._shaped_params,
+                lhs_assignment=self._assignments[index],
+                axis_coords=self._axis_coords,
             )
-            if aliases_ir:
-                try:
-                    ir_inlined = inline_aliases(
-                        ir_expanded,
-                        aliases_ir,
-                        memo=alias_memo,
-                        skip_cycle_check=alias_cycle_ok,
-                    )
-                except (ValueError, RecursionError):
-                    ir_inlined = ir_expanded
-            else:
-                ir_inlined = ir_expanded
-            all_syms |= free_symbols(ir_inlined)
-            out_full.append(ir_inlined)
-        return tuple(out_full), tuple(out_reduce), all_syms
+            if not self._aliases_ir:
+                return expanded
+            try:
+                return inline_aliases(
+                    expanded,
+                    self._aliases_ir,
+                    memo=self._alias_memo,
+                    skip_cycle_check=self._alias_cycle_ok,
+                )
+            except (ValueError, RecursionError):
+                return expanded
+
+
+class _ParentItem:
+    """Build a view's item by reading the parent's (memoized) item."""
+
+    __slots__ = ("_parent",)
+
+    def __init__(self, parent: _LazyCells) -> None:
+        self._parent = parent
+
+    def __call__(self, _index: int, parent_index: int) -> Any:  # ruff: ignore[any-type]
+        return self._parent[parent_index]
+
+
+class _LazyCells(Sequence[Any]):
+    """Tuple-like sequence whose items are built on first access.
+
+    Normalization used to expand every cell's reductions and render every
+    cell's string eagerly, which dominates normalization time for large
+    axes (#88) even though the vectorized path reads only a few cells.
+    Items are memoized; equality, hashing, and pickling behave like the
+    materialized tuple (pickling returns a plain tuple).
+    """
+
+    __slots__ = ("_build", "_cache", "_sources")
+
+    def __init__(self, sources: tuple[Any, ...], build: Any) -> None:  # ruff: ignore[any-type]
+        self._sources = sources
+        self._build = build
+        self._cache: dict[int, Any] = {}
+
+    def __len__(self) -> int:
+        return len(self._sources)
+
+    def _item(self, index: int) -> Any:  # ruff: ignore[any-type]
+        if index not in self._cache:
+            self._cache[index] = self._build(index, self._sources[index])
+        return self._cache[index]
+
+    def __getitem__(self, index: Any) -> Any:  # ruff: ignore[any-type]
+        if isinstance(index, slice):
+            positions = tuple(range(*index.indices(len(self))))
+            return _LazyCells(positions, _ParentItem(self))
+        position = int(index)
+        if position < 0:
+            position += len(self)
+        if not 0 <= position < len(self):
+            msg = "lazy cell index out of range"
+            raise IndexError(msg)
+        return self._item(position)
+
+    def __iter__(self) -> Iterator[Any]:
+        return (self._item(i) for i in range(len(self)))
+
+    def materialize(self) -> tuple[Any, ...]:
+        """Return every item as a tuple, building any not yet built."""
+        return tuple(self)
+
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, (_LazyCells, tuple, list)):
+            return self.materialize() == tuple(other)
+        return NotImplemented
+
+    def __hash__(self) -> int:
+        return hash(self.materialize())
+
+    def __reduce__(self) -> tuple[Any, tuple[Any, ...]]:
+        return (tuple, (self.materialize(),))
+
+    def __repr__(self) -> str:
+        return f"_LazyCells(len={len(self)}, built={len(self._cache)})"
 
 
 # ---------------------------------------------------------------------------
 # String derivation from IR
 # ---------------------------------------------------------------------------
+
+
+class _UnparseCell:
+    """Render one cell's IR to its equation string."""
+
+    __slots__ = ("_memo",)
+
+    def __init__(self, memo: dict[tuple[int, int, bool], str]) -> None:
+        self._memo = memo
+
+    def __call__(self, index: int, ir: Expr | None) -> str:
+        if ir is None:
+            raise InvalidRhsSpecError(
+                detail=f"equations[{index}] is missing typed IR during rendering"
+            )
+        old_limit = sys.getrecursionlimit()
+        with _raise_recursion_limit(max(old_limit, 10_000), old_limit):
+            try:
+                return unparse_ir(ir, _memo=self._memo)
+            except (ValueError, RecursionError) as exc:
+                raise InvalidRhsSpecError(
+                    detail=f"equations[{index}] could not be rendered from typed IR"
+                ) from exc
+
+
+def _derive_equation_strings_lazy(
+    equations_ir: Sequence[Expr | None],
+    *,
+    _unparse_memo: dict[tuple[int, int, bool], str] | None = None,
+) -> _LazyCells:
+    """Return equation strings rendered on first access (see ``_LazyCells``).
+
+    Raises:
+        InvalidRhsSpecError: If any equation IR is missing.
+    """
+    sources = tuple(equations_ir) if not isinstance(equations_ir, _LazyCells) else None
+    if sources is not None:
+        for idx, ir in enumerate(sources):
+            if ir is None:
+                raise InvalidRhsSpecError(
+                    detail=f"equations[{idx}] is missing typed IR during rendering"
+                )
+        return _LazyCells(sources, _UnparseCell(_unparse_memo or {}))
+    return _LazyCells(
+        tuple(range(len(equations_ir))),
+        _LazyUnparse(equations_ir, _UnparseCell(_unparse_memo or {})),
+    )
+
+
+class _LazyUnparse:
+    """Render cell ``index`` of a lazy IR sequence, expanding it on demand."""
+
+    __slots__ = ("_ir", "_unparse")
+
+    def __init__(self, ir: Sequence[Expr | None], unparse: _UnparseCell) -> None:
+        self._ir = ir
+        self._unparse = unparse
+
+    def __call__(self, index: int, _source: int) -> str:
+        return self._unparse(index, self._ir[index])
 
 
 def _derive_equation_strings(

@@ -53,7 +53,7 @@ from op_system._operators import OperatorDescriptor
 from op_system._symbols import parse_expression_string
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Iterable, Mapping
+    from collections.abc import Callable, Iterable, Mapping, Sequence
     from types import CodeType
 
     from .specs import NormalizedRhs
@@ -709,8 +709,8 @@ def _collect_alias_code(
 
 
 def _collect_eq_code(
-    equations: tuple[str, ...],
-    equations_ir: tuple[Expr | None, ...] | None = None,
+    equations: Sequence[str],
+    equations_ir: Sequence[Expr | None] | None = None,
     reserved_names: Iterable[str] = (),
 ) -> tuple[tuple[tuple[str, CodeType], ...], list[CodeType]]:
     """Compile equation expressions into code objects.
@@ -852,11 +852,11 @@ def _evaluate_equations(
 
 def _make_eval_fn(
     *,
-    state_names: tuple[str, ...],
+    state_names: Sequence[str],
     aliases: Mapping[str, str],
-    equations: tuple[str, ...],
+    equations: Sequence[str],
     aliases_ir: Mapping[str, Expr] | None = None,
-    equations_ir: tuple[Expr | None, ...] | None = None,
+    equations_ir: Sequence[Expr | None] | None = None,
 ) -> EvalFn:
     """Build a namespace-polymorphic ``eval_fn(t, y, **params) -> dydt``.
 
@@ -1025,10 +1025,49 @@ def _append_history_nodes(
         )
 
 
+def _reduce_ir_has_history(rhs: NormalizedRhs) -> bool:
+    """Return whether any equation or alias IR can hold a history operator.
+
+    Normalization records ``op_system_may_have_history`` from a text check of
+    the raw spec, which avoids walking every cell's IR for specs that use no
+    history helpers (#88). Without the flag, walk the compact reduce-form IR,
+    visiting subtrees shared across cells only once.
+    """
+    from op_system._ir import (  # ruff: ignore[import-outside-top-level]
+        Apply,
+        HistoryOp,
+        Reduce,
+    )
+
+    flag = rhs.meta.get("op_system_may_have_history")
+    if flag is False:
+        return False
+    if not rhs.equations_ir_reduce:
+        return True
+    stack: list[Expr] = [
+        expression
+        for expression in (*rhs.equations_ir_reduce, *rhs.aliases_ir_reduce.values())
+        if expression is not None
+    ]
+    seen: set[int] = set()
+    while stack:
+        node = stack.pop()
+        if id(node) in seen:
+            continue
+        seen.add(id(node))
+        if isinstance(node, HistoryOp):
+            return True
+        if isinstance(node, Apply):
+            stack.extend(node.args)
+        elif isinstance(node, Reduce):
+            stack.append(node.body)
+    return False
+
+
 def _history_requirements_from_ir(
     *,
     aliases_ir: Mapping[str, Expr] | None,
-    equations_ir: tuple[Expr | None, ...] | None,
+    equations_ir: Sequence[Expr | None] | None,
     cell_to_template: Mapping[str, tuple[str, tuple[str, ...]]] | None = None,
 ) -> tuple[dict[str, object], ...]:
     """Collect structured history-operator requirements from typed IR.
@@ -1856,10 +1895,14 @@ def _build_history_artifacts(
     Returns:
         Tuple of ``(history_requirements, history_eval_fn, body_eval_fn)``.
     """
-    history_requirements = _history_requirements_from_ir(
-        aliases_ir=rhs.aliases_ir,
-        equations_ir=rhs.equations_ir,
-        cell_to_template=_cell_to_template_from_plan(plan),
+    history_requirements = (
+        _history_requirements_from_ir(
+            aliases_ir=rhs.aliases_ir,
+            equations_ir=rhs.equations_ir,
+            cell_to_template=_cell_to_template_from_plan(plan),
+        )
+        if _reduce_ir_has_history(rhs)
+        else ()
     )
     if not history_requirements or pytree_eval_fn is None:
         return history_requirements, None, None
@@ -2061,9 +2104,13 @@ def compile_rhs(rhs: NormalizedRhs, *, xp: object | None = None) -> CompiledRhs:
     _warn_on_deprecated_xp(xp)
     _validate_rhs_type(rhs)
 
-    raw_history_requirements = _history_requirements_from_ir(
-        aliases_ir=rhs.aliases_ir,
-        equations_ir=rhs.equations_ir,
+    raw_history_requirements = (
+        _history_requirements_from_ir(
+            aliases_ir=rhs.aliases_ir,
+            equations_ir=rhs.equations_ir,
+        )
+        if _reduce_ir_has_history(rhs)
+        else ()
     )
     _validate_history_kinds(raw_history_requirements)
 
