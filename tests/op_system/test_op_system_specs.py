@@ -919,6 +919,7 @@ def test_operator_requires_kind_and_preserves_bc() -> None:
                 "kind": "advection",
                 "bc": "periodic",
                 "velocity": "v",
+                "direction": " DECREASING ",
             },
         ],
         "state": ["u"],
@@ -930,6 +931,29 @@ def test_operator_requires_kind_and_preserves_bc() -> None:
     assert isinstance(operators_meta, list)
     assert operators_meta[0]["kind"] == "advection"
     assert operators_meta[0]["bc"] == "periodic"
+    assert operators_meta[0]["direction"] == "decreasing"
+
+
+@pytest.mark.parametrize("direction", ["sideways", "", 1])
+def test_operator_advection_rejects_invalid_direction(direction: object) -> None:
+    """Advection direction is an optional normalized two-value vocabulary."""
+    spec = {
+        "kind": "expr",
+        "axes": [{"name": "x", "coords": ["a", "b"]}],
+        "operators": [
+            {
+                "axis": "x",
+                "kind": "advection",
+                "velocity": "v",
+                "direction": direction,
+            }
+        ],
+        "state": ["u[x]"],
+        "equations": {"u[x]": "0.0"},
+    }
+
+    with pytest.raises(ValueError, match="direction must be one of"):
+        normalize_expr_rhs(spec)
 
 
 def test_operator_apply_to_validation() -> None:

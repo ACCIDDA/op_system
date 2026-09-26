@@ -48,6 +48,7 @@ nav:
       - Creating A Release: development/creating-a-release.md
   - Guides:
       - Getting Started: guides/getting-started.md
+      - Operator Metadata: guides/operators.md
   - API Reference:
       - OP System: api-reference/op-system.md
       - Compile: api-reference/compile.md

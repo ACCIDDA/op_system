@@ -7,6 +7,15 @@ version; format loosely follows
 
 ## [Unreleased]
 
+### Added
+
+- Advection and transport operators accept a normalized optional `direction`
+  (`increasing` or `decreasing`) so a non-negative dynamic coefficient can
+  carry explicit orientation without provider-side expression parsing. The
+  public contract now defines velocity sign relative to coordinate order and
+  upstream/downstream behavior for absorbing, reflecting, and periodic
+  boundaries (#225).
+
 ## [0.4.0] - 2026-09-26
 
 ### Added

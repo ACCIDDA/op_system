@@ -276,6 +276,7 @@ def test_option_operators_preserves_normalized_metadata() -> None:
                 "kind": "advection",
                 "axis": "loc",
                 "velocity": 0.25,
+                "direction": "decreasing",
                 "apply_to": ["S"],
             }
         ],
@@ -285,6 +286,7 @@ def test_option_operators_preserves_normalized_metadata() -> None:
     assert operator.name == "susceptible_drift"
     assert operator.apply_to == ("S",)
     assert operator.velocity == pytest.approx(0.25)
+    assert operator.direction == "decreasing"
 
 
 def test_option_operators_returns_immutable(
