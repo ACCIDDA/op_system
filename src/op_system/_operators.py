@@ -34,7 +34,11 @@ class OperatorDescriptor:
         name: Optional operator name from the specification.
         apply_to: Concrete state names selected by the operator, or ``None`` when
             the operator applies to every compatible state.
-        direction: Optional normalized direction for a jump integral.
+        direction: Optional normalized direction. For advection and transport,
+            ``"increasing"`` preserves the resolved velocity sign and
+            ``"decreasing"`` reverses it; when omitted, velocity is used as a
+            signed coefficient. Other operator kinds may define their own
+            direction vocabulary.
 
     Examples:
         >>> od = OperatorDescriptor(axis="loc")

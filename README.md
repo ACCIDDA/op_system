@@ -89,6 +89,36 @@ The compiled object exposes:
 | `meta` | Normalized metadata (axes, state_axes, kernels, operators, reserved blocks). |
 | `operators` | Tuple of `OperatorDescriptor` preserving normalized names, state selectors, coefficients, directions, boundary conditions, and kernel metadata. |
 
+### Advection contract
+
+Advection and transport act along the declared coordinate order. A signed
+`velocity` without `direction` is used directly: positive moves toward
+increasing indices and negative moves toward decreasing indices. An optional
+direction makes the orientation explicit while keeping a dynamic coefficient:
+
+```yaml
+operators:
+  - kind: advection
+    axis: imm
+    velocity: waning_rate
+    direction: decreasing
+    bc: reflecting
+```
+
+Providers multiply an `increasing` coefficient by `+1` and a `decreasing`
+coefficient by `-1`. Coefficients used with explicit direction should
+therefore be non-negative; producers of traced dynamic values are responsible
+for that invariant.
+
+Boundary conditions are defined relative to the resolved direction:
+
+- `absorbing` uses zero upstream inflow and permits downstream outflow;
+- `reflecting` uses zero upstream inflow and zero downstream flux, so mass
+  accumulates in the terminal cell;
+- `periodic` wraps downstream outflow to the upstream cell.
+
+Engines must apply these semantics identically for either velocity sign.
+
 `compile_spec` accepts legacy `backend=` / `xp=` keyword arguments but they
 are deprecated and ignored — the compiled callable infers its array
 namespace from the input `y` on every call.

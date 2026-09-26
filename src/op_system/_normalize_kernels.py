@@ -327,6 +327,9 @@ def _validate_op_apply_to(
     return result
 
 
+_ADVECTION_DIRECTIONS = frozenset({"increasing", "decreasing"})
+
+
 def _validate_op_advection(op_map: Mapping[str, Any], idx: int, kind_s: str) -> None:
     """Validate advection/transport operator fields.
 
@@ -339,6 +342,17 @@ def _validate_op_advection(op_map: Mapping[str, Any], idx: int, kind_s: str) -> 
             detail=f"operators[{idx}].velocity is required for {kind_s!r}"
         )
     _validate_scalar_or_expr(velocity_val, f"operators[{idx}].velocity")
+    direction = op_map.get("direction")
+    if direction is None:
+        return
+    if (
+        not isinstance(direction, str)
+        or direction.strip().lower() not in _ADVECTION_DIRECTIONS
+    ):
+        allowed = ", ".join(sorted(_ADVECTION_DIRECTIONS))
+        raise InvalidRhsSpecError(
+            detail=f"operators[{idx}].direction must be one of: {allowed}"
+        )
 
 
 def _validate_op_jump_integral(op_map: Mapping[str, Any], idx: int) -> None:
@@ -569,6 +583,8 @@ def _enrich_op_kind_fields(op_out: dict[str, Any], kind_s: str) -> None:
             if isinstance(velocity_val, str)
             else float(velocity_val)
         )
+        if "direction" in op_out:
+            op_out["direction"] = str(op_out["direction"]).strip().lower()
     elif kind_s == "jump_integral":
         rate_val = op_out["rate"]
         op_out["rate"] = (
