@@ -41,6 +41,7 @@ from op_system._validate import ShapeGroup, ValidationReport, validate_spec
 
 from .compile import (
     BodyEvalFn,
+    CompiledReactant,
     CompiledReaction,
     CompiledRhs,
     EvalFn,
@@ -132,6 +133,7 @@ __all__ = [
     "Array",
     "BlockAxisInfo",
     "BodyEvalFn",
+    "CompiledReactant",
     "CompiledReaction",
     "CompiledRhs",
     "EvalFn",

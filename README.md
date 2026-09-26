@@ -155,6 +155,34 @@ spec:
 This pattern is useful for cumulative trackers (e.g., weekly admissions via
 ``diff(H_cum)``) without introducing a dummy donor compartment.
 
+Named transitions may also declare the molecular reactants needed by
+stochastic solvers. The list is independent of net source/target
+stoichiometry, so it must include the consumed source as well as catalysts:
+
+```yaml
+spec:
+  kind: transitions
+  axes:
+    - {name: age, coords: [child, adult]}
+    - {name: vax, coords: [u, v]}
+  state: [S[age,vax], E[age,vax], I[age]]
+  transitions:
+    - name: infection
+      from: S[age,vax]
+      to: E[age,vax]
+      rate: beta * I[age]
+      reactants:
+        - {state: S[age,vax], order: 1}
+        - {state: I[age], order: 1}  # catalytic: not consumed
+```
+
+The compiled reaction exposes these entries as array-neutral structural
+metadata. If `reactants` is omitted, op_system preserves compatibility by
+publishing the consumed source at order one with `reactants_complete=false`;
+adaptive stochastic consumers should require complete metadata rather than
+try to infer catalysts from the rate expression. An explicit empty list marks
+a source-only zero-order reaction as complete.
+
 ### Templated states with `apply_along`
 
 ```yaml

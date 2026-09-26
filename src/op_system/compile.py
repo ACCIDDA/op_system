@@ -272,6 +272,24 @@ class BodyEvalFn(Protocol):
 
 
 @dataclass(frozen=True, slots=True)
+class CompiledReactant:
+    """Molecular reactant metadata aligned to an expanded reaction channel.
+
+    The record is numerical-array neutral. Providers combine ``state_axes``
+    with the enclosing reaction's channel coordinates and ``pinned`` indices
+    to locate a state cell, then place ``order`` in their reactant-order
+    matrix. Catalysts appear here even when their net stoichiometric change is
+    zero.
+    """
+
+    state_base: str
+    state_axes: tuple[str, ...]
+    full_axes: tuple[str, ...]
+    pinned: tuple[tuple[str, int], ...]
+    order: int
+
+
+@dataclass(frozen=True, slots=True)
 class CompiledReaction:
     """Compiled propensity + axis bookkeeping for one named transition.
 
@@ -341,6 +359,12 @@ class CompiledReaction:
     #: Propensity evaluator: ``(t, y, **params) -> array`` shaped like
     #: ``from_axes`` -- one independent rate per source cell.
     propensity_fn: ReactionPropensityFn
+    #: Molecular reactants for each expanded channel, including catalysts.
+    #: Orders are independent of the net stoichiometric change.
+    reactants: tuple[CompiledReactant, ...] = ()
+    #: False when op_system supplied only the legacy consumed-source fallback
+    #: because the transition omitted an explicit ``reactants:`` declaration.
+    reactants_complete: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -1833,6 +1857,19 @@ def _build_reaction_artifacts(  # ruff: ignore[complex-structure, too-many-local
             from_pinned = tuple(
                 (axis, axis_coords[axis].index(coord)) for axis, coord in r.from_pinned
             )
+            reactants = tuple(
+                CompiledReactant(
+                    state_base=reactant.state_base,
+                    state_axes=reactant.state_axes,
+                    full_axes=reactant.full_axes,
+                    pinned=tuple(
+                        (axis, axis_coords[axis].index(coord))
+                        for axis, coord in reactant.pinned
+                    ),
+                    order=reactant.order,
+                )
+                for reactant in r.reactants
+            )
         except (KeyError, ValueError):
             continue  # axis/coord not resolvable against this spec's axes.
 
@@ -1847,6 +1884,8 @@ def _build_reaction_artifacts(  # ruff: ignore[complex-structure, too-many-local
                 sum_axes=tuple(ax for ax in r.from_axes if ax not in r.to_axes),
                 pinned=pinned,
                 from_pinned=from_pinned,
+                reactants=reactants,
+                reactants_complete=r.reactants_complete,
                 propensity_fn=_wrap_propensity_fn_for_time_varying(
                     _make_propensity_fn(
                         code,
