@@ -8,13 +8,13 @@
       
       
       
-        <link rel="canonical" href="https://accidda.github.io/op_system/0.4/development/code-style/">
+        <link rel="canonical" href="https://accidda.github.io/op_system/0.4/guides/operators/">
       
       
-        <link rel="prev" href="../..">
+        <link rel="prev" href="../getting-started/">
       
       
-        <link rel="next" href="../creating-a-release/">
+        <link rel="next" href="../../api-reference/op-system/">
       
       
         
@@ -25,7 +25,7 @@
     
     
       
-        <title>Code Style - op_system Documentation</title>
+        <title>Operator Metadata - op_system Documentation</title>
       
     
     
@@ -68,7 +68,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#code-style" class="md-skip">
+        <a href="#operator-metadata" class="md-skip">
           Skip to content
         </a>
       
@@ -120,7 +120,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Code Style
+              Operator Metadata
             
           </span>
         </div>
@@ -264,20 +264,18 @@
       
   
   
-    
   
   
-  
     
     
     
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
         
           
           <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
@@ -298,7 +296,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="true">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_2">
             <span class="md-nav__icon md-icon"></span>
             
@@ -313,37 +311,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Code Style
-  
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../../development/code-style/" class="md-nav__link">
         
   
   
@@ -359,70 +330,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#records-namedtuple-vs-dataclass" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Records: NamedTuple vs @dataclass
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#colocate-parsers-with-the-type-they-produce" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Colocate parsers with the type they produce
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#internal-vs-public-names" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Internal vs public names
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#error-handling" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Error handling
-      
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -435,7 +342,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../creating-a-release/" class="md-nav__link">
+      <a href="../../development/creating-a-release/" class="md-nav__link">
         
   
   
@@ -467,18 +374,20 @@
       
   
   
+    
   
   
+  
     
     
     
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
         
           
           <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
@@ -499,7 +408,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_3">
             <span class="md-nav__icon md-icon"></span>
             
@@ -517,7 +426,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../guides/getting-started/" class="md-nav__link">
+      <a href="../getting-started/" class="md-nav__link">
         
   
   
@@ -542,10 +451,37 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../../guides/operators/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Operator Metadata
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -561,6 +497,37 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#advection-and-transport" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Advection and transport
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -766,43 +733,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#records-namedtuple-vs-dataclass" class="md-nav__link">
+  <a href="#advection-and-transport" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Records: NamedTuple vs @dataclass
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#colocate-parsers-with-the-type-they-produce" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Colocate parsers with the type they produce
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#internal-vs-public-names" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Internal vs public names
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#error-handling" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Error handling
+        Advection and transport
       
     </span>
   </a>
@@ -826,68 +760,36 @@
 
 
 
-<h1 id="code-style">Code style<a class="headerlink" href="#code-style" title="Permanent link">&para;</a></h1>
-<p>This page captures conventions adopted across <code>op_system</code>. They are not strict
-rules — exceptions exist where the trade-offs differ — but new code should
-follow them by default and call out any deviation in the PR description.</p>
-<h2 id="records-namedtuple-vs-dataclass">Records: <code>NamedTuple</code> vs <code>@dataclass</code><a class="headerlink" href="#records-namedtuple-vs-dataclass" title="Permanent link">&para;</a></h2>
-<p><code>op_system</code> parsers and normalizers produce many small "value records": parsed
-selectors, normalized axes, validated constraint rules, compiled kernel
-descriptors, etc. For these we have a default and a fallback.</p>
-<p><strong>Default to <code>typing.NamedTuple</code></strong> for small, value-like records that are
-produced once by a parser and read many times.</p>
-<p>Reasons:</p>
+<h1 id="operator-metadata">Operator metadata<a class="headerlink" href="#operator-metadata" title="Permanent link">&para;</a></h1>
+<p><code>op_system</code> validates operators as model-level metadata and publishes them as
+typed <code>OperatorDescriptor</code> values. Engines own spatial discretization and
+solver staging, but they must agree on the meaning of the descriptor.</p>
+<h2 id="advection-and-transport">Advection and transport<a class="headerlink" href="#advection-and-transport" title="Permanent link">&para;</a></h2>
+<p>Advection acts along the declared coordinate order. With no <code>direction</code>,
+<code>velocity</code> is signed: positive moves toward increasing indices and negative
+moves toward decreasing indices.</p>
+<p>Use <code>direction</code> when the orientation is structural but the non-negative
+coefficient remains dynamic:</p>
+<pre><code class="language-yaml">operators:
+  - kind: advection
+    axis: imm
+    velocity: waning_rate
+    direction: decreasing
+    bc: reflecting
+</code></pre>
+<p>Providers multiply an <code>increasing</code> coefficient by <code>+1</code> and a <code>decreasing</code>
+coefficient by <code>-1</code>. Numeric or traced coefficients supplied with a direction
+should therefore be non-negative.</p>
+<p>Boundary conditions are relative to the resolved direction:</p>
 <ul>
-<li>Immutable — downstream code cannot silently mutate the record.</li>
-<li>Hashable — usable as <code>dict</code> keys and in <code>set</code>s without extra work.</li>
-<li>Tuple-compatible — legacy unpacking (<code>base, tokens = parse_selector(s)</code>)
-  keeps working and <code>NamedTuple</code> records compare equal to plain tuples of the
-  same values.</li>
-<li>Zero boilerplate — fields and types in one declaration, no <code>__init__</code>
-  required.</li>
+<li><code>absorbing</code>: zero upstream inflow and free downstream outflow;</li>
+<li><code>reflecting</code>: zero upstream inflow and zero downstream flux, with mass
+  accumulating in the terminal cell;</li>
+<li><code>periodic</code>: downstream outflow wraps to the upstream cell.</li>
 </ul>
-<p>Use <code>@dataclass</code> (preferably <code>@dataclass(frozen=True, slots=True)</code>) when you
-need any of:</p>
-<ul>
-<li>Mutability.</li>
-<li><code>field(default_factory=...)</code> for mutable defaults.</li>
-<li><code>__post_init__</code> validation that cannot live in a parser/classmethod.</li>
-<li>Inheritance.</li>
-<li>Keyword-only construction (<code>@dataclass(kw_only=True)</code>).</li>
-<li>Computed fields beyond what a <code>from_*</code> classmethod would express.</li>
-</ul>
-<h2 id="colocate-parsers-with-the-type-they-produce">Colocate parsers with the type they produce<a class="headerlink" href="#colocate-parsers-with-the-type-they-produce" title="Permanent link">&para;</a></h2>
-<p>Whenever a record has a non-trivial parsing/validation path, expose it as a
-classmethod on the record type — typically <code>from_string</code>, <code>from_mapping</code>, or
-<code>from_yaml_node</code>. The pattern is modeled on <code>ParsedShorthand.from_string</code> in
-<code>flepimop2._utils._module</code>. This keeps the constructor of record next to the
-spec for what a valid record looks like.</p>
-<h2 id="internal-vs-public-names">Internal vs public names<a class="headerlink" href="#internal-vs-public-names" title="Permanent link">&para;</a></h2>
-<p>Modules whose name starts with an underscore (<code>_axes</code>, <code>_constraints</code>,
-<code>_helpers</code>, <code>_normalize</code>, <code>_symbols</code>, <code>_templates</code>) are internal to
-<code>op_system</code>. Types and helpers defined in those modules should also be
-underscore-prefixed unless they are deliberately re-exported from a public
-module (e.g. <code>op_system.specs</code>, <code>op_system.compile</code>, the package <code>__init__</code>).</p>
-<p>This applies to record classes too: an internal record produced by a private
-parser is <code>_ConstraintRule</code>, not <code>ConstraintRule</code>. Promoting an internal type
-to public should be a deliberate decision tied to a stability commitment.</p>
-<h2 id="error-handling">Error handling<a class="headerlink" href="#error-handling" title="Permanent link">&para;</a></h2>
-<p>Raise the specific exception type at the point of failure rather than
-delegating to a <code>_raise_*</code> helper. The shared exception types live in
-<code>op_system._errors</code>:</p>
-<ul>
-<li><code>InvalidRhsSpecError(ValueError)</code> — structural problems with a normalized
-  RHS spec (missing fields, wrong types, unknown references).</li>
-<li><code>InvalidExpressionError(ValueError)</code> — expression strings that fail
-  parsing/AST validation.</li>
-<li><code>UnsupportedFeatureError(NotImplementedError)</code> — features declared in a
-  spec that are not yet implemented.</li>
-</ul>
-<p>All three subclass a built-in (<code>ValueError</code> / <code>NotImplementedError</code>), so
-existing <code>except ValueError</code> / <code>except NotImplementedError</code> sites in
-downstream code keep working while new code can catch the more specific
-subclasses when needed.</p>
-<p>Document the specific exception type in the function's <code>Raises:</code> block.</p>
+<p>These rules apply identically for increasing and decreasing transport. The
+descriptor keeps direction separate from a parameter name so engines never
+need to parse backend-specific scalar expressions such as <code>-waning_rate</code>.</p>
 
 
 
