@@ -74,6 +74,10 @@ version; format loosely follows
 
 ### Fixed
 
+- The flepimop2 provider now declares its actual `flepimop2>=0.3.0`
+  compatibility floor, and clean-wheel release validation exercises the
+  lowest published direct dependencies instead of installing flepimop2 from
+  its development branch.
 - Normalizing a transitions spec no longer rewrites the caller's
   `transitions` entries in place when stripping the time axis from rates,
   so normalizing the same spec twice keeps time-varying parameters

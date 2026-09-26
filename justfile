@@ -151,9 +151,7 @@ build-test-provider:
 	cd ..
 	{{run}} --with build python -m build --wheel --outdir "${CLEANROOM}/core-dist"
 	uv venv --python "${UV_PYTHON_VERSION:-3.12}" "${CLEANROOM}/venv"
-	uv pip install --python "${CLEANROOM}/venv/bin/python" "flepimop2 @ git+https://github.com/ACCIDDA/flepimop2.git@main"
-	uv pip install --python "${CLEANROOM}/venv/bin/python" "${CLEANROOM}/core-dist"/*.whl
-	uv pip install --python "${CLEANROOM}/venv/bin/python" --no-deps "${CLEANROOM}/provider-dist"/*.whl
+	uv pip install --python "${CLEANROOM}/venv/bin/python" --resolution lowest-direct --find-links "${CLEANROOM}/core-dist" "${CLEANROOM}/provider-dist"/*.whl
 	uv pip install --python "${CLEANROOM}/venv/bin/python" -r "${CLEANROOM}/dev-requirements.txt"
 	cp {{provider_dir}}/pyproject.toml "${CLEANROOM}/pyproject.toml"
 	cp -R {{provider_dir}}/src "${CLEANROOM}/src"
