@@ -12,7 +12,7 @@ authors = [
 license = { file = "LICENSE" }
 dependencies = [
   "op-system>=0.4.0",
-  "flepimop2>=0.2.0",
+  "flepimop2>=0.3.0",
   "pydantic>=2.0,<3",
   "numpy>=1.26",
   "PyYAML>=6.0",
@@ -54,9 +54,9 @@ include = ["src/flepimop2/system/op_system/py.typed"]
 # --- uv monorepo wiring: satisfy op-system from the sibling directory ---
 [tool.uv.sources]
 op-system = { path = ".." }
-# flepimop2 0.2.0 (PyPI) predates the ParameterAPI used by this adapter
-# (ModelStateSpecification, ParameterRequest, AxisCollection).  Until the
-# next flepimop2 release, pin to the development tip on main.
+# Development follows flepimop2 main so pending protocol changes are exercised
+# before release. Clean-wheel validation separately covers the published 0.3.0
+# minimum declared above.
 flepimop2 = { git = "https://github.com/ACCIDDA/flepimop2", branch = "main" }
 
 [tool.pytest.ini_options]
