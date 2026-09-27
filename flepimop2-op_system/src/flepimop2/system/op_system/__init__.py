@@ -30,6 +30,7 @@ import dataclasses
 import functools
 import sys
 from collections.abc import Mapping
+from importlib import metadata
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -54,7 +55,19 @@ from pydantic import ConfigDict, Field
 
 from op_system import CompiledReaction, CompiledRhs, compile_spec
 
-__version__ = "0.2.0"
+_DISTRIBUTION_NAME = "flepimop2-op-system"
+_UNKNOWN_VERSION = "0+unknown"
+
+
+def _distribution_version() -> str:
+    """Return installed metadata or a source-tree fallback version."""
+    try:
+        return metadata.version(_DISTRIBUTION_NAME)
+    except metadata.PackageNotFoundError:
+        return _UNKNOWN_VERSION
+
+
+__version__ = _distribution_version()
 
 if TYPE_CHECKING:
     from collections.abc import Callable
