@@ -26,10 +26,11 @@ Today that means these two files must contain the same semantic version:
 - `pyproject.toml`
 - `flepimop2-op_system/pyproject.toml`
 
-If they differ, the `validate` job fails immediately. `op_system.__version__`
-is read dynamically from installed package metadata
-(`importlib.metadata.version("op_system")`), so it does not need a separate
-manual edit.
+If they differ, the `validate` job fails immediately. Both public module
+versions are read dynamically from installed package metadata, using the
+distribution names `op_system` and `flepimop2-op-system`, so neither needs a
+separate manual edit. The provider reports `0+unknown` only when imported
+directly from an uninstalled source tree where distribution metadata is absent.
 
 ## 2. Run The Local Release Preflight
 

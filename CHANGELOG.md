@@ -22,6 +22,12 @@ version; format loosely follows
   concrete/traced behavior. PyTorch remains optional through the `torch`
   extra (#227).
 
+### Fixed
+
+- `flepimop2.system.op_system.__version__` now comes from installed
+  distribution metadata instead of a stale hard-coded value. Direct imports
+  from an uninstalled source tree use the explicit `0+unknown` sentinel (#231).
+
 ## [0.4.0] - 2026-09-26
 
 ### Added
