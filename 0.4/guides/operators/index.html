@@ -524,6 +524,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#jump-integrals" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Jump integrals
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -743,6 +754,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#jump-integrals" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Jump integrals
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -790,6 +812,59 @@ should therefore be non-negative.</p>
 <p>These rules apply identically for increasing and decreasing transport. The
 descriptor keeps direction separate from a parameter name so engines never
 need to parse backend-specific scalar expressions such as <code>-waning_rate</code>.</p>
+<h2 id="jump-integrals">Jump integrals<a class="headerlink" href="#jump-integrals" title="Permanent link">&para;</a></h2>
+<p><code>jump_integral</code> is a conservative gain-minus-loss operator along one axis. Its
+matrix uses <strong>rows as sources and columns as targets</strong>. Given a non-negative
+off-diagonal rate-density matrix <code>J</code>, op_system defines a generator <code>Q</code> by
+masking disallowed destinations and setting each diagonal to the negative
+off-diagonal row sum. Engines apply</p>
+<p>[
+  \frac{d x}{d t}\bigg|_{jump} = r\,xQ
+]</p>
+<p>along the declared axis. The scalar <code>rate</code> <code>r</code> is separate so it can remain a
+dynamic inference parameter.</p>
+<pre><code class="language-yaml">operators:
+  - kind: jump_integral
+    axis: trait
+    rate: jump_rate
+    direction: up
+    bc: reflecting
+    kernel:
+      form: matrix
+      params: {matrix: trait_jump_density}
+      param_axes: {trait_jump_density: [trait, trait]}
+</code></pre>
+<p>The current contract intentionally has one kernel form, <code>matrix</code>. Unknown
+forms are rejected. The matrix diagonal must be zero and off-diagonal values
+must be finite and non-negative. <code>kernel.param_axes</code> is mandatory and must
+declare <code>[axis, axis]</code>; this fixes orientation and lets providers request the
+parameter with the correct shape.</p>
+<p>Directions are defined in declared coordinate order:</p>
+<ul>
+<li><code>up</code> retains source-to-target entries with <code>target &gt; source</code>;</li>
+<li><code>down</code> retains entries with <code>target &lt; source</code>;</li>
+<li><code>both</code> retains every off-diagonal entry and is the default.</li>
+</ul>
+<p>Categorical axes are unordered and therefore accept only <code>both</code>. Ordinal axes
+use their listed order. Continuous axes require strictly increasing numeric
+coordinates and multiply each target column by the axis's trapezoidal
+quadrature weight. Thus a continuous kernel has rate-density units inverse to
+the axis units, while <code>rate * J * target_weight</code> has inverse-time units.</p>
+<p>Only <code>reflecting</code> boundaries are defined. This means truncation at the declared
+domain: no jump outside the coordinate set occurs, the remaining in-domain
+off-diagonal rates are not renormalized, and a terminal source with no allowed
+target has a zero generator row. Every row sums to zero, so mass is conserved
+for every independent slice of the other state axes. <code>absorbing</code> and
+<code>periodic</code> are rejected until their non-local geometry is specified.</p>
+<p><code>jump_integral_generator</code>, <code>jump_integral_rhs</code>, and
+<code>validate_jump_integral_kernel</code> are public Array-API reference functions.
+Engines must match them exactly. Validate concrete parameter values at an eager
+orchestration boundary; the reference assembly itself keeps matrix values
+dynamic for JAX, Torch, and other differentiable array backends.</p>
+<p>The older project-local Diffrax behavior that treated <code>kernel.params</code> as
+per-coordinate diagonal outflow is not this operator: it omitted direction and
+required a separately duplicated inflow. Model that behavior as an explicit
+source transition, or migrate it to the conservative matrix contract.</p>
 
 
 

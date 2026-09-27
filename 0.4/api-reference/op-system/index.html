@@ -962,6 +962,28 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#op_system.jump_integral_generator" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        jump_integral_generator
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#op_system.jump_integral_rhs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        jump_integral_rhs
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#op_system.normalize_expr_rhs" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -999,6 +1021,17 @@
     <span class="md-ellipsis">
       
         validate_axis_kernel_matrix
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#op_system.validate_jump_integral_kernel" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        validate_jump_integral_kernel
       
     </span>
   </a>
@@ -1514,6 +1547,28 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#op_system.jump_integral_generator" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        jump_integral_generator
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#op_system.jump_integral_rhs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        jump_integral_rhs
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#op_system.normalize_expr_rhs" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1551,6 +1606,17 @@
     <span class="md-ellipsis">
       
         validate_axis_kernel_matrix
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#op_system.validate_jump_integral_kernel" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        validate_jump_integral_kernel
       
     </span>
   </a>
@@ -2812,8 +2878,8 @@ the operator applies to every compatible state.</p>
                 <p>Optional normalized direction. For advection and transport,
 <code>"increasing"</code> preserves the resolved velocity sign and
 <code>"decreasing"</code> reverses it; when omitted, velocity is used as a
-signed coefficient. Other operator kinds may define their own
-direction vocabulary.</p>
+signed coefficient. For jump integrals, <code>"up"</code>, <code>"down"</code>, or
+<code>"both"</code> masks source-to-target movement in coordinate order.</p>
               </div>
             </td>
           </tr>
@@ -4406,15 +4472,7 @@ removed in a future release.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/op_system/__init__.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"> 81</span>
-<span class="normal"> 82</span>
-<span class="normal"> 83</span>
-<span class="normal"> 84</span>
-<span class="normal"> 85</span>
-<span class="normal"> 86</span>
-<span class="normal"> 87</span>
-<span class="normal"> 88</span>
-<span class="normal"> 89</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"> 89</span>
 <span class="normal"> 90</span>
 <span class="normal"> 91</span>
 <span class="normal"> 92</span>
@@ -4447,7 +4505,15 @@ removed in a future release.</p>
 <span class="normal">119</span>
 <span class="normal">120</span>
 <span class="normal">121</span>
-<span class="normal">122</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">compile_spec</span><span class="p">(</span>  <span class="c1"># ruff: ignore[non-empty-init-module]</span>
+<span class="normal">122</span>
+<span class="normal">123</span>
+<span class="normal">124</span>
+<span class="normal">125</span>
+<span class="normal">126</span>
+<span class="normal">127</span>
+<span class="normal">128</span>
+<span class="normal">129</span>
+<span class="normal">130</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">compile_spec</span><span class="p">(</span>  <span class="c1"># ruff: ignore[non-empty-init-module]</span>
     <span class="n">spec</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">object</span><span class="p">],</span>
     <span class="o">*</span><span class="p">,</span>
     <span class="n">xp</span><span class="p">:</span> <span class="nb">object</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -4489,6 +4555,597 @@ removed in a future release.</p>
 
     <span class="n">rhs</span> <span class="o">=</span> <span class="n">normalize_rhs</span><span class="p">(</span><span class="n">spec</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">compile_rhs</span><span class="p">(</span><span class="n">rhs</span><span class="p">)</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="op_system.jump_integral_generator" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">jump_integral_generator</span><span class="p">(</span><span class="n">kernel</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">axis_type</span><span class="p">,</span> <span class="n">direction</span><span class="o">=</span><span class="s1">'both'</span><span class="p">,</span> <span class="n">boundary</span><span class="o">=</span><span class="s1">'reflecting'</span><span class="p">,</span> <span class="n">quadrature_weights</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
+
+<a href="#op_system.jump_integral_generator" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Build the conservative row-source generator for a jump kernel.</p>
+<p><code>kernel[i, j]</code> is the non-negative rate density from source coordinate
+<code>i</code> to target coordinate <code>j</code>. Its diagonal is ignored. <code>up</code> keeps
+only <code>j &gt; i</code>; <code>down</code> keeps only <code>j &lt; i</code>; <code>both</code> keeps every
+off-diagonal entry. For a continuous axis each target column <code>j</code> is
+multiplied by <code>quadrature_weights[j]</code> before the diagonal loss is set.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>kernel</code>
+            </td>
+            <td>
+                  <code><span title="typing.Any">Any</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Square source-by-target rate-density matrix.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>axis_type</code>
+            </td>
+            <td>
+                  <code><span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p><code>categorical</code>, <code>ordinal</code>, or <code>continuous</code>.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>direction</code>
+            </td>
+            <td>
+                  <code><span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Permitted movement in declared coordinate order.</p>
+              </div>
+            </td>
+            <td>
+                  <code>&#39;both&#39;</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>boundary</code>
+            </td>
+            <td>
+                  <code><span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Boundary contract. Only <code>reflecting</code> is currently defined.</p>
+              </div>
+            </td>
+            <td>
+                  <code>&#39;reflecting&#39;</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>quadrature_weights</code>
+            </td>
+            <td>
+                  <code><span title="typing.Any">Any</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Positive target weights required for continuous
+axes and forbidden for categorical or ordinal axes.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="typing.Any">Any</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>A generator in the kernel's Array-API namespace. Rows sum to zero.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<p><span class="doc-section-title">Raises:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="ValueError">ValueError</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>If static choices, shapes, or quadrature usage are invalid.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<details class="notes" open>
+  <summary>Notes</summary>
+  <p>Call :func:<code>validate_jump_integral_kernel</code> with concrete parameter
+values at an orchestration boundary to check finiteness and signs.
+This builder deliberately keeps array values dynamic under transforms.</p>
+</details>
+
+            <details class="mkdocstrings-source">
+              <summary>Source code in <code>src/op_system/_jump_integral.py</code></summary>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"> 60</span>
+<span class="normal"> 61</span>
+<span class="normal"> 62</span>
+<span class="normal"> 63</span>
+<span class="normal"> 64</span>
+<span class="normal"> 65</span>
+<span class="normal"> 66</span>
+<span class="normal"> 67</span>
+<span class="normal"> 68</span>
+<span class="normal"> 69</span>
+<span class="normal"> 70</span>
+<span class="normal"> 71</span>
+<span class="normal"> 72</span>
+<span class="normal"> 73</span>
+<span class="normal"> 74</span>
+<span class="normal"> 75</span>
+<span class="normal"> 76</span>
+<span class="normal"> 77</span>
+<span class="normal"> 78</span>
+<span class="normal"> 79</span>
+<span class="normal"> 80</span>
+<span class="normal"> 81</span>
+<span class="normal"> 82</span>
+<span class="normal"> 83</span>
+<span class="normal"> 84</span>
+<span class="normal"> 85</span>
+<span class="normal"> 86</span>
+<span class="normal"> 87</span>
+<span class="normal"> 88</span>
+<span class="normal"> 89</span>
+<span class="normal"> 90</span>
+<span class="normal"> 91</span>
+<span class="normal"> 92</span>
+<span class="normal"> 93</span>
+<span class="normal"> 94</span>
+<span class="normal"> 95</span>
+<span class="normal"> 96</span>
+<span class="normal"> 97</span>
+<span class="normal"> 98</span>
+<span class="normal"> 99</span>
+<span class="normal">100</span>
+<span class="normal">101</span>
+<span class="normal">102</span>
+<span class="normal">103</span>
+<span class="normal">104</span>
+<span class="normal">105</span>
+<span class="normal">106</span>
+<span class="normal">107</span>
+<span class="normal">108</span>
+<span class="normal">109</span>
+<span class="normal">110</span>
+<span class="normal">111</span>
+<span class="normal">112</span>
+<span class="normal">113</span>
+<span class="normal">114</span>
+<span class="normal">115</span>
+<span class="normal">116</span>
+<span class="normal">117</span>
+<span class="normal">118</span>
+<span class="normal">119</span>
+<span class="normal">120</span>
+<span class="normal">121</span>
+<span class="normal">122</span>
+<span class="normal">123</span>
+<span class="normal">124</span>
+<span class="normal">125</span>
+<span class="normal">126</span>
+<span class="normal">127</span>
+<span class="normal">128</span>
+<span class="normal">129</span>
+<span class="normal">130</span>
+<span class="normal">131</span>
+<span class="normal">132</span>
+<span class="normal">133</span>
+<span class="normal">134</span>
+<span class="normal">135</span>
+<span class="normal">136</span>
+<span class="normal">137</span>
+<span class="normal">138</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">jump_integral_generator</span><span class="p">(</span>
+    <span class="n">kernel</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>  <span class="c1"># ruff: ignore[any-type]</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">axis_type</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">direction</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"both"</span><span class="p">,</span>
+    <span class="n">boundary</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"reflecting"</span><span class="p">,</span>
+    <span class="n">quadrature_weights</span><span class="p">:</span> <span class="n">Any</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>  <span class="c1"># ruff: ignore[any-type]</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>  <span class="c1"># ruff: ignore[any-type]</span>
+<span class="w">    </span><span class="sd">"""Build the conservative row-source generator for a jump kernel.</span>
+
+<span class="sd">    ``kernel[i, j]`` is the non-negative rate density from source coordinate</span>
+<span class="sd">    ``i`` to target coordinate ``j``. Its diagonal is ignored. ``up`` keeps</span>
+<span class="sd">    only ``j &gt; i``; ``down`` keeps only ``j &lt; i``; ``both`` keeps every</span>
+<span class="sd">    off-diagonal entry. For a continuous axis each target column ``j`` is</span>
+<span class="sd">    multiplied by ``quadrature_weights[j]`` before the diagonal loss is set.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        kernel: Square source-by-target rate-density matrix.</span>
+<span class="sd">        axis_type: ``categorical``, ``ordinal``, or ``continuous``.</span>
+<span class="sd">        direction: Permitted movement in declared coordinate order.</span>
+<span class="sd">        boundary: Boundary contract. Only ``reflecting`` is currently defined.</span>
+<span class="sd">        quadrature_weights: Positive target weights required for continuous</span>
+<span class="sd">            axes and forbidden for categorical or ordinal axes.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        A generator in the kernel's Array-API namespace. Rows sum to zero.</span>
+
+<span class="sd">    Raises:</span>
+<span class="sd">        ValueError: If static choices, shapes, or quadrature usage are invalid.</span>
+
+<span class="sd">    Notes:</span>
+<span class="sd">        Call :func:`validate_jump_integral_kernel` with concrete parameter</span>
+<span class="sd">        values at an orchestration boundary to check finiteness and signs.</span>
+<span class="sd">        This builder deliberately keeps array values dynamic under transforms.</span>
+<span class="sd">    """</span>
+    <span class="n">_validate_static_contract</span><span class="p">(</span>
+        <span class="n">axis_type</span><span class="o">=</span><span class="n">axis_type</span><span class="p">,</span>
+        <span class="n">direction</span><span class="o">=</span><span class="n">direction</span><span class="p">,</span>
+        <span class="n">boundary</span><span class="o">=</span><span class="n">boundary</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="k">if</span> <span class="n">kernel</span><span class="o">.</span><span class="n">ndim</span> <span class="o">!=</span> <span class="mi">2</span> <span class="ow">or</span> <span class="n">kernel</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">!=</span> <span class="n">kernel</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]:</span>
+        <span class="n">msg</span> <span class="o">=</span> <span class="s2">"jump_integral kernel must be square"</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+
+    <span class="n">xp</span> <span class="o">=</span> <span class="n">array_namespace</span><span class="p">(</span><span class="n">kernel</span><span class="p">)</span>
+    <span class="n">upper</span> <span class="o">=</span> <span class="n">xp</span><span class="o">.</span><span class="n">triu</span><span class="p">(</span><span class="n">xp</span><span class="o">.</span><span class="n">ones_like</span><span class="p">(</span><span class="n">kernel</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">xp</span><span class="o">.</span><span class="n">bool</span><span class="p">),</span> <span class="n">k</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+    <span class="n">lower</span> <span class="o">=</span> <span class="n">xp</span><span class="o">.</span><span class="n">tril</span><span class="p">(</span><span class="n">xp</span><span class="o">.</span><span class="n">ones_like</span><span class="p">(</span><span class="n">kernel</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">xp</span><span class="o">.</span><span class="n">bool</span><span class="p">),</span> <span class="n">k</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">direction</span> <span class="o">==</span> <span class="s2">"up"</span><span class="p">:</span>
+        <span class="n">allowed</span> <span class="o">=</span> <span class="n">upper</span>
+    <span class="k">elif</span> <span class="n">direction</span> <span class="o">==</span> <span class="s2">"down"</span><span class="p">:</span>
+        <span class="n">allowed</span> <span class="o">=</span> <span class="n">lower</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">allowed</span> <span class="o">=</span> <span class="n">xp</span><span class="o">.</span><span class="n">logical_or</span><span class="p">(</span><span class="n">upper</span><span class="p">,</span> <span class="n">lower</span><span class="p">)</span>
+    <span class="n">rates</span> <span class="o">=</span> <span class="n">xp</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">allowed</span><span class="p">,</span> <span class="n">kernel</span><span class="p">,</span> <span class="n">xp</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">kernel</span><span class="p">))</span>
+
+    <span class="k">if</span> <span class="n">axis_type</span> <span class="o">==</span> <span class="s2">"continuous"</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">quadrature_weights</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">msg</span> <span class="o">=</span> <span class="s2">"continuous jump_integral axes require quadrature_weights"</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+        <span class="n">weights</span> <span class="o">=</span> <span class="n">xp</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span>
+            <span class="n">quadrature_weights</span><span class="p">,</span>
+            <span class="n">dtype</span><span class="o">=</span><span class="n">kernel</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span>
+            <span class="o">**</span><span class="n">_device_kwargs</span><span class="p">(</span><span class="n">kernel</span><span class="p">),</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="n">weights</span><span class="o">.</span><span class="n">ndim</span> <span class="o">!=</span> <span class="mi">1</span> <span class="ow">or</span> <span class="n">weights</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">!=</span> <span class="n">kernel</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span>
+            <span class="n">msg</span> <span class="o">=</span> <span class="s2">"quadrature_weights must have one entry per kernel target"</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+        <span class="n">rates</span> <span class="o">*=</span> <span class="n">xp</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">weights</span><span class="p">,</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">weights</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]))</span>
+    <span class="k">elif</span> <span class="n">quadrature_weights</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">msg</span> <span class="o">=</span> <span class="s2">"quadrature_weights are only valid for continuous jump_integral axes"</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+
+    <span class="n">row_sums</span> <span class="o">=</span> <span class="n">xp</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">rates</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+    <span class="n">identity</span> <span class="o">=</span> <span class="n">xp</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span>
+        <span class="n">kernel</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+        <span class="n">dtype</span><span class="o">=</span><span class="n">kernel</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">_device_kwargs</span><span class="p">(</span><span class="n">kernel</span><span class="p">),</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="n">rates</span> <span class="o">-</span> <span class="n">identity</span> <span class="o">*</span> <span class="n">xp</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">row_sums</span><span class="p">,</span> <span class="p">(</span><span class="n">row_sums</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="mi">1</span><span class="p">))</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="op_system.jump_integral_rhs" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">jump_integral_rhs</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="n">kernel</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">axis</span><span class="p">,</span> <span class="n">axis_type</span><span class="p">,</span> <span class="n">rate</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">direction</span><span class="o">=</span><span class="s1">'both'</span><span class="p">,</span> <span class="n">boundary</span><span class="o">=</span><span class="s1">'reflecting'</span><span class="p">,</span> <span class="n">quadrature_weights</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
+
+<a href="#op_system.jump_integral_rhs" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Return a conservative jump-integral derivative contribution.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>state</code>
+            </td>
+            <td>
+                  <code><span title="typing.Any">Any</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>State array containing the jump axis.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>kernel</code>
+            </td>
+            <td>
+                  <code><span title="typing.Any">Any</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Source-by-target rate-density matrix.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>axis</code>
+            </td>
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Position of the jump axis in <code>state</code>.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>axis_type</code>
+            </td>
+            <td>
+                  <code><span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p><code>categorical</code>, <code>ordinal</code>, or <code>continuous</code>.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>rate</code>
+            </td>
+            <td>
+                  <code><span title="typing.Any">Any</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Scalar multiplier with inverse-time units after any continuous
+target quadrature has been applied.</p>
+              </div>
+            </td>
+            <td>
+                  <code>1.0</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>direction</code>
+            </td>
+            <td>
+                  <code><span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p><code>up</code>, <code>down</code>, or <code>both</code>.</p>
+              </div>
+            </td>
+            <td>
+                  <code>&#39;both&#39;</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>boundary</code>
+            </td>
+            <td>
+                  <code><span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Boundary contract; currently only <code>reflecting</code>.</p>
+              </div>
+            </td>
+            <td>
+                  <code>&#39;reflecting&#39;</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>quadrature_weights</code>
+            </td>
+            <td>
+                  <code><span title="typing.Any">Any</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Target quadrature weights for continuous axes.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="typing.Any">Any</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Derivative contribution with the same shape as <code>state</code>.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+            <details class="mkdocstrings-source">
+              <summary>Source code in <code>src/op_system/_jump_integral.py</code></summary>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">141</span>
+<span class="normal">142</span>
+<span class="normal">143</span>
+<span class="normal">144</span>
+<span class="normal">145</span>
+<span class="normal">146</span>
+<span class="normal">147</span>
+<span class="normal">148</span>
+<span class="normal">149</span>
+<span class="normal">150</span>
+<span class="normal">151</span>
+<span class="normal">152</span>
+<span class="normal">153</span>
+<span class="normal">154</span>
+<span class="normal">155</span>
+<span class="normal">156</span>
+<span class="normal">157</span>
+<span class="normal">158</span>
+<span class="normal">159</span>
+<span class="normal">160</span>
+<span class="normal">161</span>
+<span class="normal">162</span>
+<span class="normal">163</span>
+<span class="normal">164</span>
+<span class="normal">165</span>
+<span class="normal">166</span>
+<span class="normal">167</span>
+<span class="normal">168</span>
+<span class="normal">169</span>
+<span class="normal">170</span>
+<span class="normal">171</span>
+<span class="normal">172</span>
+<span class="normal">173</span>
+<span class="normal">174</span>
+<span class="normal">175</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">jump_integral_rhs</span><span class="p">(</span>  <span class="c1"># ruff: ignore[too-many-arguments]</span>
+    <span class="n">state</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>  <span class="c1"># ruff: ignore[any-type]</span>
+    <span class="n">kernel</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>  <span class="c1"># ruff: ignore[any-type]</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">axis</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">axis_type</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">rate</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span>  <span class="c1"># ruff: ignore[any-type]</span>
+    <span class="n">direction</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"both"</span><span class="p">,</span>
+    <span class="n">boundary</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"reflecting"</span><span class="p">,</span>
+    <span class="n">quadrature_weights</span><span class="p">:</span> <span class="n">Any</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>  <span class="c1"># ruff: ignore[any-type]</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>  <span class="c1"># ruff: ignore[any-type]</span>
+<span class="w">    </span><span class="sd">"""Return a conservative jump-integral derivative contribution.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        state: State array containing the jump axis.</span>
+<span class="sd">        kernel: Source-by-target rate-density matrix.</span>
+<span class="sd">        axis: Position of the jump axis in ``state``.</span>
+<span class="sd">        axis_type: ``categorical``, ``ordinal``, or ``continuous``.</span>
+<span class="sd">        rate: Scalar multiplier with inverse-time units after any continuous</span>
+<span class="sd">            target quadrature has been applied.</span>
+<span class="sd">        direction: ``up``, ``down``, or ``both``.</span>
+<span class="sd">        boundary: Boundary contract; currently only ``reflecting``.</span>
+<span class="sd">        quadrature_weights: Target quadrature weights for continuous axes.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        Derivative contribution with the same shape as ``state``.</span>
+<span class="sd">    """</span>
+    <span class="n">generator</span> <span class="o">=</span> <span class="n">jump_integral_generator</span><span class="p">(</span>
+        <span class="n">kernel</span><span class="p">,</span>
+        <span class="n">axis_type</span><span class="o">=</span><span class="n">axis_type</span><span class="p">,</span>
+        <span class="n">direction</span><span class="o">=</span><span class="n">direction</span><span class="p">,</span>
+        <span class="n">boundary</span><span class="o">=</span><span class="n">boundary</span><span class="p">,</span>
+        <span class="n">quadrature_weights</span><span class="o">=</span><span class="n">quadrature_weights</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="n">axis_kernel_generator_rhs</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="n">generator</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="n">axis</span><span class="p">,</span> <span class="n">velocity</span><span class="o">=</span><span class="n">rate</span><span class="p">)</span>
 </code></pre></div></td></tr></table></div>
             </details>
     </div>
@@ -6143,6 +6800,318 @@ removed in a future release.</p>
             <span class="n">problems</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">"stochastic diagonal entries must be nonnegative"</span><span class="p">)</span>
         <span class="k">if</span> <span class="nb">bool</span><span class="p">(</span><span class="n">xp</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">xp</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">row_sums</span> <span class="o">-</span> <span class="mf">1.0</span><span class="p">)</span> <span class="o">&gt;</span> <span class="n">tolerance</span><span class="p">)):</span>
             <span class="n">problems</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">"stochastic rows must sum to one"</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">problems</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="op_system.validate_jump_integral_kernel" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">validate_jump_integral_kernel</span><span class="p">(</span><span class="n">kernel</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">axis_type</span><span class="p">,</span> <span class="n">direction</span><span class="o">=</span><span class="s1">'both'</span><span class="p">,</span> <span class="n">boundary</span><span class="o">=</span><span class="s1">'reflecting'</span><span class="p">,</span> <span class="n">quadrature_weights</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">tolerance</span><span class="o">=</span><span class="mf">1e-09</span><span class="p">)</span></code>
+
+<a href="#op_system.validate_jump_integral_kernel" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Return problems with concrete jump-kernel values (empty if valid).</p>
+<p>This eager validation belongs at parameter resolution or another host
+orchestration boundary, not inside a traced numerical solve.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>kernel</code>
+            </td>
+            <td>
+                  <code><span title="typing.Any">Any</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Candidate source-by-target rate-density matrix.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>axis_type</code>
+            </td>
+            <td>
+                  <code><span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p><code>categorical</code>, <code>ordinal</code>, or <code>continuous</code>.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>direction</code>
+            </td>
+            <td>
+                  <code><span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p><code>up</code>, <code>down</code>, or <code>both</code>.</p>
+              </div>
+            </td>
+            <td>
+                  <code>&#39;both&#39;</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>boundary</code>
+            </td>
+            <td>
+                  <code><span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Boundary contract; currently only <code>reflecting</code>.</p>
+              </div>
+            </td>
+            <td>
+                  <code>&#39;reflecting&#39;</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>quadrature_weights</code>
+            </td>
+            <td>
+                  <code><span title="typing.Any">Any</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Target quadrature weights for continuous axes.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>tolerance</code>
+            </td>
+            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Absolute tolerance for sign and diagonal checks.</p>
+              </div>
+            </td>
+            <td>
+                  <code>1e-09</code>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="list">list</span>[<span title="str">str</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Human-readable problems; an empty list means the values conform.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<p><span class="doc-section-title">Raises:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="ValueError">ValueError</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>If a static contract choice is unsupported.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+            <details class="mkdocstrings-source">
+              <summary>Source code in <code>src/op_system/_jump_integral.py</code></summary>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">178</span>
+<span class="normal">179</span>
+<span class="normal">180</span>
+<span class="normal">181</span>
+<span class="normal">182</span>
+<span class="normal">183</span>
+<span class="normal">184</span>
+<span class="normal">185</span>
+<span class="normal">186</span>
+<span class="normal">187</span>
+<span class="normal">188</span>
+<span class="normal">189</span>
+<span class="normal">190</span>
+<span class="normal">191</span>
+<span class="normal">192</span>
+<span class="normal">193</span>
+<span class="normal">194</span>
+<span class="normal">195</span>
+<span class="normal">196</span>
+<span class="normal">197</span>
+<span class="normal">198</span>
+<span class="normal">199</span>
+<span class="normal">200</span>
+<span class="normal">201</span>
+<span class="normal">202</span>
+<span class="normal">203</span>
+<span class="normal">204</span>
+<span class="normal">205</span>
+<span class="normal">206</span>
+<span class="normal">207</span>
+<span class="normal">208</span>
+<span class="normal">209</span>
+<span class="normal">210</span>
+<span class="normal">211</span>
+<span class="normal">212</span>
+<span class="normal">213</span>
+<span class="normal">214</span>
+<span class="normal">215</span>
+<span class="normal">216</span>
+<span class="normal">217</span>
+<span class="normal">218</span>
+<span class="normal">219</span>
+<span class="normal">220</span>
+<span class="normal">221</span>
+<span class="normal">222</span>
+<span class="normal">223</span>
+<span class="normal">224</span>
+<span class="normal">225</span>
+<span class="normal">226</span>
+<span class="normal">227</span>
+<span class="normal">228</span>
+<span class="normal">229</span>
+<span class="normal">230</span>
+<span class="normal">231</span>
+<span class="normal">232</span>
+<span class="normal">233</span>
+<span class="normal">234</span>
+<span class="normal">235</span>
+<span class="normal">236</span>
+<span class="normal">237</span>
+<span class="normal">238</span>
+<span class="normal">239</span>
+<span class="normal">240</span>
+<span class="normal">241</span>
+<span class="normal">242</span>
+<span class="normal">243</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">validate_jump_integral_kernel</span><span class="p">(</span>  <span class="c1"># ruff: ignore[complex-structure, too-many-arguments, too-many-branches]</span>
+    <span class="n">kernel</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>  <span class="c1"># ruff: ignore[any-type]</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">axis_type</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">direction</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"both"</span><span class="p">,</span>
+    <span class="n">boundary</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"reflecting"</span><span class="p">,</span>
+    <span class="n">quadrature_weights</span><span class="p">:</span> <span class="n">Any</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>  <span class="c1"># ruff: ignore[any-type]</span>
+    <span class="n">tolerance</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1e-9</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Return problems with concrete jump-kernel values (empty if valid).</span>
+
+<span class="sd">    This eager validation belongs at parameter resolution or another host</span>
+<span class="sd">    orchestration boundary, not inside a traced numerical solve.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        kernel: Candidate source-by-target rate-density matrix.</span>
+<span class="sd">        axis_type: ``categorical``, ``ordinal``, or ``continuous``.</span>
+<span class="sd">        direction: ``up``, ``down``, or ``both``.</span>
+<span class="sd">        boundary: Boundary contract; currently only ``reflecting``.</span>
+<span class="sd">        quadrature_weights: Target quadrature weights for continuous axes.</span>
+<span class="sd">        tolerance: Absolute tolerance for sign and diagonal checks.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        Human-readable problems; an empty list means the values conform.</span>
+
+<span class="sd">    Raises:</span>
+<span class="sd">        ValueError: If a static contract choice is unsupported.</span>
+<span class="sd">    """</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">_validate_static_contract</span><span class="p">(</span>
+            <span class="n">axis_type</span><span class="o">=</span><span class="n">axis_type</span><span class="p">,</span>
+            <span class="n">direction</span><span class="o">=</span><span class="n">direction</span><span class="p">,</span>
+            <span class="n">boundary</span><span class="o">=</span><span class="n">boundary</span><span class="p">,</span>
+        <span class="p">)</span>
+    <span class="k">except</span> <span class="ne">ValueError</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">exc</span><span class="p">))</span> <span class="kn">from</span><span class="w"> </span><span class="nn">exc</span>
+    <span class="k">if</span> <span class="n">kernel</span><span class="o">.</span><span class="n">ndim</span> <span class="o">!=</span> <span class="mi">2</span> <span class="ow">or</span> <span class="n">kernel</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">!=</span> <span class="n">kernel</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]:</span>
+        <span class="k">return</span> <span class="p">[</span><span class="s2">"kernel must be square"</span><span class="p">]</span>
+    <span class="n">xp</span> <span class="o">=</span> <span class="n">array_namespace</span><span class="p">(</span><span class="n">kernel</span><span class="p">)</span>
+    <span class="n">problems</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">if</span> <span class="nb">bool</span><span class="p">(</span><span class="n">xp</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">xp</span><span class="o">.</span><span class="n">logical_not</span><span class="p">(</span><span class="n">xp</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">kernel</span><span class="p">)))):</span>
+        <span class="n">problems</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">"kernel entries must be finite"</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">bool</span><span class="p">(</span><span class="n">xp</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">kernel</span> <span class="o">&lt;</span> <span class="o">-</span><span class="n">tolerance</span><span class="p">)):</span>
+        <span class="n">problems</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">"kernel entries must be nonnegative"</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">bool</span><span class="p">(</span><span class="n">xp</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">xp</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">xp</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">diagonal</span><span class="p">(</span><span class="n">kernel</span><span class="p">))</span> <span class="o">&gt;</span> <span class="n">tolerance</span><span class="p">)):</span>
+        <span class="n">problems</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">"kernel diagonal entries must be zero"</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">axis_type</span> <span class="o">==</span> <span class="s2">"continuous"</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">quadrature_weights</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">problems</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">"continuous axes require quadrature_weights"</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">weights</span> <span class="o">=</span> <span class="n">xp</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span>
+                <span class="n">quadrature_weights</span><span class="p">,</span>
+                <span class="n">dtype</span><span class="o">=</span><span class="n">kernel</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span>
+                <span class="o">**</span><span class="n">_device_kwargs</span><span class="p">(</span><span class="n">kernel</span><span class="p">),</span>
+            <span class="p">)</span>
+            <span class="k">if</span> <span class="n">weights</span><span class="o">.</span><span class="n">ndim</span> <span class="o">!=</span> <span class="mi">1</span> <span class="ow">or</span> <span class="n">weights</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">!=</span> <span class="n">kernel</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span>
+                <span class="n">problems</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">"quadrature_weights must match kernel size"</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">if</span> <span class="nb">bool</span><span class="p">(</span><span class="n">xp</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">xp</span><span class="o">.</span><span class="n">logical_not</span><span class="p">(</span><span class="n">xp</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">weights</span><span class="p">)))):</span>
+                    <span class="n">problems</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">"quadrature_weights must be finite"</span><span class="p">)</span>
+                <span class="k">if</span> <span class="nb">bool</span><span class="p">(</span><span class="n">xp</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">weights</span> <span class="o">&lt;=</span> <span class="mf">0.0</span><span class="p">)):</span>
+                    <span class="n">problems</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">"quadrature_weights must be positive"</span><span class="p">)</span>
+    <span class="k">elif</span> <span class="n">quadrature_weights</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">problems</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">"quadrature_weights require a continuous axis"</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">problems</span>
 </code></pre></div></td></tr></table></div>
             </details>
