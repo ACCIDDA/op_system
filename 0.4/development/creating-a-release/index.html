@@ -994,10 +994,11 @@
 <li><code>pyproject.toml</code></li>
 <li><code>flepimop2-op_system/pyproject.toml</code></li>
 </ul>
-<p>If they differ, the <code>validate</code> job fails immediately. <code>op_system.__version__</code>
-is read dynamically from installed package metadata
-(<code>importlib.metadata.version("op_system")</code>), so it does not need a separate
-manual edit.</p>
+<p>If they differ, the <code>validate</code> job fails immediately. Both public module
+versions are read dynamically from installed package metadata, using the
+distribution names <code>op_system</code> and <code>flepimop2-op-system</code>, so neither needs a
+separate manual edit. The provider reports <code>0+unknown</code> only when imported
+directly from an uninstalled source tree where distribution metadata is absent.</p>
 <h2 id="2-run-the-local-release-preflight">2. Run The Local Release Preflight<a class="headerlink" href="#2-run-the-local-release-preflight" title="Permanent link">&para;</a></h2>
 <p>Use the local pre-release target before dispatching the release workflow:</p>
 <pre><code class="language-shell">just release-validate
