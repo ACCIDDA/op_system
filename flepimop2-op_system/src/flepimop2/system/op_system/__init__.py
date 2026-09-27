@@ -82,6 +82,7 @@ class _AxesMeta(NamedTuple):
     axis_order: tuple[str, ...]
     axis_sizes: dict[str, int]
     axis_coords: dict[str, np.ndarray]
+    axis_types: dict[str, str]
 
 
 class OpSystemSystem(SystemABC, module="flepimop2.system.op_system"):  # ruff: ignore[undocumented-public-class]
@@ -216,6 +217,7 @@ class OpSystemSystem(SystemABC, module="flepimop2.system.op_system"):  # ruff: i
             "axis_order": axes_meta.axis_order,
             "axis_sizes": axes_meta.axis_sizes,
             "axis_coords": axes_meta.axis_coords,
+            "axis_types": axes_meta.axis_types,
             "axis_labels": self._extract_axis_labels(compiled),
             "state_names": compiled.state_names,
             "initial_state": compiled.meta.get("initial_state"),
@@ -698,6 +700,7 @@ class OpSystemSystem(SystemABC, module="flepimop2.system.op_system"):  # ruff: i
         axis_coords: dict[str, np.ndarray] = {
             "subgroup": np.asarray([0], dtype=np.float64)
         }
+        axis_types: dict[str, str] = {"subgroup": "categorical"}
         axis_order: list[str] = ["state", "subgroup"]
         for ax in axes_meta:
             name = str(ax.get("name"))
@@ -713,9 +716,13 @@ class OpSystemSystem(SystemABC, module="flepimop2.system.op_system"):  # ruff: i
                 coords = np.arange(size, dtype=np.float64)
             axis_sizes[name] = size
             axis_coords[name] = coords
+            axis_types[name] = str(ax.get("type", "categorical"))
             axis_order.append(name)
         return _AxesMeta(
-            axis_order=tuple(axis_order), axis_sizes=axis_sizes, axis_coords=axis_coords
+            axis_order=tuple(axis_order),
+            axis_sizes=axis_sizes,
+            axis_coords=axis_coords,
+            axis_types=axis_types,
         )
 
     @staticmethod

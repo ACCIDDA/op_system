@@ -8,6 +8,11 @@ Bound system steppers accept and return Flepimop2's backend-neutral `Array`
 protocol. The provider performs no state conversion: NumPy, JAX, and other
 supported namespaces are selected by the state supplied by the engine.
 
+System options preserve normalized axis metadata for engine providers:
+`axis_order`, `axis_sizes`, numeric `axis_coords`, original `axis_labels`, and
+declared `axis_types`. Consumers can therefore distinguish categorical,
+ordinal, and continuous semantics without inferring them from coordinate values.
+
 It also provides the `sparse_table` parameter module, which assembles a dense
 array for a routing transition's matrix parameter (for example
 `eta[time, imm:i, imm:j]`) from a declared support. Each entry is a number or
