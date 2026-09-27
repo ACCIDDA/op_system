@@ -7,6 +7,8 @@ version; format loosely follows
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-09-27
+
 ### Added
 
 - The Flepimop provider now publishes normalized `axis_types` alongside axis
