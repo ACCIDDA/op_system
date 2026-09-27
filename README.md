@@ -122,6 +122,15 @@ Boundary conditions are defined relative to the resolved direction:
 
 Engines must apply these semantics identically for either velocity sign.
 
+### Jump-integral contract
+
+`jump_integral` metadata defines a conservative row-source, column-target
+matrix generator along an axis. `direction: up|down|both` masks destinations;
+continuous axes use target trapezoidal weights; and the currently supported
+`reflecting` boundary truncates out-of-domain jumps without renormalizing or
+losing mass. See the [operator guide](https://accidda.github.io/op_system/guides/operators/)
+for the exact schema, units, and Array-API reference functions.
+
 `compile_spec` accepts legacy `backend=` / `xp=` keyword arguments but they
 are deprecated and ignored — the compiled callable infers its array
 namespace from the input `y` on every call.

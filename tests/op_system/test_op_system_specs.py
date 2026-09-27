@@ -1022,7 +1022,7 @@ def test_operator_jump_integral_requires_kernel_and_normalizes_direction() -> No
 
     spec_ok_jump = {
         "kind": "expr",
-        "axes": [{"name": "x", "coords": ["a"]}],
+        "axes": [{"name": "x", "type": "ordinal", "coords": ["a"]}],
         "state": ["S"],
         "operators": [
             {
@@ -1030,7 +1030,11 @@ def test_operator_jump_integral_requires_kernel_and_normalizes_direction() -> No
                 "axis": "x",
                 "kind": "jump_integral",
                 "rate": "nu",
-                "kernel": {"form": "gaussian", "params": {"sigma": 0.1}},
+                "kernel": {
+                    "form": "matrix",
+                    "params": {"matrix": "J"},
+                    "param_axes": {"J": ["x", "x"]},
+                },
                 "direction": "UP",
                 "apply_to": ["S"],
             }

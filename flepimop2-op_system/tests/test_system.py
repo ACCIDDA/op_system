@@ -595,6 +595,31 @@ def test_requested_parameters_for_axis_kernel_operator() -> None:
     assert requests["w"].axes == ()
 
 
+def test_requested_parameters_for_jump_integral_operator() -> None:
+    """A jump rate is scalar and its kernel matrix uses both operator axes."""
+    spec: dict[str, object] = {
+        "kind": "expr",
+        "axes": [{"name": "trait", "type": "continuous", "coords": [0.0, 0.5, 1.0]}],
+        "state": ["X[trait]"],
+        "equations": {"X[trait]": "0.0"},
+        "operators": [
+            {
+                "kind": "jump_integral",
+                "axis": "trait",
+                "rate": "nu",
+                "kernel": {
+                    "form": "matrix",
+                    "params": {"matrix": "J"},
+                    "param_axes": {"J": ["trait", "trait"]},
+                },
+            }
+        ],
+    }
+    requests = OpSystemSystem(spec=spec).requested_parameters(AxisCollection())
+    assert requests["J"].axes == ("trait", "trait")
+    assert requests["nu"].axes == ()
+
+
 def test_requested_parameters_includes_initial_state_seeds() -> None:
     """Seed parameter names appear in requested_parameters even if absent from rates."""
     spec: dict[str, object] = {

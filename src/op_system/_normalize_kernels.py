@@ -355,55 +355,85 @@ def _validate_op_advection(op_map: Mapping[str, Any], idx: int, kind_s: str) -> 
         )
 
 
-def _validate_op_jump_integral(op_map: Mapping[str, Any], idx: int) -> None:
-    """Validate jump_integral operator fields.
+def _validate_op_jump_integral(  # ruff: ignore[complex-structure]
+    op_map: Mapping[str, Any],
+    idx: int,
+    axis_name: str,
+    axes: list[dict[str, Any]] | None,
+) -> None:
+    """Validate the conservative matrix jump-integral contract.
 
     Raises:
         InvalidRhsSpecError: If validation fails.
     """
+    where = f"operators[{idx}]"
     rate_val = op_map.get("rate")
     if rate_val is None:
         raise InvalidRhsSpecError(
-            detail=f"operators[{idx}].rate is required for 'jump_integral'"
+            detail=f"{where}.rate is required for 'jump_integral'"
         )
-    _validate_scalar_or_expr(rate_val, f"operators[{idx}].rate")
+    _validate_scalar_or_expr(rate_val, f"{where}.rate")
 
-    kernel_val = op_map.get("kernel")
-    if not isinstance(kernel_val, dict):
+    kernel = op_map.get("kernel")
+    if not isinstance(kernel, _MappingABC):
         raise InvalidRhsSpecError(
-            detail=f"operators[{idx}].kernel must be a mapping for 'jump_integral'"
+            detail=f"{where}.kernel must be a mapping for 'jump_integral'"
         )
-    kernel_form = kernel_val.get("form")
-    if not isinstance(kernel_form, str) or not kernel_form.strip():
+    form = kernel.get("form")
+    if not isinstance(form, str) or form.strip().lower() != "matrix":
+        raise InvalidRhsSpecError(
+            detail=f"{where}.kernel.form must be 'matrix' for 'jump_integral'"
+        )
+    params = kernel.get("params")
+    if not isinstance(params, _MappingABC):
+        raise InvalidRhsSpecError(detail=f"{where}.kernel.params must be a mapping")
+    if set(params) != {"matrix"}:
+        raise InvalidRhsSpecError(
+            detail=f"{where}.kernel.params must contain only 'matrix'"
+        )
+    matrix = params.get("matrix")
+    if not isinstance(matrix, str) or not matrix.strip().isidentifier():
+        raise InvalidRhsSpecError(
+            detail=f"{where}.kernel.params.matrix must name a parameter"
+        )
+    matrix_name = matrix.strip()
+    param_axes = kernel.get("param_axes")
+    declared = (
+        param_axes.get(matrix_name) if isinstance(param_axes, _MappingABC) else None
+    )
+    declared_axes = list(declared) if isinstance(declared, (list, tuple)) else None
+    if declared_axes != [axis_name, axis_name]:
         raise InvalidRhsSpecError(
             detail=(
-                f"operators[{idx}].kernel.form must be a non-empty "
-                "string for 'jump_integral'"
-            )
-        )
-    kernel_params = kernel_val.get("params")
-    if kernel_params is not None and not isinstance(kernel_params, dict):
-        raise InvalidRhsSpecError(
-            detail=(
-                f"operators[{idx}].kernel.params must be a mapping if "
-                "provided for 'jump_integral'"
+                f"{where}.kernel.param_axes[{matrix_name!r}] must be "
+                f"[{axis_name}, {axis_name}]"
             )
         )
 
-    direction_val = op_map.get("direction")
-    if direction_val is not None:
-        if not isinstance(direction_val, str) or not direction_val.strip():
-            raise InvalidRhsSpecError(
-                detail=(
-                    f"operators[{idx}].direction must be one of 'up', 'down', or 'both'"
-                )
-            )
-        if direction_val.strip().lower() not in {"up", "down", "both"}:
-            raise InvalidRhsSpecError(
-                detail=(
-                    f"operators[{idx}].direction must be one of 'up', 'down', or 'both'"
-                )
-            )
+    direction = op_map.get("direction", "both")
+    if not isinstance(direction, str) or direction.strip().lower() not in {
+        "up",
+        "down",
+        "both",
+    }:
+        raise InvalidRhsSpecError(
+            detail=f"{where}.direction must be one of 'up', 'down', or 'both'"
+        )
+    axis = next(
+        (item for item in axes or () if item.get("name") == axis_name),
+        None,
+    )
+    axis_type = str((axis or {}).get("type", "categorical"))
+    if axis_type == "categorical" and direction.strip().lower() != "both":
+        raise InvalidRhsSpecError(
+            detail=f"{where}.direction must be 'both' for a categorical axis"
+        )
+
+    boundary = op_map.get("bc", "reflecting")
+    if not isinstance(boundary, str) or boundary.strip().lower() != "reflecting":
+        raise InvalidRhsSpecError(
+            detail=f"{where}.bc must be 'reflecting' for 'jump_integral'"
+        )
 
 
 def _validate_axis_kernel_matrix(
@@ -591,10 +621,13 @@ def _enrich_op_kind_fields(op_out: dict[str, Any], kind_s: str) -> None:
             rate_val.strip() if isinstance(rate_val, str) else float(rate_val)
         )
         kernel_val = dict(op_out["kernel"])
-        kernel_val["form"] = str(kernel_val["form"]).strip()
+        kernel_val["form"] = "matrix"
+        params = dict(kernel_val["params"])
+        params["matrix"] = str(params["matrix"]).strip()
+        kernel_val["params"] = params
         op_out["kernel"] = kernel_val
-        if "direction" in op_out and isinstance(op_out["direction"], str):
-            op_out["direction"] = op_out["direction"].strip().lower()
+        op_out["direction"] = str(op_out.get("direction", "both")).strip().lower()
+        op_out["bc"] = str(op_out.get("bc", "reflecting")).strip().lower()
 
 
 def _normalize_single_operator(
@@ -625,7 +658,7 @@ def _normalize_single_operator(
     if kind_s in {"advection", "transport"}:
         _validate_op_advection(op_map, idx, kind_s)
     elif kind_s == "jump_integral":
-        _validate_op_jump_integral(op_map, idx)
+        _validate_op_jump_integral(op_map, idx, axis_name_s, axes)
     elif kind_s == "axis_kernel":
         _validate_op_axis_kernel(op_map, idx, axis_name_s, axes)
 
