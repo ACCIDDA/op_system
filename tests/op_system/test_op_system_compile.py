@@ -726,7 +726,7 @@ def test_compile_spec_with_backend_jax_is_jittable() -> None:
     """compile_spec produces a JAX-jittable eval_fn when called with a JAX state.
 
     The namespace is inferred from the input ``y`` via
-    ``__array_namespace__``, so no compile-time backend selection is
+    ``array_api_compat.array_namespace``, so no compile-time backend selection is
     required (the deprecated ``backend`` kwarg is accepted and ignored).
     """
     jax = pytest.importorskip("jax")
@@ -749,7 +749,7 @@ def test_compile_rhs_requires_explicit_backend_namespace() -> None:
     """compile_rhs no longer requires (or honors) an explicit ``xp``.
 
     Backend selection is per-call from the input ``y`` via
-    ``__array_namespace__``. Passing ``xp`` is accepted under a
+    ``array_api_compat.array_namespace``. Passing ``xp`` is accepted under a
     DeprecationWarning for one release; omitting it is the new default.
     """
     spec: dict[str, object] = {

@@ -38,6 +38,7 @@ from typing import (
 import numpy as np
 from numpy.typing import NDArray
 
+from op_system._array import array_namespace
 from op_system._block_axes import BlockAxisInfo, analyze_block_axes
 from op_system._errors import InvalidExpressionError, UnsupportedFeatureError
 from op_system._ir import (
@@ -77,26 +78,6 @@ class _HistoryCollectContext:
     seen_by_key: dict[tuple[str, str, tuple[tuple[str, str], ...]], int]
     cell_to_template: Mapping[str, tuple[str, tuple[str, ...]]] | None
     lift_cell_ir_to_template: Any
-
-
-def _namespace_of(y: object) -> Any:  # ruff: ignore[any-type]
-    """Return the Array-API namespace of ``y``.
-
-    Raises:
-        TypeError: If ``y`` does not implement ``__array_namespace__``.
-            NumPy >= 2.0 arrays, JAX arrays (concrete and traced),
-            and PyTorch tensors (via array-api compat) all qualify.
-    """
-    ns_fn = getattr(y, "__array_namespace__", None)
-    if ns_fn is None:
-        msg = (
-            "op_system eval_fn requires Array-API arrays for `y` "
-            "(NumPy >= 2.0, JAX, PyTorch). Got "
-            f"{type(y).__name__!r} which does not implement "
-            "__array_namespace__()."
-        )
-        raise TypeError(msg)
-    return ns_fn()
 
 
 def _check_numeric_dtype(xp: Any, dtype: object) -> None:  # ruff: ignore[any-type]
@@ -871,7 +852,11 @@ def _evaluate_equations(
             _raise_invalid_expression(detail=f"equation evaluation failed: {exc!r}")
         out_vals.append(val)
 
-    return cast("Float64Array", xp.asarray(out_vals))
+    array_values = [
+        value if getattr(value, "dtype", None) is not None else xp.asarray(value)
+        for value in out_vals
+    ]
+    return cast("Float64Array", xp.stack(array_values))
 
 
 def _make_eval_fn(
@@ -885,7 +870,7 @@ def _make_eval_fn(
     """Build a namespace-polymorphic ``eval_fn(t, y, **params) -> dydt``.
 
     The compiled function infers its array namespace from the input ``y``
-    via :meth:`y.__array_namespace__` at call time. No coercion is
+    through :func:`array_api_compat.array_namespace` at call time. No coercion is
     performed: producers hand in arrays of the desired backend and dtype,
     and outputs come back in that same namespace. This keeps the function
     natively callable under ``jax.jit`` / ``jax.vmap`` (tracers carry
@@ -906,7 +891,7 @@ def _make_eval_fn(
     )
 
     def eval_fn(t: object, y: object, **params: object) -> Float64Array:
-        xp = _namespace_of(y)
+        xp = array_namespace(y)
         _check_numeric_dtype(xp, getattr(y, "dtype", None))
         y_arr = _validate_state_vector(y, n_state=n_state)
 
@@ -1160,7 +1145,7 @@ def _interp_along_axis(
         grid: Array whose ``axis``-th dimension indexes ``ts``.
         axis: Position of the time axis within ``grid``'s shape.
         xp: Array-API namespace, derived from the input ``y`` by the
-            caller (``y.__array_namespace__()``).
+            caller through ``array_api_compat.array_namespace``.
 
     Returns:
         Interpolated value with ``grid``'s shape minus the ``axis`` slot.
@@ -1246,7 +1231,7 @@ def _wrap_eval_fn_for_time_varying(
     )
 
     def wrapped(t: object, y: object, **params: object) -> Float64Array:
-        xp = _namespace_of(y)
+        xp = array_namespace(y)
         for name, axis_pos in plan:
             if name not in params:
                 _raise_parameter_error(
@@ -1306,7 +1291,7 @@ def _wrap_pytree_eval_fn_for_time_varying(
 
     def wrapped(t: object, y: StateDict, **params: object) -> StateDict:
         first_val = next(iter(y.values()))
-        xp = _namespace_of(first_val)
+        xp = array_namespace(first_val)
         for name, axis_pos in plan:
             if name not in params:
                 _raise_parameter_error(
@@ -1381,7 +1366,7 @@ def _wrap_propensity_fn_for_time_varying(
 
     def wrapped(t: object, y: StateDict, **params: object) -> object:
         first_val = next(iter(y.values()))
-        xp = _namespace_of(first_val)
+        xp = array_namespace(first_val)
         for name, axis_pos in plan:
             if name in params:
                 grid = params.pop(name)
@@ -1486,7 +1471,7 @@ def _wrap_eval_fn_for_synth_consts(
     def wrapped(t: object, y: object, **params: object) -> Float64Array:
         # Cast synth-mask values to ``y``'s namespace and dtype so they
         # don't promote a float32 state buffer to float64 (or vice versa).
-        xp = _namespace_of(y)
+        xp = array_namespace(y)
         y_dtype = getattr(y, "dtype", None)
         for k, v in synth_const_values.items():
             if k in params:
@@ -1514,7 +1499,7 @@ def _wrap_pytree_eval_fn_for_synth_consts(
 
     def wrapped(t: object, y: StateDict, **params: object) -> StateDict:
         first_val = next(iter(y.values()))
-        xp = _namespace_of(first_val)
+        xp = array_namespace(first_val)
         y_dtype = getattr(first_val, "dtype", None)
         for k, v in synth_const_values.items():
             if k in params:
@@ -1560,10 +1545,11 @@ def _make_body_eval_fn(history_eval_fn: HistoryEvalFn) -> BodyEvalFn:
             def query(signal_id: int, body: object, **options: object) -> object:
                 del options
                 signal_values[signal_id] = body
-                ns_fn = getattr(body, "__array_namespace__", None)
-                if ns_fn is None:
+                try:
+                    xp = array_namespace(body)
+                except TypeError:
                     return np.zeros_like(body)
-                return ns_fn().zeros_like(body)
+                return xp.zeros_like(body)
 
         history_eval_fn(
             t,
@@ -1582,8 +1568,8 @@ def _warn_on_deprecated_xp(xp: object | None) -> None:
         return
     warnings.warn(
         "compile_rhs(xp=...) is deprecated and ignored. The compiled "
-        "eval_fn now infers its array namespace from the input `y` at "
-        "call time via __array_namespace__(); pass JAX arrays for a "
+        "eval_fn now infers its array namespace from the input `y` with "
+        "array_api_compat; pass JAX arrays for a "
         "JAX-native call, NumPy arrays for a NumPy call. The `xp` "
         "kwarg will be removed in a future release.",
         DeprecationWarning,
@@ -1723,7 +1709,7 @@ def _make_propensity_fn(  # ruff: ignore[complex-structure]
 
     def propensity_fn(t: object, y: StateDict, **params: object) -> object:
         first_val = y[state_bases[0]] if state_bases else next(iter(params.values()))
-        xp = _namespace_of(first_val)
+        xp = array_namespace(first_val)
         env: dict[str, object] = {"np": xp, "t": xp.asarray(t)}
         env.update(params)
         for base, names, shape in param_recipes:
@@ -2121,7 +2107,7 @@ def compile_rhs(rhs: NormalizedRhs, *, xp: object | None = None) -> CompiledRhs:
 
     The returned ``eval_fn`` is **namespace-polymorphic**: it infers its
     array namespace from the input ``y`` at call time
-    (``y.__array_namespace__()``), and returns arrays in that same
+    (through ``array_api_compat.array_namespace``), and returns arrays in that same
     namespace. Calling it with JAX arrays (or tracers) yields a JAX-native
     computation suitable for ``jax.jit`` / ``jax.vmap`` without any
     correctness wrapping.

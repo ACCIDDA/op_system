@@ -6,11 +6,10 @@ Mirrors :class:`flepimop2.typing.Array` so that producers and consumers
 across both packages can share the same structural contract without an
 import dependency between them.
 
-The single load-bearing capability is :meth:`Array.__array_namespace__`,
-which is what allows :func:`op_system.compile.compile_rhs` to obtain the
-operations namespace at *call time* from the input arrays themselves —
-removing the need for a compile-time backend selector and giving users a
-single, namespace-polymorphic, trace-pure ``eval_fn``.
+Runtime namespace discovery uses :func:`array_api_compat.array_namespace`,
+which accepts standard-compliant arrays and native arrays such as
+``torch.Tensor``. The stricter :class:`Array` protocol remains useful for
+static typing when a producer exposes ``__array_namespace__`` directly.
 """
 
 from __future__ import annotations
@@ -24,13 +23,12 @@ class Array(Protocol):
 
     Any object whose runtime type implements ``shape``, ``dtype``,
     ``__array_namespace__`` and ``item`` satisfies this protocol. NumPy
-    >= 2.0 ndarrays, JAX arrays (concrete and traced), and PyTorch tensors
-    (via the array-api compat layer) all qualify.
+    >= 2.0 ndarrays and JAX arrays (concrete and traced) qualify directly.
 
-    The namespace returned by ``__array_namespace__`` is the *only* gate
-    op_system uses to dispatch operations: input → namespace → output in
-    that same namespace. No conversion, no coercion, no compile-time
-    backend selector.
+    Runtime evaluation is deliberately broader: it discovers namespaces via
+    :func:`array_api_compat.array_namespace`, so native arrays such as
+    ``torch.Tensor`` are accepted even though they do not structurally satisfy
+    this protocol. No compile-time backend selector is needed.
     """
 
     @property

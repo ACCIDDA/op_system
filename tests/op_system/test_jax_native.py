@@ -7,8 +7,8 @@ paths agree numerically.
 
 Mirrors the contract documented in :mod:`op_system._typing` and
 :func:`op_system.compile.compile_rhs`: the array namespace is inferred from
-the input ``y`` at call time via ``y.__array_namespace__()``; no compile-
-time backend selection is required.
+the input ``y`` at call time via ``array_api_compat.array_namespace``; no
+compile-time backend selection is required.
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ import numpy as np
 import pytest
 
 import op_system.compile as _op_system_compile
-from op_system import Array, compile_spec
+from op_system import Array, array_namespace, compile_spec
 
 # ---------------------------------------------------------------------------
 # Symbol removal: assert _is_numpy_backend is gone (issue #101 step 4).
@@ -28,7 +28,7 @@ def test_is_numpy_backend_is_removed() -> None:
     """The dual-path discriminator should no longer exist."""
     assert not hasattr(_op_system_compile, "_is_numpy_backend"), (
         "_is_numpy_backend should be removed: namespace selection is now "
-        "per-call from the input via __array_namespace__()."
+        "per-call from the input via array_api_compat.array_namespace()."
     )
     assert not hasattr(_op_system_compile, "_BackendNamespace"), (
         "_BackendNamespace Protocol should be removed: the runtime contract "
@@ -79,10 +79,16 @@ def test_numpy_call_no_xp_kwarg() -> None:
 
 
 def test_non_array_y_raises_typeerror() -> None:
-    """Passing a Python list (no __array_namespace__) raises a clear error."""
+    """Passing a Python list raises the centralized compatibility error."""
     compiled = compile_spec(_expr_spec())
-    with pytest.raises(TypeError, match="__array_namespace__"):
+    with pytest.raises(TypeError, match="supported array objects"):
         compiled.eval_fn(0.0, [0.99, 0.01, 0.0], beta=1.5, gamma=0.5)
+
+
+def test_public_array_namespace_rejects_unsupported_objects() -> None:
+    """Public namespace discovery uses the same error across call sites."""
+    with pytest.raises(TypeError, match="got list"):
+        array_namespace([1.0, 2.0])
 
 
 def test_non_numeric_dtype_raises_typeerror() -> None:
@@ -195,6 +201,60 @@ def test_vectorized_path_is_jax_native_too() -> None:
     out = jax.jit(lambda y: compiled.eval_fn(0.0, y, beta=1.0, gamma=0.2))(y0)
     assert out.__array_namespace__() is jnp
     assert out.shape == (6,)
+
+
+def test_torch_eval_fn_preserves_autograd_when_available() -> None:
+    """A raw Torch tensor runs through scalar ``eval_fn`` with gradients."""
+    torch = pytest.importorskip("torch")
+
+    compiled = compile_spec(_expr_spec())
+    y0 = torch.tensor([0.7, 0.2, 0.1], dtype=torch.float64, requires_grad=True)
+    beta = torch.tensor(0.4, dtype=torch.float64, requires_grad=True)
+    gamma = torch.tensor(0.1, dtype=torch.float64, requires_grad=True)
+
+    out = compiled.eval_fn(0.0, y0, beta=beta, gamma=gamma)
+    expected = torch.tensor([-0.056, 0.036, 0.02], dtype=torch.float64)
+    assert isinstance(out, torch.Tensor)
+    assert torch.allclose(out, expected)
+    torch.sum(out * out).backward()
+    assert y0.grad is not None
+    assert beta.grad is not None
+    assert gamma.grad is not None
+
+
+def test_torch_pytree_eval_fn_preserves_autograd_when_available() -> None:
+    """Raw Torch PyTree leaves retain state and parameter gradients."""
+    torch = pytest.importorskip("torch")
+
+    spec: dict[str, object] = {
+        "kind": "expr",
+        "axes": [{"name": "age", "coords": ["y", "o"]}],
+        "state": ["S[age]", "I[age]", "R[age]"],
+        "equations": {
+            "S[age]": "-beta * S[age] * I[age]",
+            "I[age]": "beta * S[age] * I[age] - gamma * I[age]",
+            "R[age]": "gamma * I[age]",
+        },
+    }
+    compiled = compile_spec(spec)
+    assert compiled.pytree_eval_fn is not None
+    state = {
+        "S": torch.tensor([0.7, 0.6], dtype=torch.float64, requires_grad=True),
+        "I": torch.tensor([0.2, 0.3], dtype=torch.float64, requires_grad=True),
+        "R": torch.tensor([0.1, 0.1], dtype=torch.float64, requires_grad=True),
+    }
+    beta = torch.tensor(0.4, dtype=torch.float64, requires_grad=True)
+    gamma = torch.tensor(0.1, dtype=torch.float64, requires_grad=True)
+
+    out = compiled.pytree_eval_fn(0.0, state, beta=beta, gamma=gamma)
+    assert set(out) == set(state)
+    assert all(isinstance(value, torch.Tensor) for value in out.values())
+    objective = torch.stack([torch.sum(value * value) for value in out.values()]).sum()
+    objective.backward()
+    assert state["S"].grad is not None
+    assert state["I"].grad is not None
+    assert beta.grad is not None
+    assert gamma.grad is not None
 
 
 def test_synth_mask_constants_match_y_dtype() -> None:

@@ -31,6 +31,7 @@ from dataclasses import dataclass
 from itertools import combinations as _comb
 from typing import TYPE_CHECKING, Any, cast
 
+from op_system._array import array_namespace
 from op_system._ir import (
     Apply,
     HistoryOp,
@@ -49,7 +50,6 @@ from op_system.compile import (
     _SAFE_BUILTINS,
     _check_numeric_dtype,
     _Indexable,
-    _namespace_of,
     _validate_state_vector,
 )
 
@@ -1151,7 +1151,7 @@ def make_vectorized_eval_fn(plan: _VectorPlan) -> EvalFn:  # ruff: ignore[comple
     """Return a namespace-polymorphic ``eval_fn(t, y, **params)`` driven by ``plan``.
 
     The compiled function infers its array namespace from the input ``y``
-    via :meth:`y.__array_namespace__` at call time, so a single eval_fn
+    through :func:`array_api_compat.array_namespace` at call time, so a single eval_fn
     handles NumPy and JAX (and any other Array-API backend) without
     branching. Calling it with JAX arrays (or tracers) yields a JAX-native
     computation.
@@ -1175,7 +1175,7 @@ def make_vectorized_eval_fn(plan: _VectorPlan) -> EvalFn:  # ruff: ignore[comple
     extra_param_buffers = plan.extra_param_buffers
 
     def eval_fn(t: object, y: object, **params: object) -> Float64Array:  # ruff: ignore[complex-structure, too-many-branches, too-many-locals, too-many-statements]
-        xp = _namespace_of(y)
+        xp = array_namespace(y)
         _check_numeric_dtype(xp, getattr(y, "dtype", None))
         y_arr = _validate_state_vector(y, n_state=n_state)
         y_idx = cast("_Indexable", y_arr)
@@ -1259,7 +1259,10 @@ def make_vectorized_eval_fn(plan: _VectorPlan) -> EvalFn:  # ruff: ignore[comple
                 except (NameError, ValueError, TypeError, ArithmeticError) as exc:
                     msg = f"equation {grp.base!r} evaluation failed: {exc!r}"
                     raise ValueError(msg) from exc
-                arr = xp.broadcast_to(xp.asarray(val), grp.vec_shape)
+                arr_value = (
+                    val if getattr(val, "dtype", None) is not None else xp.asarray(val)
+                )
+                arr = xp.broadcast_to(arr_value, grp.vec_shape)
                 bin_results.append(arr)
 
             if not grp.unroll_axes:
@@ -1308,7 +1311,7 @@ def make_pytree_eval_fn(plan: _VectorPlan) -> PytreeEvalFn:  # ruff: ignore[comp
     ) -> StateDict:
         # Obtain the array namespace from the first state value.
         first_val = y[state_templates[0].base]
-        xp = _namespace_of(first_val)
+        xp = array_namespace(first_val)
         _check_numeric_dtype(xp, getattr(first_val, "dtype", None))
 
         t_val: object = xp.asarray(t)
@@ -1384,7 +1387,10 @@ def make_pytree_eval_fn(plan: _VectorPlan) -> PytreeEvalFn:  # ruff: ignore[comp
                 except (NameError, ValueError, TypeError, ArithmeticError) as exc:
                     msg = f"equation {grp.base!r} evaluation failed: {exc!r}"
                     raise ValueError(msg) from exc
-                arr = xp.broadcast_to(xp.asarray(val), y[grp.base].shape)
+                arr_value = (
+                    val if getattr(val, "dtype", None) is not None else xp.asarray(val)
+                )
+                arr = xp.broadcast_to(arr_value, y[grp.base].shape)
                 bin_results.append(arr)
 
             if not grp.unroll_axes:

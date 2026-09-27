@@ -125,6 +125,21 @@ def test_redistribution_conserves_the_transferred_flux() -> None:
     np.testing.assert_allclose(flux + delta, flux @ kernel, rtol=1e-12)
 
 
+def test_axis_kernel_supports_torch_autograd_when_available() -> None:
+    """Reference axis kernels accept raw Torch tensors without detaching."""
+    torch = pytest.importorskip("torch")
+    state = torch.tensor([[1.0, 2.0]], dtype=torch.float64, requires_grad=True)
+    generator = torch.tensor(
+        [[-0.3, 0.3], [0.2, -0.2]], dtype=torch.float64, requires_grad=True
+    )
+
+    derivative = axis_kernel_generator_rhs(state, generator, axis=1)
+    assert isinstance(derivative, torch.Tensor)
+    derivative.square().sum().backward()
+    assert state.grad is not None
+    assert generator.grad is not None
+
+
 def test_matrix_validation_reports_form_violations() -> None:
     """Matrix validation reports each violated form property."""
     rng = np.random.default_rng(2)
