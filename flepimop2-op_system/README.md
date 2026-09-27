@@ -4,6 +4,10 @@
 
 It packages the `flepimop2.system.op_system` provider so `flepimop2` can load and execute RHS specifications compiled by the core `op_system` package.
 
+Bound system steppers accept and return Flepimop2's backend-neutral `Array`
+protocol. The provider performs no state conversion: NumPy, JAX, and other
+supported namespaces are selected by the state supplied by the engine.
+
 It also provides the `sparse_table` parameter module, which assembles a dense
 array for a routing transition's matrix parameter (for example
 `eta[time, imm:i, imm:j]`) from a declared support. Each entry is a number or

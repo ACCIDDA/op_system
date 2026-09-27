@@ -74,6 +74,9 @@ version; format loosely follows
 
 ### Changed
 
+- `flepimop2-op_system` now types flat stepper state and results with
+  Flepimop2's backend-neutral `Array` protocol, matching its existing
+  namespace-preserving NumPy and JAX behavior (#229).
 - Normalization no longer expands every cell's reductions or renders every
   cell's equation string eagerly. `NormalizedRhs.equations`,
   `equations_ir`, and `equations_ir_reduce` may be lazy sequences, built

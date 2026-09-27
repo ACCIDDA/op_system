@@ -166,6 +166,8 @@ def test_jax_state_stepper_jittable(sir_spec: dict[str, object]) -> None:
 
     out = jax.jit(lambda y: stepper(time=0.0, state=y))(y0)
 
+    assert isinstance(out, jax.Array)
+    assert out.__array_namespace__() is jnp
     expected = np.array([-0.0002997, 0.0001997, 0.0001], dtype=np.float64)
     np.testing.assert_allclose(np.asarray(out), expected, rtol=1e-6, atol=1e-12)
 

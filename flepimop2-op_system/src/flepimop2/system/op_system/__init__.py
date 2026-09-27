@@ -60,7 +60,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     from flepimop2.axis import AxisCollection
-    from flepimop2.typing import Float64NDArray
+    from flepimop2.typing import Array
 
     from op_system._operators import OperatorDescriptor
 
@@ -231,7 +231,7 @@ class OpSystemSystem(SystemABC, module="flepimop2.system.op_system"):  # ruff: i
         *,
         compiled: CompiledRhs,
         mixing_kernels: Mapping[str, np.ndarray],
-    ) -> Callable[[np.float64, Float64NDArray], Float64NDArray]:
+    ) -> Callable[[np.float64, Array], Array]:
         """Build scalar-vector stepper wrapper around compiled.eval_fn.
 
         Returns:
@@ -241,9 +241,9 @@ class OpSystemSystem(SystemABC, module="flepimop2.system.op_system"):  # ruff: i
 
         def _stepper(
             time: np.float64,
-            state: Float64NDArray,
+            state: Array,
             **kwargs: Any,  # ruff: ignore[any-type]
-        ) -> Float64NDArray:
+        ) -> Array:
             shape = getattr(state, "shape", None)
             if shape != (n_state,):
                 msg = (
