@@ -415,6 +415,29 @@ def test_option_axis_coords_with_axes() -> None:
     np.testing.assert_array_equal(coords["loc"], np.array([0, 1], dtype=np.float64))
 
 
+def test_option_axis_types_preserves_normalized_declarations() -> None:
+    """Provider metadata distinguishes every supported numerical axis type."""
+    spec: dict[str, object] = {
+        "kind": "expr",
+        "axes": [
+            {"name": "category", "type": "categorical", "coords": ["a", "b"]},
+            {"name": "stage", "type": "ordinal", "coords": ["low", "high"]},
+            {"name": "x", "type": "continuous", "coords": [0.0, 1.0]},
+        ],
+        "state": ["S[category, stage, x]"],
+        "equations": {"S[category, stage, x]": "-S[category, stage, x]"},
+    }
+
+    system = OpSystemSystem(spec=spec)
+
+    assert system.option("axis_types", None) == {
+        "subgroup": "categorical",
+        "category": "categorical",
+        "stage": "ordinal",
+        "x": "continuous",
+    }
+
+
 def test_option_state_shape_bare_spec(sir_spec: dict[str, object]) -> None:
     """A bare SIR spec has state_shape (3, 1)."""
     sys = OpSystemSystem(spec=sir_spec)

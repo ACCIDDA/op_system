@@ -9,6 +9,9 @@ version; format loosely follows
 
 ### Added
 
+- The Flepimop provider now publishes normalized `axis_types` alongside axis
+  labels and coordinates, so engine providers can distinguish categorical,
+  ordinal, and continuous numerical semantics without guessing (#234).
 - `jump_integral` now has portable conservative semantics: a mandatory
   row-source/column-target matrix rate density, explicit `up`/`down`/`both`
   masking, target quadrature on continuous axes, and reflecting/truncated
