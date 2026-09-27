@@ -26,15 +26,9 @@ from __future__ import annotations
 
 from typing import Any
 
+from op_system._array import array_namespace
+
 AXIS_KERNEL_FORMS = frozenset({"generator", "stochastic"})
-
-
-def _namespace(value: Any) -> Any:  # ruff: ignore[any-type]
-    namespace = getattr(value, "__array_namespace__", None)
-    if namespace is None:
-        msg = "axis_kernel inputs must implement __array_namespace__"
-        raise TypeError(msg)
-    return namespace()
 
 
 def axis_kernel_generator_rhs(
@@ -55,7 +49,7 @@ def axis_kernel_generator_rhs(
     Returns:
         The derivative contribution, with the same shape as ``state``.
     """
-    xp = _namespace(state)
+    xp = array_namespace(state)
     moved = xp.moveaxis(state, axis, -1)
     return xp.moveaxis(velocity * (moved @ generator), -1, axis)
 
@@ -76,7 +70,7 @@ def axis_kernel_redistribute(
     Returns:
         The redistribution to add to the target slice.
     """
-    xp = _namespace(flux)
+    xp = array_namespace(flux)
     moved = xp.moveaxis(flux, axis, -1)
     return xp.moveaxis(moved @ kernel - moved, -1, axis)
 
@@ -103,7 +97,7 @@ def validate_axis_kernel_matrix(
     if form not in AXIS_KERNEL_FORMS:
         msg = f"unknown axis_kernel form {form!r}"
         raise ValueError(msg)
-    xp = _namespace(matrix)
+    xp = array_namespace(matrix)
     problems: list[str] = []
     if matrix.ndim != 2 or matrix.shape[0] != matrix.shape[1]:
         return ["matrix must be square"]

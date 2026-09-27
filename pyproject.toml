@@ -11,6 +11,7 @@ authors = [
     { name = "Timothy Willard", email = "twillard@unc.edu" },
 ]
 dependencies = [
+    "array-api-compat>=1.12",
     "numpy>=2.0",
     "pydantic>=2.12.5,<3.0.0",
 ]
@@ -40,6 +41,9 @@ jax-inference = [
     "jax>=0.4",
     "diffrax",
     "blackjax",
+]
+torch = [
+    "torch>=2.6",
 ]
 
 [build-system]

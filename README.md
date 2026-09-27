@@ -28,9 +28,9 @@ downstream solvers.  `op_system` provides:
 - **Vectorized compilation** that operates on shaped state buffers (one
   tensor expression per template) rather than per-cell scalar code, with
   template-level common-subexpression elimination.
-- **Backend polymorphism at call time** — the compiled `eval_fn` reads
-  `y.__array_namespace__()` on every call, so the same compiled artifact
-  serves NumPy hosts, JAX `jit`/`vmap`/`grad`, and traced inference loops.
+- **Backend polymorphism at call time** — `array-api-compat` selects the
+  namespace from each input, so the same compiled artifact serves NumPy,
+  JAX `jit`/`vmap`/`grad`, and raw PyTorch tensors with autograd.
 - **First-class PyTree interface** (`pytree_eval_fn`) for engines that want
   to keep state as a dict of shaped arrays rather than a flat vector.
 - **Block-axis vmap support** (`block_pytree_eval_fn`) for hierarchical
@@ -53,12 +53,15 @@ Optional extras:
 ```bash
 pip install "op-system[jax]"            # JAX runtime support
 pip install "op-system[jax-inference]"  # adds diffrax + blackjax
+pip install "op-system[torch]"          # PyTorch runtime support
 pip install "op-system[data]"           # pandas + pyarrow helpers
 ```
 
 ## Quick start
 
 ```python
+import numpy as np
+
 from op_system import compile_spec
 
 spec = {
@@ -73,7 +76,7 @@ spec = {
 }
 
 compiled = compile_spec(spec)
-dydt = compiled.eval_fn(0.0, [999.0, 1.0, 0.0], beta=0.3, gamma=0.1)
+dydt = compiled.eval_fn(0.0, np.asarray([999.0, 1.0, 0.0]), beta=0.3, gamma=0.1)
 ```
 
 The compiled object exposes:

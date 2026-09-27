@@ -15,6 +15,12 @@ version; format loosely follows
   public contract now defines velocity sign relative to coordinate order and
   upstream/downstream behavior for absorbing, reflecting, and periodic
   boundaries (#225).
+- Numerical namespace discovery now uses `array-api-compat` through one
+  public `op_system.array_namespace` helper. Compiled flat and PyTree RHS
+  functions and the reference axis kernels therefore accept raw PyTorch
+  tensors while preserving autograd, alongside existing NumPy and JAX
+  concrete/traced behavior. PyTorch remains optional through the `torch`
+  extra (#227).
 
 ## [0.4.0] - 2026-09-26
 

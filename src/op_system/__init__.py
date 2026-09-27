@@ -26,6 +26,7 @@ import warnings
 from importlib.metadata import version
 from typing import Final, Literal
 
+from op_system._array import array_namespace
 from op_system._axis_kernel import (
     AXIS_KERNEL_FORMS,
     axis_kernel_generator_rhs,
@@ -90,7 +91,7 @@ def compile_spec(  # ruff: ignore[non-empty-init-module]
 
     The compiled ``eval_fn`` is **namespace-polymorphic**: it infers its
     array namespace from the input ``y`` at call time
-    (``y.__array_namespace__()``), so a single compiled callable handles
+    (through ``array_api_compat.array_namespace``), so one callable handles
     NumPy, JAX (concrete and traced), and any other Array-API backend
     natively. No compile-time backend selection is required.
 
@@ -110,9 +111,9 @@ def compile_spec(  # ruff: ignore[non-empty-init-module]
         warnings.warn(
             "compile_spec(xp=..., backend=...) is deprecated and ignored. "
             "The compiled eval_fn now infers its array namespace from the "
-            "input `y` at call time via __array_namespace__(); pass JAX "
-            "arrays for a JAX-native call, NumPy arrays for a NumPy call. "
-            "These kwargs will be removed in a future release.",
+            "input `y` at call time; pass JAX arrays for a JAX-native call, "
+            "NumPy arrays for a NumPy call, or Torch tensors for a Torch "
+            "call. These kwargs will be removed in a future release.",
             DeprecationWarning,
             stacklevel=2,
         )
@@ -150,6 +151,7 @@ __all__ = [
     "TransitionsRhs",
     "ValidationReport",
     "__version__",
+    "array_namespace",
     "axis_kernel_generator_rhs",
     "axis_kernel_redistribute",
     "compile_rhs",
