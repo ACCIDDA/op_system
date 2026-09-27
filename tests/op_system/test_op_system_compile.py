@@ -933,7 +933,7 @@ def test_parse_operator_descriptor_kind_and_bc() -> None:
     """Operator descriptors retain normalized selectors and scalar metadata."""
     spec = {
         "kind": "expr",
-        "axes": [{"name": "loc", "coords": ["a", "b"]}],
+        "axes": [{"name": "loc", "type": "ordinal", "coords": ["a", "b"]}],
         "state": ["S", "I"],
         "equations": {"S": "-S", "I": "-I"},
         "operators": [
@@ -951,7 +951,11 @@ def test_parse_operator_descriptor_kind_and_bc() -> None:
                 "axis": "loc",
                 "rate": 2,
                 "direction": "UP",
-                "kernel": {"form": "gaussian", "params": {"sigma": 0.1}},
+                "kernel": {
+                    "form": "matrix",
+                    "params": {"matrix": "J"},
+                    "param_axes": {"J": ["loc", "loc"]},
+                },
                 "apply_to": ["I"],
             },
         ],
@@ -970,7 +974,11 @@ def test_parse_operator_descriptor_kind_and_bc() -> None:
     assert jump.rate == pytest.approx(2.0)
     assert jump.direction == "up"
     assert jump.apply_to == ("I",)
-    assert jump.kernel == {"form": "gaussian", "params": {"sigma": 0.1}}
+    assert jump.kernel == {
+        "form": "matrix",
+        "params": {"matrix": "J"},
+        "param_axes": {"J": ["loc", "loc"]},
+    }
 
 
 def test_operator_descriptor_kind_bc_default_none() -> None:

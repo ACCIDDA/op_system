@@ -37,8 +37,8 @@ class OperatorDescriptor:
         direction: Optional normalized direction. For advection and transport,
             ``"increasing"`` preserves the resolved velocity sign and
             ``"decreasing"`` reverses it; when omitted, velocity is used as a
-            signed coefficient. Other operator kinds may define their own
-            direction vocabulary.
+            signed coefficient. For jump integrals, ``"up"``, ``"down"``, or
+            ``"both"`` masks source-to-target movement in coordinate order.
 
     Examples:
         >>> od = OperatorDescriptor(axis="loc")

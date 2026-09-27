@@ -35,6 +35,14 @@ from op_system._axis_kernel import (
 )
 from op_system._block_axes import BlockAxisInfo
 from op_system._identifer_string import IdentifierString
+from op_system._jump_integral import (
+    JUMP_INTEGRAL_BOUNDARIES,
+    JUMP_INTEGRAL_DIRECTIONS,
+    JUMP_INTEGRAL_FORMS,
+    jump_integral_generator,
+    jump_integral_rhs,
+    validate_jump_integral_kernel,
+)
 from op_system._operators import OperatorDescriptor
 from op_system._state_string import StateString
 from op_system._typing import Array
@@ -130,6 +138,9 @@ __all__ = [
     "AXIS_KERNEL_FORMS",
     "DEFAULT_ARRAY_BACKEND",
     "EXPERIMENTAL_FEATURES",
+    "JUMP_INTEGRAL_BOUNDARIES",
+    "JUMP_INTEGRAL_DIRECTIONS",
+    "JUMP_INTEGRAL_FORMS",
     "SUPPORTED_RHS_KINDS",
     "Array",
     "BlockAxisInfo",
@@ -156,9 +167,12 @@ __all__ = [
     "axis_kernel_redistribute",
     "compile_rhs",
     "compile_spec",
+    "jump_integral_generator",
+    "jump_integral_rhs",
     "normalize_expr_rhs",
     "normalize_rhs",
     "normalize_transitions_rhs",
     "validate_axis_kernel_matrix",
+    "validate_jump_integral_kernel",
     "validate_spec",
 ]

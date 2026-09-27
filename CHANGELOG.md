@@ -9,6 +9,11 @@ version; format loosely follows
 
 ### Added
 
+- `jump_integral` now has portable conservative semantics: a mandatory
+  row-source/column-target matrix rate density, explicit `up`/`down`/`both`
+  masking, target quadrature on continuous axes, and reflecting/truncated
+  boundaries. Public Array-API reference assembly, RHS, and eager value
+  validation functions give engine providers one conformance target (#216).
 - Advection and transport operators accept a normalized optional `direction`
   (`increasing` or `decreasing`) so a non-negative dynamic coefficient can
   carry explicit orientation without provider-side expression parsing. The

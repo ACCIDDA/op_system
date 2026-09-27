@@ -53,3 +53,4 @@ nav:
       - OP System: api-reference/op-system.md
       - Compile: api-reference/compile.md
       - Specs: api-reference/specs.md
+      - Validate: api-reference/validate.md
