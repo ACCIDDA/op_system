@@ -3,9 +3,10 @@
 Domain-agnostic specification and compilation of right-hand sides (RHS) for
 ODE, PDE, and multi-physics / multi-scale compartmental systems.  `op_system`
 takes a YAML/JSON-friendly spec, validates and normalizes it, then compiles
-it into a fast, **array-API-polymorphic** callable that runs identically on
-NumPy, JAX (concrete and traced), or any other Array-API backend — without
-recompiling.
+it into a fast, **array-API-polymorphic** callable whose namespace is selected
+from the inputs at call time. NumPy, JAX (concrete and traced), and raw PyTorch
+tensors are covered by the test suite. Other Array-API implementations may
+work through `array-api-compat`, but should be qualified before production use.
 
 - Docs: <https://accidda.github.io/op_system/>
 - License: MIT
@@ -34,9 +35,9 @@ downstream solvers.  `op_system` provides:
 - **First-class PyTree interface** (`pytree_eval_fn`) for engines that want
   to keep state as a dict of shaped arrays rather than a flat vector.
 - **Block-axis vmap support** (`block_pytree_eval_fn`) for hierarchical
-  models — declare a `factorize_axis` and the engine can vmap a stripped
-  per-block RHS over the block axis instead of evaluating a monolithic
-  flat state.
+  models — declare `factorize_axes` and the engine can vmap a stripped
+  per-block RHS over a block axis instead of evaluating a monolithic flat
+  state.
 - **Picklable `CompiledRhs`** — round-trips through `pickle.dumps`/`loads`
   by retaining the source spec and recompiling on load.
 
