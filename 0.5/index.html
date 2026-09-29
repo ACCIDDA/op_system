@@ -66,7 +66,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#welcome-to-op-system" class="md-skip">
+        <a href="#op_system" class="md-skip">
           Skip to content
         </a>
       
@@ -247,6 +247,24 @@
         
       
       
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
       <a href="." class="md-nav__link md-nav__link--active">
         
   
@@ -263,6 +281,58 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#installation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Installation
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#main-interfaces" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Main interfaces
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#backend-boundary" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Backend boundary
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
       
     </li>
   
@@ -674,6 +744,47 @@
     
   
   
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#installation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Installation
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#main-interfaces" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Main interfaces
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#backend-boundary" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Backend boundary
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
 </nav>
                   </div>
                 </div>
@@ -689,8 +800,33 @@
 
 
 
-<h1 id="welcome-to-op-system">Welcome to <code>OP System</code><a class="headerlink" href="#welcome-to-op-system" title="Permanent link">&para;</a></h1>
-<p>The next generation vectorized compartmental model system builder for <a href="https://github.com/ACCIDDA/flepimop2"><code>flepimop2</code></a>.</p>
+<h1 id="op_system"><code>op_system</code><a class="headerlink" href="#op_system" title="Permanent link">&para;</a></h1>
+<p><code>op_system</code> validates YAML/JSON-friendly model specifications and compiles them
+into vectorized right-hand-side callables for ODE, PDE, and compartmental
+systems. It is domain-agnostic: <a href="https://github.com/ACCIDDA/flepimop2"><code>flepimop2</code></a>
+is an important consumer, not the package's only intended use.</p>
+<p>The test suite covers NumPy, concrete and traced JAX arrays, and raw PyTorch
+tensors. Other Array API implementations may work through
+<code>array-api-compat</code>, but should be qualified before production use.</p>
+<h2 id="installation">Installation<a class="headerlink" href="#installation" title="Permanent link">&para;</a></h2>
+<pre><code class="language-bash">pip install op-system
+</code></pre>
+<h2 id="main-interfaces">Main interfaces<a class="headerlink" href="#main-interfaces" title="Permanent link">&para;</a></h2>
+<ul>
+<li><code>load_spec(...)</code> validates and normalizes a model specification.</li>
+<li><code>compile_rhs(...)</code> creates a reusable <code>CompiledRhs</code> object.</li>
+<li><code>CompiledRhs.eval_fn(...)</code> evaluates a flat state vector.</li>
+<li><code>CompiledRhs.pytree_eval_fn(...)</code> evaluates shaped state mappings.</li>
+<li><code>CompiledRhs.block_pytree_eval_fn(...)</code> supports hierarchical block-axis
+  vectorization using the specification's <code>factorize_axes</code> declaration.</li>
+</ul>
+<p>See the <a href="https://github.com/ACCIDDA/op_system#readme">repository README</a> for a
+worked example and the navigation for the specification and API references.</p>
+<h2 id="backend-boundary">Backend boundary<a class="headerlink" href="#backend-boundary" title="Permanent link">&para;</a></h2>
+<p>Backend selection happens from the input arrays at call time. Keep model
+expressions within the documented allowlist, and validate an additional backend
+against the package's conformance tests before treating it as supported in a
+production workflow.</p>
 
 
 
