@@ -243,6 +243,7 @@ class OpSystemSystem(SystemABC, module="flepimop2.system.op_system"):  # ruff: i
             "block_history_stepper_fn": None,
             "block_body_eval_fn": None,
             "reactions": (),
+            "reaction_gaps": compiled.reaction_gaps,
         }
 
     @staticmethod

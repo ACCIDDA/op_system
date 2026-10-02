@@ -23,6 +23,11 @@ from op_system._templates import (
     parse_selector,
 )
 
+#: Private transition key naming where a normalized transition came from in
+#: the spec (``transitions[2]``, ``chain[0].forward[1]``), so reaction
+#: coverage records can point users at the entry to fix.
+ORIGIN_KEY = "_op_system_origin"
+
 # ---------------------------------------------------------------------------
 # Chain normalization helpers
 # ---------------------------------------------------------------------------
@@ -287,6 +292,7 @@ def _apply_transition_chains(
                 "from": entry_from,
                 "to": stage_names[0],
                 "rate": entry_rate,
+                ORIGIN_KEY: f"chain[{c_idx}].entry",
             })
 
         transitions_raw.extend(
@@ -294,6 +300,7 @@ def _apply_transition_chains(
                 "from": stage_names[i],
                 "to": stage_names[i + 1],
                 "rate": forward_rates[i],
+                ORIGIN_KEY: f"chain[{c_idx}].forward[{i}]",
             }
             for i in range(len(stage_names) - 1)
         )
@@ -304,6 +311,7 @@ def _apply_transition_chains(
                 "from": stage_names[-1],
                 "to": sink_s,
                 "rate": sink_rate or forward_rates[-1],
+                ORIGIN_KEY: f"chain[{c_idx}].exit",
             })
 
 
@@ -694,46 +702,65 @@ def _apply_coord_shifts(
             shifted = _expand_axis_wide_shift(
                 tr, axis_lookup=axis_lookup, state_template_map=tmpl_map
             )
-            transitions_raw[i : i + 1] = shifted
-            i += len(shifted)
-            continue
-
-        axis_name, from_coord, to_coord, apply_to, rate_s = _validate_coord_shift_entry(
-            tr, axis_lookup
-        )
-
-        concrete: list[dict[str, Any]] = []
-        from_frag = f"{axis_name}_{_sanitize_fragment(from_coord)}"
-        to_frag = f"{axis_name}_{_sanitize_fragment(to_coord)}"
-        expanded_apply_to = expand_apply_to(
-            apply_to,
-            axis_lookup=axis_lookup,
-            context=f"coord_shift[{axis_name}].apply_to",
-        )
-        for base in expanded_apply_to:
-            templated = _build_templated_coord_shift_transition(
-                base=base,
-                axis_name=axis_name,
-                from_coord=from_coord,
-                to_coord=to_coord,
-                rate_s=rate_s,
+        else:
+            shifted = _expand_pairwise_shift(
+                tr,
+                axis_lookup=axis_lookup,
                 state_template_map=tmpl_map,
+                state_expanded=state_expanded,
             )
-            if templated is not None:
-                concrete.append(templated)
-            else:
-                concrete.extend(
-                    _expand_coord_shift_for_base(
-                        base=base,
-                        from_frag=from_frag,
-                        to_frag=to_frag,
-                        rate_s=rate_s,
-                        state_expanded=state_expanded,
-                    )
-                )
+        if ORIGIN_KEY in tr:
+            for entry in shifted:
+                entry[ORIGIN_KEY] = tr[ORIGIN_KEY]
+        transitions_raw[i : i + 1] = shifted
+        i += len(shifted)
 
-        transitions_raw[i : i + 1] = concrete
-        i += len(concrete)
+
+def _expand_pairwise_shift(
+    tr: dict[str, Any],
+    *,
+    axis_lookup: dict[str, list[str]],
+    state_template_map: Mapping[str, list[tuple[str, dict[str, str]]]],
+    state_expanded: list[str],
+) -> list[dict[str, Any]]:
+    """Expand one ``{axis: "from -> to"}`` entry for every ``apply_to`` base.
+
+    Returns:
+        One template-form transition per base where possible, otherwise one
+        concrete transition per matching cell.
+    """
+    axis_name, from_coord, to_coord, apply_to, rate_s = _validate_coord_shift_entry(
+        tr, axis_lookup
+    )
+    concrete: list[dict[str, Any]] = []
+    from_frag = f"{axis_name}_{_sanitize_fragment(from_coord)}"
+    to_frag = f"{axis_name}_{_sanitize_fragment(to_coord)}"
+    for base in expand_apply_to(
+        apply_to,
+        axis_lookup=axis_lookup,
+        context=f"coord_shift[{axis_name}].apply_to",
+    ):
+        templated = _build_templated_coord_shift_transition(
+            base=base,
+            axis_name=axis_name,
+            from_coord=from_coord,
+            to_coord=to_coord,
+            rate_s=rate_s,
+            state_template_map=state_template_map,
+        )
+        if templated is not None:
+            concrete.append(templated)
+        else:
+            concrete.extend(
+                _expand_coord_shift_for_base(
+                    base=base,
+                    from_frag=from_frag,
+                    to_frag=to_frag,
+                    rate_s=rate_s,
+                    state_expanded=state_expanded,
+                )
+            )
+    return concrete
 
 
 def _build_templated_coord_shift_transition(  # ruff: ignore[too-many-arguments]
