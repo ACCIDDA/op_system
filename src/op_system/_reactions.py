@@ -15,7 +15,7 @@ This module builds a SEPARATE, independent artifact instead of trying to
 extend that hot path: for every *named* transition whose ``to``-side
 wildcard axes are a subset of its ``from``-side wildcard axes (i.e. no
 axis is "created" transitioning from -> to, and the rate expression
-doesn't reference any axis outside that set), it captures:
+doesn't reference any free axis outside that set), it captures:
 
 - a template-form propensity expression, shaped like the ``from``-side
   template (one independent rate per source cell), and
@@ -25,7 +25,7 @@ doesn't reference any axis outside that set), it captures:
 
 This is deliberately narrower than the full transitions grammar (no
 ``to``-side axis not present on ``from``, no rate expression referencing
-an axis absent from ``from``) -- see ``docs`` / the originating issue for
+a free axis absent from ``from``) -- see ``docs`` / the originating issue for
 why: a stochastic/CTMC consumer needs "how many independent source cells
 are firing, and where does each firing land", which these excluded shapes
 don't have a well-defined answer for without design work beyond this
@@ -41,6 +41,12 @@ process per DESTINATION cell, with no source population to bound it
 against. ``from_base`` is ``None`` and ``from_axes``/``full_axes`` are
 taken from the ``to``-side template instead of a nonexistent ``from``-side
 one; see ``ReactionArtifactIR``'s own field docs.
+
+Axes bound inside ``sum_over`` / ``apply_along`` and literal coordinate
+indices do not create free channel dimensions. A source-only renewal
+flux reduced over age can therefore target a pinned youngest-age cell:
+one scalar hazard, with no donor depletion. Any remaining free axes
+must belong to the destination's wildcard set.
 """
 
 from __future__ import annotations
@@ -64,7 +70,7 @@ from op_system._ir import (
     walk,
 )
 from op_system._ir_expand import expand_reduce_pointwise
-from op_system._ir_templates import expand_inline_templates
+from op_system._ir_templates import _free_axes_in, expand_inline_templates
 from op_system._templates import (
     PinnedToken,
     WildcardToken,
@@ -748,7 +754,7 @@ def build_reaction_artifacts_ir(  # ruff: ignore[too-many-arguments, too-many-lo
         whose ``to``-side introduces a wildcard axis absent from ``from``
         (not applicable to a source-only transition, which has no
         ``from``-side to compare against), and transitions whose rate
-        (after alias inlining) references an axis outside the
+        (after alias inlining) references a free axis outside the
         from-side wildcard set (the to-side wildcard set, for a
         source-only transition) are silently omitted (not an error -- see
         module docstring).
@@ -807,12 +813,11 @@ def build_reaction_artifacts_ir(  # ruff: ignore[too-many-arguments, too-many-lo
         # Rate must not reference an axis outside the from-side wildcard
         # set (other than the time axis, which is handled separately by
         # the engine, not baked into the propensity template).
-        rate_axes = {
-            ix.axis
-            for sub in iter_subscripts(ir_rate_raw)
-            for ix in sub.indices
-            if ix.axis is not None
-        }
+        # Only FREE indices determine the firing-cell shape. Coordinates
+        # pinned literally or bound inside a Reduce do not create channels.
+        # Inspect after alias inlining so a reduction in an alias has the
+        # same scope as one written directly in the rate.
+        rate_axes = _free_axes_in(ir_rate_raw, shaped={}, memo={})
         if any(
             ax not in frm_wc_set and ax != time_axis_name and ax in axis_lookup
             for ax in rate_axes

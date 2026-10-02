@@ -1186,3 +1186,46 @@ def test_option_reactions_merges_mixing_kernels() -> None:
     got = np.asarray(reactions[0].propensity_fn(np.float64(0.0), y))
     expected = (mk["k"] @ y["S"]) * y["S"]
     np.testing.assert_allclose(got, expected)
+
+
+@pytest.mark.parametrize("backend", ["numpy", "jax"])
+def test_provider_renewal_birth_reduction_matches_flat_and_pytree(backend: str) -> None:
+    """A consumer receives one scalar birth channel into the pinned age bin."""
+    spec: dict[str, object] = {
+        "kind": "transitions",
+        "axes": [{"name": "age", "coords": ["a0", "a1", "a2"]}],
+        "state": ["N[age]", "M[age]"],
+        "transitions": [
+            {
+                "name": "renewal",
+                "from": None,
+                "to": "N[age=a0]",
+                "rate": "sum_over(B[age:a] * (N[age:a] + M[age:a]), age=a)",
+                "reactants": [],
+            },
+        ],
+    }
+    system = OpSystemSystem(spec=spec)
+    assert system.requested_parameters(AxisCollection())["B"].axes == ("age",)
+    (birth,) = system.option("reactions", ())
+    assert birth.from_base is None
+    assert birth.from_axes == birth.to_axes == ()
+    assert birth.full_axes == ("age",)
+    assert birth.pinned == (("age", 0),)
+    assert birth.reactants_complete is True
+    assert birth.reactants == ()
+
+    xp = np if backend == "numpy" else pytest.importorskip("jax.numpy")
+    state = {"N": xp.asarray([10.0, 20.0, 30.0]), "M": xp.asarray([1.0, 2.0, 3.0])}
+    fertility = xp.asarray([0.1, 0.2, 0.3])
+    propensity = birth.propensity_fn(0.0, state, B=fertility)
+    assert propensity.shape == ()
+    assert propensity.__array_namespace__() is xp
+    np.testing.assert_allclose(np.asarray(propensity), 15.4)
+    flat = system.step(0.0, xp.concatenate(list(state.values())), B=fertility)
+    assert flat.__array_namespace__() is xp
+    np.testing.assert_allclose(np.asarray(flat), [15.4, 0.0, 0.0, 0.0, 0.0, 0.0])
+    tree = system.option("pytree_stepper_fn")(0.0, state, B=fertility)
+    assert tree["N"].__array_namespace__() is xp
+    np.testing.assert_allclose(np.asarray(tree["N"]), [15.4, 0.0, 0.0])
+    np.testing.assert_array_equal(np.asarray(tree["M"]), np.zeros(3))

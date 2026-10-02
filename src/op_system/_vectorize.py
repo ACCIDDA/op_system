@@ -1390,7 +1390,7 @@ def make_pytree_eval_fn(plan: _VectorPlan) -> PytreeEvalFn:  # ruff: ignore[comp
                 arr_value = (
                     val if getattr(val, "dtype", None) is not None else xp.asarray(val)
                 )
-                arr = xp.broadcast_to(arr_value, y[grp.base].shape)
+                arr = xp.broadcast_to(arr_value, grp.vec_shape)
                 bin_results.append(arr)
 
             if not grp.unroll_axes:

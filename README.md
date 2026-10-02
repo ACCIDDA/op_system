@@ -237,6 +237,12 @@ adaptive stochastic consumers should require complete metadata rather than
 try to infer catalysts from the rate expression. An explicit empty list marks
 a source-only zero-order reaction as complete.
 
+Source-only rates may also depend on population through a bound reduction,
+such as `sum_over(B[age:a] * N[age:a], age=a)`, while their destination pins
+`age=a0`. This produces one total birth hazard into that cell, without donor
+depletion. See the [renewal births guide](docs/guides/renewal-births.md) for
+reaction metadata, retained group axes, and a stationary age-population example.
+
 ### Templated states with `apply_along`
 
 ```yaml
