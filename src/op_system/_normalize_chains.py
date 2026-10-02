@@ -9,7 +9,7 @@ All public entry points remain in ``_normalize.py``.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, NamedTuple, TypeGuard
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -355,7 +355,16 @@ def _validate_coord_shift_entry(
                     f"axis {axis_name!r} coords {valid_coords}"
                 ),
             )
+    _validate_coord_shift_common(tr)
+    return axis_name, from_coord, to_coord, tr["apply_to"], tr["rate"].strip()
 
+
+def _validate_coord_shift_common(tr: Mapping[str, Any]) -> None:
+    """Validate the ``apply_to`` and ``rate`` fields shared by both forms.
+
+    Raises:
+        InvalidRhsSpecError: If either field is missing or malformed.
+    """
     apply_to = tr.get("apply_to")
     if not isinstance(apply_to, list) or not apply_to:
         raise InvalidRhsSpecError(
@@ -366,7 +375,276 @@ def _validate_coord_shift_entry(
     if not isinstance(rate_s, str) or not rate_s.strip():
         raise InvalidRhsSpecError(detail="coord_shift requires a 'rate' string")
 
-    return axis_name, from_coord, to_coord, apply_to, rate_s.strip()
+
+_AXIS_SHIFT_KEYS = frozenset({"axis", "step", "rate", "boundary"})
+_AXIS_SHIFT_BOUNDARIES = ("absorb", "stay", "error")
+
+#: Private transition key carrying a validated axis-wide shift from
+#: ``_apply_coord_shifts`` to equation synthesis and reaction artifacts.
+COORD_SHIFT_KEY = "_op_system_coord_shift"
+
+
+def _is_axis_wide_shift(shift_spec: object) -> TypeGuard[dict[str, Any]]:
+    """Return whether a ``coord_shift`` value uses the axis-wide form.
+
+    The pairwise form is ``{axis_name: "from -> to"}``. An axis that is
+    itself named ``axis`` keeps that meaning, distinguished by the arrow.
+
+    Returns:
+        ``True`` for ``{axis: ..., step: ..., ...}`` mappings.
+    """
+    if not isinstance(shift_spec, dict) or "axis" not in shift_spec:
+        return False
+    value = shift_spec["axis"]
+    return not (len(shift_spec) == 1 and isinstance(value, str) and "->" in value)
+
+
+class _AxisShift(NamedTuple):
+    """Validated axis-wide ``coord_shift``: every coordinate moves ``step`` bins.
+
+    ``boundary`` says what happens to source bins whose destination
+    ``index + step`` falls outside the axis: ``absorb`` removes the mass
+    from the system and ``stay`` leaves it in place.
+    """
+
+    axis: str
+    step: int
+    boundary: str
+
+    @classmethod
+    def from_mapping(
+        cls,
+        shift_spec: Mapping[str, Any],
+        *,
+        axis_lookup: Mapping[str, list[str]],
+    ) -> _AxisShift:
+        """Parse ``{axis, step, boundary}`` (``rate`` is hoisted already).
+
+        Returns:
+            The validated shift.
+
+        Raises:
+            InvalidRhsSpecError: If a field is missing, unknown, or invalid,
+                or if ``boundary`` is ``error`` (the default).
+        """
+        unknown = set(shift_spec) - _AXIS_SHIFT_KEYS
+        if unknown:
+            raise InvalidRhsSpecError(
+                detail=f"coord_shift has unknown fields: {sorted(unknown)!r}"
+            )
+        axis = shift_spec["axis"]
+        if not isinstance(axis, str) or axis not in axis_lookup:
+            raise InvalidRhsSpecError(
+                detail=f"coord_shift axis {axis!r} is not defined",
+            )
+        n_coords = len(axis_lookup[axis])
+        step = shift_spec.get("step", 1)
+        if (
+            not isinstance(step, int)
+            or isinstance(step, bool)
+            or step == 0
+            or abs(step) >= n_coords
+        ):
+            raise InvalidRhsSpecError(
+                detail=(
+                    f"coord_shift step on axis {axis!r} must be a nonzero integer "
+                    f"smaller in magnitude than the axis length {n_coords}; "
+                    f"got {step!r}"
+                ),
+            )
+        boundary = shift_spec.get("boundary", "error")
+        if boundary not in _AXIS_SHIFT_BOUNDARIES:
+            raise InvalidRhsSpecError(
+                detail=(
+                    f"coord_shift boundary must be one of "
+                    f"{list(_AXIS_SHIFT_BOUNDARIES)}; got {boundary!r}"
+                ),
+            )
+        if boundary == "error":
+            edge = "last" if step > 0 else "first"
+            raise InvalidRhsSpecError(
+                detail=(
+                    f"coord_shift step {step:+d} on axis {axis!r} moves the {edge} "
+                    f"{abs(step)} coordinate(s) off the axis; set boundary to "
+                    "'absorb' (mass leaves the system) or 'stay' (mass remains)"
+                ),
+            )
+        return cls(axis=axis, step=step, boundary=boundary)
+
+    def tag(self) -> str:
+        """Return a name-safe step label such as ``p1`` or ``m2``.
+
+        Returns:
+            ``p{step}`` for forward shifts and ``m{-step}`` for backward ones.
+        """
+        return f"p{self.step}" if self.step > 0 else f"m{-self.step}"
+
+    def shift_matrix(self, n_coords: int) -> tuple[tuple[float, ...], ...]:
+        """Return the one-hot source-row, target-column shift matrix.
+
+        Returns:
+            ``M[i][j] == 1.0`` exactly when ``j == i + step`` is on the axis.
+        """
+        return tuple(
+            tuple(1.0 if j == i + self.step else 0.0 for j in range(n_coords))
+            for i in range(n_coords)
+        )
+
+    def keep_mask(self, n_coords: int) -> tuple[float, ...]:
+        """Return ``1.0`` for source bins whose destination is on the axis.
+
+        Returns:
+            One weight per coordinate along the shifted axis.
+        """
+        return tuple(
+            1.0 if 0 <= i + self.step < n_coords else 0.0 for i in range(n_coords)
+        )
+
+
+def coord_shift_constant_names(axis: str, tag: str) -> tuple[str, str]:
+    """Return synthesized ``(shift_matrix, keep_mask)`` parameter names.
+
+    Returns:
+        Shaped-parameter names for the ``[axis, axis]`` shift matrix and the
+        ``[axis]`` in-domain source mask.
+    """
+    return (
+        f"__op_system_shift__{axis}__{tag}",
+        f"__op_system_shift_keep__{axis}__{tag}",
+    )
+
+
+def _hoist_coord_shift_rates(transitions_raw: list[Any]) -> None:
+    """Move an axis-wide ``coord_shift.rate`` to the transition's ``rate``.
+
+    Runs before shaped-parameter discovery and time-axis stripping, which
+    both read only top-level rates. Entries are replaced, not mutated, so a
+    caller's nested ``coord_shift`` mapping is left untouched.
+
+    Raises:
+        InvalidRhsSpecError: If both places declare a rate.
+    """
+    for idx, tr in enumerate(transitions_raw):
+        if not isinstance(tr, dict):
+            continue
+        shift_spec = tr.get("coord_shift")
+        if not _is_axis_wide_shift(shift_spec) or "rate" not in shift_spec:
+            continue
+        if "rate" in tr:
+            raise InvalidRhsSpecError(
+                detail=(
+                    f"transitions[{idx}] declares a rate both in coord_shift "
+                    "and on the transition; keep one"
+                )
+            )
+        transitions_raw[idx] = {
+            **tr,
+            "rate": shift_spec["rate"],
+            "coord_shift": {k: v for k, v in shift_spec.items() if k != "rate"},
+        }
+
+
+def _wildcard_template_axes(
+    base: str,
+    state_template_map: Mapping[str, list[tuple[str, dict[str, str]]]],
+) -> list[str] | None:
+    """Return ``base``'s axes when it has one all-wildcard state template.
+
+    Returns:
+        Axis names in declaration order, or ``None`` when ``base`` has no
+        unique template or that template pins a coordinate.
+    """
+    prefix = f"{base}["
+    matches = [
+        k for k in state_template_map if k.startswith(prefix) and k.endswith("]")
+    ]
+    if len(matches) != 1:
+        return None
+    inside = matches[0][len(prefix) : -1]
+    tokens = [t.strip() for t in inside.split(",") if t.strip()]
+    if any("=" in tok for tok in tokens):
+        return None
+    return tokens
+
+
+def _expand_axis_wide_shift(
+    tr: Mapping[str, Any],
+    *,
+    axis_lookup: dict[str, list[str]],
+    state_template_map: Mapping[str, list[tuple[str, dict[str, str]]]],
+) -> list[dict[str, Any]]:
+    """Emit one template-form shift transition per ``apply_to`` base.
+
+    Each output carries :data:`COORD_SHIFT_KEY`; equation synthesis lowers it
+    once per template and reaction-artifact construction publishes it as one
+    offset reaction. A named entry yields names ``{name}_{base}``.
+
+    Returns:
+        Template-form transition dicts.
+
+    Raises:
+        InvalidRhsSpecError: If validation fails.
+    """
+    shift = _AxisShift.from_mapping(tr["coord_shift"], axis_lookup=axis_lookup)
+    _validate_coord_shift_common(tr)
+    if "reactants" in tr:
+        raise InvalidRhsSpecError(
+            detail="axis-wide coord_shift does not accept 'reactants'",
+        )
+    name = tr.get("name")
+    out: list[dict[str, Any]] = []
+    for base in expand_apply_to(
+        tr["apply_to"],
+        axis_lookup=axis_lookup,
+        context=f"coord_shift[{shift.axis}].apply_to",
+    ):
+        axes = _wildcard_template_axes(base, state_template_map)
+        if axes is None or shift.axis not in axes:
+            raise InvalidRhsSpecError(
+                detail=(
+                    f"axis-wide coord_shift apply_to state {base!r} needs one "
+                    f"state template with a wildcard {shift.axis!r} axis and no "
+                    "pinned coordinates"
+                ),
+            )
+        selector = f"{base}[{', '.join(axes)}]"
+        entry: dict[str, Any] = {
+            "from": selector,
+            "to": selector,
+            "rate": tr["rate"].strip(),
+            COORD_SHIFT_KEY: shift,
+        }
+        if isinstance(name, str) and name.strip():
+            entry["name"] = f"{name.strip()}_{base}"
+        out.append(entry)
+    return out
+
+
+def _discover_coord_shift_constants(
+    transitions_raw: list[Any],
+    *,
+    axis_lookup: Mapping[str, list[str]],
+) -> tuple[dict[str, tuple[str, ...]], dict[str, Any]]:
+    """Collect synthesized shift matrices and masks for axis-wide shifts.
+
+    Returns:
+        ``(shaped_axes, values)`` keyed by synthesized parameter name.
+    """
+    shaped: dict[str, tuple[str, ...]] = {}
+    values: dict[str, Any] = {}
+    for tr in transitions_raw:
+        shift = tr.get(COORD_SHIFT_KEY) if isinstance(tr, dict) else None
+        if not isinstance(shift, _AxisShift):
+            continue
+        matrix_name, keep_name = coord_shift_constant_names(shift.axis, shift.tag())
+        if matrix_name in values:
+            continue
+        n_coords = len(axis_lookup[shift.axis])
+        shaped[matrix_name] = (shift.axis, shift.axis)
+        shaped[keep_name] = (shift.axis,)
+        values[matrix_name] = shift.shift_matrix(n_coords)
+        values[keep_name] = shift.keep_mask(n_coords)
+    return shaped, values
 
 
 def _apply_coord_shifts(
@@ -378,13 +656,19 @@ def _apply_coord_shifts(
 ) -> None:
     """Expand ``coord_shift`` entries into concrete transitions in-place.
 
-    Each ``coord_shift`` entry describes movement along one axis coordinate for
-    a set of states.  When ``state_template_map`` is supplied and the
-    ``apply_to`` base has a unique all-wildcard state template, the entry is
-    replaced by a single template-form transition (selectors with the shifted
-    axis pinned and remaining axes left as wildcards); otherwise it falls back
-    to one concrete transition per matching cell.  Template-form output lets
-    downstream synthesis lift the transition into a vectorizable Reduce.
+    A pairwise ``coord_shift`` entry describes movement between two
+    coordinates of one axis for a set of states.  When ``state_template_map``
+    is supplied and the ``apply_to`` base has a unique all-wildcard state
+    template, the entry is replaced by a single template-form transition
+    (selectors with the shifted axis pinned and remaining axes left as
+    wildcards); otherwise it falls back to one concrete transition per
+    matching cell.  Template-form output lets downstream synthesis lift the
+    transition into a vectorizable Reduce.
+
+    An axis-wide entry (``{axis, step, boundary}``) instead becomes one
+    template-form transition per ``apply_to`` base, marked with
+    :data:`COORD_SHIFT_KEY`, so it compiles once per template rather than
+    once per coordinate pair.
 
     Args:
         transitions_raw: Mutable transition list — ``coord_shift`` entries are
@@ -405,6 +689,13 @@ def _apply_coord_shifts(
         tr = transitions_raw[i]
         if "coord_shift" not in tr:
             i += 1
+            continue
+        if _is_axis_wide_shift(tr["coord_shift"]):
+            shifted = _expand_axis_wide_shift(
+                tr, axis_lookup=axis_lookup, state_template_map=tmpl_map
+            )
+            transitions_raw[i : i + 1] = shifted
+            i += len(shifted)
             continue
 
         axis_name, from_coord, to_coord, apply_to, rate_s = _validate_coord_shift_entry(
@@ -466,23 +757,8 @@ def _build_templated_coord_shift_transition(  # ruff: ignore[too-many-arguments]
         Template-form transition dict, or ``None`` if no unique all-wildcard
         template for ``base`` exists (or ``axis_name`` is not among its axes).
     """
-    prefix = f"{base}["
-    matches = [
-        k for k in state_template_map if k.startswith(prefix) and k.endswith("]")
-    ]
-    if len(matches) != 1:
-        return None
-
-    inside = matches[0][len(prefix) : -1]
-    tokens = [t.strip() for t in inside.split(",") if t.strip()]
-    axes: list[str] = []
-    for tok in tokens:
-        if "=" in tok:
-            # Pinned token in state template — cannot represent generically.
-            return None
-        axes.append(tok)
-
-    if axis_name not in axes:
+    axes = _wildcard_template_axes(base, state_template_map)
+    if axes is None or axis_name not in axes:
         return None
 
     from_parts = [f"{ax}={from_coord}" if ax == axis_name else ax for ax in axes]

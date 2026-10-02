@@ -66,9 +66,14 @@ from op_system._ir_templates import (
     inline_aliases,
 )
 from op_system._normalize_chains import (
+    COORD_SHIFT_KEY,
     _apply_coord_shifts,
     _apply_expr_chains,
     _apply_transition_chains,
+    _AxisShift,
+    _discover_coord_shift_constants,
+    _hoist_coord_shift_rates,
+    coord_shift_constant_names,
 )
 from op_system._normalize_initial_state import _maybe_attach_initial_state
 from op_system._normalize_ir import (
@@ -94,7 +99,11 @@ from op_system._normalize_kernels import (
     _normalize_operators,
     _normalize_state_axes,
 )
-from op_system._reactions import ReactionArtifactIR, build_reaction_artifacts_ir
+from op_system._reactions import (
+    ReactionArtifactIR,
+    _apply_axis_substitution,
+    build_reaction_artifacts_ir,
+)
 from op_system._templates import (
     PinnedToken,
     WildcardToken,
@@ -1068,6 +1077,7 @@ def _synthesize_routing(  # ruff: ignore[too-many-arguments, complex-structure]
     d_ir_reduce: dict[str, list[Expr]],
     d_ir_full: dict[str, list[Expr]],
     all_syms: set[str],
+    outflow_rate: Expr | None = None,
 ) -> None:
     """Install template-level inflow and outflow reductions for a routing transition.
 
@@ -1082,6 +1092,11 @@ def _synthesize_routing(  # ruff: ignore[too-many-arguments, complex-structure]
     diagonal inflow and outflow cancel exactly. Both terms are expanded once
     at the template level and shared by identity across cells, like
     ``_synthesize_template_uniform``.
+
+    ``outflow_rate`` replaces the per-source total ``sum_j R[a, j]`` with an
+    expression in the bare routed axis. Axis-wide coordinate shifts use it to
+    avoid summing a one-hot row and to remove boundary mass that has no
+    target cell.
     """
     from op_system._ir_expand import expand_reduce_pointwise  # ruff: ignore[import-outside-top-level]
 
@@ -1142,11 +1157,15 @@ def _synthesize_routing(  # ruff: ignore[too-many-arguments, complex-structure]
     source_state: Expr = Subscript(name=frm_base, indices=_indices(None))
     for token in pinned_from:
         source_state = Apply(op="*", args=(source_state, _mask(token)))
-    total_rate = Reduce(
-        kind="apply_along",
-        bindings=((axis, parts.target_alias),),
-        body=total_rate_body,
-        kernel="sum",
+    total_rate: Expr = (
+        Reduce(
+            kind="apply_along",
+            bindings=((axis, parts.target_alias),),
+            body=total_rate_body,
+            kernel="sum",
+        )
+        if outflow_rate is None
+        else outflow_rate
     )
     outflow: Expr = Apply(
         op="neg", args=(Apply(op="*", args=(source_state, total_rate)),)
@@ -1183,6 +1202,97 @@ def _synthesize_routing(  # ruff: ignore[too-many-arguments, complex-structure]
     for cell in _cells(frm_base, parts.from_tokens):
         d_ir_reduce[cell].append(outflow)
         d_ir_full[cell].append(outflow_full)
+
+
+_SHIFT_SOURCE_ALIAS = "op_shift_src"
+_SHIFT_TARGET_ALIAS = "op_shift_dst"
+
+
+def _synthesize_coord_shift(  # ruff: ignore[too-many-arguments]
+    *,
+    shift: _AxisShift,
+    base: str,
+    tokens: list[Any],
+    ir_rate: Expr,
+    masks: Mapping[tuple[str, str], str],
+    axes: list[dict[str, Any]],
+    shaped: Mapping[str, tuple[str, ...]],
+    ax_lookup_dict: dict[str, list[str]],
+    cells_by_base: Mapping[str, list[str]],
+    enum_cache: dict[tuple[str, tuple[Any, ...]], list[str]],
+    d_ir_reduce: dict[str, list[Expr]],
+    d_ir_full: dict[str, list[Expr]],
+    all_syms: set[str],
+) -> None:
+    """Lower an axis-wide coordinate shift as one routing transition per template.
+
+    The shift is matrix routing along ``shift.axis`` with the synthesized
+    one-hot matrix ``M[i, j] = [j == i + step]`` and per-capita rate
+    ``r[i] * M[i, j]``, where ``r`` is the transition rate evaluated at the
+    source coordinate. Target cell ``k`` therefore gains
+    ``r[k - step] X[k - step]``. Each source cell loses ``r[k] X[k]`` under
+    ``absorb``, and ``r[k] X[k] keep[k]`` under ``stay``, where ``keep`` is
+    zero for sources whose target leaves the axis. Both terms are built once
+    per template, so compile cost does not grow with the number of
+    coordinate pairs, and the cell values match the equivalent pairwise
+    ``coord_shift`` entries.
+    """
+    axis = shift.axis
+    matrix_name, keep_name = coord_shift_constant_names(axis, shift.tag())
+
+    def _aliased(alias: str) -> tuple[Any, ...]:
+        return tuple(
+            WildcardToken(axis=f"{axis}:{alias}") if tok.axis == axis else tok
+            for tok in tokens
+        )
+
+    source_rate = _apply_axis_substitution(
+        ir_rate, {axis: AxisIndex(axis=axis, coord=_SHIFT_SOURCE_ALIAS)}
+    )
+    routed_rate = Apply(
+        op="*",
+        args=(
+            source_rate,
+            Subscript(
+                name=matrix_name,
+                indices=(
+                    AxisIndex(axis=axis, coord=_SHIFT_SOURCE_ALIAS),
+                    AxisIndex(axis=axis, coord=_SHIFT_TARGET_ALIAS),
+                ),
+            ),
+        ),
+    )
+    outflow_rate: Expr = ir_rate
+    if shift.boundary == "stay":
+        outflow_rate = Apply(
+            op="*",
+            args=(
+                ir_rate,
+                Subscript(name=keep_name, indices=(AxisIndex(axis=axis),)),
+            ),
+        )
+    _synthesize_routing(
+        parts=_RoutingParts(
+            axis=axis,
+            source_alias=_SHIFT_SOURCE_ALIAS,
+            target_alias=_SHIFT_TARGET_ALIAS,
+            from_tokens=_aliased(_SHIFT_SOURCE_ALIAS),
+            to_tokens=_aliased(_SHIFT_TARGET_ALIAS),
+        ),
+        frm_base=base,
+        to_base=base,
+        ir_rate_raw=routed_rate,
+        masks=masks,
+        axes=axes,
+        shaped=shaped,
+        ax_lookup_dict=ax_lookup_dict,
+        cells_by_base=cells_by_base,
+        enum_cache=enum_cache,
+        d_ir_reduce=d_ir_reduce,
+        d_ir_full=d_ir_full,
+        all_syms=all_syms,
+        outflow_rate=outflow_rate,
+    )
 
 
 def _build_transition_equations_ir(  # ruff: ignore[complex-structure, too-many-branches, too-many-arguments, too-many-locals, too-many-statements]
@@ -1264,6 +1374,38 @@ def _build_transition_equations_ir(  # ruff: ignore[complex-structure, too-many-
                 frm_s = _get_required_str(tr_valid, idx=tr_idx, key="from")
                 frm_base, frm_tokens = parse_selector(frm_s)
             to_base, to_tokens = parse_selector(to_s)
+
+            shift = tr_valid.get(COORD_SHIFT_KEY)
+            if isinstance(shift, _AxisShift):
+                _synthesize_coord_shift(
+                    shift=shift,
+                    base=frm_base,
+                    tokens=frm_tokens,
+                    ir_rate=parse_expr_to_ir(rate_s, lower_helpers=True),
+                    masks=masks,
+                    axes=axes,
+                    shaped=shaped,
+                    ax_lookup_dict=ax_lookup_dict,
+                    cells_by_base=cells_by_base,
+                    enum_cache=enumerate_template_cell_names_cache,
+                    d_ir_reduce=d_ir_reduce,
+                    d_ir_full=d_ir_full,
+                    all_syms=all_syms,
+                )
+                record: dict[str, Any] = {
+                    "from": frm_s,
+                    "to": to_s,
+                    "rate": rate_s,
+                    "coord_shift": {
+                        "axis": shift.axis,
+                        "step": shift.step,
+                        "boundary": shift.boundary,
+                    },
+                }
+                if name_s:
+                    record["name"] = name_s
+                transitions_expanded_out.append(record)
+                continue
 
             routing = _routing_parts(
                 frm_tokens=frm_tokens,
@@ -1763,6 +1905,7 @@ def normalize_transitions_rhs(  # ruff: ignore[complex-structure, too-many-branc
         transitions_raw = [
             dict(tr) if isinstance(tr, _MappingABC) else tr for tr in transitions_raw
         ]
+        _hoist_coord_shift_rates(transitions_raw)
     else:
         raise InvalidRhsSpecError(detail="transitions must be a list")
 
@@ -1905,14 +2048,18 @@ def normalize_transitions_rhs(  # ruff: ignore[complex-structure, too-many-branc
     pinned_mask_names, pinned_mask_values = _discover_pinned_token_masks(
         transitions_raw, axis_lookup=axis_lookup_dict
     )
-    if pinned_mask_values:
-        # Register one-hot masks as shaped params so the vectorizer's
-        # extra-param-buffers plumbing assembles them at eval time; stash
-        # the actual values under ``meta`` so ``compile_rhs`` can inject
-        # them into the eval_fn's ``params`` automatically.
+    shift_axes, shift_values = _discover_coord_shift_constants(
+        transitions_raw, axis_lookup=axis_lookup_dict
+    )
+    if pinned_mask_values or shift_values:
+        # Register one-hot masks and shift matrices as shaped params so the
+        # vectorizer's extra-param-buffers plumbing assembles them at eval
+        # time; stash the actual values under ``meta`` so ``compile_rhs``
+        # can inject them into the eval_fn's ``params`` automatically.
         for (axis, _coord), mask_name in pinned_mask_names.items():
             shaped_params[mask_name] = (axis,)
-        meta["op_system_synth_constants"] = dict(pinned_mask_values)
+        shaped_params.update(shift_axes)
+        meta["op_system_synth_constants"] = {**pinned_mask_values, **shift_values}
 
     equations_ir_pre_inline, equations_ir_reduce, transitions_expanded, rate_syms = (
         _build_transition_equations_ir(
