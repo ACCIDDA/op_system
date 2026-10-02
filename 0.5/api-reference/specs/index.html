@@ -1590,7 +1590,7 @@ slice starts in the flat state vector).</p>
 
 
 <h3 id="op_system.specs.TransitionsRhs" class="doc doc-heading">
-              <code class="highlight language-python"><span class="n">TransitionsRhs</span><span class="p">(</span><span class="n">state_names</span><span class="p">,</span> <span class="n">equations</span><span class="p">,</span> <span class="n">aliases</span><span class="p">,</span> <span class="n">param_names</span><span class="p">,</span> <span class="n">all_symbols</span><span class="p">,</span> <span class="n">meta</span><span class="p">,</span> <span class="n">state_templates</span><span class="o">=</span><span class="p">(),</span> <span class="n">shaped_params</span><span class="o">=</span><span class="p">(),</span> <span class="n">time_varying_params</span><span class="o">=</span><span class="p">(),</span> <span class="n">aliases_ir</span><span class="o">=</span><span class="nb">dict</span><span class="p">(),</span> <span class="n">equations_ir</span><span class="o">=</span><span class="p">(),</span> <span class="n">aliases_ir_reduce</span><span class="o">=</span><span class="nb">dict</span><span class="p">(),</span> <span class="n">equations_ir_reduce</span><span class="o">=</span><span class="p">(),</span> <span class="n">alias_templates</span><span class="o">=</span><span class="p">(),</span> <span class="n">reactions_ir</span><span class="o">=</span><span class="p">())</span></code>
+              <code class="highlight language-python"><span class="n">TransitionsRhs</span><span class="p">(</span><span class="n">state_names</span><span class="p">,</span> <span class="n">equations</span><span class="p">,</span> <span class="n">aliases</span><span class="p">,</span> <span class="n">param_names</span><span class="p">,</span> <span class="n">all_symbols</span><span class="p">,</span> <span class="n">meta</span><span class="p">,</span> <span class="n">state_templates</span><span class="o">=</span><span class="p">(),</span> <span class="n">shaped_params</span><span class="o">=</span><span class="p">(),</span> <span class="n">time_varying_params</span><span class="o">=</span><span class="p">(),</span> <span class="n">aliases_ir</span><span class="o">=</span><span class="nb">dict</span><span class="p">(),</span> <span class="n">equations_ir</span><span class="o">=</span><span class="p">(),</span> <span class="n">aliases_ir_reduce</span><span class="o">=</span><span class="nb">dict</span><span class="p">(),</span> <span class="n">equations_ir_reduce</span><span class="o">=</span><span class="p">(),</span> <span class="n">alias_templates</span><span class="o">=</span><span class="p">(),</span> <span class="n">reactions_ir</span><span class="o">=</span><span class="p">(),</span> <span class="n">reaction_gaps_ir</span><span class="o">=</span><span class="p">())</span></code>
 
   <span class="doc doc-labels">
       <small class="doc doc-label doc-label-dataclass"><code>dataclass</code></small>
@@ -1785,12 +1785,7 @@ as the union type when you need to accept both kinds.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/op_system/_normalize.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">368</span>
-<span class="normal">369</span>
-<span class="normal">370</span>
-<span class="normal">371</span>
-<span class="normal">372</span>
-<span class="normal">373</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">373</span>
 <span class="normal">374</span>
 <span class="normal">375</span>
 <span class="normal">376</span>
@@ -1998,7 +1993,12 @@ as the union type when you need to accept both kinds.</p>
 <span class="normal">578</span>
 <span class="normal">579</span>
 <span class="normal">580</span>
-<span class="normal">581</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">normalize_expr_rhs</span><span class="p">(</span><span class="n">spec</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">ExprRhs</span><span class="p">:</span>  <span class="c1"># ruff: ignore[complex-structure, too-many-locals, too-many-statements]</span>
+<span class="normal">581</span>
+<span class="normal">582</span>
+<span class="normal">583</span>
+<span class="normal">584</span>
+<span class="normal">585</span>
+<span class="normal">586</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">normalize_expr_rhs</span><span class="p">(</span><span class="n">spec</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">ExprRhs</span><span class="p">:</span>  <span class="c1"># ruff: ignore[complex-structure, too-many-locals, too-many-statements]</span>
 <span class="w">    </span><span class="sd">"""Normalize an expression-based RHS specification.</span>
 
 <span class="sd">    Args:</span>
@@ -2321,12 +2321,7 @@ as the union type when you need to accept both kinds.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/op_system/_normalize.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">338</span>
-<span class="normal">339</span>
-<span class="normal">340</span>
-<span class="normal">341</span>
-<span class="normal">342</span>
-<span class="normal">343</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">343</span>
 <span class="normal">344</span>
 <span class="normal">345</span>
 <span class="normal">346</span>
@@ -2348,7 +2343,12 @@ as the union type when you need to accept both kinds.</p>
 <span class="normal">362</span>
 <span class="normal">363</span>
 <span class="normal">364</span>
-<span class="normal">365</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">normalize_rhs</span><span class="p">(</span><span class="n">spec</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">NormalizedRhs</span><span class="p">:</span>
+<span class="normal">365</span>
+<span class="normal">366</span>
+<span class="normal">367</span>
+<span class="normal">368</span>
+<span class="normal">369</span>
+<span class="normal">370</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">normalize_rhs</span><span class="p">(</span><span class="n">spec</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">NormalizedRhs</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Normalize a RHS specification dict into a backend-facing representation.</span>
 
 <span class="sd">    Args:</span>
@@ -2407,7 +2407,7 @@ as the union type when you need to accept both kinds.</p>
       <tbody>
           <tr class="doc-section-item">
             <td>
-                  <code><a class="autorefs autorefs-internal" title="TransitionsRhs(state_names, equations, aliases, param_names, all_symbols, meta, state_templates=(), shaped_params=(), time_varying_params=(), aliases_ir=dict(), equations_ir=(), aliases_ir_reduce=dict(), equations_ir_reduce=(), alias_templates=(), reactions_ir=())
+                  <code><a class="autorefs autorefs-internal" title="TransitionsRhs(state_names, equations, aliases, param_names, all_symbols, meta, state_templates=(), shaped_params=(), time_varying_params=(), aliases_ir=dict(), equations_ir=(), aliases_ir_reduce=dict(), equations_ir_reduce=(), alias_templates=(), reactions_ir=(), reaction_gaps_ir=())
 
   
       dataclass
@@ -2448,13 +2448,7 @@ as the union type when you need to accept both kinds.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/op_system/_normalize.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1885</span>
-<span class="normal">1886</span>
-<span class="normal">1887</span>
-<span class="normal">1888</span>
-<span class="normal">1889</span>
-<span class="normal">1890</span>
-<span class="normal">1891</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1891</span>
 <span class="normal">1892</span>
 <span class="normal">1893</span>
 <span class="normal">1894</span>
@@ -2808,7 +2802,18 @@ as the union type when you need to accept both kinds.</p>
 <span class="normal">2242</span>
 <span class="normal">2243</span>
 <span class="normal">2244</span>
-<span class="normal">2245</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">normalize_transitions_rhs</span><span class="p">(</span>  <span class="c1"># ruff: ignore[complex-structure, too-many-branches, too-many-locals, too-many-statements]</span>
+<span class="normal">2245</span>
+<span class="normal">2246</span>
+<span class="normal">2247</span>
+<span class="normal">2248</span>
+<span class="normal">2249</span>
+<span class="normal">2250</span>
+<span class="normal">2251</span>
+<span class="normal">2252</span>
+<span class="normal">2253</span>
+<span class="normal">2254</span>
+<span class="normal">2255</span>
+<span class="normal">2256</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">normalize_transitions_rhs</span><span class="p">(</span>  <span class="c1"># ruff: ignore[complex-structure, too-many-branches, too-many-locals, too-many-statements]</span>
     <span class="n">spec</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TransitionsRhs</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Normalize a transition-based RHS specification (diagram/hazard semantics).</span>
@@ -2828,8 +2833,12 @@ as the union type when you need to accept both kinds.</p>
         <span class="n">transitions_raw</span> <span class="o">=</span> <span class="p">[]</span>
     <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">transitions_raw</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
         <span class="c1"># Copy each entry: time-axis stripping rewrites rates in place.</span>
+        <span class="c1"># Stamp each with its spec position for reaction coverage records.</span>
         <span class="n">transitions_raw</span> <span class="o">=</span> <span class="p">[</span>
-            <span class="nb">dict</span><span class="p">(</span><span class="n">tr</span><span class="p">)</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">tr</span><span class="p">,</span> <span class="n">_MappingABC</span><span class="p">)</span> <span class="k">else</span> <span class="n">tr</span> <span class="k">for</span> <span class="n">tr</span> <span class="ow">in</span> <span class="n">transitions_raw</span>
+            <span class="p">{</span><span class="o">**</span><span class="n">tr</span><span class="p">,</span> <span class="n">ORIGIN_KEY</span><span class="p">:</span> <span class="sa">f</span><span class="s2">"transitions[</span><span class="si">{</span><span class="n">idx</span><span class="si">}</span><span class="s2">]"</span><span class="p">}</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">tr</span><span class="p">,</span> <span class="n">_MappingABC</span><span class="p">)</span>
+            <span class="k">else</span> <span class="n">tr</span>
+            <span class="k">for</span> <span class="n">idx</span><span class="p">,</span> <span class="n">tr</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">transitions_raw</span><span class="p">)</span>
         <span class="p">]</span>
         <span class="n">_hoist_coord_shift_rates</span><span class="p">(</span><span class="n">transitions_raw</span><span class="p">)</span>
     <span class="k">else</span><span class="p">:</span>
@@ -3005,7 +3014,7 @@ as the union type when you need to accept both kinds.</p>
     <span class="p">)</span>
     <span class="n">all_syms</span> <span class="o">|=</span> <span class="n">rate_syms</span>
 
-    <span class="n">reactions_ir</span> <span class="o">=</span> <span class="n">build_reaction_artifacts_ir</span><span class="p">(</span>
+    <span class="n">reactions_ir</span><span class="p">,</span> <span class="n">reaction_gaps_ir</span> <span class="o">=</span> <span class="n">build_reaction_artifacts_ir</span><span class="p">(</span>
         <span class="n">transitions_raw</span><span class="p">,</span>
         <span class="n">axes</span><span class="o">=</span><span class="n">axes_meta</span><span class="p">,</span>
         <span class="n">axis_lookup</span><span class="o">=</span><span class="n">axis_lookup_dict</span><span class="p">,</span>
@@ -3133,6 +3142,7 @@ as the union type when you need to accept both kinds.</p>
     <span class="n">equations_ir_built</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">equations_ir_built_list</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">TransitionsRhs</span><span class="p">(</span>
         <span class="n">reactions_ir</span><span class="o">=</span><span class="n">reactions_ir</span><span class="p">,</span>
+        <span class="n">reaction_gaps_ir</span><span class="o">=</span><span class="n">reaction_gaps_ir</span><span class="p">,</span>
         <span class="n">state_names</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(</span><span class="n">state_expanded</span><span class="p">),</span>
         <span class="n">equations</span><span class="o">=</span><span class="n">eqs_tuple</span><span class="p">,</span>
         <span class="n">aliases</span><span class="o">=</span><span class="n">_derive_alias_strings</span><span class="p">(</span>
