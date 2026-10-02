@@ -200,6 +200,11 @@ class ReactionArtifactIR:
             A destination off the axis means the unit leaves the system;
             under ``boundary: stay`` the propensity is zero for those
             sources, so they never fire. Empty for every other reaction.
+        to_full_axes: Every axis of ``to_base``'s template, in declaration
+            order. It differs from ``full_axes`` when the source and target
+            templates have different axes, for example an axis-less source
+            depositing into a pinned cell of a templated state, or a
+            templated source collapsing into an axis-less one.
     """
 
     name: str
@@ -220,6 +225,7 @@ class ReactionArtifactIR:
     origin: str = ""
     from_selector: str | None = None
     to_selector: str = ""
+    to_full_axes: tuple[str, ...] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -249,8 +255,7 @@ class ReactionGap:
             - ``rate_axis_out_of_scope``: the rate has a free axis outside
               the reaction's channel axes.
             - ``unsupported_layout``: the compiled RHS has no vectorized
-              state layout to index propensities against (currently specs
-              with axis-less states).
+              state layout to index propensities against.
             - ``compile_failed``: the propensity could not be lowered or
               its coordinates could not be resolved.
             - ``expr_spec``: an ``expr`` spec, whose equations are not
@@ -1078,6 +1083,7 @@ def build_reaction_artifacts_ir(  # ruff: ignore[too-many-arguments, too-many-lo
                 origin=str(tr_map.get(ORIGIN_KEY, "transitions")),
                 from_selector=None if source_only else str(frm_raw),
                 to_selector=to_s,
+                to_full_axes=tuple(tok.axis for tok in to_tokens),
             )
         )
 

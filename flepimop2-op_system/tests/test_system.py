@@ -833,15 +833,13 @@ def test_option_factorize_axes_from_spec() -> None:
     assert sys.option("factorize_axes", ()) == ("loc",)
 
 
-def test_option_template_shapes_none_scalar_spec(
+def test_option_template_shapes_zero_dimensional_for_scalar_spec(
     sir_spec: dict[str, object],
 ) -> None:
-    """template_shapes is None for a scalar (no-axes) spec (no vectorized path)."""
+    """A scalar (no-axes) spec lays out each state as a 0-d template."""
     sys = OpSystemSystem(spec=sir_spec)
-    # Scalar specs have no N-D axes so pytree_eval_fn is absent and
-    # template_shapes is not set.
     shapes = sys.option("template_shapes", None)
-    assert shapes is None
+    assert shapes == dict.fromkeys(sys.option("state_names"), ())
 
 
 def test_option_template_shapes_multidim() -> None:

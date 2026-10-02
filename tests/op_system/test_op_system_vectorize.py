@@ -21,6 +21,8 @@ if TYPE_CHECKING:
 
     import pytest
 
+    from op_system.specs import NormalizedRhs
+
 from op_system._ir import Subscript, Sym, walk
 from op_system._vectorize import build_vector_plan, last_vector_plan_bail_reason
 from op_system.compile import _make_eval_fn, compile_rhs
@@ -181,11 +183,11 @@ def test_full_vectorization_when_no_structural_variation() -> None:
         assert len(grp.codes) == 1
 
 
-def test_fallback_on_non_templated_spec() -> None:
-    """Silently fall back to the scalar engine for non-templated specs.
+def test_axis_less_spec_builds_zero_dimensional_plan() -> None:
+    """Axis-less states vectorize as 0-d buffers (issue #246).
 
-    A purely scalar (non-templated) RHS yields ``None`` for the plan and the
-    compile path silently falls back to the scalar engine.
+    ``eval_fn`` keeps the scalar evaluator, while the plan supplies the
+    PyTree evaluator and template shapes.
     """
     spec = {
         "kind": "expr",
@@ -193,39 +195,47 @@ def test_fallback_on_non_templated_spec() -> None:
         "equations": {"x": "-x", "y": "x - y"},
     }
     rhs = normalize_rhs(spec)
-    assert build_vector_plan(rhs) is None
-    # Compiling must transparently fall back and not raise.
+    plan = build_vector_plan(rhs)
+    assert plan is not None
+    assert [tpl.shape for tpl in plan.state_templates] == [(), ()]
     c = compile_rhs(rhs, xp=np)
+    assert c.template_shapes == {"x": (), "y": ()}
     out = c.eval_fn(0.0, np.array([1.0, 2.0]))
     assert np.allclose(out, np.array([-1.0, -1.0]))
+    assert c.pytree_eval_fn is not None
+    tree = c.pytree_eval_fn(0.0, {"x": np.asarray(1.0), "y": np.asarray(2.0)})
+    assert np.allclose([tree["x"], tree["y"]], [-1.0, -1.0])
 
 
-def test_bail_reason_recorded_for_non_templated_spec() -> None:
-    """``last_vector_plan_bail_reason`` exposes why the plan was rejected.
+def _bailing_rhs() -> NormalizedRhs:
+    """Return a normalized RHS the vectorizer must reject.
 
-    A scalar-only RHS should record a non-empty diagnostic explaining the
-    bail (here: "scalar (non-wildcard) state template present").
+    Aliases without alias templates cannot be vectorized.
+
+    Returns:
+        The RHS.
     """
     rhs = normalize_rhs({
         "kind": "expr",
-        "state": ["x", "y"],
-        "equations": {"x": "-x", "y": "x - y"},
+        "state": ["x"],
+        "aliases": {"a": "2 * x"},
+        "equations": {"x": "-a"},
     })
-    assert build_vector_plan(rhs) is None
+    return replace(rhs, alias_templates=())
+
+
+def test_bail_reason_recorded_for_non_templated_spec() -> None:
+    """``last_vector_plan_bail_reason`` exposes why the plan was rejected."""
+    assert build_vector_plan(_bailing_rhs()) is None
     reason = last_vector_plan_bail_reason()
     assert reason is not None
-    assert "scalar" in reason or "no state templates" in reason
+    assert "alias_templates is empty" in reason
 
 
 def test_bail_reason_cleared_on_success() -> None:
     """A successful ``build_vector_plan`` clears any prior bail reason."""
     # First trigger a bail to populate state.
-    scalar_rhs = normalize_rhs({
-        "kind": "expr",
-        "state": ["x"],
-        "equations": {"x": "-x"},
-    })
-    assert build_vector_plan(scalar_rhs) is None
+    assert build_vector_plan(_bailing_rhs()) is None
     assert last_vector_plan_bail_reason() is not None
     # Then a supported templated spec should clear it.
     ok_rhs = normalize_rhs(_sir_two_axis_spec())
@@ -240,12 +250,7 @@ def test_bail_reason_printed_to_stderr_when_env_set(
 ) -> None:
     """Setting ``OP_SYSTEM_DEBUG_VECTOR_PLAN`` prints bail reasons to stderr."""
     monkeypatch.setenv("OP_SYSTEM_DEBUG_VECTOR_PLAN", "1")
-    rhs = normalize_rhs({
-        "kind": "expr",
-        "state": ["x"],
-        "equations": {"x": "-x"},
-    })
-    assert build_vector_plan(rhs) is None
+    assert build_vector_plan(_bailing_rhs()) is None
     captured = capsys.readouterr()
     assert "[op_system vector-plan] bail:" in captured.err
 

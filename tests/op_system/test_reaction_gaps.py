@@ -162,13 +162,6 @@ def test_fully_covered_model_has_no_gaps() -> None:
             id="rate-axis",
         ),
         pytest.param(
-            _transitions(
-                ["S", "I"], [{"name": "infect", "from": "S", "to": "I", "rate": "b"}]
-            ),
-            [("transitions[0]", "infect", "S", "I", "unsupported_layout")],
-            id="axis-less-states",
-        ),
-        pytest.param(
             {"kind": "expr", "state": ["x"], "equations": {"x": "-k * x"}},
             [("equations", None, None, None, "expr_spec")],
             id="expr-spec",
@@ -181,6 +174,31 @@ def test_each_omission_is_reported_with_its_reason(
 ) -> None:
     """Every transition without a compiled reaction names its origin and reason."""
     assert _gaps(spec) == expected
+
+
+def test_axis_less_sir_is_fully_covered() -> None:
+    """Axis-less states publish scalar reactions (issue #246)."""
+    spec = _transitions(
+        ["S", "I", "R"],
+        [
+            {"name": "infect", "from": "S", "to": "I", "rate": "b * I"},
+            {"name": "recover", "from": "I", "to": "R", "rate": "g"},
+        ],
+    )
+    compiled = compile_spec(spec)
+    assert [r.name for r in compiled.reactions] == ["infect", "recover"]
+    assert compiled.reaction_gaps == ()
+
+
+def test_missing_vector_plan_is_reported(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Without a state layout, every reaction is reported as unsupported."""
+    import op_system._vectorize as vectorize  # ruff: ignore[import-outside-top-level]
+
+    monkeypatch.setattr(vectorize, "build_vector_plan", lambda _rhs: None)
+    spec = _transitions(
+        ["S", "I"], [{"name": "infect", "from": "S", "to": "I", "rate": "b"}]
+    )
+    assert _gaps(spec) == [("transitions[0]", "infect", "S", "I", "unsupported_layout")]
 
 
 def test_compile_failure_is_reported(monkeypatch: pytest.MonkeyPatch) -> None:
