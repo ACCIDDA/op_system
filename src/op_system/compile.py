@@ -28,6 +28,7 @@ from types import MappingProxyType
 from typing import (
     TYPE_CHECKING,
     Any,
+    NamedTuple,
     NoReturn,
     Protocol,
     SupportsFloat,
@@ -51,6 +52,7 @@ from op_system._ir import (
 )
 from op_system._normalize import ExprRhs, TransitionsRhs
 from op_system._operators import OperatorDescriptor
+from op_system._reactions import ReactionGap, reaction_gap_for
 from op_system._symbols import parse_expression_string
 
 if TYPE_CHECKING:
@@ -461,6 +463,14 @@ class CompiledRhs:
     reactions: tuple[CompiledReaction, ...] = field(
         default_factory=tuple, repr=False, compare=False, hash=False
     )
+    # ``reaction_gaps`` lists the model dynamics with no entry in
+    # ``reactions`` (see ``op_system._reactions.ReactionGap``): empty when
+    # every transition has a compiled reaction. A consumer that executes only
+    # ``reactions`` must reject a non-empty value or knowingly accept the
+    # missing dynamics. Rebuilt during ``__setstate__``.
+    reaction_gaps: tuple[ReactionGap, ...] = field(
+        default_factory=tuple, repr=False, compare=False, hash=False
+    )
     # Private: source spec retained for pickling. ``compile_rhs`` populates
     # this; direct constructions without ``_rhs`` are not picklable (the
     # ``eval_fn`` closure cannot be serialized) and will raise from
@@ -532,6 +542,7 @@ class CompiledRhs:
         object.__setattr__(self, "block_history_eval_fn", rebuilt.block_history_eval_fn)
         object.__setattr__(self, "block_body_eval_fn", rebuilt.block_body_eval_fn)
         object.__setattr__(self, "reactions", rebuilt.reactions)
+        object.__setattr__(self, "reaction_gaps", rebuilt.reaction_gaps)
         object.__setattr__(self, "_rhs", rhs)
 
 
@@ -1813,33 +1824,53 @@ def _make_propensity_fn(  # ruff: ignore[complex-structure]
     return propensity_fn
 
 
+class _ReactionArtifacts(NamedTuple):
+    """Compiled reactions and the dynamics left without one."""
+
+    reactions: tuple[CompiledReaction, ...]
+    gaps: tuple[ReactionGap, ...]
+
+
 def _build_reaction_artifacts(  # ruff: ignore[complex-structure, too-many-locals]
     *,
     rhs: NormalizedRhs,
     plan: Any,  # ruff: ignore[any-type]
     vec: Any,  # ruff: ignore[any-type]
-) -> tuple[CompiledReaction, ...]:
+) -> _ReactionArtifacts:
     """Compile each in-scope named transition's reaction artifact.
 
     Opportunistic like ``_build_history_artifacts``: a reaction whose
-    propensity fails to lower/compile is silently omitted rather than
-    failing the whole compile (matches how ``TransitionsRhs.reactions_ir``
-    itself already omits out-of-scope transitions -- see
-    ``op_system._reactions``).
+    propensity fails to lower/compile is omitted rather than failing the
+    whole compile (matches how ``TransitionsRhs.reactions_ir`` itself
+    already omits out-of-scope transitions -- see ``op_system._reactions``).
+    Every omission, here or at normalization, is reported as a
+    :class:`~op_system._reactions.ReactionGap`.
 
     Returns:
-        One :class:`CompiledReaction` per successfully-compiled reaction,
-        in declaration order. Empty when ``rhs`` has no reactions_ir (e.g.
-        ``ExprRhs``, or a transitions spec with no in-scope transitions)
-        or when the vector plan is unavailable.
+        ``(reactions, gaps)``: one :class:`CompiledReaction` per
+        successfully-compiled reaction, in declaration order, and one gap
+        per transition without one. An ``ExprRhs`` yields a single
+        ``expr_spec`` gap.
     """
+    if isinstance(rhs, ExprRhs):
+        return _ReactionArtifacts(
+            (),
+            (
+                ReactionGap(
+                    origin="equations",
+                    name=None,
+                    source=None,
+                    target=None,
+                    reason="expr_spec",
+                ),
+            ),
+        )
     reactions_ir = getattr(rhs, "reactions_ir", ())
-    if not reactions_ir or plan is None:
-        return ()
-
+    gaps: list[ReactionGap] = list(getattr(rhs, "reaction_gaps_ir", ()))
     axes_meta = rhs.meta.get("axes") if isinstance(rhs.meta, _MappingABC) else None
-    if not axes_meta:
-        return ()
+    if not reactions_ir or plan is None or not axes_meta:
+        gaps.extend(reaction_gap_for(r, "unsupported_layout") for r in reactions_ir)
+        return _ReactionArtifacts((), tuple(gaps))
 
     time_varying_params = rhs.time_varying_params
     time_axis_name = str(rhs.meta.get("time_axis", "time"))
@@ -1913,7 +1944,9 @@ def _build_reaction_artifacts(  # ruff: ignore[complex-structure, too-many-local
             filename="<op_system_reaction>",
         )
         if code is None:
-            continue  # opportunistic: omit, don't fail the whole compile.
+            # Opportunistic: omit, don't fail the whole compile.
+            gaps.append(reaction_gap_for(r, "compile_failed"))
+            continue
 
         try:
             pinned = tuple(
@@ -1936,7 +1969,9 @@ def _build_reaction_artifacts(  # ruff: ignore[complex-structure, too-many-local
                 for reactant in r.reactants
             )
         except (KeyError, ValueError):
-            continue  # axis/coord not resolvable against this spec's axes.
+            # Axis/coord not resolvable against this spec's axes.
+            gaps.append(reaction_gap_for(r, "compile_failed"))
+            continue
 
         out.append(
             CompiledReaction(
@@ -1978,7 +2013,7 @@ def _build_reaction_artifacts(  # ruff: ignore[complex-structure, too-many-local
                 ),
             )
         )
-    return tuple(out)
+    return _ReactionArtifacts(tuple(out), tuple(gaps))
 
 
 def _cell_to_template_from_plan(plan: Any) -> dict[str, tuple[str, tuple[str, ...]]]:  # ruff: ignore[any-type]
@@ -2220,7 +2255,7 @@ def compile_rhs(rhs: NormalizedRhs, *, xp: object | None = None) -> CompiledRhs:
     _warn_on_deprecated_xp(xp)
     _validate_rhs_type(rhs)
 
-    raw_history_requirements = (
+    _validate_history_kinds(
         _history_requirements_from_ir(
             aliases_ir=rhs.aliases_ir,
             equations_ir=rhs.equations_ir,
@@ -2228,7 +2263,6 @@ def compile_rhs(rhs: NormalizedRhs, *, xp: object | None = None) -> CompiledRhs:
         if _reduce_ir_has_history(rhs)
         else ()
     )
-    _validate_history_kinds(raw_history_requirements)
 
     vec, plan, eval_fn, pytree_eval_fn, template_shapes = _build_primary_eval_artifacts(
         rhs
@@ -2290,6 +2324,7 @@ def compile_rhs(rhs: NormalizedRhs, *, xp: object | None = None) -> CompiledRhs:
         history_requirements=history_requirements,
     )
 
+    reaction_artifacts = _build_reaction_artifacts(rhs=rhs, plan=plan, vec=vec)
     return CompiledRhs(
         state_names=rhs.state_names,
         param_names=tuple(rhs.param_names),
@@ -2307,6 +2342,7 @@ def compile_rhs(rhs: NormalizedRhs, *, xp: object | None = None) -> CompiledRhs:
         body_eval_fn=body_eval_fn,
         block_history_eval_fn=block_history_eval_fn,
         block_body_eval_fn=block_body_eval_fn,
-        reactions=_build_reaction_artifacts(rhs=rhs, plan=plan, vec=vec),
+        reactions=reaction_artifacts.reactions,
+        reaction_gaps=reaction_artifacts.gaps,
         _rhs=rhs,
     )

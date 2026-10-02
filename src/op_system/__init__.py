@@ -44,6 +44,7 @@ from op_system._jump_integral import (
     validate_jump_integral_kernel,
 )
 from op_system._operators import OperatorDescriptor
+from op_system._reactions import ReactionGap
 from op_system._state_string import StateString
 from op_system._typing import Array
 from op_system._validate import ShapeGroup, ValidationReport, validate_spec
@@ -155,6 +156,7 @@ __all__ = [
     "NormalizedRhs",
     "OperatorDescriptor",
     "PytreeEvalFn",
+    "ReactionGap",
     "ReactionPropensityFn",
     "ShapeGroup",
     "StateDict",

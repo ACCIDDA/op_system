@@ -67,6 +67,7 @@ from op_system._ir_templates import (
 )
 from op_system._normalize_chains import (
     COORD_SHIFT_KEY,
+    ORIGIN_KEY,
     _apply_coord_shifts,
     _apply_expr_chains,
     _apply_transition_chains,
@@ -101,6 +102,7 @@ from op_system._normalize_kernels import (
 )
 from op_system._reactions import (
     ReactionArtifactIR,
+    ReactionGap,
     _apply_axis_substitution,
     build_reaction_artifacts_ir,
 )
@@ -184,6 +186,9 @@ class TransitionsRhs(_RhsBase):
     #: Only in-scope named transitions are present; see that module's
     #: docstring for exactly which transitions are included.
     reactions_ir: tuple[ReactionArtifactIR, ...] = ()
+    #: Transitions omitted from ``reactions_ir``, with reasons. Compilation
+    #: appends any artifact it cannot compile (see ``CompiledRhs.reaction_gaps``).
+    reaction_gaps_ir: tuple[ReactionGap, ...] = ()
 
 
 #: Discriminated union of the two normalized-RHS kinds.
@@ -1810,6 +1815,7 @@ def _build_transition_equations_ir(  # ruff: ignore[complex-structure, too-many-
                         rate_key, rate_str_memo, ir_rate_full
                     )
                 tr_out: dict[str, Any] = dict(tr_valid)
+                tr_out.pop(ORIGIN_KEY, None)
                 tr_out["from"] = None if source_only else from_name
                 tr_out["to"] = to_name
                 tr_out["rate"] = rate_string
@@ -1902,8 +1908,12 @@ def normalize_transitions_rhs(  # ruff: ignore[complex-structure, too-many-branc
         transitions_raw = []
     elif isinstance(transitions_raw, list):
         # Copy each entry: time-axis stripping rewrites rates in place.
+        # Stamp each with its spec position for reaction coverage records.
         transitions_raw = [
-            dict(tr) if isinstance(tr, _MappingABC) else tr for tr in transitions_raw
+            {**tr, ORIGIN_KEY: f"transitions[{idx}]"}
+            if isinstance(tr, _MappingABC)
+            else tr
+            for idx, tr in enumerate(transitions_raw)
         ]
         _hoist_coord_shift_rates(transitions_raw)
     else:
@@ -2079,7 +2089,7 @@ def normalize_transitions_rhs(  # ruff: ignore[complex-structure, too-many-branc
     )
     all_syms |= rate_syms
 
-    reactions_ir = build_reaction_artifacts_ir(
+    reactions_ir, reaction_gaps_ir = build_reaction_artifacts_ir(
         transitions_raw,
         axes=axes_meta,
         axis_lookup=axis_lookup_dict,
@@ -2207,6 +2217,7 @@ def normalize_transitions_rhs(  # ruff: ignore[complex-structure, too-many-branc
     equations_ir_built = tuple(equations_ir_built_list)
     return TransitionsRhs(
         reactions_ir=reactions_ir,
+        reaction_gaps_ir=reaction_gaps_ir,
         state_names=tuple(state_expanded),
         equations=eqs_tuple,
         aliases=_derive_alias_strings(

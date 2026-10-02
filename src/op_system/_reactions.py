@@ -79,6 +79,7 @@ from op_system._ir_expand import expand_reduce_pointwise
 from op_system._ir_templates import _free_axes_in, expand_inline_templates
 from op_system._normalize_chains import (
     COORD_SHIFT_KEY,
+    ORIGIN_KEY,
     _AxisShift,
     coord_shift_constant_names,
 )
@@ -216,6 +217,84 @@ class ReactionArtifactIR:
     reactants: tuple[ReactionReactantIR, ...]
     reactants_complete: bool
     offsets: tuple[tuple[str, int], ...] = ()
+    origin: str = ""
+    from_selector: str | None = None
+    to_selector: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class ReactionGap:
+    """Model dynamics that publish no compiled reaction artifact.
+
+    A consumer that executes only ``CompiledRhs.reactions`` (for example a
+    pure stochastic simulation) silently loses these dynamics. An empty
+    ``CompiledRhs.reaction_gaps`` means every transition has an artifact.
+
+    Attributes:
+        origin: Where the dynamics come from in the spec, such as
+            ``transitions[2]``, ``chain[0].forward[1]``, or ``equations``
+            for an ``expr`` spec.
+        name: The transition's ``name``, or ``None`` when it has none.
+        source: The transition's ``from`` selector, or ``None`` for a
+            source-only transition or an ``expr`` spec.
+        target: The transition's ``to`` selector, or ``None`` for an
+            ``expr`` spec.
+        reason: Why no artifact exists:
+
+            - ``unnamed``: the transition has no ``name``.
+            - ``routing``: matrix routing with ``axis:alias`` selectors.
+            - ``fan_out``: a target-only ``axis:alias`` fan-out.
+            - ``target_axis_not_on_source``: ``to`` has a wildcard axis
+              that ``from`` lacks.
+            - ``rate_axis_out_of_scope``: the rate has a free axis outside
+              the reaction's channel axes.
+            - ``unsupported_layout``: the compiled RHS has no vectorized
+              state layout to index propensities against (currently specs
+              with axis-less states).
+            - ``compile_failed``: the propensity could not be lowered or
+              its coordinates could not be resolved.
+            - ``expr_spec``: an ``expr`` spec, whose equations are not
+              decomposed into transitions.
+    """
+
+    origin: str
+    name: str | None
+    source: str | None
+    target: str | None
+    reason: str
+
+
+def _transition_gap(tr_map: Mapping[str, Any], reason: str) -> ReactionGap:
+    """Describe one normalized transition that publishes no reaction.
+
+    Returns:
+        A gap record built from the transition's origin and selectors.
+    """
+    name = tr_map.get("name")
+    source = tr_map.get("from")
+    target = tr_map.get("to")
+    return ReactionGap(
+        origin=str(tr_map.get(ORIGIN_KEY, "transitions")),
+        name=name if isinstance(name, str) and name.strip() else None,
+        source=source if isinstance(source, str) else None,
+        target=target if isinstance(target, str) else None,
+        reason=reason,
+    )
+
+
+def reaction_gap_for(reaction: ReactionArtifactIR, reason: str) -> ReactionGap:
+    """Describe a reaction artifact that was built but could not be compiled.
+
+    Returns:
+        A gap record carrying the artifact's origin and selectors.
+    """
+    return ReactionGap(
+        origin=reaction.origin or "transitions",
+        name=reaction.name,
+        source=reaction.from_selector,
+        target=reaction.to_selector,
+        reason=reason,
+    )
 
 
 def _in_order_wildcard_axes(tokens: list[Any]) -> list[str]:
@@ -774,7 +853,7 @@ def build_reaction_artifacts_ir(  # ruff: ignore[too-many-arguments, too-many-lo
     time_axis_name: str | None = None,
     aliases_raw: Mapping[str, Any] | None = None,
     state_axes: Mapping[str, tuple[str, ...]] | None = None,
-) -> tuple[ReactionArtifactIR, ...]:
+) -> tuple[tuple[ReactionArtifactIR, ...], tuple[ReactionGap, ...]]:
     """Build per-transition reaction artifacts for in-scope named transitions.
 
     Runs independently of (and has no effect on) the deterministic
@@ -803,15 +882,17 @@ def build_reaction_artifacts_ir(  # ruff: ignore[too-many-arguments, too-many-lo
             used to validate explicit reactant selectors.
 
     Returns:
-        One :class:`ReactionArtifactIR` per named, in-scope transition, in
-        declaration order. Transitions without a ``name:``, transitions
-        whose ``to``-side introduces a wildcard axis absent from ``from``
-        (not applicable to a source-only transition, which has no
-        ``from``-side to compare against), and transitions whose rate
-        (after alias inlining) references a free axis outside the
-        from-side wildcard set (the to-side wildcard set, for a
-        source-only transition) are silently omitted (not an error -- see
-        module docstring).
+        ``(artifacts, gaps)``. ``artifacts`` has one
+        :class:`ReactionArtifactIR` per named, in-scope transition, in
+        declaration order. Transitions without a ``name:``, routing and
+        fan-out transitions, transitions whose ``to``-side introduces a
+        wildcard axis absent from ``from`` (not applicable to a source-only
+        transition, which has no ``from``-side to compare against), and
+        transitions whose rate (after alias inlining) references a free axis
+        outside the from-side wildcard set (the to-side wildcard set, for a
+        source-only transition) are omitted from ``artifacts`` (not an
+        error -- see module docstring). Each omission is recorded in
+        ``gaps`` as a :class:`ReactionGap` with its reason.
     """
     shaped = shaped_params or {}
     declared_state_axes = state_axes or {}
@@ -820,6 +901,7 @@ def build_reaction_artifacts_ir(  # ruff: ignore[too-many-arguments, too-many-lo
     )
     axis_names = frozenset(axis_lookup)
     out: list[ReactionArtifactIR] = []
+    gaps: list[ReactionGap] = []
 
     for tr_map in transitions_raw:
         if not isinstance(tr_map, dict):
@@ -827,7 +909,8 @@ def build_reaction_artifacts_ir(  # ruff: ignore[too-many-arguments, too-many-lo
         shift = tr_map.get(COORD_SHIFT_KEY)
         name_s = tr_map.get("name")
         if not isinstance(name_s, str) or not name_s.strip():
-            continue  # unnamed: not addressable, skip.
+            gaps.append(_transition_gap(tr_map, "unnamed"))
+            continue
 
         frm_raw = tr_map.get("from")
         source_only = frm_raw is None
@@ -854,12 +937,15 @@ def build_reaction_artifacts_ir(  # ruff: ignore[too-many-arguments, too-many-lo
             frm_wc_axes = _in_order_wildcard_axes(list(frm_tokens))
             frm_wc_set = set(frm_wc_axes)
 
-            # to-side must not introduce a wildcard axis absent from from-side.
-            if any(ax not in frm_wc_set for ax in to_wc_axes):
-                continue
             # Routing transitions (``axis:alias``) scatter one source cell
             # over many targets; they have no reaction artifact yet.
-            if any(":" in ax for ax in frm_wc_axes):
+            if any(":" in ax for ax in to_wc_axes):
+                routed = any(":" in ax for ax in frm_wc_axes)
+                gaps.append(_transition_gap(tr_map, "routing" if routed else "fan_out"))
+                continue
+            # to-side must not introduce a wildcard axis absent from from-side.
+            if any(ax not in frm_wc_set for ax in to_wc_axes):
+                gaps.append(_transition_gap(tr_map, "target_axis_not_on_source"))
                 continue
 
         ir_rate_raw = parse_expr_to_ir(rate_s, lower_helpers=True)
@@ -879,6 +965,7 @@ def build_reaction_artifacts_ir(  # ruff: ignore[too-many-arguments, too-many-lo
             ax not in frm_wc_set and ax != time_axis_name and ax in axis_lookup
             for ax in rate_axes
         ):
+            gaps.append(_transition_gap(tr_map, "rate_axis_out_of_scope"))
             continue
 
         rate_ir_reduce = expand_inline_templates(
@@ -988,14 +1075,19 @@ def build_reaction_artifacts_ir(  # ruff: ignore[too-many-arguments, too-many-lo
                 reactants=reactants,
                 reactants_complete=reactants_complete,
                 offsets=offsets,
+                origin=str(tr_map.get(ORIGIN_KEY, "transitions")),
+                from_selector=None if source_only else str(frm_raw),
+                to_selector=to_s,
             )
         )
 
-    return tuple(out)
+    return tuple(out), tuple(gaps)
 
 
 __all__ = [
     "ReactionArtifactIR",
+    "ReactionGap",
     "ReactionReactantIR",
     "build_reaction_artifacts_ir",
+    "reaction_gap_for",
 ]

@@ -1073,6 +1073,26 @@ def test_option_reactions_empty_for_transitions_with_no_named_transitions() -> N
     assert sys.option("reactions", None) == ()
 
 
+def test_option_reaction_gaps_lists_transitions_without_reactions() -> None:
+    """`reaction_gaps` names every transition missing from `reactions`."""
+    spec: dict[str, object] = {
+        "kind": "transitions",
+        "axes": [{"name": "vax", "coords": ["u", "f"]}],
+        "state": ["S[vax]", "I[vax]"],
+        "transitions": [
+            {"name": "infect", "from": "S[vax]", "to": "I[vax]", "rate": "b"},
+            {"from": "I[vax]", "to": "S[vax]", "rate": "g"},
+        ],
+    }
+    sys = OpSystemSystem(spec=spec)
+    assert [r.name for r in sys.option("reactions", None)] == ["infect"]
+    (gap,) = sys.option("reaction_gaps", None)
+    assert (gap.origin, gap.name, gap.reason) == ("transitions[1]", None, "unnamed")
+
+    spec["transitions"] = spec["transitions"][:1]  # type: ignore[index]
+    assert OpSystemSystem(spec=spec).option("reaction_gaps", None) == ()
+
+
 def test_option_reactions_exposes_named_transition() -> None:
     """`reactions` surfaces a compiled propensity for each named transition.
 
