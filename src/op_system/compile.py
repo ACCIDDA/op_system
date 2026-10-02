@@ -301,6 +301,12 @@ class CompiledReaction:
     ``to_base`` scatter, using ``from_axes``/``full_axes`` (which are the
     ``to``-side template's own axes in this case, not a nonexistent
     ``from``-side one -- see ``ReactionArtifactIR``).
+
+    An axis-wide ``coord_shift`` publishes one reaction per state template
+    with a non-empty ``offsets``: the destination index on each offset axis
+    is the source index plus its step (see ``offsets``). The destination
+    cell is then built from ``to_axes`` (copied), ``pinned`` (fixed), and
+    ``offsets`` (shifted), which together cover ``full_axes``.
     """
 
     name: str
@@ -346,6 +352,14 @@ class CompiledReaction:
     #: False when op_system supplied only the legacy consumed-source fallback
     #: because the transition omitted an explicit ``reactants:`` declaration.
     reactants_complete: bool = False
+    #: ``(axis, step)`` pairs for an axis-wide ``coord_shift`` reaction. Each
+    #: axis is in ``from_axes`` but in none of ``to_axes``, ``pinned``, or
+    #: ``sum_axes``: a firing at source index ``k`` on that axis deposits at
+    #: index ``k + step``. When ``k + step`` is off the axis, the firing
+    #: removes the source unit and deposits nothing (``boundary: absorb``);
+    #: ``boundary: stay`` sources have zero propensity and never fire. Empty
+    #: for every other reaction.
+    offsets: tuple[tuple[str, int], ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -1331,6 +1345,36 @@ def _wrap_pytree_eval_fn_for_time_varying(
     return wrapped
 
 
+def _wrap_propensity_fn_for_synth_consts(
+    propensity_fn: ReactionPropensityFn,
+    synth_consts: Mapping[str, object] | None,
+) -> ReactionPropensityFn:
+    """Inject normalize-time synthesized constants into a propensity call.
+
+    The propensity counterpart of :func:`_wrap_eval_fn_for_synth_consts`:
+    coordinate masks and coordinate-shift matrices are supplied unless the
+    caller passes them, cast to the state's namespace and dtype.
+
+    Returns:
+        ``propensity_fn`` unchanged when there are no constants, otherwise a
+        wrapper with the same signature.
+    """
+    if not synth_consts:
+        return propensity_fn
+    consts = dict(synth_consts)
+
+    def wrapped(t: object, y: StateDict, **params: object) -> object:
+        first_val = next(iter(y.values()))
+        xp = array_namespace(first_val)
+        dtype = getattr(first_val, "dtype", None)
+        for name, value in consts.items():
+            if name not in params:
+                params[name] = xp.asarray(value, dtype=dtype)
+        return propensity_fn(t, y, **params)
+
+    return wrapped
+
+
 def _wrap_propensity_fn_for_time_varying(
     propensity_fn: ReactionPropensityFn,
     *,
@@ -1844,6 +1888,9 @@ def _build_reaction_artifacts(  # ruff: ignore[complex-structure, too-many-local
     )
     extra_param_buffers = plan.extra_param_buffers
     state_bases = tuple(tpl.base for tpl in rhs.state_templates)
+    synth_consts = rhs.meta.get("op_system_synth_constants")
+    if not isinstance(synth_consts, _MappingABC):
+        synth_consts = None
 
     out: list[CompiledReaction] = []
     for r in reactions_ir:
@@ -1899,22 +1946,30 @@ def _build_reaction_artifacts(  # ruff: ignore[complex-structure, too-many-local
                 full_axes=r.full_axes,
                 to_base=r.to_base,
                 to_axes=r.to_axes,
-                sum_axes=tuple(ax for ax in r.from_axes if ax not in r.to_axes),
+                sum_axes=tuple(
+                    ax
+                    for ax in r.from_axes
+                    if ax not in r.to_axes and ax not in dict(r.offsets)
+                ),
+                offsets=r.offsets,
                 pinned=pinned,
                 from_pinned=from_pinned,
                 reactants=reactants,
                 reactants_complete=r.reactants_complete,
                 propensity_fn=_wrap_propensity_fn_for_time_varying(
-                    _make_propensity_fn(
-                        code,
-                        param_recipes=param_recipes,
-                        extra_param_buffers=extra_param_buffers,
-                        state_bases=state_bases,
-                        broadcast_shape=(
-                            tuple(len(axis_coords[axis]) for axis in r.from_axes)
-                            if r.from_base is None
-                            else None
+                    _wrap_propensity_fn_for_synth_consts(
+                        _make_propensity_fn(
+                            code,
+                            param_recipes=param_recipes,
+                            extra_param_buffers=extra_param_buffers,
+                            state_bases=state_bases,
+                            broadcast_shape=(
+                                tuple(len(axis_coords[axis]) for axis in r.from_axes)
+                                if r.from_base is None
+                                else None
+                            ),
                         ),
+                        synth_consts,
                     ),
                     time_varying_params=time_varying_params,
                     time_axis_name=time_axis_name,

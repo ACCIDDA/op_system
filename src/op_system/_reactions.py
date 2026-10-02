@@ -42,6 +42,12 @@ against. ``from_base`` is ``None`` and ``from_axes``/``full_axes`` are
 taken from the ``to``-side template instead of a nonexistent ``from``-side
 one; see ``ReactionArtifactIR``'s own field docs.
 
+Axis-wide ``coord_shift`` transitions are also in scope, as ONE templated
+reaction per state template rather than one pinned reaction per coordinate
+pair: the shifted axis varies with the firing cell and is published in
+``offsets`` -- the destination coordinate is the source coordinate plus the
+step. It is in neither ``to_axes`` nor ``pinned``.
+
 Axes bound inside ``sum_over`` / ``apply_along`` and literal coordinate
 indices do not create free channel dimensions. A source-only renewal
 flux reduced over age can therefore target a pinned youngest-age cell:
@@ -71,7 +77,11 @@ from op_system._ir import (
 )
 from op_system._ir_expand import expand_reduce_pointwise
 from op_system._ir_templates import _free_axes_in, expand_inline_templates
-from op_system._normalize_chains import COORD_SHIFT_KEY
+from op_system._normalize_chains import (
+    COORD_SHIFT_KEY,
+    _AxisShift,
+    coord_shift_constant_names,
+)
 from op_system._templates import (
     PinnedToken,
     WildcardToken,
@@ -183,6 +193,12 @@ class ReactionArtifactIR:
             authoritative ``reactants:`` list. When false, op_system only
             supplies the backwards-compatible consumed-source fallback and
             consumers must not assume catalytic reactants are absent.
+        offsets: ``(axis, step)`` pairs for an axis-wide ``coord_shift``.
+            Each axis is in ``from_axes`` but in neither ``to_axes`` nor
+            ``pinned``: a firing at source index ``k`` lands at ``k + step``.
+            A destination off the axis means the unit leaves the system;
+            under ``boundary: stay`` the propensity is zero for those
+            sources, so they never fire. Empty for every other reaction.
     """
 
     name: str
@@ -199,6 +215,7 @@ class ReactionArtifactIR:
     propensity_ir_reduce: Expr
     reactants: tuple[ReactionReactantIR, ...]
     reactants_complete: bool
+    offsets: tuple[tuple[str, int], ...] = ()
 
 
 def _in_order_wildcard_axes(tokens: list[Any]) -> list[str]:
@@ -712,6 +729,42 @@ def _build_alias_bodies(
     return _resolve_alias_templates(parsed, axis_names=frozenset(axis_lookup))
 
 
+def _split_shift_offsets(
+    shift: object, to_wc_axes: list[str]
+) -> tuple[list[str], tuple[tuple[str, int], ...]]:
+    """Move an axis-wide shift's axis from the copied axes to ``offsets``.
+
+    The shifted axis varies per firing but is not copied to the
+    destination: it is offset by ``step`` instead.
+
+    Returns:
+        ``(to_axes, offsets)``; unchanged axes and ``()`` for other
+        transitions.
+    """
+    if not isinstance(shift, _AxisShift):
+        return to_wc_axes, ()
+    return (
+        [ax for ax in to_wc_axes if ax != shift.axis],
+        ((shift.axis, shift.step),),
+    )
+
+
+def _mask_stay_sources(shift: object, propensity: Expr) -> Expr:
+    """Zero a ``boundary: stay`` shift's propensity where the target is off-axis.
+
+    Returns:
+        ``propensity`` times the synthesized keep mask, or ``propensity``
+        itself for every other transition.
+    """
+    if not isinstance(shift, _AxisShift) or shift.boundary != "stay":
+        return propensity
+    keep = Subscript(
+        name=coord_shift_constant_names(shift.axis, shift.tag())[1],
+        indices=(AxisIndex(axis=shift.axis),),
+    )
+    return Apply(op="*", args=(propensity, keep))
+
+
 def build_reaction_artifacts_ir(  # ruff: ignore[too-many-arguments, too-many-locals, too-many-statements]
     transitions_raw: list[Mapping[str, Any]],
     *,
@@ -771,15 +824,10 @@ def build_reaction_artifacts_ir(  # ruff: ignore[too-many-arguments, too-many-lo
     for tr_map in transitions_raw:
         if not isinstance(tr_map, dict):
             continue
+        shift = tr_map.get(COORD_SHIFT_KEY)
         name_s = tr_map.get("name")
-        # Unnamed transitions are not addressable. Axis-wide coord_shift
-        # entries have no offset reaction form yet.
-        if (
-            not isinstance(name_s, str)
-            or not name_s.strip()
-            or COORD_SHIFT_KEY in tr_map
-        ):
-            continue
+        if not isinstance(name_s, str) or not name_s.strip():
+            continue  # unnamed: not addressable, skip.
 
         frm_raw = tr_map.get("from")
         source_only = frm_raw is None
@@ -787,7 +835,9 @@ def build_reaction_artifacts_ir(  # ruff: ignore[too-many-arguments, too-many-lo
         to_s = _get_required_str(tr_map, idx=-1, key="to")
         rate_s = _get_required_str(tr_map, idx=-1, key="rate")
         to_base, to_tokens = parse_selector(to_s)
-        to_wc_axes = _in_order_wildcard_axes(list(to_tokens))
+        to_wc_axes, offsets = _split_shift_offsets(
+            shift, _in_order_wildcard_axes(list(to_tokens))
+        )
 
         if source_only:
             # No from-side template at all -- the propensity's shape is
@@ -882,8 +932,12 @@ def build_reaction_artifacts_ir(  # ruff: ignore[too-many-arguments, too-many-lo
                     for tok in frm_tokens
                 ),
             )
-            propensity_ir_full = Apply(op="*", args=(rate_ir_full, from_sub))
-            propensity_ir_reduce = Apply(op="*", args=(rate_ir_reduce, from_sub))
+            propensity_ir_full = _mask_stay_sources(
+                shift, Apply(op="*", args=(rate_ir_full, from_sub))
+            )
+            propensity_ir_reduce = _mask_stay_sources(
+                shift, Apply(op="*", args=(rate_ir_reduce, from_sub))
+            )
 
             # Every from-side pinned axis (full_axes minus from_axes) needs
             # its own coordinate recorded separately from `pinned` -- for a
@@ -933,6 +987,7 @@ def build_reaction_artifacts_ir(  # ruff: ignore[too-many-arguments, too-many-lo
                 propensity_ir_reduce=propensity_ir_reduce,
                 reactants=reactants,
                 reactants_complete=reactants_complete,
+                offsets=offsets,
             )
         )
 

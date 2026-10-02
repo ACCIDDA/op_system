@@ -3,16 +3,19 @@
 from __future__ import annotations
 
 import copy
+import math
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import pytest
 
-from op_system import CompiledRhs, compile_spec
+from op_system import CompiledReaction, CompiledRhs, compile_spec
 from op_system._errors import InvalidRhsSpecError
 from op_system.specs import normalize_transitions_rhs
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     import numpy.typing as npt
 
     from op_system.compile import StateDict
@@ -314,3 +317,176 @@ def test_state_without_shift_axis_raises() -> None:
     spec["state"].append("R[vax]")
     with pytest.raises(InvalidRhsSpecError, match=r"'R' needs one state template"):
         normalize_transitions_rhs(spec)
+
+
+# ---------------------------------------------------------------------------
+# Templated reaction artifacts
+# ---------------------------------------------------------------------------
+
+
+def _fire(
+    state: StateDict, reaction: CompiledReaction, index: tuple[int, ...]
+) -> StateDict:
+    """Apply one firing using only the published ``CompiledReaction`` contract.
+
+    Returns:
+        A new state mapping with the firing applied.
+    """
+    assert reaction.from_base is not None
+    out = {base: value.copy() for base, value in state.items()}
+    channel = dict(zip(reaction.from_axes, index, strict=True))
+    source = {**channel, **dict(reaction.from_pinned)}
+    out[reaction.from_base][tuple(source[ax] for ax in reaction.full_axes)] -= 1
+    offsets = dict(reaction.offsets)
+    target = {ax: channel[ax] for ax in reaction.to_axes}
+    target.update(dict(reaction.pinned))
+    target.update({ax: channel[ax] + step for ax, step in offsets.items()})
+    size = dict(zip(reaction.full_axes, out[reaction.to_base].shape, strict=True))
+    if all(0 <= target[ax] < size[ax] for ax in reaction.full_axes):
+        out[reaction.to_base][tuple(target[ax] for ax in reaction.full_axes)] += 1
+    return out
+
+
+@pytest.mark.parametrize("boundary", ["absorb", "stay"])
+@pytest.mark.parametrize("step", [1, -2])
+def test_offset_reaction_metadata(boundary: str, step: int) -> None:
+    """One templated reaction per state; the shifted axis is an offset."""
+    compiled = compile_spec(_spec([_axis_wide(boundary, step=step)]))
+    by_name = {r.name: r for r in compiled.reactions}
+    assert set(by_name) == {"infection", "aging_S", "aging_I"}
+    for base in ("S", "I"):
+        reaction = by_name[f"aging_{base}"]
+        assert reaction.from_base == reaction.to_base == base
+        assert reaction.from_axes == reaction.full_axes == ("age", "vax")
+        assert reaction.to_axes == ("vax",)
+        assert reaction.sum_axes == ()
+        assert reaction.pinned == reaction.from_pinned == ()
+        assert reaction.offsets == (("age", step),)
+        assert reaction.reactants_complete is False
+    assert by_name["infection"].offsets == ()
+
+
+@pytest.mark.parametrize("boundary", ["absorb", "stay"])
+@pytest.mark.parametrize("step", [1, -2])
+def test_single_firing_moves_one_unit(boundary: str, step: int) -> None:
+    """A firing at age k decrements (S, k) and increments (S, k + step)."""
+    compiled = compile_spec(_spec([_axis_wide(boundary, step=step)]))
+    reaction = next(r for r in compiled.reactions if r.name == "aging_S")
+    state = {"S": np.full((N_AGE, 2), 3.0), "I": np.zeros((N_AGE, 2))}
+    rates = np.linspace(0.2, 1.0, N_AGE)
+    propensity = np.asarray(reaction.propensity_fn(0.0, state, aging_rate=rates))
+    fires = np.array([
+        boundary == "absorb" or 0 <= k + step < N_AGE for k in range(N_AGE)
+    ])
+    expected_propensity = np.where(fires, 3 * rates, 0.0)[:, None]
+    np.testing.assert_allclose(
+        propensity, np.broadcast_to(expected_propensity, propensity.shape)
+    )
+    for k in range(N_AGE):
+        if propensity[k, 1] == 0:
+            continue
+        after = _fire(state, reaction, (k, 1))["S"]
+        delta = after - state["S"]
+        expected = np.zeros_like(delta)
+        expected[k, 1] = -1
+        if 0 <= k + step < N_AGE:
+            expected[k + step, 1] = 1
+        np.testing.assert_array_equal(delta, expected)
+
+
+@pytest.mark.parametrize("boundary", ["absorb", "stay"])
+@pytest.mark.parametrize("step", [1, 2, -1])
+def test_propensities_reconstruct_rhs(boundary: str, step: int) -> None:
+    """Propensity-weighted offset stoichiometry equals the deterministic RHS."""
+    compiled = compile_spec(_spec([_axis_wide(boundary, step=step)]))
+    assert compiled.pytree_eval_fn is not None
+    _, state, params = _random_inputs(compiled, 13)
+    drift = {base: np.zeros_like(value) for base, value in state.items()}
+    zero = {base: np.zeros_like(value) for base, value in state.items()}
+    for reaction in compiled.reactions:
+        propensity = np.asarray(reaction.propensity_fn(0.0, state, **params))
+        for index in np.ndindex(propensity.shape):
+            for base, change in _fire(zero, reaction, index).items():
+                drift[base] += propensity[index] * change
+    rhs = compiled.pytree_eval_fn(0.0, state, **params)
+    for base, value in drift.items():
+        np.testing.assert_allclose(value, rhs[base], rtol=1e-12, atol=1e-14)
+
+
+def test_unnamed_shift_publishes_no_reaction() -> None:
+    """Like other transitions, only named entries publish reactions."""
+    compiled = compile_spec(_spec([_axis_wide("absorb", name=None)]))
+    assert [r.name for r in compiled.reactions] == ["infection"]
+
+
+def _ssa_exit_time(
+    reaction: CompiledReaction,
+    rates: npt.NDArray[np.float64],
+    rng: np.random.Generator,
+) -> float:
+    """Run one individual from the first bin until it leaves the axis.
+
+    Returns:
+        The absorption time.
+    """
+    state = {"S": np.zeros(rates.size)}
+    state["S"][0] = 1.0
+    t = 0.0
+    while state["S"].sum():
+        propensity = np.asarray(reaction.propensity_fn(t, state, aging_rate=rates))
+        total = propensity.sum()
+        t += rng.exponential(1.0 / total)
+        index = int(rng.choice(rates.size, p=propensity / total))
+        state = _fire(state, reaction, (index,))
+    return t
+
+
+def _ks_statistic(
+    samples: npt.NDArray[np.float64], cdf: Callable[[float], float]
+) -> float:
+    """Return the two-sided Kolmogorov-Smirnov distance to ``cdf``.
+
+    Returns:
+        ``sup |F_n - F|`` over the samples.
+    """
+    ordered = np.sort(samples)
+    expected = np.array([cdf(float(x)) for x in ordered])
+    n = ordered.size
+    return float(
+        max(
+            np.max(np.arange(1, n + 1) / n - expected),
+            np.max(expected - np.arange(n) / n),
+        )
+    )
+
+
+def test_pure_aging_ssa_reproduces_erlang_exit_time() -> None:
+    """An SSA over the artifact exits an n-bin chain after Erlang(n, r) time."""
+    n_bins, rate, runs = 4, 2.0, 4000
+    spec: dict[str, object] = {
+        "kind": "transitions",
+        "axes": [_axes(n_age=n_bins)[0]],
+        "state": ["S[age]"],
+        "transitions": [
+            {
+                "name": "aging",
+                "coord_shift": {"axis": "age", "boundary": "absorb"},
+                "rate": "aging_rate[age]",
+                "apply_to": ["S"],
+            }
+        ],
+    }
+    (reaction,) = compile_spec(spec).reactions
+    rng = np.random.default_rng(238)
+    rates = np.full(n_bins, rate)
+    exits = np.array([_ssa_exit_time(reaction, rates, rng) for _ in range(runs)])
+
+    def erlang_cdf(x: float) -> float:
+        return 1.0 - sum(
+            math.exp(-rate * x) * (rate * x) ** k / math.factorial(k)
+            for k in range(n_bins)
+        )
+
+    assert _ks_statistic(exits, erlang_cdf) < 1.36 / math.sqrt(runs)
+    np.testing.assert_allclose(exits.mean(), n_bins / rate, rtol=0.05)
+    np.testing.assert_allclose(exits.var(), n_bins / rate**2, rtol=0.1)
