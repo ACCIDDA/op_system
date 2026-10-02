@@ -288,3 +288,29 @@ def test_jax_renewal_reduction_is_dynamic_under_jit_and_vmap() -> None:
     )
     assert rates.__array_namespace__() is xp
     np.testing.assert_allclose(np.asarray(rates), [14.0, 28.0])
+
+
+@pytest.mark.parametrize("backend", ["numpy", "jax"])
+def test_pinned_renewal_equations_assemble_unrolled_pytree_bins(backend: str) -> None:
+    """An explicit boundary equation assembles scalar bins without extra axes."""
+    compiled = compile_spec({
+        "kind": "expr",
+        "axes": [{"name": "age", "coords": ["a0", "a1", "a2"]}],
+        "state": ["N[age]"],
+        "equations": {
+            "N__age_a0": "sum_over(B[age:a] * N[age:a], age=a)",
+            "N__age_a1": "0.0",
+            "N__age_a2": "0.0",
+        },
+    })
+    assert compiled.pytree_eval_fn is not None
+    xp = np if backend == "numpy" else pytest.importorskip("jax.numpy")
+    state = {"N": xp.asarray([10.0, 20.0, 30.0])}
+    fertility = xp.asarray([0.1, 0.2, 0.3])
+    tree = compiled.pytree_eval_fn(0.0, state, B=fertility)
+    assert tree["N"].shape == (3,)
+    assert tree["N"].__array_namespace__() is xp
+    np.testing.assert_allclose(np.asarray(tree["N"]), [14.0, 0.0, 0.0])
+    np.testing.assert_allclose(
+        np.asarray(compiled.eval_fn(0.0, state["N"], B=fertility)), [14.0, 0.0, 0.0]
+    )
