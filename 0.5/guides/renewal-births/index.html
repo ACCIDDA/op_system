@@ -8,9 +8,13 @@
       
       
       
-        <link rel="canonical" href="https://accidda.github.io/op_system/0.5/development/issue-168-block-stripped-rhs-plan/">
+        <link rel="canonical" href="https://accidda.github.io/op_system/0.5/guides/renewal-births/">
       
       
+        <link rel="prev" href="../time-indexed-parameters/">
+      
+      
+        <link rel="next" href="../../api-reference/op-system/">
       
       
         
@@ -21,7 +25,7 @@
     
     
       
-        <title>Issue 168 block stripped rhs plan - op_system Documentation</title>
+        <title>Renewal Births - op_system Documentation</title>
       
     
     
@@ -64,7 +68,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#problem" class="md-skip">
+        <a href="#renewal-births-into-a-pinned-age-bin" class="md-skip">
           Skip to content
         </a>
       
@@ -116,7 +120,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Issue 168 block stripped rhs plan
+              Renewal Births
             
           </span>
         </div>
@@ -310,7 +314,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../code-style/" class="md-nav__link">
+      <a href="../../development/code-style/" class="md-nav__link">
         
   
   
@@ -338,7 +342,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../creating-a-release/" class="md-nav__link">
+      <a href="../../development/creating-a-release/" class="md-nav__link">
         
   
   
@@ -370,18 +374,20 @@
       
   
   
+    
   
   
+  
     
     
     
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
         
           
           <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
@@ -402,7 +408,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_3">
             <span class="md-nav__icon md-icon"></span>
             
@@ -420,7 +426,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../guides/getting-started/" class="md-nav__link">
+      <a href="../getting-started/" class="md-nav__link">
         
   
   
@@ -448,7 +454,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../guides/operators/" class="md-nav__link">
+      <a href="../operators/" class="md-nav__link">
         
   
   
@@ -476,7 +482,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../guides/time-indexed-parameters/" class="md-nav__link">
+      <a href="../time-indexed-parameters/" class="md-nav__link">
         
   
   
@@ -501,10 +507,37 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../../guides/renewal-births/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Renewal Births
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -520,6 +553,37 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#a-stationary-living-population" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A stationary living population
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -715,6 +779,8 @@
   
   
   
+    
+  
   
     <label class="md-nav__title" for="__toc">
       <span class="md-nav__icon md-icon"></span>
@@ -723,126 +789,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#problem" class="md-nav__link">
+  <a href="#a-stationary-living-population" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Problem
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#decision" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Decision
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#slices-each-500-loc" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Slices (each ≤ ~500 LOC)
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Slices (each ≤ ~500 LOC)">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#slice-1-feat168-strip-block-axis-ir" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Slice 1 — feat/168-strip-block-axis-ir
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#slice-2-feat168-block-compile-pass" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Slice 2 — feat/168-block-compile-pass
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#slice-3-feat168-engine-uses-block-fn-done" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Slice 3 — feat/168-engine-uses-block-fn ✅ DONE
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#slice-4-feat168-flepimop2-shim-block-fields" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Slice 4 — feat/168-flepimop2-shim-block-fields
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#work-order" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Work Order
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#acceptance-gate-end-of-slice-3" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Acceptance gate (end of Slice 3)
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#files-to-delete-after-all-slices" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Files to delete after all slices
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#open-questions" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Open questions
+        A stationary living population
       
     </span>
   </a>
@@ -866,130 +816,146 @@
 
 
 
-  <h1>Issue 168 block stripped rhs plan</h1>
+<h1 id="renewal-births-into-a-pinned-age-bin">Renewal births into a pinned age bin<a class="headerlink" href="#renewal-births-into-a-pinned-age-bin" title="Permanent link">&para;</a></h1>
+<p>A source-only transition (<code>from: null</code>, or omitted <code>from</code>) adds its rate to
+the destination without depleting a donor. Its rate is a total flux, rather
+than a per-capita coefficient multiplied by the destination population.
+It may reduce states and age-indexed parameters over an axis that is pinned
+on the destination.</p>
+<pre><code class="language-python">import numpy as np
 
-<p>*issu# Issue #168 — Block-stripped <code>pytree_eval_fn</code> for <code>factorize_axes</code> vmap</p>
-<p><strong>Repo</strong>: ACCIDDA/op_system
-<strong>Branch convention</strong>: <code>feat/168-&lt;slug&gt;</code>
-<strong>Filed</strong>: 2026-05-28
-<strong>Depends on</strong>: PRs from #162 / #158 / #156 already merged on main.</p>
-<hr />
-<h2 id="problem">Problem<a class="headerlink" href="#problem" title="Permanent link">&para;</a></h2>
-<p><code>pytree_eval_fn</code> is rank-rigid. Its lowered body contains literal axis indices
-(<code>np.transpose(buf, (2, 0, 1))</code>, <code>np.sum(buf, axis=k)</code>, alias-buffer reshapes).
-When <code>diffrax_engine</code> wraps it in <code>jax.vmap(in_axes=&lt;block_axis_pos&gt;)</code>, vmap
-traces it on per-block slices where the block axis is missing → <code>axis k out of
-bounds for array of dimension k-1</code> from inside an alias body.</p>
-<p><code>analyze_block_axes</code> already proves the block axis is separable, so stripping
-it is well-defined.</p>
-<h2 id="decision">Decision<a class="headerlink" href="#decision" title="Permanent link">&para;</a></h2>
-<p>Add a <strong>second</strong> compiled function <code>block_pytree_eval_fn</code> on <code>CompiledRhs</code> that
-operates on block-stripped state. Engine swaps to it under vmap. Stripping
-logic lives in op_system, not the engine.</p>
-<hr />
-<h2 id="slices-each-500-loc">Slices (each ≤ ~500 LOC)<a class="headerlink" href="#slices-each-500-loc" title="Permanent link">&para;</a></h2>
-<h3 id="slice-1-feat168-strip-block-axis-ir">Slice 1 — <code>feat/168-strip-block-axis-ir</code><a class="headerlink" href="#slice-1-feat168-strip-block-axis-ir" title="Permanent link">&para;</a></h3>
-<p><strong>Goal</strong>: IR-level "strip a block axis" primitive + unit tests.</p>
-<ul>
-<li>New <code>src/op_system/_normalize_block.py</code>:</li>
-<li><code>strip_block_axis(rhs: ExprRhs | TransitionsRhs, axis_name: str) -&gt; ExprRhs | TransitionsRhs</code></li>
-<li>Walks <code>equations_ir</code>, <code>aliases_ir</code>, <code>state_templates</code>, <code>shaped_params</code>, <code>time_varying_params</code>.</li>
-<li>Deletes <code>axis_name</code> from every shape tuple; rebuilds <code>axis_order</code>.</li>
-<li>Strips coord-pinned subscripts on <code>axis_name</code> (<code>[loc:l]</code> → bare scalar slice).</li>
-<li>Drops <code>Reduce</code> nodes whose axis is <code>axis_name</code> (already proven absent by <code>analyze_block_axes</code>; assert).</li>
-<li>Refuses if <code>axis_name</code> is not in the spec axes.</li>
-<li>Tests in <code>tests/op_system/test_block_axes.py</code>:</li>
-<li><code>test_strip_block_axis_removes_axis_from_template_shapes</code></li>
-<li><code>test_strip_block_axis_removes_axis_from_alias_bodies</code></li>
-<li><code>test_strip_block_axis_strips_tv_param_axes</code>  (<code>beta[time, loc]</code> → <code>beta[time]</code>)</li>
-<li><code>test_strip_block_axis_raises_on_unknown_axis</code></li>
-</ul>
-<p><strong>Files</strong>: <code>_normalize_block.py</code> (new), <code>tests/op_system/test_block_axes.py</code>
-<strong>Dependencies</strong>: none.
-<strong>Budget</strong>: ~250 LOC.</p>
-<hr />
-<h3 id="slice-2-feat168-block-compile-pass">Slice 2 — <code>feat/168-block-compile-pass</code><a class="headerlink" href="#slice-2-feat168-block-compile-pass" title="Permanent link">&para;</a></h3>
-<p><strong>Goal</strong>: Wire stripping into <code>compile_rhs</code>; surface <code>block_pytree_eval_fn</code> + <code>block_template_shapes</code>.</p>
-<ul>
-<li><code>src/op_system/_vectorize.py</code>:</li>
-<li>After existing flat + pytree compile, if <code>compiled.block_axes</code> is non-empty AND <code>pytree_eval_fn is not None</code>:<ol>
-<li><code>stripped = strip_block_axis(rhs, block_axes[0].name)</code></li>
-<li>Run <code>_lower_to_pytree_eval_fn(stripped, ...)</code> → <code>block_pytree_eval_fn</code></li>
-<li>Compute <code>block_template_shapes</code> from stripped <code>state_templates</code>.</li>
-</ol>
-</li>
-<li>Attach both to <code>CompiledRhs</code> (new fields, default <code>None</code>).</li>
-<li><code>src/op_system/compile.py</code>:</li>
-<li><code>@dataclass</code> add <code>block_pytree_eval_fn: PytreeEvalFn | None = None</code></li>
-<li><code>@dataclass</code> add <code>block_template_shapes: dict[str, tuple[int, ...]] | None = None</code></li>
-<li><code>tests/op_system/test_block_axes.py</code>:</li>
-<li><code>test_compile_emits_block_pytree_eval_fn_when_block_axes_nonempty</code></li>
-<li><code>test_block_pytree_eval_fn_matches_monolithic_at_each_block_coord</code><ul>
-<li>Compile SIR-like spec with <code>factorize_axes: [loc]</code>.</li>
-<li>Pick random <code>y_full</code> shape <code>(age, vax, loc)</code>.</li>
-<li>For each <code>i</code>: <code>vmap(block_eval, in_axes=loc_pos)(y_full)[base][i]</code> ≈
-  <code>pytree_eval_fn(y_full)[base][..., i, ...]</code> (within 1e-12).</li>
-</ul>
-</li>
-<li><code>test_compile_no_block_axes_leaves_block_fields_none</code></li>
-</ul>
-<p><strong>Files</strong>: <code>_vectorize.py</code>, <code>compile.py</code>, <code>tests/op_system/test_block_axes.py</code>
-<strong>Dependencies</strong>: Slice 1 merged.
-<strong>Budget</strong>: ~300 LOC.</p>
-<hr />
-<h3 id="slice-3-feat168-engine-uses-block-fn-done">Slice 3 — <code>feat/168-engine-uses-block-fn</code> ✅ DONE<a class="headerlink" href="#slice-3-feat168-engine-uses-block-fn-done" title="Permanent link">&para;</a></h3>
-<p><strong>Goal</strong>: Switch <code>diffrax_engine</code> to use <code>block_pytree_eval_fn</code>; delete the engine-side stripping helper.</p>
-<p>This slice lands in <strong>ACCIDDA/COVID19_USA</strong>, not op_system.</p>
-<p><strong>What was done</strong>:
-- <code>model_input/plugins/diffrax_engine.py</code>:
-  - Merged <code>_build_operator_terms_pytree_block</code> into <code>_build_operator_terms_pytree</code> (added <code>block_axis_name: str | None = None</code> parameter); deleted the separate 80-LOC block function.
-  - Block path now reads <code>stepper.option("block_template_shapes")</code> (from Slice 4 shim) instead of computing shapes inline.
-  - Replaced <code>else pytree_stepper_fn</code> fallback with a <code>RuntimeError</code> assertion — <code>block_pytree_stepper_fn</code> must be set when entering the block path.
-  - Acceptance gate (<code>SMH_R19_op_system_hierarchical.yml -t prior_predictive</code>) passes: EXIT=0.
-- <code>tests/test_diffrax_engine.py</code>:
-  - <code>_MockStepper</code> now exposes <code>block_pytree_stepper_fn</code> and <code>block_template_shapes</code> from <code>compiled.*</code>.
-  - All 4 existing tests pass with the real <code>block_pytree_eval_fn</code> path (no fallback).</p>
-<p><strong>Files</strong>: COVID19_USA <code>model_input/plugins/diffrax_engine.py</code>, <code>tests/test_diffrax_engine.py</code>
-<strong>Dependencies</strong>: Slice 2 released (op_system version bump).
-<strong>Budget</strong>: ~150 LOC of net deletes + ~80 LOC of new tests.</p>
-<hr />
-<h3 id="slice-4-feat168-flepimop2-shim-block-fields">Slice 4 — <code>feat/168-flepimop2-shim-block-fields</code><a class="headerlink" href="#slice-4-feat168-flepimop2-shim-block-fields" title="Permanent link">&para;</a></h3>
-<p><strong>Goal</strong>: Surface new fields through <code>flepimop2-op_system</code> connector.</p>
-<ul>
-<li><code>flepimop2-op_system/src/flepimop2/system/op_system/__init__.py</code>:</li>
-<li>Add <code>"block_pytree_eval_fn"</code> and <code>"block_template_shapes"</code> to <code>self.options</code> (None when unused).</li>
-<li><code>flepimop2-op_system/tests/test_system.py</code>:</li>
-<li>Extend round-trip test for <code>factorize_axes: [loc]</code> to assert both new options are populated.</li>
-</ul>
-<p><strong>Files</strong>: shim + tests.
-<strong>Dependencies</strong>: Slice 2 merged.
-<strong>Budget</strong>: ~50 LOC.
-Can be combined with Slice 2 if the connector is bumped at the same time.</p>
-<hr />
-<h2 id="work-order">Work Order<a class="headerlink" href="#work-order" title="Permanent link">&para;</a></h2>
-<pre><code>1 (strip-block-axis-ir, op_system)
-  → 2 (block-compile-pass, op_system)
-    → 4 (flepimop2 shim)
-    → 3 (engine swap, COVID19_USA)        ← end-to-end gate
+from op_system import compile_spec
+
+spec = {
+    &quot;kind&quot;: &quot;transitions&quot;,
+    &quot;axes&quot;: [{&quot;name&quot;: &quot;age&quot;, &quot;coords&quot;: [&quot;a0&quot;, &quot;a1&quot;, &quot;a2&quot;]}],
+    &quot;state&quot;: [&quot;N[age]&quot;, &quot;M[age]&quot;],
+    &quot;transitions&quot;: [
+        {
+            &quot;name&quot;: &quot;renewal&quot;,
+            &quot;from&quot;: None,
+            &quot;to&quot;: &quot;N[age=a0]&quot;,
+            &quot;rate&quot;: &quot;sum_over(B[age:a] * (N[age:a] + M[age:a]), age=a)&quot;,
+            &quot;reactants&quot;: [],
+        }
+    ],
+}
+compiled = compile_spec(spec)
+state = {&quot;N&quot;: np.array([10.0, 20.0, 30.0]), &quot;M&quot;: np.array([1.0, 2.0, 3.0])}
+fertility = np.array([0.1, 0.2, 0.3])
+births = fertility @ (state[&quot;N&quot;] + state[&quot;M&quot;])
+assert compiled.pytree_eval_fn is not None
+drift = compiled.pytree_eval_fn(0.0, state, B=fertility)
+np.testing.assert_allclose(drift[&quot;N&quot;], [births, 0.0, 0.0])
+np.testing.assert_array_equal(drift[&quot;M&quot;], np.zeros(3))
+
+(reaction,) = compiled.reactions
+assert reaction.from_base is None
+assert reaction.from_axes == reaction.to_axes == ()
+assert reaction.full_axes == (&quot;age&quot;,)
+assert reaction.pinned == ((&quot;age&quot;, 0),)
+np.testing.assert_allclose(
+    np.asarray(reaction.propensity_fn(0.0, state, B=fertility)), births
+)
 </code></pre>
-<p>Slice 3 is the user-visible fix; everything before it is plumbing.</p>
-<h2 id="acceptance-gate-end-of-slice-3">Acceptance gate (end of Slice 3)<a class="headerlink" href="#acceptance-gate-end-of-slice-3" title="Permanent link">&para;</a></h2>
-<pre><code class="language-bash">cd /home/jcmacdo/Documents/GitHub/ACCIDDA/COVID19_USA
-PYTHONPATH=$PWD conda run -n dev --no-capture-output --cwd $PWD \
-  flepimop2 process configs/SMH_R19_op_system_hierarchical.yml -t prior_predictive
+<p>Here <code>a</code> is a local reduction variable. The bracket form <code>age:a</code> binds the
+state or parameter position to that variable; it does not create a free
+reaction-channel axis. <code>sum_over(B[age] * N[age], age=age)</code> also binds <code>age</code>
+locally and counts the resulting flux once. Unknown reduction axes raise
+<code>InvalidRhsSpecError</code>.</p>
+<p>Named transitions publish a reaction artifact. With every destination axis
+pinned, the artifact has one scalar propensity: one Poisson stream into the
+specified cell. The rate already contains the population dependence; a
+consumer must apply only the destination increment for each firing. The
+explicit <code>reactants: []</code> declares that no population is consumed by a birth.
+It does not imply that the rate is independent of population.</p>
+<p>If a group axis remains free, for example <code>to: N[age=a0,group]</code> with rate
+<code>sum_over(B[age:a] * N[age:a,group], age=a)</code>, the propensity has one entry per
+group. The age reduction happens within each group; <code>from_axes</code> and <code>to_axes</code>
+are both <code>("group",)</code>, while <code>full_axes</code> retains the destination's full axis
+order. Bound variables inside aliases have the same scope. An unreduced
+free axis outside the channel axes remains outside the reaction-artifact
+contract. For example, multiplying this pinned birth flux by <code>B[age]</code>
+without reducing that occurrence introduces an extra free age dimension.</p>
+<p>The flat RHS, PyTree RHS, and reaction propensity use the same flux. The
+flepimop2 provider publishes the artifact through <code>system.option("reactions")</code>
+and the shaped RHS through <code>system.option("pytree_stepper_fn")</code>. Both support
+NumPy and JAX arrays, including runtime state and parameter changes under
+JAX tracing.</p>
+<h2 id="a-stationary-living-population">A stationary living population<a class="headerlink" href="#a-stationary-living-population" title="Permanent link">&para;</a></h2>
+<p>Births alone increase total population. Conservation of the living total
+requires balancing departures. The following three-bin model has renewal
+births, aging, and constant per-capita mortality <code>mu</code>. <code>D</code> is an absorbing
+counter of departures, so its derivative is positive even when the living
+population is stationary.</p>
+<p>The bins represent <code>[0, h)</code>, <code>[h, 2h)</code>, and the open-ended tail <code>[2h, infinity)</code>.
+For a constant aging hazard <code>g</code>, the stationary living proportions are
+<code>(1-q, q*(1-q), q**2)</code>, where <code>q = g/(g+mu)</code>. Setting
+<code>g = mu/expm1(mu*h)</code> makes these exactly the bin integrals of the normalized
+continuum density <code>mu*exp(-mu*a)</code>. This is an exponential-fitted aging rate.
+The usual upwind rate <code>g = 1/h</code> instead gives a discrete geometric profile
+that approaches the continuum profile as <code>h</code> decreases.</p>
+<pre><code class="language-python">import math
+
+import numpy as np
+
+from op_system import compile_spec
+
+spec = {
+    &quot;kind&quot;: &quot;transitions&quot;,
+    &quot;axes&quot;: [{&quot;name&quot;: &quot;age&quot;, &quot;coords&quot;: [&quot;a0&quot;, &quot;a1&quot;, &quot;a2&quot;]}],
+    &quot;state&quot;: [&quot;N[age]&quot;, &quot;D[age]&quot;],
+    &quot;transitions&quot;: [
+        {
+            &quot;name&quot;: &quot;renewal&quot;,
+            &quot;from&quot;: None,
+            &quot;to&quot;: &quot;N[age=a0]&quot;,
+            &quot;rate&quot;: &quot;sum_over(B[age:a] * N[age:a], age=a)&quot;,
+            &quot;reactants&quot;: [],
+        },
+        {
+            &quot;name&quot;: &quot;depart&quot;,
+            &quot;from&quot;: &quot;N[age]&quot;,
+            &quot;to&quot;: &quot;D[age]&quot;,
+            &quot;rate&quot;: &quot;mu&quot;,
+            &quot;reactants&quot;: [{&quot;state&quot;: &quot;N[age]&quot;, &quot;order&quot;: 1}],
+        },
+        *(
+            {
+                &quot;name&quot;: f&quot;age_{k}&quot;,
+                &quot;from&quot;: f&quot;N[age=a{k}]&quot;,
+                &quot;to&quot;: f&quot;N[age=a{k + 1}]&quot;,
+                &quot;rate&quot;: &quot;aging&quot;,
+                &quot;reactants&quot;: [{&quot;state&quot;: f&quot;N[age=a{k}]&quot;, &quot;order&quot;: 1}],
+            }
+            for k in range(2)
+        ),
+    ],
+}
+mu, h, total = 0.2, 1.0, 1000.0
+q = math.exp(-mu * h)
+population = total * np.array([1.0 - q, q * (1.0 - q), q**2])
+params = {
+    &quot;mu&quot;: np.asarray(mu),
+    &quot;aging&quot;: np.asarray(mu / math.expm1(mu * h)),
+    &quot;B&quot;: np.full(3, mu),
+}
+compiled = compile_spec(spec)
+assert compiled.pytree_eval_fn is not None
+drift = compiled.pytree_eval_fn(0.0, {&quot;N&quot;: population, &quot;D&quot;: np.zeros(3)}, **params)
+np.testing.assert_allclose(drift[&quot;N&quot;], np.zeros(3), atol=1e-12)
+np.testing.assert_allclose(drift[&quot;D&quot;], mu * population)
 </code></pre>
-<p>must complete and produce a non-empty <code>.nc</code> + <code>.pdf</code>.</p>
-<h2 id="files-to-delete-after-all-slices">Files to delete after all slices<a class="headerlink" href="#files-to-delete-after-all-slices" title="Permanent link">&para;</a></h2>
-<ul>
-<li>COVID19_USA <code>model_input/plugins/diffrax_engine.py</code>: <code>_build_operator_terms_pytree_block</code> (~80 LOC).</li>
-<li>The <code>_axis_dim</code> helper inside <code>_build_operator_terms_pytree</code> can be simplified to the per-base axis-position lookup already used elsewhere.</li>
-</ul>
-<h2 id="open-questions">Open questions<a class="headerlink" href="#open-questions" title="Permanent link">&para;</a></h2>
-<ol>
-<li>Multi-block-axis support — leave as out-of-scope for #168; add <code>factorize_axes: [a, b]</code> support in a follow-up if it lands as a real use case.</li>
-<li>Should <code>block_pytree_eval_fn</code> accept a <code>block_coord: int</code> arg (for debug) or stay vmap-shaped? Decision: stay vmap-shaped (cheaper; matches how engine calls it).</li>
-<li>Where do we put the assertion that <code>analyze_block_axes</code> approved the axis? Inside <code>strip_block_axis</code> — refuse silently-undefined stripping.</li>
-</ol>
+<p>The last living bin has no aging outflow because it represents the entire
+tail, rather than a truncated finite age interval. Constant fertility
+<code>B = mu</code> makes births equal total living departures at any state. Thus
+<code>sum(dN/dt) = 0</code> for arbitrary living populations, while the stationary
+profile also makes each individual living-bin derivative zero.</p>
+<p>For a stochastic consumer, these are population-dependent birth and death
+hazards with zero expected total living-population drift. Individual paths
+still fluctuate and can become extinct; the departure counter is excluded
+from the living total and age distribution. The ensemble stationarity check
+belongs in the numerical engine's integration tests.</p>
 
 
 
