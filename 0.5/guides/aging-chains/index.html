@@ -876,8 +876,8 @@ has two forms.</p>
 </code></pre>
 <p>An aging chain over <code>n</code> bins needs <code>n - 1</code> such entries. Each entry adds a
 masked term to every cell's equation, so the compile cost grows with the
-square of the number of bins. Pairwise entries also publish no reaction
-artifacts.</p>
+square of the number of bins. A named pairwise entry publishes one point-to-
+point reaction per state, named <code>{name}_{state}</code>.</p>
 <p>The axis-wide form shifts every coordinate in a single entry:</p>
 <pre><code class="language-yaml">- name: aging
   coord_shift: {axis: age, step: 1, rate: &quot;aging_rate[age]&quot;, boundary: absorb}
@@ -965,9 +965,13 @@ zero propensity, so they never fire.</p>
 <p>A consumer that predates <code>offsets</code> fails its own metadata checks on these
 reactions. The destination axes no longer cover <code>full_axes</code>, so the reaction
 is rejected rather than silently treated as a no-op.</p>
-<p>The reactants metadata uses the consumed-source fallback, with
-<code>reactants_complete=False</code>. Axis-wide entries do not accept a <code>reactants</code>
-list.</p>
+<p>By default the reactants metadata is the consumed-source fallback, with
+<code>reactants_complete=False</code>. One entry generates a reaction per <code>apply_to</code>
+state, so it cannot list each one's consumed source. Instead, declare the
+reactants beyond the shifted state as <code>catalysts</code>; <code>catalysts: []</code> declares
+a first-order shift. The generator adds the consumed source, and each
+reaction reports <code>reactants_complete=True</code>, as adaptive tau-leaping requires.
+Both <code>coord_shift</code> forms accept <code>catalysts</code> and reject <code>reactants</code>.</p>
 
 
 
