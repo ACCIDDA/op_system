@@ -71,6 +71,7 @@ from op_system._ir import (
 )
 from op_system._ir_expand import expand_reduce_pointwise
 from op_system._ir_templates import _free_axes_in, expand_inline_templates
+from op_system._normalize_chains import COORD_SHIFT_KEY
 from op_system._templates import (
     PinnedToken,
     WildcardToken,
@@ -771,8 +772,14 @@ def build_reaction_artifacts_ir(  # ruff: ignore[too-many-arguments, too-many-lo
         if not isinstance(tr_map, dict):
             continue
         name_s = tr_map.get("name")
-        if not isinstance(name_s, str) or not name_s.strip():
-            continue  # unnamed: not addressable, skip.
+        # Unnamed transitions are not addressable. Axis-wide coord_shift
+        # entries have no offset reaction form yet.
+        if (
+            not isinstance(name_s, str)
+            or not name_s.strip()
+            or COORD_SHIFT_KEY in tr_map
+        ):
+            continue
 
         frm_raw = tr_map.get("from")
         source_only = frm_raw is None
