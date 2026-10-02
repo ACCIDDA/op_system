@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+
 import numpy as np
 import pytest
 
@@ -160,3 +162,129 @@ def test_filtered_renewal_reduction_matches_rhs() -> None:
     np.testing.assert_allclose(
         compiled.pytree_eval_fn(np.asarray(0.0), state, B=fertility)["N"], expected
     )
+
+
+def _age_population_spec() -> dict[str, object]:
+    """Build three living age bins and an absorbing departure counter.
+
+    Returns:
+        Named renewal, aging, and departure transitions.
+    """
+    spec = _renewal_spec("sum_over(B[age:a] * N[age:a], age=a)")
+    spec["state"] = ["N[age]", "D[age]"]
+    transitions = spec["transitions"]
+    assert isinstance(transitions, list)
+    transitions.extend([
+        {
+            "name": "depart",
+            "from": "N[age]",
+            "to": "D[age]",
+            "rate": "mu",
+            "reactants": [{"state": "N[age]", "order": 1}],
+        },
+        *(
+            {
+                "name": f"age_{k}",
+                "from": f"N[age=a{k}]",
+                "to": f"N[age=a{k + 1}]",
+                "rate": "aging",
+                "reactants": [{"state": f"N[age=a{k}]", "order": 1}],
+            }
+            for k in range(2)
+        ),
+    ])
+    return spec
+
+
+@pytest.mark.parametrize("mu", [0.1, 0.8])
+@pytest.mark.parametrize("width", [0.25, 2.0])
+def test_renewal_age_population_has_exponential_stationary_live_distribution(
+    mu: float, width: float
+) -> None:
+    """Exponential-fitted aging preserves bin masses of the continuum density."""
+    compiled = compile_spec(_age_population_spec())
+    assert compiled.pytree_eval_fn is not None
+    survival = math.exp(-mu * width)
+    # Integrate mu*exp(-mu*a) over [0,h), [h,2h), and [2h,infinity).
+    population = 1000.0 * np.array([
+        1.0 - survival,
+        survival * (1.0 - survival),
+        survival**2,
+    ])
+    params = {
+        "mu": np.asarray(mu),
+        "aging": np.asarray(mu / math.expm1(mu * width)),
+        "B": np.full(3, mu),
+    }
+    state = {"N": population, "D": np.zeros(3)}
+    rhs = compiled.pytree_eval_fn(np.asarray(0.0), state, **params)
+    np.testing.assert_allclose(rhs["N"], np.zeros(3), atol=1e-12)
+    np.testing.assert_allclose(rhs["D"], mu * population)
+    np.testing.assert_allclose(
+        compiled.eval_fn(
+            np.asarray(0.0), np.concatenate(list(state.values())), **params
+        ),
+        np.concatenate([np.zeros(3), mu * population]),
+        atol=1e-12,
+    )
+    birth = next(r for r in compiled.reactions if r.name == "renewal")
+    np.testing.assert_allclose(
+        np.asarray(birth.propensity_fn(0.0, state, **params)), mu * population.sum()
+    )
+
+
+def test_reaction_scatter_reconstructs_age_population_rhs_at_random_states() -> None:
+    """Birth, aging, and departure artifacts reproduce both population drifts."""
+    compiled = compile_spec(_age_population_spec())
+    assert compiled.pytree_eval_fn is not None
+    assert len(compiled.reactions) == 4
+    rng = np.random.default_rng(239)
+    for _ in range(5):
+        state = {"N": rng.uniform(0.0, 100.0, 3), "D": rng.uniform(0.0, 10.0, 3)}
+        params = {"B": np.full(3, 0.2), "mu": np.asarray(0.2), "aging": np.asarray(2.0)}
+        reconstructed = {"N": np.zeros(3), "D": np.zeros(3)}
+        for reaction in compiled.reactions:
+            propensity = np.asarray(reaction.propensity_fn(0.0, state, **params))
+            if reaction.from_base is not None:
+                source = (
+                    reaction.from_pinned[0][1] if reaction.from_pinned else slice(None)
+                )
+                reconstructed[reaction.from_base][source] -= propensity
+            target = reaction.pinned[0][1] if reaction.pinned else slice(None)
+            reconstructed[reaction.to_base][target] += propensity
+        rhs = compiled.pytree_eval_fn(np.asarray(0.0), state, **params)
+        for base in state:
+            np.testing.assert_allclose(reconstructed[base], rhs[base])
+        # Constant fertility equal to mortality conserves the living total
+        # at every state, while the absorbing departure counter increases.
+        np.testing.assert_allclose(rhs["N"].sum(), 0.0, atol=1e-12)
+        np.testing.assert_allclose(rhs["D"].sum(), 0.2 * state["N"].sum())
+
+
+def test_jax_renewal_reduction_is_dynamic_under_jit_and_vmap() -> None:
+    """Changing state and fertility values must change compiled birth hazards."""
+    jax = pytest.importorskip("jax")
+    xp = pytest.importorskip("jax.numpy")
+    compiled = compile_spec(_renewal_spec("sum_over(B[age:a] * N[age:a], age=a)"))
+    assert compiled.pytree_eval_fn is not None
+    population = xp.asarray([10.0, 20.0, 30.0])
+    fertility = xp.asarray([0.1, 0.2, 0.3])
+    tree_fn = jax.jit(compiled.pytree_eval_fn)
+    np.testing.assert_allclose(
+        np.asarray(tree_fn(0.0, {"N": population}, B=fertility)["N"]),
+        [14.0, 0.0, 0.0],
+    )
+    flat_fn = jax.jit(compiled.eval_fn)
+    np.testing.assert_allclose(
+        np.asarray(flat_fn(0.0, population, B=2 * fertility)), [28.0, 0.0, 0.0]
+    )
+    propensity_fn = jax.jit(
+        jax.vmap(compiled.reactions[0].propensity_fn, in_axes=(None, 0))
+    )
+    rates = propensity_fn(
+        0.0,
+        {"N": xp.stack([population, 2 * population])},
+        B=xp.stack([fertility, fertility]),
+    )
+    assert rates.__array_namespace__() is xp
+    np.testing.assert_allclose(np.asarray(rates), [14.0, 28.0])

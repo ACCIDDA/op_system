@@ -743,7 +743,7 @@ def _rate_ir_for_combo(  # ruff: ignore[too-many-arguments]
 
 def _synthesize_template_uniform(  # ruff: ignore[too-many-arguments]
     *,
-    frm_base: str,
+    frm_base: str | None,
     frm_tokens: list[Any],
     to_base: str,
     to_tokens: list[Any],
@@ -770,7 +770,8 @@ def _synthesize_template_uniform(  # ruff: ignore[too-many-arguments]
     pinned ``(axis, coord)`` selector multiplies the body by a one-hot
     mask shaped param so that only the pinned slab contributes; the
     mask zeroes out the non-pinned slabs before the surrounding Reduce
-    sums them away.
+    sums them away. A source-only transition installs just its rate,
+    multiplied by destination masks, and has no depletion contribution.
 
     Mutates ``d_ir_reduce``, ``d_ir_full``, and ``all_syms`` in place.
     """
@@ -784,22 +785,17 @@ def _synthesize_template_uniform(  # ruff: ignore[too-many-arguments]
             enum_cache=enum_cache,
         )
     )
-    from_names_for_synthesis = set(
-        _enumerate_template_cell_names(
-            frm_base,
-            tuple(frm_tokens),
-            cells_by_base=cells_by_base,
-            enum_cache=enum_cache,
+    from_names_for_synthesis = (
+        set(
+            _enumerate_template_cell_names(
+                frm_base,
+                tuple(frm_tokens),
+                cells_by_base=cells_by_base,
+                enum_cache=enum_cache,
+            )
         )
-    )
-
-    from_subscript = Subscript(
-        name=frm_base,
-        indices=tuple(
-            AxisIndex(axis=tok.axis, coord=None)
-            for tok in frm_tokens
-            if isinstance(tok, (WildcardToken, PinnedToken))
-        ),
+        if frm_base is not None
+        else set()
     )
 
     def _mask_sub(tok: PinnedToken) -> Subscript:
@@ -813,7 +809,17 @@ def _synthesize_template_uniform(  # ruff: ignore[too-many-arguments]
     # (which use to-cell coords). Rate lives inside the reduce so
     # per-axis terms such as ``theta[imm]`` correctly bind to the
     # reduce loop.
-    inner_to: Expr = Apply(op="*", args=(ir_rate_raw, from_subscript))
+    inner_to = ir_rate_raw
+    if frm_base is not None:
+        from_subscript = Subscript(
+            name=frm_base,
+            indices=tuple(
+                AxisIndex(axis=tok.axis, coord=None)
+                for tok in frm_tokens
+                if isinstance(tok, (WildcardToken, PinnedToken))
+            ),
+        )
+        inner_to = Apply(op="*", args=(ir_rate_raw, from_subscript))
     for tok in pinned_tokens_from:
         inner_to = Apply(op="*", args=(inner_to, _mask_sub(tok)))
     synth_to: Expr
@@ -831,10 +837,7 @@ def _synthesize_template_uniform(  # ruff: ignore[too-many-arguments]
     # From-side body: rate * from-state * masks for FROM-side pinned
     # tokens only (to-side pinned axes may not be in the from-template
     # and would broadcast incorrectly).
-    from_body: Expr = Apply(op="*", args=(ir_rate_raw, from_subscript))
-    for tok in pinned_tokens_from:
-        from_body = Apply(op="*", args=(from_body, _mask_sub(tok)))
-    synth_neg = Apply(op="neg", args=(from_body,))
+    synth_neg = Apply(op="neg", args=(inner_to,))
 
     all_syms |= free_symbols(synth_to)
     # Pointwise-expand the synthesized IR ONCE at the template level so
@@ -1374,10 +1377,11 @@ def _build_transition_equations_ir(  # ruff: ignore[complex-structure, too-many-
             # destination side template-uniform ``Reduce(sum_over)`` over
             # axes present on the from-template but absent from the
             # to-template, with one-hot mask multiplications collapsing
-            # pinned-coord slabs.
+            # pinned-coord slabs. Fully pinned donors and source-only
+            # inflows use the same masks; they need no wildcard donor axis.
             synthesize = (
-                bool(frm_wc_axes)
-                and not to_only_axes
+                bool(frm_tokens or source_only)
+                and (source_only or not to_only_axes)
                 and not expr_only_axes
                 and pinned_masks_ok
                 and (bool(from_only_axes) or has_pinned)
@@ -1683,7 +1687,7 @@ def _build_transition_equations_ir(  # ruff: ignore[complex-structure, too-many-
             # representation. See ``_synthesize_template_uniform``.
             if synthesize:
                 _synthesize_template_uniform(
-                    frm_base=frm_base,
+                    frm_base=None if source_only else frm_base,
                     frm_tokens=frm_tokens,
                     to_base=to_base,
                     to_tokens=to_tokens,

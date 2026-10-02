@@ -46,7 +46,7 @@ def _unvectorizable() -> dict[str, Any]:
         "kind": "transitions",
         "axes": [{"name": "imm", "type": "ordinal", "coords": ["x0", "x1"]}],
         "state": ["X[imm]"],
-        "transitions": [{"from": "X[imm=x1]", "to": "X[imm=x0]", "rate": "k"}],
+        "transitions": [{"from": "X[imm=x1]", "to": "X[imm=x0]", "rate": "k * X[imm]"}],
     }
 
 
@@ -77,8 +77,8 @@ def test_vectorization_failure_reports_expression_shapes() -> None:
     assert report.stages["vectorize"] == "failed"
     groups = report.shape_groups["X"]
     assert {group.example_expression for group in groups} == {
-        "k * X__imm_x1",
-        "-(k * X__imm_x1)",
+        "k * X__imm_x0 * X__imm_x1 + k * X__imm_x1 * X__imm_x1",
+        "-(k * X__imm_x0 * X__imm_x1) + -(k * X__imm_x1 * X__imm_x1)",
     }
     assert "vectorized eval path" in report.errors[0]
 
