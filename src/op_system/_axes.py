@@ -219,7 +219,11 @@ def _generate_continuous_coords(
 
 
 def _normalize_single_axis(
-    ax_map: Mapping[str, Any], *, idx: int, seen: set[str]
+    ax_map: Mapping[str, Any],
+    *,
+    idx: int,
+    seen: set[str],
+    time_axis_name: str | None = None,
 ) -> dict[str, Any]:
     name = _normalize_axis_name(ax_map, idx=idx, seen=seen)
     ax_type = _normalize_axis_type(ax_map, idx=idx)
@@ -246,7 +250,12 @@ def _normalize_single_axis(
         "size": resolved_size,
     }
     if ax_type == "continuous":
-        axis_out["deltas"] = _compute_axis_deltas(coords, idx=idx)
+        # A constant time table has zero temporal integration width.
+        axis_out["deltas"] = (
+            [0.0]
+            if name == time_axis_name and len(coords) == 1
+            else _compute_axis_deltas(coords, idx=idx)
+        )
     if domain is not None:
         axis_out["domain"] = domain
     if spacing:
@@ -257,8 +266,10 @@ def _normalize_single_axis(
     return axis_out
 
 
-def _normalize_axes(raw_axes: object) -> list[dict[str, Any]]:
-    """Normalize axis specifications (categorical or continuous).
+def _normalize_axes(
+    raw_axes: object, *, time_axis_name: str | None = None
+) -> list[dict[str, Any]]:
+    """Normalize axes, allowing a singleton configured time grid.
 
     Returns:
         Normalized axis definitions with coords and sizes.
@@ -276,7 +287,10 @@ def _normalize_axes(raw_axes: object) -> list[dict[str, Any]]:
 
     for idx, ax in enumerate(raw_axes):
         axis_out = _normalize_single_axis(
-            _ensure_mapping(ax, name=f"axes[{idx}]"), idx=idx, seen=seen
+            _ensure_mapping(ax, name=f"axes[{idx}]"),
+            idx=idx,
+            seen=seen,
+            time_axis_name=time_axis_name,
         )
         axes_out.append(axis_out)
 

@@ -103,6 +103,7 @@ from op_system._templates import (
     parse_selector,
     render_selector,
 )
+from op_system._time import _normalize_time_metadata
 
 __all__ = [
     "ExprRhs",
@@ -376,7 +377,8 @@ def normalize_expr_rhs(spec: Mapping[str, Any]) -> ExprRhs:  # ruff: ignore[comp
 
     equations_map = {_normalize_bracket_key(k): v for k, v in equations_map.items()}
 
-    axes_meta = _normalize_axes(spec.get("axes"))
+    time_axis_name = _resolve_time_axis_name(spec)
+    axes_meta = _normalize_axes(spec.get("axes"), time_axis_name=time_axis_name)
     meta_parts = _normalize_common_meta(
         spec,
         axis_names={"subgroup"} | {ax["name"] for ax in axes_meta},
@@ -422,11 +424,18 @@ def normalize_expr_rhs(spec: Mapping[str, Any]) -> ExprRhs:  # ruff: ignore[comp
         axis_lookup=axis_lookup_dict,
     )
     _reject_legacy_time_varying_field(spec)
-    time_axis_name = _resolve_time_axis_name(spec)
     shaped_params, time_varying_full = _partition_time_varying_shaped(
         shaped_params,
         time_axis_name=time_axis_name,
         axis_lookup=axis_lookup_dict,
+    )
+    meta.update(
+        _normalize_time_metadata(
+            spec,
+            time_axis_name=time_axis_name,
+            axes_meta=axes_meta,
+            time_varying_params=time_varying_full,
+        )
     )
     if time_varying_full:
         _strip_time_axis_in_mapping(
@@ -1751,7 +1760,8 @@ def normalize_transitions_rhs(  # ruff: ignore[complex-structure, too-many-branc
     else:
         raise InvalidRhsSpecError(detail="transitions must be a list")
 
-    axes_meta = _normalize_axes(spec.get("axes"))
+    time_axis_name = _resolve_time_axis_name(spec)
+    axes_meta = _normalize_axes(spec.get("axes"), time_axis_name=time_axis_name)
 
     meta_parts = _normalize_common_meta(
         spec,
@@ -1815,11 +1825,18 @@ def normalize_transitions_rhs(  # ruff: ignore[complex-structure, too-many-branc
         axis_lookup=axis_lookup_dict,
     )
     _reject_legacy_time_varying_field(spec)
-    time_axis_name = _resolve_time_axis_name(spec)
     shaped_params, time_varying_full = _partition_time_varying_shaped(
         shaped_params,
         time_axis_name=time_axis_name,
         axis_lookup=axis_lookup_dict,
+    )
+    meta.update(
+        _normalize_time_metadata(
+            spec,
+            time_axis_name=time_axis_name,
+            axes_meta=axes_meta,
+            time_varying_params=time_varying_full,
+        )
     )
     if time_varying_full:
         if isinstance(meta_parts[0], dict):

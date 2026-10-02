@@ -319,7 +319,7 @@ def test_tv_param_axis_pos_uses_runtime_position() -> None:
             {"from": "I[age,loc]", "to": "R[age,loc]", "rate": "gamma"},
         ],
         "axes": [
-            {"name": "time", "type": "categorical", "coords": ["t0", "t1"]},
+            {"name": "time", "type": "continuous", "coords": [0.0, 1.0]},
             {"name": "age", "type": "categorical", "coords": ["y", "o"]},
             {"name": "loc", "type": "categorical", "coords": ["a", "b"]},
         ],

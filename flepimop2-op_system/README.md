@@ -13,6 +13,26 @@ System options preserve normalized axis metadata for engine providers:
 declared `axis_types`. Consumers can therefore distinguish categorical,
 ordinal, and continuous semantics without inferring them from coordinate values.
 
+Time-indexed parameter tables select interpolation through the inline spec's
+`time_interpolation` field: `linear` is the default, and `previous` holds the
+value at each coordinate until the next, including the new value at an exact
+boundary. Both policies clamp beyond the endpoints. All bound flat, PyTree,
+block, and reaction steppers share the policy and preserve the state's array
+namespace.
+
+The provider also exposes `time_axis`, `time_interpolation`, `time_coordinates`,
+and `forcing_breakpoints` through `system.option(...)`. Coordinates and
+breakpoints are immutable tuples. Hold-mode tables publish all coordinates
+after the first as possible forcing changes; linear tables and unused time axes
+publish no breakpoints. A single-coordinate time table is constant and has no
+forcing changes. Parameter requests still include the complete declared time
+axis, so the parameter producer supplies the full table at run time.
+
+An engine can use these options to configure forcing boundaries independently
+of its output grid. Exact breakpoint SSA also requires every other external
+time dependency in the propensity to be constant between those boundaries.
+The provider exposes the schedule; the engine chooses how to consume it.
+
 It also provides the `sparse_table` parameter module, which assembles a dense
 array for a routing transition's matrix parameter (for example
 `eta[time, imm:i, imm:j]`) from a declared support. Each entry is a number or
