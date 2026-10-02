@@ -338,6 +338,26 @@ spec:
 `chain` synthesizes the staged compartments (`I1..I3`) and the internal
 forward / exit transitions; declare only the base `I` in `state`.
 
+### Axis-wide aging with `coord_shift`
+
+```yaml
+spec:
+  kind: transitions
+  axes:
+    - {name: age, type: ordinal, coords: [a0, a1, a2, a3]}
+  state: [S[age], I[age]]
+  transitions:
+    - name: aging
+      coord_shift: {axis: age, step: 1, rate: "aging_rate[age]", boundary: absorb}
+      apply_to: [S, I]
+```
+
+Every bin `k` moves to `k + step` at the source bin's rate. `boundary: absorb`
+removes mass shifted off the axis, and `stay` keeps it in the terminal bin.
+The entry lowers once per state, and named entries publish one templated
+reaction per state with an `offsets` field. See the
+[aging-chain guide](https://accidda.github.io/op_system/guides/aging-chains/).
+
 ### Continuous axis + kernel
 
 ```yaml

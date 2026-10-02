@@ -14,6 +14,16 @@ version; format loosely follows
   default. Flat, PyTree, block, and reaction evaluators share the policy;
   compiled metadata and provider options expose the immutable time coordinates
   and forcing breakpoints. Single-coordinate time tables remain constant (#240).
+- `coord_shift` accepts an axis-wide form,
+  `{axis: age, step: 1, rate: ..., boundary: absorb|stay}`. It shifts every
+  coordinate of one axis in a single entry instead of `n - 1` pairwise
+  entries. Rates read the source coordinate. Each `apply_to` state lowers
+  once through matrix routing, with cell values equal to the pairwise form;
+  a 240-bin, four-state chain compiles in tens of milliseconds instead of
+  seconds. Named entries publish one templated `CompiledReaction` per state.
+  The new `offsets` field gives the shifted axis and its step, and
+  off-axis destinations either leave the system (`absorb`) or never fire
+  (`stay`). `boundary` has no default (#238).
 
 ## [0.5.0] - 2026-09-27
 
