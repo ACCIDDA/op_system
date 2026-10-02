@@ -58,6 +58,17 @@ pip install "op-system[torch]"          # PyTorch runtime support
 pip install "op-system[data]"           # pandas + pyarrow helpers
 ```
 
+## Time-indexed parameters
+
+Time-indexed parameter tables use linear interpolation by default. Set
+`time_interpolation: previous` in a specification to hold each table value
+until the next coordinate, with right-continuous changes and constant endpoint
+extrapolation. The same policy applies to flat, PyTree, block, and reaction
+evaluators. Compiled metadata and the flepimop2 provider publish immutable
+forcing coordinates for numerical engines. See the
+[time-indexed parameter guide](https://accidda.github.io/op_system/guides/time-indexed-parameters/)
+for the schema, examples, and exactness conditions.
+
 ## Quick start
 
 ```python

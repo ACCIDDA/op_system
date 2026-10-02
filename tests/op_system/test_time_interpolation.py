@@ -91,6 +91,17 @@ def test_invalid_time_coordinates_are_rejected(
         normalize_rhs(spec)
 
 
+def test_nonnumeric_active_time_labels_fail_during_normalization() -> None:
+    """A metadata-only model cannot postpone an unusable table until compile."""
+    spec = _spec()
+    spec["axes"] = [
+        {"name": "group", "coords": ["a", "b"]},
+        {"name": "time", "coords": ["t0", "t1"]},
+    ]
+    with pytest.raises(InvalidRhsSpecError, match="finite real times"):
+        normalize_rhs(spec)
+
+
 def test_custom_time_axis_coordinates_are_snapshotted() -> None:
     """Metadata uses the configured axis and survives mutation of the raw spec."""
     spec = _spec(time_axis="day") | {"time_interpolation": "previous"}

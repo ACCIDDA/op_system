@@ -49,6 +49,7 @@ nav:
   - Guides:
       - Getting Started: guides/getting-started.md
       - Operator Metadata: guides/operators.md
+      - Time-indexed Parameters: guides/time-indexed-parameters.md
   - API Reference:
       - OP System: api-reference/op-system.md
       - Compile: api-reference/compile.md

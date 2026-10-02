@@ -7,6 +7,14 @@ version; format loosely follows
 
 ## [Unreleased]
 
+### Added
+
+- Time-indexed parameters support opt-in right-continuous hold interpolation
+  with `time_interpolation: previous`, retaining linear interpolation by
+  default. Flat, PyTree, block, and reaction evaluators share the policy;
+  compiled metadata and provider options expose the immutable time coordinates
+  and forcing breakpoints. Single-coordinate time tables remain constant (#240).
+
 ## [0.5.0] - 2026-09-27
 
 ### Added
