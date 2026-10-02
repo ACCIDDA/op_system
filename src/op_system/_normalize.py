@@ -103,6 +103,7 @@ from op_system._templates import (
     parse_selector,
     render_selector,
 )
+from op_system._time import _normalize_time_metadata
 
 __all__ = [
     "ExprRhs",
@@ -427,6 +428,14 @@ def normalize_expr_rhs(spec: Mapping[str, Any]) -> ExprRhs:  # ruff: ignore[comp
         shaped_params,
         time_axis_name=time_axis_name,
         axis_lookup=axis_lookup_dict,
+    )
+    meta.update(
+        _normalize_time_metadata(
+            spec,
+            time_axis_name=time_axis_name,
+            axes_meta=axes_meta,
+            time_varying_params=time_varying_full,
+        )
     )
     if time_varying_full:
         _strip_time_axis_in_mapping(
@@ -1820,6 +1829,14 @@ def normalize_transitions_rhs(  # ruff: ignore[complex-structure, too-many-branc
         shaped_params,
         time_axis_name=time_axis_name,
         axis_lookup=axis_lookup_dict,
+    )
+    meta.update(
+        _normalize_time_metadata(
+            spec,
+            time_axis_name=time_axis_name,
+            axes_meta=axes_meta,
+            time_varying_params=time_varying_full,
+        )
     )
     if time_varying_full:
         if isinstance(meta_parts[0], dict):
