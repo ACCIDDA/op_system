@@ -192,3 +192,141 @@ def test_singleton_spatial_axis_still_requires_integration_grid() -> None:
     }
     with pytest.raises(InvalidRhsSpecError, match=">=2 coords"):
         normalize_rhs(spec)
+
+
+def _shaped_spec(kind: str, axes: tuple[str, ...], policy: str) -> dict[str, object]:
+    """Create a rate tensor whose time axis occupies any of three positions.
+
+    Returns:
+        A shaped expression or transition specification.
+    """
+    spec = _spec(kind) | {"time_interpolation": policy}
+    spec["axes"] = [
+        {"name": "group", "coords": ["a", "b"]},
+        {"name": "site", "coords": ["x", "y"]},
+        {"name": "time", "type": "continuous", "coords": [0.0, 1.0, 2.0]},
+    ]
+    spec["state"] = ["A[group,site]", "B[group,site]"]
+    rate = f"rate[{','.join(axes)}]"
+    if kind == "expr":
+        spec["equations"] = {
+            "A[group,site]": f"-{rate} * A[group,site]",
+            "B[group,site]": f"{rate} * A[group,site]",
+        }
+    else:
+        spec["transitions"] = [
+            {
+                "name": "transfer",
+                "from": "A[group,site]",
+                "to": "B[group,site]",
+                "rate": rate,
+                "reactants": [{"state": "A[group,site]", "order": 1}],
+            }
+        ]
+    return spec
+
+
+@pytest.mark.parametrize("backend", ["numpy", "jax"])
+@pytest.mark.parametrize("kind", ["expr", "transitions"])
+@pytest.mark.parametrize("policy", ["linear", "previous"])
+@pytest.mark.parametrize("position", [0, 1, 2])
+def test_shaped_tables_support_every_time_axis_position(
+    backend: str,
+    kind: str,
+    policy: str,
+    position: int,
+) -> None:
+    """Shaped rates retain the state namespace across all compiled paths."""
+    xp = np if backend == "numpy" else pytest.importorskip("jax.numpy")
+    axes = ["group", "site"]
+    axes.insert(position, "time")
+    compiled = compile_spec(_shaped_spec(kind, tuple(axes), policy))
+    assert compiled.pytree_eval_fn is not None
+    scale = np.asarray([[1.0, 2.0], [3.0, 4.0]])
+    table = np.asarray([0.0, 3.0, 1.0])[:, None, None] * scale
+    grid = xp.asarray(np.moveaxis(table, 0, position))
+    state = {"A": xp.ones((2, 2)), "B": xp.zeros((2, 2))}
+    flat = xp.asarray([1.0] * 4 + [0.0] * 4)
+    rate = 3.0 if policy == "previous" else 2.0
+    expected = rate * scale
+
+    out = compiled.eval_fn(1.5, flat, rate=grid)
+    assert out.__array_namespace__() is xp
+    np.testing.assert_allclose(
+        np.asarray(out), np.concatenate([-expected.ravel(), expected.ravel()])
+    )
+    drift = compiled.pytree_eval_fn(1.5, state, rate=grid)
+    assert drift["B"].__array_namespace__() is xp
+    np.testing.assert_allclose(np.asarray(drift["B"]), expected)
+    if kind == "transitions":
+        propensity = compiled.reactions[0].propensity_fn(1.5, state, rate=grid)
+        assert hasattr(propensity, "__array_namespace__")
+        assert propensity.__array_namespace__() is xp
+        np.testing.assert_allclose(np.asarray(propensity), expected)
+
+
+@pytest.mark.parametrize("policy", ["linear", "previous"])
+def test_jax_tables_remain_trace_pure_under_jit_and_vmap(policy: str) -> None:
+    """Runtime evaluation times and table values remain dynamic while tracing."""
+    jax = pytest.importorskip("jax")
+    xp = pytest.importorskip("jax.numpy")
+    compiled = compile_spec(_spec("transitions") | {"time_interpolation": policy})
+    assert compiled.pytree_eval_fn is not None
+    times = xp.asarray([0.5, 1.0, 1.5])
+    grid = xp.asarray([0.0, 3.0, 1.0])
+    state = {"A": xp.ones(2), "B": xp.zeros(2)}
+    flat = xp.asarray([1.0, 1.0, 0.0, 0.0])
+    rates = np.asarray([0.0, 3.0, 3.0] if policy == "previous" else [1.5, 3.0, 2.0])
+
+    flat_fn = jax.jit(jax.vmap(compiled.eval_fn, in_axes=(0, None)))
+    flat_out = flat_fn(times, flat, rate=xp.broadcast_to(grid, (3, 3)))
+    np.testing.assert_allclose(
+        np.asarray(flat_out)[:, 2:], np.repeat(rates[:, None], 2, axis=1)
+    )
+    tree_fn = jax.jit(compiled.pytree_eval_fn)
+    np.testing.assert_allclose(
+        np.asarray(tree_fn(times[2], state, rate=grid)["B"]), [rates[2]] * 2
+    )
+    propensity_fn = jax.jit(compiled.reactions[0].propensity_fn)
+    np.testing.assert_allclose(
+        np.asarray(propensity_fn(times[2], state, rate=grid)), [rates[2]] * 2
+    )
+    np.testing.assert_allclose(
+        np.asarray(propensity_fn(times[2], state, rate=2 * grid)), [2 * rates[2]] * 2
+    )
+
+
+@pytest.mark.parametrize("policy", ["linear", "previous"])
+@pytest.mark.parametrize("backend", ["numpy", "jax"])
+def test_block_evaluation_matches_whole_tensor_rates(policy: str, backend: str) -> None:
+    """Block stripping preserves the time policy and adjusts the time position."""
+    compiled = compile_spec(
+        _shaped_spec("expr", ("site", "time", "group"), policy)
+        | {"factorize_axes": ["site"]}
+    )
+    assert compiled.pytree_eval_fn is not None
+    assert compiled.block_pytree_eval_fn is not None
+    xp = np if backend == "numpy" else pytest.importorskip("jax.numpy")
+    state = {"A": xp.ones((2, 2)), "B": xp.zeros((2, 2))}
+    grid = xp.asarray([
+        [[0.0, 0.0], [3.0, 6.0], [1.0, 2.0]],
+        [[0.0, 0.0], [9.0, 12.0], [3.0, 4.0]],
+    ])
+    full = compiled.pytree_eval_fn(1.5, state, rate=grid)
+    for site in range(2):
+        block_state = {name: value[:, site] for name, value in state.items()}
+        block = compiled.block_pytree_eval_fn(1.5, block_state, rate=grid[site])
+        assert block["B"].__array_namespace__() is xp
+        np.testing.assert_allclose(
+            np.asarray(block["A"]), np.asarray(full["A"])[:, site]
+        )
+        np.testing.assert_allclose(
+            np.asarray(block["B"]), np.asarray(full["B"])[:, site]
+        )
+    if backend == "jax":
+        jax = pytest.importorskip("jax")
+        block_fn = jax.jit(
+            jax.vmap(compiled.block_pytree_eval_fn, in_axes=(None, 1), out_axes=1)
+        )
+        mapped = block_fn(1.5, state, rate=grid)
+        np.testing.assert_allclose(np.asarray(mapped["B"]), np.asarray(full["B"]))
