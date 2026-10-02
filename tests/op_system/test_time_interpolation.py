@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from op_system import normalize_rhs
+from op_system import compile_spec, normalize_rhs
 from op_system._errors import InvalidRhsSpecError
 
 
@@ -113,3 +113,82 @@ def test_unused_time_axis_does_not_publish_forcing() -> None:
     rhs = normalize_rhs(spec)
     assert rhs.meta["time_coordinates"] == ()
     assert rhs.meta["forcing_breakpoints"] == ()
+
+
+@pytest.mark.parametrize("kind", ["expr", "transitions"])
+@pytest.mark.parametrize(
+    ("policy", "expected"),
+    [
+        ("linear", [0.0, 0.0, 1.5, 3.0, 2.0, 1.0, 1.0]),
+        ("previous", [0.0, 0.0, 0.0, 3.0, 3.0, 1.0, 1.0]),
+    ],
+)
+def test_scalar_table_is_right_continuous_and_clamped(
+    kind: str,
+    policy: str,
+    expected: list[float],
+) -> None:
+    """Flat, PyTree, and reaction paths share the chosen table semantics."""
+    compiled = compile_spec(_spec(kind) | {"time_interpolation": policy})
+    assert compiled.pytree_eval_fn is not None
+    y = {"A": np.ones(2), "B": np.zeros(2)}
+    flat = np.asarray([1.0, 1.0, 0.0, 0.0])
+    params = {"rate": np.asarray([0.0, 3.0, 1.0])}
+    for time, rate in zip([-1.0, 0.0, 0.5, 1.0, 1.5, 2.0, 3.0], expected, strict=True):
+        np.testing.assert_allclose(
+            compiled.eval_fn(time, flat, **params), [-rate, -rate, rate, rate]
+        )
+        drift = compiled.pytree_eval_fn(time, y, **params)
+        np.testing.assert_allclose(drift["A"], [-rate, -rate])
+        np.testing.assert_allclose(drift["B"], [rate, rate])
+        if kind == "transitions":
+            assert len(compiled.reactions) == 1
+            np.testing.assert_allclose(
+                np.asarray(compiled.reactions[0].propensity_fn(time, y, **params)),
+                [rate, rate],
+            )
+
+
+@pytest.mark.parametrize("kind", ["expr", "transitions"])
+@pytest.mark.parametrize("policy", ["linear", "previous"])
+def test_single_coordinate_time_table_is_constant(kind: str, policy: str) -> None:
+    """A one-entry table is constant at every time and has no forcing changes."""
+    spec = _spec(kind, time_axis="day") | {"time_interpolation": policy}
+    spec["axes"] = [
+        {"name": "group", "coords": ["a", "b"]},
+        {"name": "day", "type": "continuous", "coords": [1.0]},
+    ]
+    compiled = compile_spec(spec)
+    assert compiled.meta["time_coordinates"] == (1.0,)
+    assert compiled.meta["forcing_breakpoints"] == ()
+    assert compiled.pytree_eval_fn is not None
+    for time in [-1.0, 1.0, 2.0]:
+        np.testing.assert_allclose(
+            compiled.eval_fn(
+                time, np.asarray([1.0, 1.0, 0.0, 0.0]), rate=np.asarray([3.0])
+            ),
+            [-3.0, -3.0, 3.0, 3.0],
+        )
+        out = compiled.pytree_eval_fn(
+            time, {"A": np.ones(2), "B": np.zeros(2)}, rate=np.asarray([3.0])
+        )
+        np.testing.assert_array_equal(out["B"], [3.0, 3.0])
+        if kind == "transitions":
+            np.testing.assert_array_equal(
+                compiled.reactions[0].propensity_fn(
+                    time, {"A": np.ones(2), "B": np.zeros(2)}, rate=np.asarray([3.0])
+                ),
+                [3.0, 3.0],
+            )
+
+
+def test_singleton_spatial_axis_still_requires_integration_grid() -> None:
+    """The time-table exception does not relax spatial quadrature validation."""
+    spec: dict[str, object] = {
+        "kind": "expr",
+        "axes": [{"name": "x", "type": "continuous", "coords": [1.0]}],
+        "state": ["A[x]"],
+        "equations": {"A[x]": "-A[x]"},
+    }
+    with pytest.raises(InvalidRhsSpecError, match=">=2 coords"):
+        normalize_rhs(spec)

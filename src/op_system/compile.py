@@ -1123,15 +1123,16 @@ def _history_requirements_from_ir(
 # -----------------------------------------------------------------------------
 
 
-def _interp_along_axis(
+def _interp_along_axis(  # ruff: ignore[too-many-arguments]
     t: object,
     ts: object,
     grid: object,
     *,
     axis: int,
     xp: Any,  # ruff: ignore[any-type]
+    interpolation: str = "linear",
 ) -> object:
-    """Linearly interpolate ``grid`` along axis ``axis`` at scalar ``t``.
+    """Interpolate ``grid`` along axis ``axis`` at scalar ``t``.
 
     For a 1-D ``grid`` of shape ``(N,)`` returns a scalar; for an N-D
     ``grid`` whose ``axis``-th dimension has length ``N`` returns an array
@@ -1141,11 +1142,12 @@ def _interp_along_axis(
 
     Args:
         t: Scalar evaluation time.
-        ts: 1-D monotonically non-decreasing array of grid times of length N.
+        ts: Finite strictly increasing grid times of length N.
         grid: Array whose ``axis``-th dimension indexes ``ts``.
         axis: Position of the time axis within ``grid``'s shape.
         xp: Array-API namespace, derived from the input ``y`` by the
             caller through ``array_api_compat.array_namespace``.
+        interpolation: ``linear`` (default) or right-continuous ``previous``.
 
     Returns:
         Interpolated value with ``grid``'s shape minus the ``axis`` slot.
@@ -1155,8 +1157,12 @@ def _interp_along_axis(
     if axis != 0:
         grid_arr = xp.moveaxis(grid_arr, axis, 0)
     n = ts_arr.shape[0]
+    if n == 1:
+        return grid_arr[0]
     t_val = xp.asarray(t)
     raw_idx = xp.searchsorted(ts_arr, t_val, side="right")
+    if interpolation == "previous":
+        return grid_arr[xp.clip(raw_idx - 1, 0, n - 1)]
     idx_right = xp.clip(raw_idx, 1, n - 1)
     idx_left = idx_right - 1
     t_left = ts_arr[idx_left]
@@ -1179,6 +1185,7 @@ def _wrap_eval_fn_for_time_varying(
     time_varying_params: tuple[tuple[str, tuple[str, ...]], ...],
     time_axis_name: str,
     axes_meta: tuple[Mapping[str, Any], ...],
+    interpolation: str = "linear",
 ) -> EvalFn:
     """Wrap ``eval_fn`` so each time-varying name is interpolated at runtime.
 
@@ -1204,6 +1211,7 @@ def _wrap_eval_fn_for_time_varying(
         axes_meta: Normalized axes records (each a mapping with ``name``
             and ``coords``).  Used to look up the time-axis ``coords``
             array baked into the wrapper closure as the interpolation grid.
+        interpolation: Validated time-interpolation policy.
 
     Returns:
         A new `EvalFn` with the same shape contract as ``eval_fn``.
@@ -1241,7 +1249,14 @@ def _wrap_eval_fn_for_time_varying(
                     )
                 )
             grid = params.pop(name)
-            params[name] = _interp_along_axis(t, ts, grid, axis=axis_pos, xp=xp)
+            params[name] = _interp_along_axis(
+                t,
+                ts,
+                grid,
+                axis=axis_pos,
+                xp=xp,
+                interpolation=interpolation,
+            )
         return eval_fn(t, y, **params)
 
     return wrapped
@@ -1253,6 +1268,7 @@ def _wrap_pytree_eval_fn_for_time_varying(
     time_varying_params: tuple[tuple[str, tuple[str, ...]], ...],
     time_axis_name: str,
     axes_meta: tuple[Mapping[str, Any], ...],
+    interpolation: str = "linear",
 ) -> PytreeEvalFn:
     """Like :func:`_wrap_eval_fn_for_time_varying` but for PyTree eval fns.
 
@@ -1265,6 +1281,7 @@ def _wrap_pytree_eval_fn_for_time_varying(
         time_varying_params: Same as for the flat wrapper.
         time_axis_name: Configured time-axis name.
         axes_meta: Normalized axes metadata records.
+        interpolation: Validated time-interpolation policy.
 
     Returns:
         A new :class:`PytreeEvalFn` with the same PyTree shape contract.
@@ -1301,7 +1318,14 @@ def _wrap_pytree_eval_fn_for_time_varying(
                     )
                 )
             grid = params.pop(name)
-            params[name] = _interp_along_axis(t, ts, grid, axis=axis_pos, xp=xp)
+            params[name] = _interp_along_axis(
+                t,
+                ts,
+                grid,
+                axis=axis_pos,
+                xp=xp,
+                interpolation=interpolation,
+            )
         return eval_fn(t, y, **params)
 
     return wrapped
@@ -1313,6 +1337,7 @@ def _wrap_propensity_fn_for_time_varying(
     time_varying_params: tuple[tuple[str, tuple[str, ...]], ...],
     time_axis_name: str,
     axes_meta: tuple[Mapping[str, Any], ...],
+    interpolation: str = "linear",
 ) -> ReactionPropensityFn:
     """Interpolate time-varying params before a reaction's propensity_fn runs.
 
@@ -1370,7 +1395,14 @@ def _wrap_propensity_fn_for_time_varying(
         for name, axis_pos in plan:
             if name in params:
                 grid = params.pop(name)
-                params[name] = _interp_along_axis(t, ts, grid, axis=axis_pos, xp=xp)
+                params[name] = _interp_along_axis(
+                    t,
+                    ts,
+                    grid,
+                    axis=axis_pos,
+                    xp=xp,
+                    interpolation=interpolation,
+                )
         return propensity_fn(t, y, **params)
 
     return wrapped
@@ -1887,6 +1919,7 @@ def _build_reaction_artifacts(  # ruff: ignore[complex-structure, too-many-local
                     time_varying_params=time_varying_params,
                     time_axis_name=time_axis_name,
                     axes_meta=tuple(axes_meta),
+                    interpolation=str(rhs.meta.get("time_interpolation", "linear")),
                 ),
             )
         )
@@ -1969,6 +2002,7 @@ def _wrap_time_varying_artifacts(
         time_varying_params=rhs.time_varying_params,
         time_axis_name=time_axis_name,
         axes_meta=axes_meta,
+        interpolation=str(rhs.meta.get("time_interpolation", "linear")),
     )
     wrapped_pytree_eval_fn = pytree_eval_fn
     if wrapped_pytree_eval_fn is not None:
@@ -1977,6 +2011,7 @@ def _wrap_time_varying_artifacts(
             time_varying_params=rhs.time_varying_params,
             time_axis_name=time_axis_name,
             axes_meta=axes_meta,
+            interpolation=str(rhs.meta.get("time_interpolation", "linear")),
         )
     return wrapped_eval_fn, wrapped_pytree_eval_fn
 
@@ -2086,6 +2121,7 @@ def _build_block_pytree_artifacts(
         time_varying_params=stripped.time_varying_params,
         time_axis_name=stripped_time_axis,
         axes_meta=stripped_axes_meta,
+        interpolation=str(stripped.meta.get("time_interpolation", "linear")),
     )
     if isinstance(synth_consts, _MappingABC) and synth_consts:
         raw_block_fn = _wrap_pytree_eval_fn_for_synth_consts(
