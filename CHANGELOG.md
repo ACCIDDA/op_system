@@ -9,6 +9,14 @@ version; format loosely follows
 
 ### Added
 
+- `CompiledRhs.reaction_gaps` and the provider's `reaction_gaps` option list
+  every transition that has no compiled reaction artifact. Each `ReactionGap`
+  gives its spec origin (including `chain:` stages), name, selectors, and a
+  reason (`unnamed`, `routing`, `fan_out`, `target_axis_not_on_source`,
+  `rate_axis_out_of_scope`, `unsupported_layout`, `compile_failed`, or
+  `expr_spec`), so reaction-only consumers can refuse to drop dynamics
+  silently (#244).
+
 - Time-indexed parameters support opt-in right-continuous hold interpolation
   with `time_interpolation: previous`, retaining linear interpolation by
   default. Flat, PyTree, block, and reaction evaluators share the policy;

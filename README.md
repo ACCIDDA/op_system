@@ -103,6 +103,7 @@ The compiled object exposes:
 | `block_pytree_eval_fn`, `block_template_shapes` | Per-block PyTree RHS with the first factorize axis stripped. |
 | `meta` | Normalized metadata (axes, state_axes, kernels, operators, reserved blocks). |
 | `operators` | Tuple of `OperatorDescriptor` preserving normalized names, state selectors, coefficients, directions, boundary conditions, and kernel metadata. |
+| `reactions`, `reaction_gaps` | One `CompiledReaction` per named transition with a reaction artifact, and one `ReactionGap` per transition without one (empty when every transition is covered). |
 
 ### Advection contract
 
@@ -236,6 +237,14 @@ publishing the consumed source at order one with `reactants_complete=false`;
 adaptive stochastic consumers should require complete metadata rather than
 try to infer catalysts from the rate expression. An explicit empty list marks
 a source-only zero-order reaction as complete.
+
+Not every transition publishes a reaction. `CompiledRhs.reaction_gaps` (and
+the provider's `reaction_gaps` option) lists each one that does not, with its
+spec origin (`transitions[1]`, `chain[0].forward[0]`), selectors, and a
+reason such as `unnamed`, `routing`, or `unsupported_layout`. An `expr` spec
+reports a single `expr_spec` gap. A consumer that executes only the reactions,
+such as a pure stochastic simulation, should reject a non-empty value rather
+than silently drop those dynamics.
 
 Source-only rates may also depend on population through a bound reduction,
 such as `sum_over(B[age:a] * N[age:a], age=a)`, while their destination pins
