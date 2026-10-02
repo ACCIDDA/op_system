@@ -13,8 +13,8 @@ The pairwise form moves one coordinate to another:
 
 An aging chain over `n` bins needs `n - 1` such entries. Each entry adds a
 masked term to every cell's equation, so the compile cost grows with the
-square of the number of bins. Pairwise entries also publish no reaction
-artifacts.
+square of the number of bins. A named pairwise entry publishes one point-to-
+point reaction per state, named `{name}_{state}`.
 
 The axis-wide form shifts every coordinate in a single entry:
 
@@ -117,6 +117,10 @@ A consumer that predates `offsets` fails its own metadata checks on these
 reactions. The destination axes no longer cover `full_axes`, so the reaction
 is rejected rather than silently treated as a no-op.
 
-The reactants metadata uses the consumed-source fallback, with
-`reactants_complete=False`. Axis-wide entries do not accept a `reactants`
-list.
+By default the reactants metadata is the consumed-source fallback, with
+`reactants_complete=False`. One entry generates a reaction per `apply_to`
+state, so it cannot list each one's consumed source. Instead, declare the
+reactants beyond the shifted state as `catalysts`; `catalysts: []` declares
+a first-order shift. The generator adds the consumed source, and each
+reaction reports `reactants_complete=True`, as adaptive tau-leaping requires.
+Both `coord_shift` forms accept `catalysts` and reject `reactants`.
