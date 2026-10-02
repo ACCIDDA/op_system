@@ -318,10 +318,110 @@ def test_routing_compiles_without_per_entry_expansion() -> None:
     assert elapsed < 20.0
 
 
-def test_routing_has_no_reaction_artifact() -> None:
-    """Named routing transitions are outside the reaction-artifact scope."""
-    compiled = compile_spec(_spec(3, [{**WANE, "name": "wane"}]))
-    assert compiled.reactions == ()
+def _reaction_drift(
+    compiled: CompiledRhs, state: dict[str, Any], params: dict[str, Any]
+) -> dict[str, np.ndarray]:
+    """Scatter propensities through the published reaction contract.
+
+    The trailing ``routed_axes`` dimensions give target coordinates.
+
+    Returns:
+        Drift per state template.
+    """
+    drift = {base: np.zeros(np.shape(value)) for base, value in state.items()}
+    for reaction in compiled.reactions:
+        assert reaction.from_base is not None
+        assert reaction.to_full_axes is not None
+        propensity = np.asarray(reaction.propensity_fn(0.0, state, **params))
+        n_from = len(reaction.from_axes)
+        assert propensity.shape == tuple(
+            np.shape(state[reaction.from_base])[reaction.full_axes.index(ax)]
+            for ax in reaction.from_axes
+        ) + tuple(
+            np.shape(state[reaction.to_base])[reaction.to_full_axes.index(ax)]
+            for ax in reaction.routed_axes
+        )
+        for index in np.ndindex(propensity.shape):
+            channel = dict(zip(reaction.from_axes, index[:n_from], strict=True))
+            source = channel | dict(reaction.from_pinned)
+            drift[reaction.from_base][tuple(source[a] for a in reaction.full_axes)] -= (
+                propensity[index]
+            )
+            target = {a: channel[a] for a in reaction.to_axes} | dict(reaction.pinned)
+            target |= dict(zip(reaction.routed_axes, index[n_from:], strict=True))
+            drift[reaction.to_base][
+                tuple(target[a] for a in reaction.to_full_axes)
+            ] += propensity[index]
+    return drift
+
+
+@pytest.mark.parametrize("backend", ["numpy", "jax"])
+def test_routing_reactions_reconstruct_the_rhs(backend: str) -> None:
+    """Routing publishes one channel per source cell and target coordinate.
+
+    Self-routing masks its no-op diagonal, including the generator's
+    negative diagonal; the vax flip keeps it because it moves mass.
+    """
+    xp = np if backend == "numpy" else pytest.importorskip("jax.numpy")
+    compiled = compile_spec(
+        _spec(3, [{**WANE, "name": "wane"}, {**VACC, "name": "vaccinate"}])
+    )
+    assert compiled.reaction_gaps == ()
+    wane, vaccinate = compiled.reactions
+    assert (wane.from_axes, wane.to_axes, wane.routed_axes) == (
+        ("loc", "vax", "imm"),
+        ("loc", "vax"),
+        ("imm",),
+    )
+    assert wane.sum_axes == ("imm",)
+    assert vaccinate.from_pinned == (("vax", 0),)
+    assert vaccinate.pinned == (("vax", 1),)
+    y, params = _params(3)
+    params["G"] -= 2 * np.diag(params["G"].sum(1))
+    state = {"X": y}
+    wane_p = np.asarray(
+        wane.propensity_fn(
+            0.0,
+            {"X": xp.asarray(y)},
+            w=xp.asarray(params["w"]),
+            G=xp.asarray(params["G"]),
+        )
+    )
+    assert np.all(np.diagonal(wane_p, axis1=-2, axis2=-1) == 0)
+    assert np.all(wane_p >= 0)
+    rhs = _eval(compiled)(0.0, state, **params)
+    drift = _reaction_drift(compiled, state, params)
+    np.testing.assert_allclose(drift["X"], np.asarray(rhs["X"]), rtol=1e-12, atol=1e-12)
+
+
+def test_fanout_reactions_reconstruct_the_rhs() -> None:
+    """Fan-out publishes one channel per source cell and target coordinate."""
+    compiled = compile_spec(
+        _fanout_spec(
+            3,
+            {
+                "name": "reset",
+                "from": "I[age,loc]",
+                "to": "X[age,loc,imm:j]",
+                "rate": "r * w[imm:j]",
+            },
+        )
+    )
+    assert compiled.reaction_gaps == ()
+    (reset,) = compiled.reactions
+    assert (reset.from_axes, reset.to_axes, reset.routed_axes, reset.sum_axes) == (
+        ("age", "loc"),
+        ("age", "loc"),
+        ("imm",),
+        (),
+    )
+    rng = np.random.default_rng(248)
+    state = {"I": rng.uniform(1, 5, (2, 3)), "X": rng.uniform(1, 5, (2, 3, 3))}
+    params = {"r": 0.7, "w": rng.uniform(0, 1, 3)}
+    rhs = _eval(compiled)(0.0, state, **params)
+    drift = _reaction_drift(compiled, state, params)
+    for base, value in rhs.items():
+        np.testing.assert_allclose(drift[base], np.asarray(value), rtol=1e-12)
 
 
 @pytest.mark.parametrize(

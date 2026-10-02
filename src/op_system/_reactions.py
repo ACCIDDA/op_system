@@ -33,6 +33,11 @@ artifact's scope. Transitions outside this scope are simply omitted from
 the artifact tuple, not an error -- mirrors how ``history_requirements``
 is built opportunistically elsewhere in this package.
 
+Routing (``X[imm:i] -> X[imm:j]``) and target-only fan-out
+(``I[age] -> X[age, imm:j]``) transitions ARE in scope: their routed target
+coordinate becomes a trailing channel dimension (``routed_axes``), so every
+firing still has one source cell and one destination cell.
+
 ``from: null`` SOURCE-ONLY transitions (an exogenous hazard with no
 compartment to deplete -- e.g. cross-district case importation) ARE in
 scope: unlike the narrowing above, a source-only transition's firing-cell
@@ -66,6 +71,7 @@ from op_system._helpers import _get_required_str
 from op_system._ir import (
     Apply,
     AxisIndex,
+    AxisKind,
     Expr,
     Reduce,
     Subscript,
@@ -205,6 +211,12 @@ class ReactionArtifactIR:
             templates have different axes, for example an axis-less source
             depositing into a pinned cell of a templated state, or a
             templated source collapsing into an axis-less one.
+        routed_axes: Target axes whose coordinate is a trailing propensity
+            dimension, for routing (``X[imm:i] -> X[imm:j]``) and target-only
+            fan-out (``I[age] -> X[age, imm:j]``) transitions. The propensity
+            is shaped ``from_axes + routed_axes``: one channel per source
+            cell and target coordinate. A routed axis is in neither
+            ``to_axes`` nor ``pinned``.
     """
 
     name: str
@@ -226,6 +238,7 @@ class ReactionArtifactIR:
     from_selector: str | None = None
     to_selector: str = ""
     to_full_axes: tuple[str, ...] | None = None
+    routed_axes: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -248,8 +261,6 @@ class ReactionGap:
         reason: Why no artifact exists:
 
             - ``unnamed``: the transition has no ``name``.
-            - ``routing``: matrix routing with ``axis:alias`` selectors.
-            - ``fan_out``: a target-only ``axis:alias`` fan-out.
             - ``target_axis_not_on_source``: ``to`` has a wildcard axis
               that ``from`` lacks.
             - ``rate_axis_out_of_scope``: the rate has a free axis outside
@@ -813,6 +824,127 @@ def _build_alias_bodies(
     return _resolve_alias_templates(parsed, axis_names=frozenset(axis_lookup))
 
 
+@dataclass(frozen=True, slots=True)
+class _Route:
+    """The ``axis:alias`` structure of a routing or fan-out transition."""
+
+    axis: str
+    source_alias: str | None
+    target_alias: str
+
+
+def _alias_token(token: Any) -> tuple[str, str] | None:  # ruff: ignore[any-type]
+    """Return ``(axis, alias)`` for an ``axis:alias`` wildcard token."""
+    if isinstance(token, WildcardToken) and ":" in token.axis:
+        axis, alias = (part.strip() for part in token.axis.split(":", 1))
+        return axis, alias
+    return None
+
+
+def _find_route(frm_tokens: list[Any], to_tokens: list[Any]) -> _Route | None:
+    """Describe a transition's routed axis, if it has one.
+
+    Returns:
+        The routed axis and aliases, or ``None`` for an ordinary transition.
+        Deterministic normalization has already validated the structure.
+    """
+    targets = [a for a in (_alias_token(t) for t in to_tokens) if a]
+    if len(targets) != 1:
+        return None
+    axis, target_alias = targets[0]
+    sources = [a for a in (_alias_token(t) for t in frm_tokens) if a]
+    return _Route(
+        axis=axis,
+        source_alias=sources[0][1] if sources else None,
+        target_alias=target_alias,
+    )
+
+
+def _unalias_tokens(tokens: list[Any]) -> list[Any]:
+    """Replace ``axis:alias`` wildcard tokens with the bare axis.
+
+    Returns:
+        Tokens naming real axes only.
+    """
+    out: list[Any] = []
+    for token in tokens:
+        aliased = _alias_token(token)
+        out.append(WildcardToken(axis=aliased[0]) if aliased else token)
+    return out
+
+
+def routed_axis_label(axis: str, from_axes: tuple[str, ...]) -> str:
+    """Return the propensity label for a routed target axis.
+
+    A routing transition's source also varies over the routed axis, so the
+    target coordinate is labelled ``{axis}#to`` to keep the two dimensions
+    apart during lowering. A fan-out source lacks the axis, so it keeps its
+    own name.
+
+    Returns:
+        The synthetic or real axis label.
+    """
+    return f"{axis}#to" if axis in from_axes else axis
+
+
+def routing_offdiag_axis(tr_map: Mapping[str, Any]) -> str | None:
+    """Return the routed axis whose diagonal is a no-op, if any.
+
+    When a routing transition's source and target are the same slice apart
+    from the routed axis, ``i == j`` moves nothing; deterministically the
+    diagonal inflow and outflow cancel, whatever ``R[i, i]`` is (a waning
+    generator's negative diagonal included). Its propensity must therefore
+    be masked to zero.
+
+    Returns:
+        The routed axis, or ``None`` when the diagonal moves mass or the
+        transition does not route a source axis.
+    """
+    frm, to = tr_map.get("from"), tr_map.get("to")
+    if not isinstance(frm, str) or not isinstance(to, str):
+        return None
+    frm_base, frm_tokens = parse_selector(frm)
+    to_base, to_tokens = parse_selector(to)
+    route = _find_route(list(frm_tokens), list(to_tokens))
+    if route is None or route.source_alias is None or frm_base != to_base:
+        return None
+    if _unalias_tokens(list(frm_tokens)) != _unalias_tokens(list(to_tokens)):
+        return None
+    return route.axis
+
+
+def offdiag_constant_name(axis: str) -> str:
+    """Return the synthesized ``[axis, axis]`` off-diagonal mask's name.
+
+    Returns:
+        Shaped-parameter name for a matrix that is 0 on the diagonal and 1
+        elsewhere.
+    """
+    return f"__op_system_offdiag__{axis}"
+
+
+def _bind_route_aliases(expr: Expr, route: _Route, label: str) -> Expr:
+    """Turn the rate's routing aliases into free propensity axes.
+
+    ``axis:source_alias`` becomes the free source axis and
+    ``axis:target_alias`` the free ``label`` axis.
+
+    Returns:
+        The rewritten IR.
+    """
+    if isinstance(expr, Subscript):
+        indices: list[AxisIndex] = []
+        for idx in expr.indices:
+            if idx.axis == route.axis and idx.coord == route.source_alias:
+                indices.append(AxisIndex(axis=route.axis))
+            elif idx.axis == route.axis and idx.coord == route.target_alias:
+                indices.append(AxisIndex(axis=label, kind=AxisKind.FREE))
+            else:
+                indices.append(idx)
+        return Subscript(name=expr.name, indices=tuple(indices))
+    return _map_children(expr, lambda e: _bind_route_aliases(e, route, label))
+
+
 def _split_shift_offsets(
     shift: object, to_wc_axes: list[str]
 ) -> tuple[list[str], tuple[tuple[str, int], ...]]:
@@ -847,6 +979,29 @@ def _mask_stay_sources(shift: object, propensity: Expr) -> Expr:
         indices=(AxisIndex(axis=shift.axis),),
     )
     return Apply(op="*", args=(propensity, keep))
+
+
+def _mask_routing_diagonal(
+    tr_map: Mapping[str, Any], route_label: str | None, propensity: Expr
+) -> Expr:
+    """Zero a same-slice routing propensity on its no-op diagonal.
+
+    Returns:
+        ``propensity`` times the synthesized off-diagonal mask, or
+        ``propensity`` itself when the diagonal moves mass or the
+        transition does not route a source axis.
+    """
+    offdiag_axis = routing_offdiag_axis(tr_map)
+    if offdiag_axis is None or route_label is None:
+        return propensity
+    offdiag = Subscript(
+        name=offdiag_constant_name(offdiag_axis),
+        indices=(
+            AxisIndex(axis=offdiag_axis),
+            AxisIndex(axis=route_label, kind=AxisKind.FREE),
+        ),
+    )
+    return Apply(op="*", args=(propensity, offdiag))
 
 
 def build_reaction_artifacts_ir(  # ruff: ignore[too-many-arguments, too-many-locals, too-many-statements]
@@ -889,8 +1044,8 @@ def build_reaction_artifacts_ir(  # ruff: ignore[too-many-arguments, too-many-lo
     Returns:
         ``(artifacts, gaps)``. ``artifacts`` has one
         :class:`ReactionArtifactIR` per named, in-scope transition, in
-        declaration order. Transitions without a ``name:``, routing and
-        fan-out transitions, transitions whose ``to``-side introduces a
+        declaration order. Transitions without a ``name:``, transitions
+        whose ``to``-side introduces a
         wildcard axis absent from ``from`` (not applicable to a source-only
         transition, which has no ``from``-side to compare against), and
         transitions whose rate (after alias inlining) references a free axis
@@ -923,8 +1078,20 @@ def build_reaction_artifacts_ir(  # ruff: ignore[too-many-arguments, too-many-lo
         to_s = _get_required_str(tr_map, idx=-1, key="to")
         rate_s = _get_required_str(tr_map, idx=-1, key="rate")
         to_base, to_tokens = parse_selector(to_s)
+        route = (
+            None
+            if frm_raw is None
+            else _find_route(list(parse_selector(str(frm_raw))[1]), list(to_tokens))
+        )
+        routed_axes = () if route is None else (route.axis,)
+        to_tokens = _unalias_tokens(list(to_tokens))
         to_wc_axes, offsets = _split_shift_offsets(
-            shift, _in_order_wildcard_axes(list(to_tokens))
+            shift,
+            [
+                ax
+                for ax in _in_order_wildcard_axes(list(to_tokens))
+                if ax not in routed_axes
+            ],
         )
 
         if source_only:
@@ -938,16 +1105,11 @@ def build_reaction_artifacts_ir(  # ruff: ignore[too-many-arguments, too-many-lo
             frm_wc_set = set(to_wc_axes)
         else:
             frm_s = _get_required_str(tr_map, idx=-1, key="from")
-            frm_base, frm_tokens = parse_selector(frm_s)
+            frm_base, raw_frm_tokens = parse_selector(frm_s)
+            frm_tokens = _unalias_tokens(list(raw_frm_tokens))
             frm_wc_axes = _in_order_wildcard_axes(list(frm_tokens))
             frm_wc_set = set(frm_wc_axes)
 
-            # Routing transitions (``axis:alias``) scatter one source cell
-            # over many targets; they have no reaction artifact yet.
-            if any(":" in ax for ax in to_wc_axes):
-                routed = any(":" in ax for ax in frm_wc_axes)
-                gaps.append(_transition_gap(tr_map, "routing" if routed else "fan_out"))
-                continue
             # to-side must not introduce a wildcard axis absent from from-side.
             if any(ax not in frm_wc_set for ax in to_wc_axes):
                 gaps.append(_transition_gap(tr_map, "target_axis_not_on_source"))
@@ -958,6 +1120,11 @@ def build_reaction_artifacts_ir(  # ruff: ignore[too-many-arguments, too-many-lo
             ir_rate_raw = _substitute_alias_refs(
                 ir_rate_raw, alias_bodies, axis_names=axis_names
             )
+        route_label = None
+        if route is not None:
+            # Each (source cell, target coordinate) pair is its own channel.
+            route_label = routed_axis_label(route.axis, tuple(frm_wc_axes))
+            ir_rate_raw = _bind_route_aliases(ir_rate_raw, route, route_label)
         # Rate must not reference an axis outside the from-side wildcard
         # set (other than the time axis, which is handled separately by
         # the engine, not baked into the propensity template).
@@ -967,7 +1134,9 @@ def build_reaction_artifacts_ir(  # ruff: ignore[too-many-arguments, too-many-lo
         # same scope as one written directly in the rate.
         rate_axes = _free_axes_in(ir_rate_raw, shaped={}, memo={})
         if any(
-            ax not in frm_wc_set and ax != time_axis_name and ax in axis_lookup
+            ax not in frm_wc_set
+            and ax not in {time_axis_name, route_label}
+            and ax in axis_lookup
             for ax in rate_axes
         ):
             gaps.append(_transition_gap(tr_map, "rate_axis_out_of_scope"))
@@ -1030,6 +1199,12 @@ def build_reaction_artifacts_ir(  # ruff: ignore[too-many-arguments, too-many-lo
             propensity_ir_reduce = _mask_stay_sources(
                 shift, Apply(op="*", args=(rate_ir_reduce, from_sub))
             )
+            propensity_ir_full = _mask_routing_diagonal(
+                tr_map, route_label, propensity_ir_full
+            )
+            propensity_ir_reduce = _mask_routing_diagonal(
+                tr_map, route_label, propensity_ir_reduce
+            )
 
             # Every from-side pinned axis (full_axes minus from_axes) needs
             # its own coordinate recorded separately from `pinned` -- for a
@@ -1084,6 +1259,7 @@ def build_reaction_artifacts_ir(  # ruff: ignore[too-many-arguments, too-many-lo
                 from_selector=None if source_only else str(frm_raw),
                 to_selector=to_s,
                 to_full_axes=tuple(tok.axis for tok in to_tokens),
+                routed_axes=routed_axes,
             )
         )
 

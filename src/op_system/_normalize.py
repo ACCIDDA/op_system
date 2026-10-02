@@ -105,6 +105,8 @@ from op_system._reactions import (
     ReactionGap,
     _apply_axis_substitution,
     build_reaction_artifacts_ir,
+    offdiag_constant_name,
+    routing_offdiag_axis,
 )
 from op_system._templates import (
     PinnedToken,
@@ -2061,6 +2063,18 @@ def normalize_transitions_rhs(  # ruff: ignore[complex-structure, too-many-branc
     shift_axes, shift_values = _discover_coord_shift_constants(
         transitions_raw, axis_lookup=axis_lookup_dict
     )
+    # Routing reactions mask their no-op diagonal (see op_system._reactions).
+    for tr in transitions_raw:
+        offdiag_axis = routing_offdiag_axis(tr) if isinstance(tr, dict) else None
+        if offdiag_axis is None:
+            continue
+        n_coords = len(axis_lookup_dict[offdiag_axis])
+        offdiag_name = offdiag_constant_name(offdiag_axis)
+        shift_axes[offdiag_name] = (offdiag_axis, offdiag_axis)
+        shift_values[offdiag_name] = tuple(
+            tuple(0.0 if i == j else 1.0 for j in range(n_coords))
+            for i in range(n_coords)
+        )
     if pinned_mask_values or shift_values:
         # Register one-hot masks and shift matrices as shaped params so the
         # vectorizer's extra-param-buffers plumbing assembles them at eval

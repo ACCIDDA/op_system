@@ -52,7 +52,7 @@ from op_system._ir import (
 )
 from op_system._normalize import ExprRhs, TransitionsRhs
 from op_system._operators import OperatorDescriptor
-from op_system._reactions import ReactionGap, reaction_gap_for
+from op_system._reactions import ReactionGap, reaction_gap_for, routed_axis_label
 from op_system._symbols import parse_expression_string
 
 if TYPE_CHECKING:
@@ -369,6 +369,17 @@ class CompiledReaction:
     #: an axis-less state. ``None`` only on reactions built without it, in
     #: which case both templates share ``full_axes``.
     to_full_axes: tuple[str, ...] | None = None
+    #: Target axes whose coordinate is a trailing propensity dimension, for
+    #: routing (``X[imm:i] -> X[imm:j]``) and target-only fan-out
+    #: (``I[age] -> X[age, imm:j]``) reactions. ``propensity_fn`` returns an
+    #: array shaped ``from_axes + routed_axes``: the channel at source index
+    #: ``i`` and target index ``j`` moves one unit from the source cell to
+    #: the target cell whose routed coordinate is ``j``. A routed axis is in
+    #: neither ``to_axes`` nor ``pinned``; when the routed axis is also a
+    #: source axis it appears in ``sum_axes``, since many sources deposit
+    #: into one target. Diagonal channels of a same-slice routing are
+    #: masked to zero propensity. Empty for every other reaction.
+    routed_axes: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -1958,11 +1969,18 @@ def _build_reaction_artifacts(  # ruff: ignore[complex-structure, too-many-local
         # compiles correctly for the identical rate expression because it
         # never uses propensity_ir_full's equivalent for Reduce-bearing
         # rates in the first place.
+        # A routed target coordinate is a trailing channel dimension.
+        route_labels = tuple(routed_axis_label(ax, r.from_axes) for ax in r.routed_axes)
         code = vec._compile_ir_expr(  # ruff: ignore[private-member-access]
             r.propensity_ir_reduce,
-            target_axes=r.from_axes,
+            target_axes=r.from_axes + route_labels,
             context=context,
             filename="<op_system_reaction>",
+            axis_alias={
+                label: ax
+                for label, ax in zip(route_labels, r.routed_axes, strict=True)
+                if label != ax
+            },
         )
         if code is None:
             # Opportunistic: omit, don't fail the whole compile.
@@ -2009,6 +2027,7 @@ def _build_reaction_artifacts(  # ruff: ignore[complex-structure, too-many-local
                 ),
                 offsets=r.offsets,
                 to_full_axes=r.to_full_axes,
+                routed_axes=r.routed_axes,
                 pinned=pinned,
                 from_pinned=from_pinned,
                 reactants=reactants,
@@ -2021,8 +2040,11 @@ def _build_reaction_artifacts(  # ruff: ignore[complex-structure, too-many-local
                             extra_param_buffers=extra_param_buffers,
                             state_bases=state_bases,
                             broadcast_shape=(
-                                tuple(len(axis_coords[axis]) for axis in r.from_axes)
-                                if r.from_base is None
+                                tuple(
+                                    len(axis_coords[axis])
+                                    for axis in r.from_axes + r.routed_axes
+                                )
+                                if r.from_base is None or r.routed_axes
                                 else None
                             ),
                         ),
