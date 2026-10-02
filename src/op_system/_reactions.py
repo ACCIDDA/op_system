@@ -64,7 +64,7 @@ from op_system._ir import (
     walk,
 )
 from op_system._ir_expand import expand_reduce_pointwise
-from op_system._ir_templates import expand_inline_templates
+from op_system._ir_templates import _free_axes_in, expand_inline_templates
 from op_system._templates import (
     PinnedToken,
     WildcardToken,
@@ -807,12 +807,11 @@ def build_reaction_artifacts_ir(  # ruff: ignore[too-many-arguments, too-many-lo
         # Rate must not reference an axis outside the from-side wildcard
         # set (other than the time axis, which is handled separately by
         # the engine, not baked into the propensity template).
-        rate_axes = {
-            ix.axis
-            for sub in iter_subscripts(ir_rate_raw)
-            for ix in sub.indices
-            if ix.axis is not None
-        }
+        # Only FREE indices determine the firing-cell shape. Coordinates
+        # pinned literally or bound inside a Reduce do not create channels.
+        # Inspect after alias inlining so a reduction in an alias has the
+        # same scope as one written directly in the rate.
+        rate_axes = _free_axes_in(ir_rate_raw, shaped={}, memo={})
         if any(
             ax not in frm_wc_set and ax != time_axis_name and ax in axis_lookup
             for ax in rate_axes

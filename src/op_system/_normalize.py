@@ -60,6 +60,7 @@ from op_system._ir import (
     walk,
 )
 from op_system._ir_templates import (
+    _free_axes_in,
     _InlineMemo,
     expand_inline_templates,
     inline_aliases,
@@ -1306,9 +1307,13 @@ def _build_transition_equations_ir(  # ruff: ignore[complex-structure, too-many-
                     wildcard_axes.append(tok.axis)
                     seen_wc.add(tok.axis)
             skip_shaped = set(shaped)
+            # A reduction binding is local to the rate, not an additional
+            # transition wildcard. Otherwise a pinned birth destination
+            # receives the same reduced flux once per bound coordinate.
+            ir_rate_raw = parse_expr_to_ir(rate_s, lower_helpers=True)
             expr_phs = _extract_placeholders_from_expr(
                 rate_s, shaped_param_names=skip_shaped
-            )
+            ) & _free_axes_in(ir_rate_raw, shaped={}, memo={})
             if name_s:
                 expr_phs |= _extract_placeholders_from_expr(
                     name_s, shaped_param_names=skip_shaped
@@ -1324,9 +1329,6 @@ def _build_transition_equations_ir(  # ruff: ignore[complex-structure, too-many-
                     )
                 wildcard_axes.append(ph)
                 seen_wc.add(ph)
-
-            # Parse rate to IR once (Reduce nodes preserved for apply_along)
-            ir_rate_raw = parse_expr_to_ir(rate_s, lower_helpers=True)
 
             # Partition wildcard axes by where they appear, to decide whether
             # a template-uniform Reduce node can stand in for per-combo flow
