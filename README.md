@@ -306,8 +306,12 @@ aliases on that axis; other axes are shared or pinned as usual. When
 `from` and `to` are otherwise the same slice, the diagonal `K[i, i]` is a
 no-op. One routed axis per transition; it cannot be a `factorize_axes`
 block axis. Routing is lowered once per template, so its cost does not grow
-with the number of matrix entries. It has no per-transition `reactions`
-artifact yet.
+with the number of matrix entries. A named routing transition publishes one
+reaction whose propensity is shaped like the source plus the routed target
+axis (`routed_axes`): the channel for source `i` and target `j` has hazard
+`R[i, j] X[i]`. When source and target are otherwise the same slice, its
+no-op diagonal channels have zero propensity, so a generator's negative
+diagonal never becomes a hazard.
 
 A target-only alias fans one source cell into a target axis the source does
 not own:
