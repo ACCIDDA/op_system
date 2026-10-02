@@ -350,7 +350,13 @@ spec:
 ```
 
 `chain` synthesizes the staged compartments (`I1..I3`) and the internal
-forward / exit transitions; declare only the base `I` in `state`.
+forward / exit transitions; declare only the base `I` in `state`. The
+generated transitions publish reactions named `I_entry`, `I_advance_1`,
+`I_advance_2`, and `I_exit`. To mark them complete for adaptive stochastic
+solvers, list the reactants beyond each consumed stage: `entry.catalysts`
+for the entry rate (here `[{state: I1, order: 1}, ...]` for every
+infectious stage it reads) and the chain's `catalysts` for the forward and
+exit rates (`[]` when they are first order).
 
 ### Axis-wide aging with `coord_shift`
 

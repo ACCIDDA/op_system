@@ -65,34 +65,10 @@ def test_fully_covered_model_has_no_gaps() -> None:
             id="unnamed",
         ),
         pytest.param(
-            {
-                "kind": "transitions",
-                "axes": [AGE],
-                "state": ["S[age]", "R[age]"],
-                "chain": [
-                    {
-                        "name": "I[age]",
-                        "length": 2,
-                        "entry": {"from": "S[age]", "rate": "b"},
-                        "forward": ["g"],
-                        "exit": {"to": "R[age]", "rate": "g"},
-                    }
-                ],
-                "transitions": [],
-            },
-            [
-                ("chain[0].entry", None, "S[age]", "I1[age]", "unnamed"),
-                ("chain[0].forward[0]", None, "I1[age]", "I2[age]", "unnamed"),
-                ("chain[0].exit", None, "I2[age]", "R[age]", "unnamed"),
-            ],
-            id="chain",
-        ),
-        pytest.param(
             _transitions(
                 ["S[age]"],
                 [
                     {
-                        "name": "age_up",
                         "coord_shift": {"age": "c -> a"},
                         "rate": "b",
                         "apply_to": ["S"],

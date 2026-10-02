@@ -266,6 +266,45 @@ def _apply_expr_chains(
                 equations_map[sink_s] = f"({out_rate})*{stage_names[-1]}"
 
 
+def _normalize_catalysts(raw: object, *, field: str) -> list[dict[str, Any]] | None:
+    """Validate an optional ``catalysts`` list for generated transitions.
+
+    Catalysts are the molecular reactants beyond the consumed source, which
+    the generator adds itself. Shapes and selectors are validated with the
+    generated transition's ``reactants``.
+
+    Returns:
+        The catalyst mappings, or ``None`` when ``raw`` is absent.
+
+    Raises:
+        InvalidRhsSpecError: If ``raw`` is not a list of mappings.
+    """
+    if raw is None:
+        return None
+    if not isinstance(raw, list):
+        raise InvalidRhsSpecError(detail=f"{field} must be a list")
+    return [
+        dict(_ensure_mapping(item, name=f"{field}[{i}]")) for i, item in enumerate(raw)
+    ]
+
+
+def _with_reactants(
+    transition: dict[str, Any], catalysts: list[dict[str, Any]] | None
+) -> dict[str, Any]:
+    """Declare a generated transition's complete reactants.
+
+    Returns:
+        ``transition``, with ``reactants`` set to its consumed source at
+        order one plus ``catalysts`` when catalysts were declared.
+    """
+    if catalysts is not None:
+        transition["reactants"] = [
+            {"state": transition["from"], "order": 1},
+            *catalysts,
+        ]
+    return transition
+
+
 def _apply_transition_chains(
     *,
     chains: list[Any],
@@ -273,12 +312,22 @@ def _apply_transition_chains(
     transitions_raw: list[dict[str, Any]],
     state_set: set[str],
 ) -> None:
-    """Apply chain helper for transitions kind by appending transitions."""
+    """Apply chain helper for transitions kind by appending transitions.
+
+    Generated transitions are named ``{base}_entry``,
+    ``{base}_advance_{k}`` (stage ``k`` to ``k + 1``), and ``{base}_exit``,
+    so each publishes a reaction artifact. ``entry.catalysts`` and the
+    chain's ``catalysts`` declare their reactants beyond the consumed stage.
+    """
     for c_idx, chain in enumerate(chains):
         stage_names, forward_rates, entry_cfg, exit_cfg = _validate_chain_entry(
             chain=chain,
             idx=c_idx,
             state_set=state_set,
+        )
+        base = parse_selector(chain["name"])[0]
+        stage_catalysts = _normalize_catalysts(
+            chain.get("catalysts"), field=f"chain[{c_idx}].catalysts"
         )
 
         for stage_name in stage_names:
@@ -288,31 +337,50 @@ def _apply_transition_chains(
 
         if entry_cfg is not None:
             entry_from, entry_rate = entry_cfg
-            transitions_raw.append({
-                "from": entry_from,
-                "to": stage_names[0],
-                "rate": entry_rate,
-                ORIGIN_KEY: f"chain[{c_idx}].entry",
-            })
+            transitions_raw.append(
+                _with_reactants(
+                    {
+                        "name": f"{base}_entry",
+                        "from": entry_from,
+                        "to": stage_names[0],
+                        "rate": entry_rate,
+                        ORIGIN_KEY: f"chain[{c_idx}].entry",
+                    },
+                    _normalize_catalysts(
+                        chain["entry"].get("catalysts"),
+                        field=f"chain[{c_idx}].entry.catalysts",
+                    ),
+                )
+            )
 
         transitions_raw.extend(
-            {
-                "from": stage_names[i],
-                "to": stage_names[i + 1],
-                "rate": forward_rates[i],
-                ORIGIN_KEY: f"chain[{c_idx}].forward[{i}]",
-            }
+            _with_reactants(
+                {
+                    "name": f"{base}_advance_{i + 1}",
+                    "from": stage_names[i],
+                    "to": stage_names[i + 1],
+                    "rate": forward_rates[i],
+                    ORIGIN_KEY: f"chain[{c_idx}].forward[{i}]",
+                },
+                stage_catalysts,
+            )
             for i in range(len(stage_names) - 1)
         )
 
         if exit_cfg is not None:
             sink_s, sink_rate = exit_cfg
-            transitions_raw.append({
-                "from": stage_names[-1],
-                "to": sink_s,
-                "rate": sink_rate or forward_rates[-1],
-                ORIGIN_KEY: f"chain[{c_idx}].exit",
-            })
+            transitions_raw.append(
+                _with_reactants(
+                    {
+                        "name": f"{base}_exit",
+                        "from": stage_names[-1],
+                        "to": sink_s,
+                        "rate": sink_rate or forward_rates[-1],
+                        ORIGIN_KEY: f"chain[{c_idx}].exit",
+                    },
+                    stage_catalysts,
+                )
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -595,10 +663,7 @@ def _expand_axis_wide_shift(
     """
     shift = _AxisShift.from_mapping(tr["coord_shift"], axis_lookup=axis_lookup)
     _validate_coord_shift_common(tr)
-    if "reactants" in tr:
-        raise InvalidRhsSpecError(
-            detail="axis-wide coord_shift does not accept 'reactants'",
-        )
+    catalysts = _coord_shift_catalysts(tr)
     name = tr.get("name")
     out: list[dict[str, Any]] = []
     for base in expand_apply_to(
@@ -624,8 +689,30 @@ def _expand_axis_wide_shift(
         }
         if isinstance(name, str) and name.strip():
             entry["name"] = f"{name.strip()}_{base}"
-        out.append(entry)
+        out.append(_with_reactants(entry, catalysts))
     return out
+
+
+def _coord_shift_catalysts(tr: Mapping[str, Any]) -> list[dict[str, Any]] | None:
+    """Read a ``coord_shift`` entry's ``catalysts``, rejecting ``reactants``.
+
+    One entry generates a transition per ``apply_to`` state, so it cannot
+    name each one's consumed source; the generator adds it.
+
+    Returns:
+        The catalyst mappings, or ``None`` when none are declared.
+
+    Raises:
+        InvalidRhsSpecError: If the entry declares ``reactants``.
+    """
+    if "reactants" in tr:
+        raise InvalidRhsSpecError(
+            detail=(
+                "coord_shift does not accept 'reactants'; declare reactants "
+                "beyond the shifted state as 'catalysts'"
+            ),
+        )
+    return _normalize_catalysts(tr.get("catalysts"), field="coord_shift.catalysts")
 
 
 def _discover_coord_shift_constants(
@@ -732,6 +819,9 @@ def _expand_pairwise_shift(
     axis_name, from_coord, to_coord, apply_to, rate_s = _validate_coord_shift_entry(
         tr, axis_lookup
     )
+    catalysts = _coord_shift_catalysts(tr)
+    name = tr.get("name")
+    prefix = name.strip() if isinstance(name, str) and name.strip() else None
     concrete: list[dict[str, Any]] = []
     from_frag = f"{axis_name}_{_sanitize_fragment(from_coord)}"
     to_frag = f"{axis_name}_{_sanitize_fragment(to_coord)}"
@@ -749,17 +839,22 @@ def _expand_pairwise_shift(
             state_template_map=state_template_map,
         )
         if templated is not None:
-            concrete.append(templated)
-        else:
-            concrete.extend(
-                _expand_coord_shift_for_base(
-                    base=base,
-                    from_frag=from_frag,
-                    to_frag=to_frag,
-                    rate_s=rate_s,
-                    state_expanded=state_expanded,
-                )
-            )
+            if prefix is not None:
+                templated["name"] = f"{prefix}_{base}"
+            concrete.append(_with_reactants(templated, catalysts))
+            continue
+        # Per-cell fallback: concrete cell names are not reactant selectors,
+        # so these keep the consumed-source fallback.
+        for cell in _expand_coord_shift_for_base(
+            base=base,
+            from_frag=from_frag,
+            to_frag=to_frag,
+            rate_s=rate_s,
+            state_expanded=state_expanded,
+        ):
+            if prefix is not None:
+                cell["name"] = f"{prefix}_{cell['from']}"
+            concrete.append(cell)
     return concrete
 
 

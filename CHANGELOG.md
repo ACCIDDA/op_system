@@ -29,6 +29,13 @@ version; format loosely follows
   default. Flat, PyTree, block, and reaction evaluators share the policy;
   compiled metadata and provider options expose the immutable time coordinates
   and forcing breakpoints. Single-coordinate time tables remain constant (#240).
+- `chain:` transitions publish reactions named `{base}_entry`,
+  `{base}_advance_{k}`, and `{base}_exit`, and named pairwise `coord_shift`
+  entries publish `{name}_{state}`. Chains (`entry.catalysts`, `catalysts`)
+  and both `coord_shift` forms (`catalysts`) declare reactants beyond the
+  consumed source, so the generated reactions can be complete for adaptive
+  tau-leaping. `coord_shift` entries now reject `reactants`, which pairwise
+  entries previously ignored (#247).
 
 ### Fixed
 
