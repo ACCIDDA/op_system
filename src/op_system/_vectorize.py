@@ -223,8 +223,12 @@ def _compile_ir_expr(
     target_axes: tuple[str, ...],
     context: _LoweringContext,
     filename: str,
+    axis_alias: Mapping[str, str] | None = None,
 ) -> CodeType | None:
     """Lower IR to AST and compile it into an eval-ready code object.
+
+    ``axis_alias`` maps synthetic target labels (such as a routed target
+    ``imm#to``) to their real axes, as for same-axis-twice reductions.
 
     Returns:
         Code object on success, otherwise ``None`` when lowering/compile fails.
@@ -234,7 +238,8 @@ def _compile_ir_expr(
             expr,
             target_axes=target_axes,
             buffer_axes=context.buffer_axes,
-            axis_names=context.axis_names,
+            axis_names=context.axis_names | frozenset(axis_alias or {}),
+            axis_alias=axis_alias,
             reducible_axes=context.reducible_axes,
             axis_weights=context.axis_weights,
             axis_coords=context.axis_coords,

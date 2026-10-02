@@ -81,39 +81,6 @@ def test_fully_covered_model_has_no_gaps() -> None:
         ),
         pytest.param(
             _transitions(
-                ["X[imm]"],
-                [
-                    {
-                        "name": "wane",
-                        "from": "X[imm:i]",
-                        "to": "X[imm:j]",
-                        "rate": "K[imm:i, imm:j]",
-                    }
-                ],
-                IMM,
-            ),
-            [("transitions[0]", "wane", "X[imm:i]", "X[imm:j]", "routing")],
-            id="routing",
-        ),
-        pytest.param(
-            _transitions(
-                ["I[age]", "X[age,imm]"],
-                [
-                    {
-                        "name": "reset",
-                        "from": "I[age]",
-                        "to": "X[age,imm:j]",
-                        "rate": "w[imm:j]",
-                    }
-                ],
-                AGE,
-                IMM,
-            ),
-            [("transitions[0]", "reset", "I[age]", "X[age,imm:j]", "fan_out")],
-            id="fan-out",
-        ),
-        pytest.param(
-            _transitions(
                 ["S", "I[age]"],
                 [{"name": "seed", "from": "S", "to": "I[age]", "rate": "b"}],
                 AGE,

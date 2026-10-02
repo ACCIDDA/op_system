@@ -12,9 +12,8 @@ version; format loosely follows
 - `CompiledRhs.reaction_gaps` and the provider's `reaction_gaps` option list
   every transition that has no compiled reaction artifact. Each `ReactionGap`
   gives its spec origin (including `chain:` stages), name, selectors, and a
-  reason (`unnamed`, `routing`, `fan_out`, `target_axis_not_on_source`,
-  `rate_axis_out_of_scope`, `unsupported_layout`, `compile_failed`, or
-  `expr_spec`), so reaction-only consumers can refuse to drop dynamics
+  reason (`unnamed`, `target_axis_not_on_source`, `rate_axis_out_of_scope`,
+  `unsupported_layout`, `compile_failed`, or `expr_spec`), so reaction-only consumers can refuse to drop dynamics
   silently (#244).
 - Axis-less states compile on the vectorized path as 0-d templates. Scalar
   and mixed scalar/templated transitions models now publish reaction
@@ -36,6 +35,12 @@ version; format loosely follows
   consumed source, so the generated reactions can be complete for adaptive
   tau-leaping. `coord_shift` entries now reject `reactants`, which pairwise
   entries previously ignored (#247).
+- Routing (`X[imm:i] -> X[imm:j]`) and target-only fan-out
+  (`I[age] -> X[age, imm:j]`) transitions publish reaction artifacts. The
+  routed target coordinate is a trailing propensity dimension listed in the new
+  `CompiledReaction.routed_axes`; each channel moves one unit from a source
+  cell to one target coordinate. Same-slice routing masks its no-op diagonal,
+  so a generator's negative diagonal never becomes a hazard (#248).
 
 ### Fixed
 
