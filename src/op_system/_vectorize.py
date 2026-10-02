@@ -349,8 +349,8 @@ def _try_ir_fast_path(  # ruff: ignore[too-many-arguments]
     buffer_axes: dict[str, tuple[str, ...]] = {}
     for cell_name, tpl in name_to_template.items():
         cell_to_template[cell_name] = (tpl.base, tpl.axes)
-        if tpl.axes:
-            buffer_axes[tpl.base] = tpl.axes
+        # Axis-less templates are 0-d buffers, bound like any other.
+        buffer_axes[tpl.base] = tpl.axes
     if not buffer_axes:
         return None
     try:
@@ -915,15 +915,7 @@ def _build_vector_plan_inner(  # ruff: ignore[complex-structure, too-many-return
     if not rhs.state_templates:
         _bail("no state templates")
         return None
-    # Require all states to be wildcard templates (have axes).
-    if any(not tpl.shape for tpl in rhs.state_templates):
-        _bail("scalar (non-wildcard) state template present")
-        return None
-    # Require axes meta to be present.
-    axes_meta = rhs.meta.get("axes") if isinstance(rhs.meta, Mapping) else None
-    if not axes_meta:
-        _bail("rhs.meta has no 'axes' entry")
-        return None
+    axes_meta = (rhs.meta.get("axes") if isinstance(rhs.meta, Mapping) else None) or []
 
     axes_pairs: list[tuple[str, list[str]]] = []
     reducible_axes_set: set[str] = set()

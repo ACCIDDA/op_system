@@ -16,12 +16,25 @@ version; format loosely follows
   `rate_axis_out_of_scope`, `unsupported_layout`, `compile_failed`, or
   `expr_spec`), so reaction-only consumers can refuse to drop dynamics
   silently (#244).
+- Axis-less states compile on the vectorized path as 0-d templates. Scalar
+  and mixed scalar/templated transitions models now publish reaction
+  artifacts, `template_shapes` (with `()` for axis-less states), and a PyTree
+  evaluator; axis-less history specs gain `history_eval_fn`. `eval_fn` for
+  specs with no axes keeps the scalar evaluator. `CompiledReaction` gains
+  `to_full_axes`, the target template's axis order, for reactions between
+  templates with different axes (#246).
 
 - Time-indexed parameters support opt-in right-continuous hold interpolation
   with `time_interpolation: previous`, retaining linear interpolation by
   default. Flat, PyTree, block, and reaction evaluators share the policy;
   compiled metadata and provider options expose the immutable time coordinates
   and forcing breakpoints. Single-coordinate time tables remain constant (#240).
+
+### Fixed
+
+- A target-only fan-out from an axis-less source (`from: I`,
+  `to: X[imm:j]`) compiled but failed at evaluation with an undefined axis
+  name, and had no PyTree evaluator (#245).
 - `coord_shift` accepts an axis-wide form,
   `{axis: age, step: 1, rate: ..., boundary: absorb|stay}`. It shifts every
   coordinate of one axis in a single entry instead of `n - 1` pairwise

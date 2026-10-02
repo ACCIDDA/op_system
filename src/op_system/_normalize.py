@@ -1526,9 +1526,9 @@ def _build_transition_equations_ir(  # ruff: ignore[complex-structure, too-many-
             # to-template, with one-hot mask multiplications collapsing
             # pinned-coord slabs. Fully pinned donors and source-only
             # inflows use the same masks; they need no wildcard donor axis.
+            # An axis-less donor behaves like a fully pinned one.
             synthesize = (
-                bool(frm_tokens or source_only)
-                and (source_only or not to_only_axes)
+                (source_only or not to_only_axes)
                 and not expr_only_axes
                 and pinned_masks_ok
                 and (bool(from_only_axes) or has_pinned)

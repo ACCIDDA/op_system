@@ -1080,17 +1080,19 @@ def test_pytree_eval_fn_produces_correct_result() -> None:
     np.testing.assert_allclose(pytree_flat, flat_result)
 
 
-def test_pytree_eval_fn_absent_for_scalar_path() -> None:
-    """pytree_eval_fn is None when the scalar compile path is used.
+def test_axis_less_spec_has_zero_dimensional_pytree_eval_fn() -> None:
+    """Axis-less specs publish 0-d template shapes and a PyTree evaluator.
 
-    Only genuinely scalar specs (no axes declared) use the scalar path;
-    axis-indexed specs that fail vectorization now raise instead of falling
-    back.
+    ``eval_fn`` keeps the scalar path (issue #246); axis-indexed specs that
+    fail vectorization raise instead of falling back.
     """
     spec = {"kind": "expr", "state": ["x"], "equations": {"x": "-x"}}
     cr = compile_rhs(normalize_rhs(spec))
-    # Scalar spec → scalar path → pytree_eval_fn is None.
-    assert cr.pytree_eval_fn is None
+    assert cr.template_shapes == {"x": ()}
+    assert cr.pytree_eval_fn is not None
+    np.testing.assert_allclose(
+        cr.pytree_eval_fn(0.0, {"x": np.asarray(2.0)})["x"], -2.0
+    )
 
 
 def test_compile_rhs_raises_for_axis_spec_that_fails_vectorization(

@@ -97,7 +97,7 @@ The compiled object exposes:
 |---|---|
 | `eval_fn(t, y, **params) -> dydt` | Flat-vector RHS; array namespace inferred from `y`. |
 | `pytree_eval_fn(t, state_dict, **params) -> dict` | PyTree RHS keyed by state template base name (axis-indexed specs). |
-| `template_shapes` | `{base: shape}` for each state template. |
+| `template_shapes` | `{base: shape}` for each state template; axis-less states are `()`. |
 | `state_names`, `param_names` | Tuples of expanded state cells and parameter names. |
 | `factorize_axes`, `block_axes` | Axes the IR proved separable for block vmap. |
 | `block_pytree_eval_fn`, `block_template_shapes` | Per-block PyTree RHS with the first factorize axis stripped. |
@@ -245,6 +245,11 @@ reason such as `unnamed`, `routing`, or `unsupported_layout`. An `expr` spec
 reports a single `expr_spec` gap. A consumer that executes only the reactions,
 such as a pure stochastic simulation, should reject a non-empty value rather
 than silently drop those dynamics.
+
+Axis-less states take part like any other: a scalar S→I→R model publishes 0-d
+reactions and `template_shapes` of `()`. When a reaction's source and target
+templates have different axes, for example an axis-less source depositing into
+a pinned cell, `to_full_axes` gives the target's axis order for indexing it.
 
 Source-only rates may also depend on population through a bound reduction,
 such as `sum_over(B[age:a] * N[age:a], age=a)`, while their destination pins

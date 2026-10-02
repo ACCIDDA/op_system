@@ -362,6 +362,13 @@ class CompiledReaction:
     #: ``boundary: stay`` sources have zero propensity and never fire. Empty
     #: for every other reaction.
     offsets: tuple[tuple[str, int], ...] = ()
+    #: Every axis of ``to_base``'s template, in declaration order. Index
+    #: ``to_base`` with this order rather than ``full_axes`` (which is the
+    #: source's order): they differ when an axis-less source deposits into a
+    #: pinned cell of a templated state, or a templated source collapses into
+    #: an axis-less state. ``None`` only on reactions built without it, in
+    #: which case both templates share ``full_axes``.
+    to_full_axes: tuple[str, ...] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -1736,8 +1743,15 @@ def _build_primary_eval_artifacts(
     plan = vec.build_vector_plan(rhs)
     _enforce_vector_plan_for_axes(rhs=rhs, vec=vec, plan=plan)
 
+    # Specs with no axes keep the scalar evaluator for ``eval_fn`` (its
+    # parameter and alias-cycle diagnostics); their plan still supplies the
+    # PyTree evaluator, template shapes, and reaction layout. Such specs have
+    # no time axis or coordinate masks, so they need no eval wrappers.
+    has_axes = (
+        bool(rhs.meta.get("axes")) if isinstance(rhs.meta, _MappingABC) else False
+    )
     eval_fn: EvalFn | None = (
-        vec.make_vectorized_eval_fn(plan) if plan is not None else None
+        vec.make_vectorized_eval_fn(plan) if plan is not None and has_axes else None
     )
     pytree_eval_fn: PytreeEvalFn | None = (
         vec.make_pytree_eval_fn(plan) if plan is not None else None
@@ -1750,7 +1764,7 @@ def _build_primary_eval_artifacts(
     return vec, plan, eval_fn, pytree_eval_fn, template_shapes
 
 
-def _make_propensity_fn(  # ruff: ignore[complex-structure]
+def _make_propensity_fn(
     code: CodeType,
     *,
     param_recipes: tuple[tuple[str, tuple[str, ...], tuple[int, ...]], ...],
@@ -1809,9 +1823,14 @@ def _make_propensity_fn(  # ruff: ignore[complex-structure]
         for base, _axes, shape in extra_param_buffers:
             if base in params:
                 env[f"{base}_buf"] = xp.reshape(xp.asarray(params[base]), shape)
-        for base in state_bases:
-            if base in y:
-                env[f"{base}_buf"] = y[base]
+        states = {base: y[base] for base in state_bases if base in y}
+        env.update({f"{base}_buf": value for base, value in states.items()})
+        # Rates reference axis-less states by bare name.
+        env.update({
+            base: value
+            for base, value in states.items()
+            if not getattr(value, "shape", ())
+        })
         try:
             result = eval(code, {"__builtins__": _SAFE_BUILTINS}, env)  # ruff: ignore[suspicious-eval-usage]
         except (NameError, ValueError, TypeError, ArithmeticError) as exc:
@@ -1867,8 +1886,10 @@ def _build_reaction_artifacts(  # ruff: ignore[complex-structure, too-many-local
         )
     reactions_ir = getattr(rhs, "reactions_ir", ())
     gaps: list[ReactionGap] = list(getattr(rhs, "reaction_gaps_ir", ()))
-    axes_meta = rhs.meta.get("axes") if isinstance(rhs.meta, _MappingABC) else None
-    if not reactions_ir or plan is None or not axes_meta:
+    axes_meta = (
+        rhs.meta.get("axes") if isinstance(rhs.meta, _MappingABC) else None
+    ) or ()
+    if not reactions_ir or plan is None:
         gaps.extend(reaction_gap_for(r, "unsupported_layout") for r in reactions_ir)
         return _ReactionArtifacts((), tuple(gaps))
 
@@ -1987,6 +2008,7 @@ def _build_reaction_artifacts(  # ruff: ignore[complex-structure, too-many-local
                     if ax not in r.to_axes and ax not in dict(r.offsets)
                 ),
                 offsets=r.offsets,
+                to_full_axes=r.to_full_axes,
                 pinned=pinned,
                 from_pinned=from_pinned,
                 reactants=reactants,
