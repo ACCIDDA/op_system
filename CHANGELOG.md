@@ -7,46 +7,10 @@ version; format loosely follows
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-02
+
 ### Added
 
-- `CompiledRhs.reaction_gaps` and the provider's `reaction_gaps` option list
-  every transition that has no compiled reaction artifact. Each `ReactionGap`
-  gives its spec origin (including `chain:` stages), name, selectors, and a
-  reason (`unnamed`, `target_axis_not_on_source`, `rate_axis_out_of_scope`,
-  `unsupported_layout`, `compile_failed`, or `expr_spec`), so reaction-only consumers can refuse to drop dynamics
-  silently (#244).
-- Axis-less states compile on the vectorized path as 0-d templates. Scalar
-  and mixed scalar/templated transitions models now publish reaction
-  artifacts, `template_shapes` (with `()` for axis-less states), and a PyTree
-  evaluator; axis-less history specs gain `history_eval_fn`. `eval_fn` for
-  specs with no axes keeps the scalar evaluator. `CompiledReaction` gains
-  `to_full_axes`, the target template's axis order, for reactions between
-  templates with different axes (#246).
-
-- Time-indexed parameters support opt-in right-continuous hold interpolation
-  with `time_interpolation: previous`, retaining linear interpolation by
-  default. Flat, PyTree, block, and reaction evaluators share the policy;
-  compiled metadata and provider options expose the immutable time coordinates
-  and forcing breakpoints. Single-coordinate time tables remain constant (#240).
-- `chain:` transitions publish reactions named `{base}_entry`,
-  `{base}_advance_{k}`, and `{base}_exit`, and named pairwise `coord_shift`
-  entries publish `{name}_{state}`. Chains (`entry.catalysts`, `catalysts`)
-  and both `coord_shift` forms (`catalysts`) declare reactants beyond the
-  consumed source, so the generated reactions can be complete for adaptive
-  tau-leaping. `coord_shift` entries now reject `reactants`, which pairwise
-  entries previously ignored (#247).
-- Routing (`X[imm:i] -> X[imm:j]`) and target-only fan-out
-  (`I[age] -> X[age, imm:j]`) transitions publish reaction artifacts. The
-  routed target coordinate is a trailing propensity dimension listed in the new
-  `CompiledReaction.routed_axes`; each channel moves one unit from a source
-  cell to one target coordinate. Same-slice routing masks its no-op diagonal,
-  so a generator's negative diagonal never becomes a hazard (#248).
-
-### Fixed
-
-- A target-only fan-out from an axis-less source (`from: I`,
-  `to: X[imm:j]`) compiled but failed at evaluation with an undefined axis
-  name, and had no PyTree evaluator (#245).
 - `coord_shift` accepts an axis-wide form,
   `{axis: age, step: 1, rate: ..., boundary: absorb|stay}`. It shifts every
   coordinate of one axis in a single entry instead of `n - 1` pairwise
@@ -57,6 +21,52 @@ version; format loosely follows
   The new `offsets` field gives the shifted axis and its step, and
   off-axis destinations either leave the system (`absorb`) or never fire
   (`stay`). `boundary` has no default (#238).
+- Time-indexed parameters support opt-in right-continuous hold interpolation
+  with `time_interpolation: previous`, retaining linear interpolation by
+  default. Flat, PyTree, block, and reaction evaluators share the policy;
+  compiled metadata and provider options expose the immutable time coordinates
+  and forcing breakpoints. Single-coordinate time tables remain constant (#240).
+- `CompiledRhs.reaction_gaps` and the provider's `reaction_gaps` option list
+  every transition that has no compiled reaction artifact. Each `ReactionGap`
+  gives its spec origin (including `chain:` stages), name, selectors, and a
+  reason (`unnamed`, `target_axis_not_on_source`, `rate_axis_out_of_scope`,
+  `unsupported_layout`, `compile_failed`, or `expr_spec`), so reaction-only
+  consumers can refuse to drop dynamics silently (#244).
+- Axis-less states compile on the vectorized path as 0-d templates. Scalar
+  and mixed scalar/templated transitions models publish reaction artifacts,
+  `template_shapes` (with `()` for axis-less states), and a PyTree evaluator;
+  axis-less history specs gain `history_eval_fn`. `CompiledReaction` gains
+  `to_full_axes`, the target template's axis order, for reactions between
+  templates with different axes (#246).
+- `chain:` transitions publish reactions named `{base}_entry`,
+  `{base}_advance_{k}`, and `{base}_exit`, and named pairwise `coord_shift`
+  entries publish `{name}_{state}`. Chains (`entry.catalysts`, `catalysts`)
+  and both `coord_shift` forms (`catalysts`) declare reactants beyond the
+  consumed source, so the generated reactions can be complete for adaptive
+  tau-leaping (#247).
+- Routing (`X[imm:i] -> X[imm:j]`) and target-only fan-out
+  (`I[age] -> X[age, imm:j]`) transitions publish reaction artifacts. The
+  routed target coordinate is a trailing propensity dimension listed in the new
+  `CompiledReaction.routed_axes`; each channel moves one unit from a source
+  cell to one target coordinate. Same-slice routing masks its no-op diagonal,
+  so a generator's negative diagonal never becomes a hazard (#248).
+
+### Changed
+
+- Specs with no axes now have a vector plan: `template_shapes` (all `()`) and
+  `pytree_eval_fn` are populated instead of `None`. Their `eval_fn` keeps the
+  scalar evaluator and its diagnostics (#246).
+- `coord_shift` entries reject `reactants`, which pairwise entries previously
+  ignored; declare extra reactants as `catalysts` (#247).
+- Models using `chain:` or named pairwise `coord_shift` entries publish more
+  reactions than before, because the generated transitions are now named
+  (#247).
+
+### Fixed
+
+- A target-only fan-out from an axis-less source (`from: I`,
+  `to: X[imm:j]`) compiled but failed at evaluation with an undefined axis
+  name, and had no PyTree evaluator (#245).
 
 ## [0.5.0] - 2026-09-27
 
