@@ -7,6 +7,8 @@ version; format loosely follows
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-06
+
 ### Added
 
 - `reactants: auto` on a named transition, and `catalysts: auto` on `chain`
