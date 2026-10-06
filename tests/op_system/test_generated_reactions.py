@@ -120,16 +120,19 @@ def test_chain_stages_publish_named_complete_reactions(*, templated: bool) -> No
         np.testing.assert_allclose(drift[base], np.asarray(value), rtol=1e-12)
 
 
-def test_chain_without_catalysts_keeps_the_fallback() -> None:
-    """Without declarations the chain is named but not claimed complete."""
+def test_chain_without_catalysts_is_complete_where_rates_read_no_state() -> None:
+    """Without declarations only stages whose rate reads no state are complete.
+
+    The entry rate reads every stage, so its catalysts cannot be ruled out;
+    the advance and exit rates are constants.
+    """
     compiled = compile_spec(_chain_spec(templated=False, catalysts=False))
-    assert [r.name for r in compiled.reactions] == [
-        "I_entry",
-        "I_advance_1",
-        "I_advance_2",
-        "I_exit",
-    ]
-    assert not any(r.reactants_complete for r in compiled.reactions)
+    assert {r.name: r.reactants_complete for r in compiled.reactions} == {
+        "I_entry": False,
+        "I_advance_1": True,
+        "I_advance_2": True,
+        "I_exit": True,
+    }
 
 
 @pytest.mark.parametrize("axis_wide", [False, True])

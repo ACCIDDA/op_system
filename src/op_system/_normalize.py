@@ -45,6 +45,7 @@ from op_system._helpers import (
     _get_required_str,
     _sorted_unique,
 )
+from op_system._infer_reactants import REACTANTS_AUTO
 from op_system._ir import (
     Apply,
     AxisIndex,
@@ -224,11 +225,13 @@ def _validate_transition_mapping(  # ruff: ignore[complex-structure]
             raise InvalidRhsSpecError(
                 detail=f"transitions[{idx}].name must be a non-empty string"
             )
-    if "reactants" in tr:
-        reactants = tr.get("reactants")
+    reactants = tr.get("reactants")
+    if "reactants" in tr and reactants != REACTANTS_AUTO:
         if not isinstance(reactants, list):
             raise InvalidRhsSpecError(
-                detail=f"transitions[{idx}].reactants must be a list"
+                detail=(
+                    f"transitions[{idx}].reactants must be a list or {REACTANTS_AUTO!r}"
+                )
             )
         for reactant_idx, reactant in enumerate(reactants):
             field = f"transitions[{idx}].reactants[{reactant_idx}]"

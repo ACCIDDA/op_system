@@ -1114,7 +1114,8 @@ def test_option_reactions_exposes_named_transition() -> None:
     assert reaction.to_base == "S"
     assert reaction.sum_axes == ("vax",)
     assert reaction.pinned == (("vax", 2),)
-    assert reaction.reactants_complete is False
+    # The rate ``g`` reads no state, so the consumed source is complete.
+    assert reaction.reactants_complete is True
     assert len(reaction.reactants) == 1
     assert reaction.reactants[0].state_base == "C"
     assert reaction.reactants[0].order == 1
