@@ -509,7 +509,106 @@ def test_alias_reference_cycle_stays_out_of_scope() -> None:
             {"name": "expose", "from": "S[age]", "to": "E[age]", "rate": "foi[age]"},
         ],
     }
-    assert compile_spec(spec).reactions == ()
+    compiled = compile_spec(spec)
+    assert compiled.reactions == ()
+    assert [gap.reason for gap in compiled.reaction_gaps] == ["unresolved_alias"]
+
+
+def _assert_drift_matches_rhs(
+    spec: dict[str, object], y: dict[str, np.ndarray], params: dict[str, object]
+) -> None:
+    """Check the single reaction's net drift against the deterministic RHS."""
+    c = compile_spec(spec)
+    assert c.reaction_gaps == ()
+    (reaction,) = c.reactions
+    flow = np.asarray(reaction.propensity_fn(0.0, y, **params))
+    assert c.pytree_eval_fn is not None
+    dy = c.pytree_eval_fn(np.asarray(0.0), y, **params)
+    np.testing.assert_allclose(dy[reaction.to_base], flow)
+    assert reaction.from_base is not None
+    np.testing.assert_allclose(dy[reaction.from_base], -flow)
+
+
+def test_axis_less_alias_referenced_by_bare_name_is_inlined() -> None:
+    """A rate naming an axis-less alias evaluates (issue #254).
+
+    The bare name used to compile with no gap and raise ``NameError``
+    when the propensity was evaluated.
+    """
+    spec: dict[str, object] = {
+        "kind": "transitions",
+        "state": ["S", "I"],
+        "aliases": {"lam": "beta * I / (S + I)"},
+        "transitions": [{"name": "inf", "from": "S", "to": "I", "rate": "lam"}],
+    }
+    y = {"S": np.asarray(90.0), "I": np.asarray(10.0)}
+    got = np.asarray(compile_spec(spec).reactions[0].propensity_fn(0.0, y, beta=0.5))
+    np.testing.assert_allclose(got, 0.5 * 10.0 / 100.0 * 90.0)
+    _assert_drift_matches_rhs(spec, y, {"beta": 0.5})
+
+
+def test_axis_less_alias_inside_a_templated_alias_is_inlined() -> None:
+    """A templated alias whose body names an axis-less alias resolves fully."""
+    spec: dict[str, object] = {
+        "kind": "transitions",
+        "axes": [{"name": "age", "coords": ["a0", "a1"]}],
+        "state": ["S[age]", "I[age]"],
+        "aliases": {"bfe": "2.0 * beta", "lam[age]": "bfe * I[age]"},
+        "transitions": [
+            {"name": "inf", "from": "S[age]", "to": "I[age]", "rate": "lam[age]"},
+        ],
+    }
+    y = {"S": np.array([90.0, 80.0]), "I": np.array([10.0, 20.0])}
+    got = np.asarray(compile_spec(spec).reactions[0].propensity_fn(0.0, y, beta=0.5))
+    np.testing.assert_allclose(got, 1.0 * y["I"] * y["S"])
+    _assert_drift_matches_rhs(spec, y, {"beta": 0.5})
+
+
+def test_axis_less_alias_chain_with_reductions_is_inlined() -> None:
+    """Frequency-dependent infection through chained axis-less aliases."""
+    spec: dict[str, object] = {
+        "kind": "transitions",
+        "axes": [{"name": "age", "coords": ["a0", "a1"]}],
+        "state": ["S[age]", "I[age]"],
+        "aliases": {
+            "N": "sum_over(S[age:a] + I[age:a], age=a)",
+            "lam": "beta * sum_over(I[age:a], age=a) / N",
+        },
+        "transitions": [
+            {"name": "inf", "from": "S[age]", "to": "I[age]", "rate": "lam"},
+        ],
+    }
+    y = {"S": np.array([90.0, 80.0]), "I": np.array([10.0, 20.0])}
+    got = np.asarray(compile_spec(spec).reactions[0].propensity_fn(0.0, y, beta=0.5))
+    np.testing.assert_allclose(got, 0.5 * 30.0 / 200.0 * y["S"])
+    _assert_drift_matches_rhs(spec, y, {"beta": 0.5})
+
+
+@pytest.mark.parametrize(
+    ("aliases", "rate"),
+    [
+        pytest.param({"a": "b + 1.0", "b": "2.0 * a"}, "a", id="axis-less-cycle"),
+        pytest.param({"foi[age]": "k * S[age]"}, "foi", id="bare-templated"),
+    ],
+)
+def test_unresolvable_alias_is_reported_as_a_gap(
+    aliases: dict[str, str], rate: str
+) -> None:
+    """An alias left in a rate is a gap, not a propensity that fails later."""
+    spec: dict[str, object] = {
+        "kind": "transitions",
+        "axes": [{"name": "age", "coords": ["a0", "a1"]}],
+        "state": ["S[age]", "E[age]"],
+        "aliases": aliases,
+        "transitions": [
+            {"name": "expose", "from": "S[age]", "to": "E[age]", "rate": rate},
+        ],
+    }
+    compiled = compile_spec(spec)
+    assert compiled.reactions == ()
+    assert [(gap.name, gap.reason) for gap in compiled.reaction_gaps] == [
+        ("expose", "unresolved_alias")
+    ]
 
 
 def _importation_spec() -> dict[str, object]:
