@@ -351,8 +351,10 @@ class CompiledReaction:
     #: Molecular reactants for each expanded channel, including catalysts.
     #: Orders are independent of the net stoichiometric change.
     reactants: tuple[CompiledReactant, ...] = ()
-    #: False when op_system supplied only the legacy consumed-source fallback
-    #: because the transition omitted an explicit ``reactants:`` declaration.
+    #: True when ``reactants`` covers every state the propensity reads: from
+    #: an explicit ``reactants:`` or ``catalysts:`` list, from ``auto``
+    #: inference, or because the rate reads no state. False when only the
+    #: consumed-source fallback is known.
     reactants_complete: bool = False
     #: ``(axis, step)`` pairs for an axis-wide ``coord_shift`` reaction. Each
     #: axis is in ``from_axes`` but in none of ``to_axes``, ``pinned``, or

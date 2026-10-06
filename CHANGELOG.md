@@ -7,6 +7,27 @@ version; format loosely follows
 
 ## [Unreleased]
 
+### Added
+
+- `reactants: auto` on a named transition, and `catalysts: auto` on `chain`
+  and `coord_shift` entries, infer a reaction's molecular reactants from its
+  alias-inlined rate. The result is the consumed source at order one plus
+  each state factor at its integer power, with `reactants_complete=True`.
+  Inference covers rates that are a single product of states (mass action,
+  density dependence, first-order flows). A rate that adds states, divides by
+  a state, reduces over states, applies a function to a state, or reads state
+  history raises `InvalidRhsSpecError` naming the construct;
+  frequency-dependent rates are tracked in #256 (#255).
+
+### Changed
+
+- When `reactants` (or `catalysts`) is omitted and the rate reads no state,
+  the consumed-source reactant is complete: `reactants_complete=True`.
+  Nothing else can then be a reactant, so first-order flows and constant
+  aging or chain rates no longer block adaptive tau-leaping. Rates that read
+  state keep `reactants_complete=False`. Parameters are assumed not to depend
+  on the state (#255).
+
 ### Fixed
 
 - A transition rate that names an axis-less alias by bare name (`rate: lam`

@@ -16,6 +16,7 @@ if TYPE_CHECKING:
 
 from op_system._errors import InvalidRhsSpecError
 from op_system._helpers import _ensure_mapping, _get_required_str
+from op_system._infer_reactants import REACTANTS_AUTO
 from op_system._templates import (
     PinnedToken,
     _sanitize_fragment,
@@ -266,38 +267,46 @@ def _apply_expr_chains(
                 equations_map[sink_s] = f"({out_rate})*{stage_names[-1]}"
 
 
-def _normalize_catalysts(raw: object, *, field: str) -> list[dict[str, Any]] | None:
+def _normalize_catalysts(
+    raw: object, *, field: str
+) -> list[dict[str, Any]] | str | None:
     """Validate an optional ``catalysts`` list for generated transitions.
 
     Catalysts are the molecular reactants beyond the consumed source, which
     the generator adds itself. Shapes and selectors are validated with the
-    generated transition's ``reactants``.
+    generated transition's ``reactants``. ``auto`` infers them from the
+    rate, like ``reactants: auto``.
 
     Returns:
-        The catalyst mappings, or ``None`` when ``raw`` is absent.
+        The catalyst mappings, ``auto``, or ``None`` when ``raw`` is absent.
 
     Raises:
-        InvalidRhsSpecError: If ``raw`` is not a list of mappings.
+        InvalidRhsSpecError: If ``raw`` is not ``auto`` or a list of mappings.
     """
-    if raw is None:
-        return None
+    if raw is None or raw == REACTANTS_AUTO:
+        return raw
     if not isinstance(raw, list):
-        raise InvalidRhsSpecError(detail=f"{field} must be a list")
+        raise InvalidRhsSpecError(
+            detail=f"{field} must be a list or {REACTANTS_AUTO!r}"
+        )
     return [
         dict(_ensure_mapping(item, name=f"{field}[{i}]")) for i, item in enumerate(raw)
     ]
 
 
 def _with_reactants(
-    transition: dict[str, Any], catalysts: list[dict[str, Any]] | None
+    transition: dict[str, Any], catalysts: list[dict[str, Any]] | str | None
 ) -> dict[str, Any]:
     """Declare a generated transition's complete reactants.
 
     Returns:
         ``transition``, with ``reactants`` set to its consumed source at
-        order one plus ``catalysts`` when catalysts were declared.
+        order one plus ``catalysts`` when catalysts were declared, or to
+        ``auto`` when they are inferred.
     """
-    if catalysts is not None:
+    if catalysts == REACTANTS_AUTO:
+        transition["reactants"] = REACTANTS_AUTO
+    elif isinstance(catalysts, list):
         transition["reactants"] = [
             {"state": transition["from"], "order": 1},
             *catalysts,
@@ -693,7 +702,9 @@ def _expand_axis_wide_shift(
     return out
 
 
-def _coord_shift_catalysts(tr: Mapping[str, Any]) -> list[dict[str, Any]] | None:
+def _coord_shift_catalysts(
+    tr: Mapping[str, Any],
+) -> list[dict[str, Any]] | str | None:
     """Read a ``coord_shift`` entry's ``catalysts``, rejecting ``reactants``.
 
     One entry generates a transition per ``apply_to`` state, so it cannot

@@ -108,7 +108,8 @@ def test_same_axes_reaction_metadata_and_propensity() -> None:
     assert expose.to_axes == ("age", "vax")
     assert expose.sum_axes == ()
     assert expose.pinned == ()
-    assert expose.reactants_complete is False
+    # ``foi`` is a parameter here, so the source is the only reactant.
+    assert expose.reactants_complete is True
     assert len(expose.reactants) == 1
     source = expose.reactants[0]
     assert source.state_base == "S"

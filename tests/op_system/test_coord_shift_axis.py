@@ -362,7 +362,8 @@ def test_offset_reaction_metadata(boundary: str, step: int) -> None:
         assert reaction.sum_axes == ()
         assert reaction.pinned == reaction.from_pinned == ()
         assert reaction.offsets == (("age", step),)
-        assert reaction.reactants_complete is False
+        # The aging rate reads no state, so the shifted source is complete.
+        assert reaction.reactants_complete is True
     assert by_name["infection"].offsets == ()
 
 

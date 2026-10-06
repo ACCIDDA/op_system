@@ -63,11 +63,19 @@ must belong to the destination's wildcard set.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from itertools import starmap
+from typing import TYPE_CHECKING, Any, cast
 
 from op_system._axes import _normalize_bracket_key
 from op_system._errors import InvalidRhsSpecError
 from op_system._helpers import _get_required_str
+from op_system._infer_reactants import (
+    REACTANTS_AUTO,
+    NotInferableError,
+    StateReference,
+    infer_state_factors,
+    may_read_state,
+)
 from op_system._ir import (
     Apply,
     AxisIndex,
@@ -198,10 +206,12 @@ class ReactionArtifactIR:
             package).
         reactants: Molecular reactants aligned to each expanded reaction
             channel. Orders are independent of net stoichiometric change.
-        reactants_complete: Whether ``reactants`` came from an explicit,
-            authoritative ``reactants:`` list. When false, op_system only
-            supplies the backwards-compatible consumed-source fallback and
-            consumers must not assume catalytic reactants are absent.
+        reactants_complete: Whether ``reactants`` covers every state the
+            propensity reads: declared explicitly, inferred by
+            ``reactants: auto``, or a consumed source whose rate reads no
+            state. When false, op_system only supplies the consumed-source
+            fallback and consumers must not assume catalytic reactants are
+            absent.
         offsets: ``(axis, step)`` pairs for an axis-wide ``coord_shift``.
             Each axis is in ``from_axes`` but in neither ``to_axes`` nor
             ``pinned``: a firing at source index ``k`` lands at ``k + step``.
@@ -335,10 +345,74 @@ def _in_order_wildcard_axes(tokens: list[Any]) -> list[str]:
     return axes
 
 
-def _build_reactants_ir(  # ruff: ignore[complex-structure, too-many-arguments, too-many-branches]
+def _reactant_ir(ref: StateReference, order: int) -> ReactionReactantIR:
+    """Convert an inferred state reference into reactant metadata.
+
+    Returns:
+        The reactant at ``order``.
+    """
+    return ReactionReactantIR(
+        state_base=ref.base,
+        state_axes=ref.axes,
+        full_axes=ref.full_axes,
+        pinned=ref.pinned,
+        order=order,
+    )
+
+
+def _infer_reactants_ir(  # ruff: ignore[too-many-arguments]
+    rate: Expr,
+    *,
+    transition_name: str,
+    source: StateReference | None,
+    channel_axes: tuple[str, ...],
+    state_axes: Mapping[str, tuple[str, ...]],
+    axis_lookup: Mapping[str, list[str]],
+) -> tuple[ReactionReactantIR, ...]:
+    """Infer complete reactants for ``reactants: auto``.
+
+    The consumed source is a reactant at order one, plus each state factor
+    of the rate at its power. A rate that reads its own source raises the
+    source's order.
+
+    Returns:
+        Reactants with the source first, then in the rate's order.
+
+    Raises:
+        InvalidRhsSpecError: If the rate is not a single product of state
+            references aligned to the reaction channels.
+    """
+    try:
+        factors = infer_state_factors(
+            rate, state_axes=state_axes, axis_lookup=axis_lookup
+        )
+    except NotInferableError as error:
+        raise InvalidRhsSpecError(
+            detail=(
+                f"transition {transition_name!r} declares reactants: auto, but "
+                f"its rate {error}; declare them explicitly"
+            )
+        ) from error
+    orders: dict[StateReference, int] = {} if source is None else {source: 1}
+    for ref, power in factors.items():
+        extra = tuple(axis for axis in ref.axes if axis not in channel_axes)
+        if extra:
+            raise InvalidRhsSpecError(
+                detail=(
+                    f"transition {transition_name!r} declares reactants: auto, "
+                    f"but its rate reads state {ref.base!r} along axes outside "
+                    f"the reaction channels: {extra!r}"
+                )
+            )
+        orders[ref] = orders.get(ref, 0) + power
+    return tuple(starmap(_reactant_ir, orders.items()))
+
+
+def _build_reactants_ir(  # ruff: ignore[too-many-arguments]
     tr_map: Mapping[str, Any],
     *,
     transition_name: str,
+    rate: Expr,
     source_only: bool,
     from_base: str | None,
     from_axes: tuple[str, ...],
@@ -349,41 +423,91 @@ def _build_reactants_ir(  # ruff: ignore[complex-structure, too-many-arguments, 
 ) -> tuple[tuple[ReactionReactantIR, ...], bool]:
     """Build and validate molecular reactants for one reaction artifact.
 
+    Args:
+        tr_map: The transition mapping.
+        transition_name: The transition's name, for error messages.
+        rate: The alias-inlined rate IR.
+        source_only: Whether the transition has no ``from`` state.
+        from_base: The consumed state's base, or ``None`` when source-only.
+        from_axes: The reaction's channel axes.
+        full_axes: The consumed state's declared axes.
+        from_pinned: Coordinates the ``from`` selector pins.
+        state_axes: Each state base's declared axes.
+        axis_lookup: Each axis's declared coordinates.
+
     Returns:
         ``(reactants, complete)``. An omitted declaration synthesizes the
-        consumed source at order one for backwards compatibility, but marks
-        the result incomplete because catalysts cannot be inferred safely.
+        consumed source at order one. It is complete only when the rate
+        provably reads no state, since catalysts cannot otherwise be ruled
+        out. ``reactants: auto`` infers them from the rate.
+    """
+    source = (
+        None
+        if source_only
+        else StateReference(
+            base=cast("str", from_base),
+            axes=from_axes,
+            full_axes=full_axes,
+            pinned=from_pinned,
+        )
+    )
+    raw = tr_map.get("reactants")
+    if raw == REACTANTS_AUTO:
+        return _infer_reactants_ir(
+            rate,
+            transition_name=transition_name,
+            source=source,
+            channel_axes=from_axes,
+            state_axes=state_axes,
+            axis_lookup=axis_lookup,
+        ), True
+    if raw is None:
+        complete = bool(state_axes) and not may_read_state(rate, state_axes)
+        return tuple(
+            _reactant_ir(ref, 1) for ref in ((source,) if source else ())
+        ), complete
+    return _explicit_reactants_ir(
+        raw,
+        transition_name=transition_name,
+        source=source,
+        channel_axes=from_axes,
+        state_axes=state_axes,
+        axis_lookup=axis_lookup,
+    ), True
+
+
+def _explicit_reactants_ir(  # ruff: ignore[complex-structure, too-many-arguments]
+    raw: object,
+    *,
+    transition_name: str,
+    source: StateReference | None,
+    channel_axes: tuple[str, ...],
+    state_axes: Mapping[str, tuple[str, ...]],
+    axis_lookup: Mapping[str, list[str]],
+) -> tuple[ReactionReactantIR, ...]:
+    """Validate an explicit ``reactants:`` list against the reaction.
+
+    Returns:
+        The declared reactants, in declaration order.
 
     Raises:
-        InvalidRhsSpecError: If explicit reactant metadata cannot align with
-            the reaction-channel axes or declared state layout.
+        InvalidRhsSpecError: If the declaration cannot align with the
+            reaction-channel axes or declared state layout, or omits the
+            consumed source.
     """
-    raw = tr_map.get("reactants")
-    if raw is None:
-        if source_only:
-            return (), False
-        assert from_base is not None  # ruff: ignore[assert]
-        return (
-            ReactionReactantIR(
-                state_base=from_base,
-                state_axes=from_axes,
-                full_axes=full_axes,
-                pinned=from_pinned,
-                order=1,
-            ),
-        ), False
-
     # Basic shape/type validation happens in _validate_transition_mapping.
     # Keep a defensive guard here because this internal builder also has a
     # narrow direct-call surface.
     if not isinstance(raw, list):
         raise InvalidRhsSpecError(
-            detail=f"transition {transition_name!r} reactants must be a list"
+            detail=(
+                f"transition {transition_name!r} reactants must be a list or "
+                f"{REACTANTS_AUTO!r}"
+            )
         )
 
     reactants: list[ReactionReactantIR] = []
     seen: set[tuple[str, tuple[str, ...], tuple[tuple[str, str], ...]]] = set()
-    channel_axes = set(from_axes)
     for idx, entry in enumerate(raw):
         if not isinstance(entry, dict):
             raise InvalidRhsSpecError(
@@ -467,18 +591,15 @@ def _build_reactants_ir(  # ruff: ignore[complex-structure, too-many-arguments, 
             )
         )
 
-    if not source_only:
-        assert from_base is not None  # ruff: ignore[assert]
-        source_key = (from_base, from_axes, from_pinned)
-        if source_key not in seen:
-            raise InvalidRhsSpecError(
-                detail=(
-                    f"transition {transition_name!r} explicit reactants must "
-                    "include its consumed from-state selector"
-                )
+    if source is not None and (source.base, source.axes, source.pinned) not in seen:
+        raise InvalidRhsSpecError(
+            detail=(
+                f"transition {transition_name!r} explicit reactants must "
+                "include its consumed from-state selector"
             )
+        )
 
-    return tuple(reactants), True
+    return tuple(reactants)
 
 
 @dataclass(frozen=True, slots=True)
@@ -1279,6 +1400,7 @@ def build_reaction_artifacts_ir(  # ruff: ignore[too-many-arguments, too-many-lo
         reactants, reactants_complete = _build_reactants_ir(
             tr_map,
             transition_name=name_s,
+            rate=rate_ir_reduce,
             source_only=source_only,
             from_base=frm_base,
             from_axes=tuple(frm_wc_axes),
