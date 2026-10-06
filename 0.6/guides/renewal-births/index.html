@@ -896,7 +896,11 @@ pinned, the artifact has one scalar propensity: one Poisson stream into the
 specified cell. The rate already contains the population dependence; a
 consumer must apply only the destination increment for each firing. The
 explicit <code>reactants: []</code> declares that no population is consumed by a birth.
-It does not imply that the rate is independent of population.</p>
+It does not imply that the rate is independent of population. With
+<code>reactants: auto</code> instead, a birth rate such as
+<code>sum_over(B[age:a] * N[age:a], age=a)</code> publishes no reactants, its
+<code>dependencies</code> (every <code>N</code> cell it reads), and <code>propensity_order: 1</code>, which is
+what adaptive tau-leaping needs to bound how fast the hazard can change.</p>
 <p>If a group axis remains free, for example <code>to: N[age=a0,group]</code> with rate
 <code>sum_over(B[age:a] * N[age:a,group], age=a)</code>, the propensity has one entry per
 group. The age reduction happens within each group; <code>from_axes</code> and <code>to_axes</code>
