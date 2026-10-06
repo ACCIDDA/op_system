@@ -117,10 +117,12 @@ A consumer that predates `offsets` fails its own metadata checks on these
 reactions. The destination axes no longer cover `full_axes`, so the reaction
 is rejected rather than silently treated as a no-op.
 
-By default the reactants metadata is the consumed-source fallback, with
-`reactants_complete=False`. One entry generates a reaction per `apply_to`
-state, so it cannot list each one's consumed source. Instead, declare the
-reactants beyond the shifted state as `catalysts`; `catalysts: []` declares
-a first-order shift. The generator adds the consumed source, and each
-reaction reports `reactants_complete=True`, as adaptive tau-leaping requires.
+By default the reactants metadata is the consumed source alone. It is
+complete when the rate reads no state, as for a constant aging rate, and
+otherwise reports `reactants_complete=False`. One entry generates a reaction
+per `apply_to` state, so it cannot list each one's consumed source. Instead,
+declare the reactants beyond the shifted state as `catalysts`, or set
+`catalysts: auto` to infer them from the rate; `catalysts: []` declares a
+first-order shift. The generator adds the consumed source, and each reaction
+reports `reactants_complete=True`, as adaptive tau-leaping requires.
 Both `coord_shift` forms accept `catalysts` and reject `reactants`.

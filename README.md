@@ -232,11 +232,22 @@ spec:
 ```
 
 The compiled reaction exposes these entries as array-neutral structural
-metadata. If `reactants` is omitted, op_system preserves compatibility by
-publishing the consumed source at order one with `reactants_complete=false`;
-adaptive stochastic consumers should require complete metadata rather than
-try to infer catalysts from the rate expression. An explicit empty list marks
-a source-only zero-order reaction as complete.
+metadata. `reactants: auto` derives the list from the rate, after aliases are
+inlined: the consumed source at order one plus each state factor at its
+integer power. For the transition above it infers exactly the declared list.
+Inference covers rates that are a single product of states. A rate that adds
+states, divides by a state, reduces over states, or applies a function to a
+state is rejected at compile time, naming the construct; frequency-dependent
+rates are tracked in #256. Check `compiled.reactions[i].reactants` to confirm
+what was inferred.
+
+If `reactants` is omitted, op_system publishes the consumed source at order
+one. That is complete (`reactants_complete=true`) when the rate reads no
+state, because nothing else can then be a reactant. Otherwise it is
+`reactants_complete=false`, and adaptive stochastic consumers should require
+complete metadata. Parameters, including time-varying ones, are assumed not to
+depend on the state. An explicit empty list marks a source-only zero-order
+reaction as complete.
 
 Not every transition publishes a reaction. `CompiledRhs.reaction_gaps` (and
 the provider's `reaction_gaps` option) lists each one that does not, with its
@@ -362,11 +373,13 @@ spec:
 `chain` synthesizes the staged compartments (`I1..I3`) and the internal
 forward / exit transitions; declare only the base `I` in `state`. The
 generated transitions publish reactions named `I_entry`, `I_advance_1`,
-`I_advance_2`, and `I_exit`. To mark them complete for adaptive stochastic
-solvers, list the reactants beyond each consumed stage: `entry.catalysts`
-for the entry rate (here `[{state: I1, order: 1}, ...]` for every
-infectious stage it reads) and the chain's `catalysts` for the forward and
-exit rates (`[]` when they are first order).
+`I_advance_2`, and `I_exit`. A stage whose rate reads no state is already
+complete for adaptive stochastic solvers. For the others, list the reactants
+beyond each consumed stage: `entry.catalysts` for the entry rate (here
+`[{state: I1, order: 1}, ...]` for every infectious stage it reads) and the
+chain's `catalysts` for the forward and exit rates. `catalysts: auto` infers
+them instead when a rate is a single product of states, like
+`reactants: auto`.
 
 ### Axis-wide aging with `coord_shift`
 
