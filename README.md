@@ -235,11 +235,29 @@ The compiled reaction exposes these entries as array-neutral structural
 metadata. `reactants: auto` derives the list from the rate, after aliases are
 inlined: the consumed source at order one plus each state factor at its
 integer power. For the transition above it infers exactly the declared list.
-Inference covers rates that are a single product of states. A rate that adds
-states, divides by a state, reduces over states, or applies a function to a
-state is rejected at compile time, naming the construct; frequency-dependent
-rates are tracked in #256. Check `compiled.reactions[i].reactants` to confirm
-what was inferred.
+Check `compiled.reactions[i].reactants` to confirm what was inferred.
+
+A rate that is not a single product of states, such as the frequency-dependent
+`beta * sum_over(I[age:a], age=a) / N`, has no molecular reactants beyond the
+consumed source. Under `reactants: auto` it instead publishes what adaptive
+tau-leaping needs:
+
+- `dependencies`: every state selection the propensity reads, aligned to the
+  channels like `reactants`. A reduction contributes one pinned entry per
+  coordinate it visits.
+- `propensity_order`: a whole-number bound on the propensity's total
+  elasticity, `sum_i |d log a / d log x_i|`. It is derived from the
+  expression: products and quotients add their operands' bounds, a literal
+  power `p` multiplies by `|p|`, and a sum or reduction of non-negative terms
+  takes the largest term's bound. `beta * S * sum(I) / N` has order 3.
+- `dependencies_complete=True`.
+
+These reactions keep `reactants_complete=false`, so a consumer that only
+understands reactants refuses adaptive tau-leaping rather than misreading
+them. Subtraction, negation, other functions of a state (`exp`, `min`, ...),
+symbolic powers, and history operators have no such bound: `reactants: auto`
+rejects them at compile time, naming the construct. Parameters are assumed
+non-negative.
 
 If `reactants` is omitted, op_system publishes the consumed source at order
 one. That is complete (`reactants_complete=true`) when the rate reads no

@@ -14,10 +14,16 @@ version; format loosely follows
   alias-inlined rate. The result is the consumed source at order one plus
   each state factor at its integer power, with `reactants_complete=True`.
   Inference covers rates that are a single product of states (mass action,
-  density dependence, first-order flows). A rate that adds states, divides by
-  a state, reduces over states, applies a function to a state, or reads state
-  history raises `InvalidRhsSpecError` naming the construct;
-  frequency-dependent rates are tracked in #256 (#255).
+  density dependence, first-order flows) (#255).
+- For a `reactants: auto` rate that is not a single product of states, such
+  as a frequency-dependent force of infection, `CompiledReaction` publishes
+  `dependencies` (every state selection the propensity reads, with one pinned
+  entry per coordinate of a reduction), `propensity_order` (a structural
+  bound on `sum_i |d log a / d log x_i|`), and `dependencies_complete=True`.
+  `reactants_complete` stays false on these reactions, so consumers that
+  predate the fields refuse adaptive tau-leaping. Subtraction, negation,
+  other functions of a state, symbolic powers, and history operators raise
+  `InvalidRhsSpecError` naming the construct (#256).
 
 ### Changed
 
