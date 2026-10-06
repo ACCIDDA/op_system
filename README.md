@@ -241,10 +241,16 @@ a source-only zero-order reaction as complete.
 Not every transition publishes a reaction. `CompiledRhs.reaction_gaps` (and
 the provider's `reaction_gaps` option) lists each one that does not, with its
 spec origin (`transitions[1]`, `chain[0].forward[0]`), selectors, and a
-reason such as `unnamed`, `routing`, or `unsupported_layout`. An `expr` spec
-reports a single `expr_spec` gap. A consumer that executes only the reactions,
-such as a pure stochastic simulation, should reject a non-empty value rather
-than silently drop those dynamics.
+reason such as `unnamed`, `rate_axis_out_of_scope`, or `unsupported_layout`.
+An `expr` spec reports a single `expr_spec` gap. A consumer that executes only
+the reactions, such as a pure stochastic simulation, should reject a non-empty
+value rather than silently drop those dynamics.
+
+A rate may name aliases, either bracketed (`foi[age]`) or, for an axis-less
+alias, by bare name (`lam`). Their bodies are inlined into the propensity,
+following chains of aliases. A rate that still names an alias afterwards, for
+example one on a reference cycle or a templated alias referenced without its
+axes, gets an `unresolved_alias` gap.
 
 Axis-less states take part like any other: a scalar S→I→R model publishes 0-d
 reactions and `template_shapes` of `()`. When a reaction's source and target
