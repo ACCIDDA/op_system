@@ -59,6 +59,8 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Iterable, Mapping, Sequence
     from types import CodeType
 
+    from op_system._reactions import ReactionReactantIR
+
     from .specs import NormalizedRhs
 
 Float64Array = NDArray[np.float64]
@@ -382,6 +384,22 @@ class CompiledReaction:
     #: into one target. Diagonal channels of a same-slice routing are
     #: masked to zero propensity. Empty for every other reaction.
     routed_axes: tuple[str, ...] = ()
+    #: Every state selection the propensity reads, aligned to the channels
+    #: like ``reactants`` with each ``order`` equal to 1. Published for a
+    #: ``reactants: auto`` rate that is not a single product of states, such
+    #: as a frequency-dependent force of infection; a reduction contributes
+    #: one pinned entry per coordinate. Empty for every other reaction.
+    dependencies: tuple[CompiledReactant, ...] = ()
+    #: Whole-number bound on the propensity's total elasticity,
+    #: ``sum_i |d log a / d log x_i|`` over ``dependencies``. Adaptive
+    #: tau-leaping can bound each propensity's relative change from it.
+    #: ``None`` unless ``dependencies`` is published.
+    propensity_order: int | None = None
+    #: True when ``dependencies`` and ``propensity_order`` describe the whole
+    #: state dependence. ``reactants_complete`` stays false on these
+    #: reactions, so a consumer that only understands reactants refuses
+    #: adaptive tau-leaping rather than misreading them.
+    dependencies_complete: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -1856,6 +1874,25 @@ def _make_propensity_fn(
     return propensity_fn
 
 
+def _compiled_reactant(
+    reactant: ReactionReactantIR, axis_coords: Mapping[str, tuple[str, ...]]
+) -> CompiledReactant:
+    """Index a reactant's pinned coordinates against the spec's axes.
+
+    Returns:
+        The reactant with integer coordinate indices.
+    """
+    return CompiledReactant(
+        state_base=reactant.state_base,
+        state_axes=reactant.state_axes,
+        full_axes=reactant.full_axes,
+        pinned=tuple(
+            (axis, axis_coords[axis].index(coord)) for axis, coord in reactant.pinned
+        ),
+        order=reactant.order,
+    )
+
+
 class _ReactionArtifacts(NamedTuple):
     """Compiled reactions and the dynamics left without one."""
 
@@ -1996,18 +2033,9 @@ def _build_reaction_artifacts(  # ruff: ignore[complex-structure, too-many-local
             from_pinned = tuple(
                 (axis, axis_coords[axis].index(coord)) for axis, coord in r.from_pinned
             )
-            reactants = tuple(
-                CompiledReactant(
-                    state_base=reactant.state_base,
-                    state_axes=reactant.state_axes,
-                    full_axes=reactant.full_axes,
-                    pinned=tuple(
-                        (axis, axis_coords[axis].index(coord))
-                        for axis, coord in reactant.pinned
-                    ),
-                    order=reactant.order,
-                )
-                for reactant in r.reactants
+            reactants, dependencies = (
+                tuple(_compiled_reactant(entry, axis_coords) for entry in group)
+                for group in (r.reactants, r.dependencies)
             )
         except (KeyError, ValueError):
             # Axis/coord not resolvable against this spec's axes.
@@ -2034,6 +2062,9 @@ def _build_reaction_artifacts(  # ruff: ignore[complex-structure, too-many-local
                 from_pinned=from_pinned,
                 reactants=reactants,
                 reactants_complete=r.reactants_complete,
+                dependencies=dependencies,
+                propensity_order=r.propensity_order,
+                dependencies_complete=r.dependencies_complete,
                 propensity_fn=_wrap_propensity_fn_for_time_varying(
                     _wrap_propensity_fn_for_synth_consts(
                         _make_propensity_fn(

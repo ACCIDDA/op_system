@@ -136,24 +136,17 @@ def test_auto_on_a_source_only_transition_infers_from_the_rate() -> None:
 @pytest.mark.parametrize(
     ("rate", "reason"),
     [
-        pytest.param("beta * (I[age,vax] + R[age,vax])", "with '+'", id="sum"),
-        pytest.param(
-            "beta * I[age,vax] / (S[age,vax] + I[age,vax])",
-            "divides by a state",
-            id="frequency-dependent",
-        ),
-        pytest.param(
-            "beta * sum_over(J[age:a], age=a)", "reduces states", id="reduction"
-        ),
+        pytest.param("beta * (I[age,vax] - R[age,vax])", "with '-'", id="subtraction"),
         pytest.param("exp(-Z)", "with 'exp'", id="function"),
-        pytest.param("Z**0.5", "positive integer literal", id="fractional-power"),
         pytest.param("beta * I", "without its axes", id="bare-templated-state"),
+        pytest.param("beta * (Z + (1 - eps))", "may be negative", id="signed-sum"),
+        pytest.param("Z**p", "not a numeric literal", id="symbolic-power"),
     ],
 )
-def test_auto_rejects_rates_that_are_not_a_product_of_states(
+def test_auto_rejects_rates_without_a_structural_description(
     rate: str, reason: str
 ) -> None:
-    """Inference refuses instead of guessing; see issue #256."""
+    """Inference refuses instead of guessing, naming the construct."""
     with pytest.raises(
         InvalidRhsSpecError, match=f"reactants: auto.*{re.escape(reason)}"
     ):
