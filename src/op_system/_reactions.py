@@ -64,7 +64,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from itertools import starmap
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, NamedTuple, cast
 
 from op_system._axes import _normalize_bracket_key
 from op_system._errors import InvalidRhsSpecError
@@ -73,8 +73,10 @@ from op_system._infer_reactants import (
     REACTANTS_AUTO,
     NotInferableError,
     StateReference,
+    elasticity_order,
     infer_state_factors,
     may_read_state,
+    state_dependencies,
 )
 from op_system._ir import (
     Apply,
@@ -229,6 +231,19 @@ class ReactionArtifactIR:
             is shaped ``from_axes + routed_axes``: one channel per source
             cell and target coordinate. A routed axis is in neither
             ``to_axes`` nor ``pinned``.
+        dependencies: Every state selection the propensity reads, aligned
+            to the channels like ``reactants`` (each ``order`` is 1), for a
+            ``reactants: auto`` rate that is not a single product of states.
+            A reduction contributes one pinned entry per coordinate. Empty
+            otherwise.
+        propensity_order: Whole-number bound on the propensity's total
+            elasticity, ``sum_i |d log a / d log x_i|``, published with
+            ``dependencies``. ``None`` otherwise.
+        dependencies_complete: Whether ``dependencies`` and
+            ``propensity_order`` describe the propensity's whole state
+            dependence. ``reactants_complete`` stays false for these
+            reactions, so a consumer that does not understand dependencies
+            refuses adaptive tau-leaping instead of misreading them.
     """
 
     name: str
@@ -251,6 +266,9 @@ class ReactionArtifactIR:
     to_selector: str = ""
     to_full_axes: tuple[str, ...] | None = None
     routed_axes: tuple[str, ...] = ()
+    dependencies: tuple[ReactionReactantIR, ...] = ()
+    propensity_order: int | None = None
+    dependencies_complete: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -345,6 +363,16 @@ def _in_order_wildcard_axes(tokens: list[Any]) -> list[str]:
     return axes
 
 
+class _ReactantMetadata(NamedTuple):
+    """Reactant and dependency metadata for one reaction artifact."""
+
+    reactants: tuple[ReactionReactantIR, ...]
+    complete: bool
+    dependencies: tuple[ReactionReactantIR, ...] = ()
+    propensity_order: int | None = None
+    dependencies_complete: bool = False
+
+
 def _reactant_ir(ref: StateReference, order: int) -> ReactionReactantIR:
     """Convert an inferred state reference into reactant metadata.
 
@@ -360,7 +388,34 @@ def _reactant_ir(ref: StateReference, order: int) -> ReactionReactantIR:
     )
 
 
-def _infer_reactants_ir(  # ruff: ignore[too-many-arguments]
+def _channel_reference(
+    ref: StateReference,
+    *,
+    transition_name: str,
+    channel_axes: tuple[str, ...],
+) -> StateReference:
+    """Check that an inferred reference varies only along channel axes.
+
+    Returns:
+        ``ref`` unchanged.
+
+    Raises:
+        InvalidRhsSpecError: If the reference has a free axis that is not a
+            reaction channel axis.
+    """
+    extra = tuple(axis for axis in ref.axes if axis not in channel_axes)
+    if extra:
+        raise InvalidRhsSpecError(
+            detail=(
+                f"transition {transition_name!r} declares reactants: auto, "
+                f"but its rate reads state {ref.base!r} along axes outside "
+                f"the reaction channels: {extra!r}"
+            )
+        )
+    return ref
+
+
+def _auto_reactants_ir(  # ruff: ignore[too-many-arguments]
     rate: Expr,
     *,
     transition_name: str,
@@ -368,24 +423,44 @@ def _infer_reactants_ir(  # ruff: ignore[too-many-arguments]
     channel_axes: tuple[str, ...],
     state_axes: Mapping[str, tuple[str, ...]],
     axis_lookup: Mapping[str, list[str]],
-) -> tuple[ReactionReactantIR, ...]:
-    """Infer complete reactants for ``reactants: auto``.
+) -> _ReactantMetadata:
+    """Infer reactants, or dependencies, for ``reactants: auto``.
 
-    The consumed source is a reactant at order one, plus each state factor
-    of the rate at its power. A rate that reads its own source raises the
-    source's order.
+    A rate that is a single product of states yields complete reactants:
+    the consumed source at order one plus each state factor at its power,
+    so a rate that reads its own source raises the source's order. Any
+    other rate yields the consumed source as its only reactant, marked
+    incomplete, plus every state the propensity reads and a bound on its
+    elasticity (issue #256).
 
     Returns:
-        Reactants with the source first, then in the rate's order.
+        The inferred metadata, with the source first.
 
     Raises:
-        InvalidRhsSpecError: If the rate is not a single product of state
-            references aligned to the reaction channels.
+        InvalidRhsSpecError: If the rate's state dependence has no
+            structural description, or reads state off the channel axes.
     """
+    sources = () if source is None else (source,)
     try:
         factors = infer_state_factors(
             rate, state_axes=state_axes, axis_lookup=axis_lookup
         )
+    except NotInferableError:
+        factors = None
+    if factors is not None:
+        orders: dict[StateReference, int] = dict.fromkeys(sources, 1)
+        for ref, power in factors.items():
+            key = _channel_reference(
+                ref, transition_name=transition_name, channel_axes=channel_axes
+            )
+            orders[key] = orders.get(key, 0) + power
+        return _ReactantMetadata(
+            tuple(starmap(_reactant_ir, orders.items())), complete=True
+        )
+
+    try:
+        order = elasticity_order(rate, state_axes=state_axes) + len(sources)
+        read = state_dependencies(rate, state_axes=state_axes, axis_lookup=axis_lookup)
     except NotInferableError as error:
         raise InvalidRhsSpecError(
             detail=(
@@ -393,19 +468,22 @@ def _infer_reactants_ir(  # ruff: ignore[too-many-arguments]
                 f"its rate {error}; declare them explicitly"
             )
         ) from error
-    orders: dict[StateReference, int] = {} if source is None else {source: 1}
-    for ref, power in factors.items():
-        extra = tuple(axis for axis in ref.axes if axis not in channel_axes)
-        if extra:
-            raise InvalidRhsSpecError(
-                detail=(
-                    f"transition {transition_name!r} declares reactants: auto, "
-                    f"but its rate reads state {ref.base!r} along axes outside "
-                    f"the reaction channels: {extra!r}"
-                )
+    dependencies = dict.fromkeys(sources)
+    dependencies.update(
+        dict.fromkeys(
+            _channel_reference(
+                ref, transition_name=transition_name, channel_axes=channel_axes
             )
-        orders[ref] = orders.get(ref, 0) + power
-    return tuple(starmap(_reactant_ir, orders.items()))
+            for ref in read
+        )
+    )
+    return _ReactantMetadata(
+        reactants=tuple(_reactant_ir(ref, 1) for ref in sources),
+        complete=False,
+        dependencies=tuple(_reactant_ir(ref, 1) for ref in dependencies),
+        propensity_order=max(order, 1),
+        dependencies_complete=True,
+    )
 
 
 def _build_reactants_ir(  # ruff: ignore[too-many-arguments]
@@ -420,7 +498,7 @@ def _build_reactants_ir(  # ruff: ignore[too-many-arguments]
     from_pinned: tuple[tuple[str, str], ...],
     state_axes: Mapping[str, tuple[str, ...]],
     axis_lookup: Mapping[str, list[str]],
-) -> tuple[tuple[ReactionReactantIR, ...], bool]:
+) -> _ReactantMetadata:
     """Build and validate molecular reactants for one reaction artifact.
 
     Args:
@@ -436,10 +514,11 @@ def _build_reactants_ir(  # ruff: ignore[too-many-arguments]
         axis_lookup: Each axis's declared coordinates.
 
     Returns:
-        ``(reactants, complete)``. An omitted declaration synthesizes the
-        consumed source at order one. It is complete only when the rate
+        The reaction's reactant metadata. An omitted declaration synthesizes
+        the consumed source at order one. It is complete only when the rate
         provably reads no state, since catalysts cannot otherwise be ruled
-        out. ``reactants: auto`` infers them from the rate.
+        out. ``reactants: auto`` infers them, or the rate's dependencies,
+        from the rate.
     """
     source = (
         None
@@ -453,27 +532,31 @@ def _build_reactants_ir(  # ruff: ignore[too-many-arguments]
     )
     raw = tr_map.get("reactants")
     if raw == REACTANTS_AUTO:
-        return _infer_reactants_ir(
+        return _auto_reactants_ir(
             rate,
             transition_name=transition_name,
             source=source,
             channel_axes=from_axes,
             state_axes=state_axes,
             axis_lookup=axis_lookup,
-        ), True
+        )
     if raw is None:
         complete = bool(state_axes) and not may_read_state(rate, state_axes)
-        return tuple(
-            _reactant_ir(ref, 1) for ref in ((source,) if source else ())
-        ), complete
-    return _explicit_reactants_ir(
-        raw,
-        transition_name=transition_name,
-        source=source,
-        channel_axes=from_axes,
-        state_axes=state_axes,
-        axis_lookup=axis_lookup,
-    ), True
+        return _ReactantMetadata(
+            tuple(_reactant_ir(ref, 1) for ref in ((source,) if source else ())),
+            complete,
+        )
+    return _ReactantMetadata(
+        _explicit_reactants_ir(
+            raw,
+            transition_name=transition_name,
+            source=source,
+            channel_axes=from_axes,
+            state_axes=state_axes,
+            axis_lookup=axis_lookup,
+        ),
+        complete=True,
+    )
 
 
 def _explicit_reactants_ir(  # ruff: ignore[complex-structure, too-many-arguments]
@@ -1397,7 +1480,7 @@ def build_reaction_artifacts_ir(  # ruff: ignore[too-many-arguments, too-many-lo
         pinned = tuple(
             (tok.axis, tok.coord) for tok in to_tokens if isinstance(tok, PinnedToken)
         )
-        reactants, reactants_complete = _build_reactants_ir(
+        metadata = _build_reactants_ir(
             tr_map,
             transition_name=name_s,
             rate=rate_ir_reduce,
@@ -1424,8 +1507,11 @@ def build_reaction_artifacts_ir(  # ruff: ignore[too-many-arguments, too-many-lo
                 rate_string=unparse_ir(rate_ir_full),
                 propensity_ir_full=propensity_ir_full,
                 propensity_ir_reduce=propensity_ir_reduce,
-                reactants=reactants,
-                reactants_complete=reactants_complete,
+                reactants=metadata.reactants,
+                reactants_complete=metadata.complete,
+                dependencies=metadata.dependencies,
+                propensity_order=metadata.propensity_order,
+                dependencies_complete=metadata.dependencies_complete,
                 offsets=offsets,
                 origin=str(tr_map.get(ORIGIN_KEY, "transitions")),
                 from_selector=None if source_only else str(frm_raw),
