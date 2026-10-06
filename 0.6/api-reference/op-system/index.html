@@ -3210,6 +3210,10 @@ source-only transition or an <code>expr</code> spec.</p>
   the reaction's channel axes.</li>
 <li><code>unsupported_layout</code>: the compiled RHS has no vectorized
   state layout to index propensities against.</li>
+<li><code>unresolved_alias</code>: the rate still references an alias
+  after inlining: one on a reference cycle, a templated alias
+  referenced by bare name, or a declaration out of scope for
+  inlining.</li>
 <li><code>compile_failed</code>: the propensity could not be lowered or
   its coordinates could not be resolved.</li>
 <li><code>expr_spec</code>: an <code>expr</code> spec, whose equations are not
