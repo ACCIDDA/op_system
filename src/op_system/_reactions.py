@@ -75,7 +75,9 @@ from op_system._ir import (
     Expr,
     Reduce,
     Subscript,
+    Sym,
     _map_children,
+    free_symbols,
     iter_subscripts,
     parse_expr_to_ir,
     unparse_ir,
@@ -96,7 +98,7 @@ from op_system._templates import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from collections.abc import Collection, Mapping
 
 
 @dataclass(frozen=True, slots=True)
@@ -267,6 +269,10 @@ class ReactionGap:
               the reaction's channel axes.
             - ``unsupported_layout``: the compiled RHS has no vectorized
               state layout to index propensities against.
+            - ``unresolved_alias``: the rate still references an alias
+              after inlining: one on a reference cycle, a templated alias
+              referenced by bare name, or a declaration out of scope for
+              inlining.
             - ``compile_failed``: the propensity could not be lowered or
               its coordinates could not be resolved.
             - ``expr_spec``: an ``expr`` spec, whose equations are not
@@ -718,7 +724,11 @@ def _substitute_alias_refs(
     *,
     axis_names: frozenset[str],
 ) -> Expr:
-    """Replace in-scope alias ``Subscript`` references with their bodies.
+    """Replace in-scope alias references with their bodies.
+
+    A bracketed reference (``foi[age]``) is a ``Subscript``. An axis-less
+    alias is referenced by bare name, a ``Sym``, and has nothing to bind
+    (issue #254). A bare reference to a templated alias stays out of scope.
 
     ``templates`` bodies are expected to be already resolved (free of
     alias references themselves), so this performs a single pass.
@@ -727,6 +737,9 @@ def _substitute_alias_refs(
         A new IR expression with in-scope alias references inlined;
         structurally equal to ``expr`` when no replacements occur.
     """
+    if isinstance(expr, Sym):
+        template = templates.get(expr.name)
+        return expr if template is None or template.axes else template.body
     if isinstance(expr, Subscript):
         template = templates.get(expr.name)
         if template is None:
@@ -736,6 +749,39 @@ def _substitute_alias_refs(
     return _map_children(
         expr, lambda e: _substitute_alias_refs(e, templates, axis_names=axis_names)
     )
+
+
+def _alias_references(expr: Expr, alias_names: Collection[str]) -> set[str]:
+    """Return the aliases ``expr`` references, bracketed or by bare name.
+
+    Returns:
+        The subset of ``alias_names`` occurring as a ``Subscript`` or as a
+        free ``Sym`` under ``expr``.
+    """
+    names = set(free_symbols(expr)) | {sub.name for sub in iter_subscripts(expr)}
+    return names.intersection(alias_names)
+
+
+def _inline_rate_aliases(
+    rate: Expr,
+    templates: Mapping[str, _AliasTemplate],
+    *,
+    alias_names: Collection[str],
+    axis_names: frozenset[str],
+) -> Expr | None:
+    """Inline a rate's alias references, or detect that some remain.
+
+    An alias left in the rate (one on a reference cycle, a templated alias
+    referenced by bare name, or an out-of-scope declaration) has no value
+    when the propensity is evaluated (issue #254).
+
+    Returns:
+        The rate with every alias inlined, or ``None`` when an alias
+        reference remains.
+    """
+    if templates:
+        rate = _substitute_alias_refs(rate, templates, axis_names=axis_names)
+    return None if _alias_references(rate, alias_names) else rate
 
 
 def _resolve_alias_templates(
@@ -755,9 +801,8 @@ def _resolve_alias_templates(
     ``Subscript`` with symbolic axes rather than the fully-expanded
     per-cell ``Sym`` that function expects. An alias on a cycle -- and
     any alias that transitively references one -- is dropped from the
-    result, so a rate referencing it is simply left unresolved (the same
-    silent-omission behavior applied to every other out-of-scope shape
-    here, not an error).
+    result, so a rate referencing it is left unresolved and reported as an
+    ``unresolved_alias`` gap, not an error.
 
     Returns:
         Mapping from alias base name to a template whose body contains no
@@ -778,11 +823,7 @@ def _resolve_alias_templates(
             return None
         visiting.add(name)
         try:
-            deps = {
-                sub.name
-                for sub in iter_subscripts(template.body)
-                if sub.name in parsed and sub.name != name
-            }
+            deps = _alias_references(template.body, parsed) - {name}
             usable: dict[str, _AliasTemplate] = {}
             for dep in deps:
                 dep_template = _resolve(dep)
@@ -1034,10 +1075,11 @@ def build_reaction_artifacts_ir(  # ruff: ignore[too-many-arguments, too-many-lo
             string). A rate referencing an alias has that alias's
             template-symbolic body inlined before the axis-scope check
             below, following the whole chain when that alias references
-            further aliases -- see :func:`_build_alias_bodies`. An alias
-            on a reference cycle, or one whose reference shape is out of
-            scope, is left unresolved, same as when this argument is
-            omitted.
+            further aliases -- see :func:`_build_alias_bodies`. Axis-less
+            aliases are referenced by bare name. A rate still referencing
+            an alias afterwards (one on a reference cycle, or one whose
+            reference shape is out of scope) gets an ``unresolved_alias``
+            gap.
         state_axes: Mapping from state base to its full declared axis tuple,
             used to validate explicit reactant selectors.
 
@@ -1058,6 +1100,10 @@ def build_reaction_artifacts_ir(  # ruff: ignore[too-many-arguments, too-many-lo
     declared_state_axes = state_axes or {}
     alias_bodies = _build_alias_bodies(
         aliases_raw or {}, shaped_params=shaped, axis_lookup=axis_lookup
+    )
+    alias_names = frozenset(
+        parse_selector(_normalize_bracket_key(raw_key))[0]
+        for raw_key in aliases_raw or {}
     )
     axis_names = frozenset(axis_lookup)
     out: list[ReactionArtifactIR] = []
@@ -1115,11 +1161,15 @@ def build_reaction_artifacts_ir(  # ruff: ignore[too-many-arguments, too-many-lo
                 gaps.append(_transition_gap(tr_map, "target_axis_not_on_source"))
                 continue
 
-        ir_rate_raw = parse_expr_to_ir(rate_s, lower_helpers=True)
-        if alias_bodies:
-            ir_rate_raw = _substitute_alias_refs(
-                ir_rate_raw, alias_bodies, axis_names=axis_names
-            )
+        ir_rate_raw = _inline_rate_aliases(
+            parse_expr_to_ir(rate_s, lower_helpers=True),
+            alias_bodies,
+            alias_names=alias_names,
+            axis_names=axis_names,
+        )
+        if ir_rate_raw is None:
+            gaps.append(_transition_gap(tr_map, "unresolved_alias"))
+            continue
         route_label = None
         if route is not None:
             # Each (source cell, target coordinate) pair is its own channel.

@@ -7,6 +7,17 @@ version; format loosely follows
 
 ## [Unreleased]
 
+### Fixed
+
+- A transition rate that names an axis-less alias by bare name (`rate: lam`
+  with `aliases: {lam: ...}`) now inlines it into the reaction propensity, as
+  bracketed aliases already were. This includes axis-less aliases used inside
+  other aliases' bodies. Previously the reaction compiled with no gap and its
+  `propensity_fn` raised `NameError` when evaluated. A rate that still names
+  an alias after inlining (one on a reference cycle, or a templated alias
+  referenced by bare name) is now reported as an `unresolved_alias` reaction
+  gap instead of publishing a propensity that cannot be evaluated (#254).
+
 ## [0.6.0] - 2026-10-02
 
 ### Added
