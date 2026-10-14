@@ -2,10 +2,25 @@
 
 from __future__ import annotations
 
+from functools import partial
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
+
+
+def _bind_quadrature_weights(
+    env: dict[str, object],
+    state: object,
+    xp: Any,  # ruff: ignore[any-type]
+) -> None:
+    """Construct constant weights in the floating state's dtype and device."""
+    dtype = getattr(state, "dtype", None)
+    if dtype is not None and not xp.isdtype(dtype, "real floating"):
+        dtype = None
+    env["_op_system_weights"] = partial(
+        xp.asarray, dtype=dtype, device=getattr(state, "device", None)
+    )
 
 
 def _bind_sum_state(

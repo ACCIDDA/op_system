@@ -889,8 +889,9 @@ def _lower_reduce(  # ruff: ignore[complex-structure, too-many-branches, too-man
     (``integrate_over``, or any binding whose axis appears in
     ``axis_weights``). For weighted bindings, emits
     ``np.sum(weights * body, axis=...)`` with per-axis weight constants
-    baked into the AST as ``np.array([...])`` factors broadcast into
-    position.
+    baked into the AST as native array constants broadcast into position.
+    Evaluation binds ``_op_system_weights`` to the state's floating dtype
+    and device so weight construction uses the runtime Array API.
 
     Same-axis-twice (e.g. a shaped contact kernel ``K[age, age:ap]``
     inside ``apply_along(..., age=ap)`` whose target also carries
@@ -1158,7 +1159,7 @@ def _weight_constant_for_axis(
     weights: tuple[float, ...],
     extended_target: tuple[str, ...],
 ) -> ast.expr:
-    """Build ``np.array([w0, w1, ...])[None, ..., :, ..., None]`` for ``axis``.
+    """Build a native weights vector broadcast into the position of ``axis``.
 
     Returns a constant 1-D weights vector reshaped to broadcast along the
     position of ``axis`` within ``extended_target``.
@@ -1169,7 +1170,7 @@ def _weight_constant_for_axis(
     """
     pos = extended_target.index(axis)
     arr: ast.expr = ast.Call(
-        func=ast.Attribute(value=_name("np"), attr="array", ctx=ast.Load()),
+        func=_name("_op_system_weights"),
         args=[
             ast.List(
                 elts=[ast.Constant(value=float(w)) for w in weights],

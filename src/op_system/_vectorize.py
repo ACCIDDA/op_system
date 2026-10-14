@@ -46,7 +46,7 @@ from op_system._ir_lower import (
     lift_cell_ir_to_template,
     lower_to_vector_ast,
 )
-from op_system._state_helpers import _bind_sum_state
+from op_system._state_helpers import _bind_quadrature_weights, _bind_sum_state
 from op_system.compile import (
     _SAFE_BUILTINS,
     _check_numeric_dtype,
@@ -1181,6 +1181,7 @@ def make_vectorized_eval_fn(plan: _VectorPlan) -> EvalFn:  # ruff: ignore[comple
         t_val: object = xp.asarray(t)
         env: dict[str, object] = {"np": xp, "t": t_val}
         env.update(params)
+        _bind_quadrature_weights(env, y_arr, xp)
 
         # Assemble templated param buffers from caller-supplied scalars
         # (one value per expanded name) or, as a convenience, from a
@@ -1321,6 +1322,7 @@ def make_pytree_eval_fn(plan: _VectorPlan) -> PytreeEvalFn:  # ruff: ignore[comp
         t_val: object = xp.asarray(t)
         env: dict[str, object] = {"np": xp, "t": t_val}
         env.update(params)
+        _bind_quadrature_weights(env, first_val, xp)
 
         # Assemble templated param buffers (identical to flat path).
         for base, names, shape in param_recipes:

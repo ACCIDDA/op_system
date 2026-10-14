@@ -481,9 +481,9 @@ def test_weighted_apply_along_collapses_to_fused_reduction() -> None:
     code = alias_codes["S_total"]
     assert "S_buf" in code.co_names
     # Structural assertions: post-collapse the alias must reference its
-    # buffer at most once and reference both ``asarray`` and ``sum`` (a
+    # buffer at most once and reference native weight construction and ``sum`` (a
     # single fused multiply-reduce). The un-collapsed form would reference
-    # ``S_buf`` once per cell and never call ``asarray``/``sum``.
+    # ``S_buf`` once per cell and never construct a weight vector or call ``sum``.
     s_buf_loads = sum(
         1
         for instr in dis.get_instructions(code)
@@ -492,10 +492,8 @@ def test_weighted_apply_along_collapses_to_fused_reduction() -> None:
     assert s_buf_loads == 1, (
         f"expected a single fused S_buf load after collapse, got {s_buf_loads}"
     )
-    # The fused form materializes the weight vector with either
-    # ``np.asarray`` (string-collapser path) or ``np.array`` (IR fast path);
-    # both are correct and observably equivalent for a literal-list argument.
-    assert "asarray" in code.co_names or "array" in code.co_names
+    # Runtime construction binds the floating state precision and device.
+    assert "_op_system_weights" in code.co_names
     assert "sum" in code.co_names
 
     # The collapser must emit at least one numeric weight constant. Python

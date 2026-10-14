@@ -53,6 +53,11 @@ version; format loosely follows
 
 ### Fixed
 
+- Vectorized continuous reductions construct quadrature weights through the
+  runtime Array API, using the floating state dtype/device. This fixes CPU
+  Torch evaluation and float32 promotion on NumPy/JAX; analytic mixed-axis
+  integration regressions are required backend qualification (#283).
+
 - `sum_state()` lowers on the vectorized path and totals declared buffers
   through native reductions in flat, structured, and reaction evaluation.
   Totals exclude aliases/parameters and refresh per call. Global totals reject
