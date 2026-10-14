@@ -9,6 +9,10 @@ version; format loosely follows
 
 ### Added
 
+- Readiness coverage audit maps axis/reducer/transition/provider/error contracts
+  to existing regression suites, adds independent values for every generated
+  kernel form and provider injection, and checks empty-axis boundaries (#29).
+
 - Required installed-provider typing qualification verifies the shipped
   `py.typed` marker, public state/stepper types, and rejection of invalid state
   arguments. Clean-wheel tests and a dedicated CI job run the downstream check;
