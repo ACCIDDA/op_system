@@ -1378,9 +1378,34 @@ the current target age, and sums the source prevalence <code>I/N</code>. Use an 
 matrix while checking orientation; a symmetric matrix can hide a transpose.</p>
 <p>A transition with <code>from</code> uses a <strong>per-capita hazard</strong>: the infection flow is
 <code>foi[age] * S[age]</code>, not just <code>foi[age]</code>. Do not multiply by the source a second
-time in its rate. <code>from</code> omitted/null creates an absolute source inflow; <code>to</code>
-omitted/null creates a sink whose flow is still hazard times the source.
+time in its rate. <code>from</code> omitted/null creates an absolute source inflow.
+<code>to</code> must name a declared state: omitted/null sink destinations are currently
+unsupported and fail validation. Use an expression equation for an open loss,
+or track the loss in an explicit compartment. The latter retains the lost
+amount in the declared state total and exports a closed transfer reaction.
 A closed transition subtracts and adds the same flow, preserving population.</p>
+<p>These standalone alternatives both give <code>x' = -k*x</code>; the explicit loss
+compartment additionally gives <code>loss' = k*x</code>:</p>
+<!-- loss-alternatives -->
+
+<pre><code class="language-python">import numpy as np
+from op_system import compile_spec
+
+open_loss = compile_spec({
+    &quot;kind&quot;: &quot;expr&quot;,
+    &quot;state&quot;: [&quot;x&quot;],
+    &quot;equations&quot;: {&quot;x&quot;: &quot;-k*x&quot;},
+})
+tracked_loss = compile_spec({
+    &quot;kind&quot;: &quot;transitions&quot;,
+    &quot;state&quot;: [&quot;x&quot;, &quot;loss&quot;],
+    &quot;transitions&quot;: [{&quot;name&quot;: &quot;loss&quot;, &quot;from&quot;: &quot;x&quot;, &quot;to&quot;: &quot;loss&quot;, &quot;rate&quot;: &quot;k&quot;}],
+})
+open_derivative = open_loss.eval_fn(0.0, np.asarray([3.0]), k=2.0)  # [-6]
+tracked_derivative = tracked_loss.eval_fn(0.0, np.asarray([3.0, 0.0]), k=2.0)  # [-6, 6]
+</code></pre>
+<p>Expression equations do not currently export executable jump reactions; choose
+the representation required by the consuming deterministic/stochastic engine.</p>
 <p><code>initial_state</code> records provider seed parameter names. It does not allocate
 or initialize core arrays. A consuming framework resolves <code>S0</code>, <code>E0</code>, <code>I0</code>, and
 <code>R0</code>; core callers supply the state themselves as below. The shaped form states
