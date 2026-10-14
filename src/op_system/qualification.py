@@ -334,3 +334,112 @@ def _compare(
     )
 
 
+def _balance(
+    check: InvariantCheck,
+    fixture: QualificationFixture,
+    derivative: Mapping[str, Array],
+) -> NumericalCheck:
+    try:
+        residual = _host(
+            check.callback(fixture.time, fixture.state, derivative, fixture.params)
+        )
+    except Exception as exc:  # ruff: ignore[blind-except]
+        return NumericalCheck(
+            check.name,
+            passed=False,
+            max_abs_error=None,
+            errors=(f"{type(exc).__name__}: {exc}",),
+            condition=check.condition,
+            atol=check.atol,
+        )
+    finite = bool(residual.size and np.isfinite(residual).all())
+    maximum = float(np.max(np.abs(residual), initial=0)) if finite else None
+    passed = maximum is not None and maximum <= check.atol
+    errors = (
+        () if passed else (f"balance residual exceeds {check.atol:g} or is non-finite",)
+    )
+    return NumericalCheck(
+        check.name, passed, maximum, errors, check.condition, atol=check.atol
+    )
+
+
+def _directional(
+    compiled: CompiledRhs,
+    fixture: QualificationFixture,
+    reference: ReferenceRhs,
+    evaluator: Evaluator,
+    config: QualificationConfig,
+) -> NumericalCheck:
+    direction = fixture.direction
+    if direction is None:
+        msg = "a state direction is required"
+        raise ValueError(msg)
+    xp = array_namespace(next(iter(fixture.state.values())))
+    if not xp.__name__.startswith("jax"):
+        return _derivative_result(
+            config,
+            passed=False,
+            maximum=None,
+            errors=("directional qualification requires JAX state arrays",),
+        )
+    jax = importlib.import_module("jax")
+    step = config.derivative_step
+
+    state = dict(fixture.state)
+    _, tangent = jax.jvp(
+        lambda values: _evaluate(compiled, fixture._replace(state=values), evaluator),
+        (state,),
+        (dict(direction),),
+    )
+    plus = {
+        name: xp.add(value, xp.multiply(step, direction[name]))
+        for name, value in state.items()
+    }
+    minus = {
+        name: xp.subtract(value, xp.multiply(step, direction[name]))
+        for name, value in state.items()
+    }
+    upper = reference(fixture.time, plus, fixture.params)
+    lower = reference(fixture.time, minus, fixture.params)
+    maximum = 0.0
+    for name in state:
+        expected = (_host(upper[name]) - _host(lower[name])) / (2 * step)
+        actual = _host(tangent[name])
+        if not np.isfinite(actual).all() or not np.isfinite(expected).all():
+            return _derivative_result(
+                config,
+                passed=False,
+                maximum=None,
+                errors=(f"non-finite derivative for {name!r}",),
+            )
+        maximum = max(maximum, float(np.max(np.abs(actual - expected), initial=0)))
+        if not np.allclose(
+            actual, expected, rtol=config.derivative_rtol, atol=config.derivative_atol
+        ):
+            return _derivative_result(
+                config,
+                passed=False,
+                maximum=maximum,
+                errors=(f"directional derivative disagrees for state {name!r}",),
+            )
+    return _derivative_result(config, passed=True, maximum=maximum)
+
+
+def _derivative_result(
+    config: QualificationConfig,
+    *,
+    passed: bool,
+    maximum: float | None,
+    errors: tuple[str, ...] = (),
+) -> NumericalCheck:
+    return NumericalCheck(
+        "state_directional_derivative",
+        passed,
+        maximum,
+        errors,
+        rtol=config.derivative_rtol,
+        atol=config.derivative_atol,
+        step=config.derivative_step,
+    )
+
+
