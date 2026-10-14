@@ -1227,14 +1227,17 @@ tensors. Other Array API implementations may work through
 </code></pre>
 <h2 id="main-interfaces">Main interfaces<a class="headerlink" href="#main-interfaces" title="Permanent link">&para;</a></h2>
 <ul>
-<li><code>load_spec(...)</code> validates and normalizes a model specification.</li>
+<li><code>compile_spec(...)</code> validates, normalizes, and compiles a loaded mapping.</li>
+<li><code>normalize_rhs(...)</code> normalizes without compilation.</li>
+<li><code>validate_spec(...)</code> returns a structural validation report.</li>
 <li><code>compile_rhs(...)</code> creates a reusable <code>CompiledRhs</code> object.</li>
 <li><code>CompiledRhs.eval_fn(...)</code> evaluates a flat state vector.</li>
 <li><code>CompiledRhs.pytree_eval_fn(...)</code> evaluates shaped state mappings.</li>
 <li><code>CompiledRhs.block_pytree_eval_fn(...)</code> supports hierarchical block-axis
   vectorization using the specification's <code>factorize_axes</code> declaration.</li>
 </ul>
-<p>See the <a href="https://github.com/ACCIDDA/op_system#readme">repository README</a> for a
+<p>Start with the <a href="guides/getting-started/">model specification guide</a> and its
+executable age-structured SEIR example. See the <a href="https://github.com/ACCIDDA/op_system#readme">repository README</a> for a
 worked example and the navigation for the specification and API references.</p>
 <h2 id="array-namespace-boundary">Array namespace boundary<a class="headerlink" href="#array-namespace-boundary" title="Permanent link">&para;</a></h2>
 <p>The array namespace is selected from input arrays at call time. A numerical

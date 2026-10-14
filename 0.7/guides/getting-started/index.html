@@ -68,7 +68,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#getting-started" class="md-skip">
+        <a href="#writing-a-compartmental-model" class="md-skip">
           Skip to content
         </a>
       
@@ -519,6 +519,24 @@
         
       
       
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting Started
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
       <a href="./" class="md-nav__link md-nav__link--active">
         
   
@@ -535,6 +553,91 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#a-complete-age-structured-seir-model" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A complete age-structured SEIR model
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#evaluate-the-example" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Evaluate the example
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#equations-and-expression-syntax" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Equations and expression syntax
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#axes-and-mixing-choices" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Axes and mixing choices
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#operators-and-splitting" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Operators and splitting
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cross-axis-constraints-current-boundary" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cross-axis constraints: current boundary
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
       
     </li>
   
@@ -1070,6 +1173,80 @@
     
   
   
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#a-complete-age-structured-seir-model" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A complete age-structured SEIR model
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#evaluate-the-example" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Evaluate the example
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#equations-and-expression-syntax" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Equations and expression syntax
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#axes-and-mixing-choices" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Axes and mixing choices
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#operators-and-splitting" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Operators and splitting
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cross-axis-constraints-current-boundary" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cross-axis constraints: current boundary
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
 </nav>
                   </div>
                 </div>
@@ -1085,16 +1262,216 @@
 
 
 
-<h1 id="getting-started">Getting Started<a class="headerlink" href="#getting-started" title="Permanent link">&para;</a></h1>
-<p>A brief tutorial on how to get started with <code>OP System</code>.</p>
-<pre><code class="language-python">import math
+<h1 id="writing-a-compartmental-model">Writing a compartmental model<a class="headerlink" href="#writing-a-compartmental-model" title="Permanent link">&para;</a></h1>
+<p>Install the core compiler and a YAML reader:</p>
+<pre><code class="language-shell">python -m pip install op-system PyYAML
+</code></pre>
+<p>The compiler accepts a Python mapping. YAML/JSON loading is a caller concern;
+<code>compile_spec(spec)</code> validates, normalizes, and compiles it. <code>normalize_rhs(spec)</code>
+returns a normalized model without compilation, and <code>validate_spec(spec)</code>
+returns a structural report. There is no public <code>load_spec</code> file loader.</p>
+<h2 id="a-complete-age-structured-seir-model">A complete age-structured SEIR model<a class="headerlink" href="#a-complete-age-structured-seir-model" title="Permanent link">&para;</a></h2>
+<p>Save the following as <code>examples/age-seir.yaml</code> (create the <code>examples</code> directory
+first), or use the <a href="https://github.com/ACCIDDA/op_system/blob/main/examples/age-seir.yaml">checked example</a>.
+The groups are categorical population bins, so mixing uses an unweighted sum.
+Rates are per unit time. This synthetic example demonstrates authoring and
+balance checks; choose and independently qualify your scientific equations.</p>
+<!-- seir-spec -->
 
-foo = 2 * math.pi
+<pre><code class="language-yaml"># Shared rate beta; susceptibility varies by target age group.
+kind: transitions
+axes:
+  - name: age
+    type: categorical
+    coords: [young, old]
+state: [&quot;S[age]&quot;, &quot;E[age]&quot;, &quot;I[age]&quot;, &quot;R[age]&quot;]
+aliases:
+  &quot;N[age]&quot;: &quot;S[age] + E[age] + I[age] + R[age]&quot;
+  &quot;foi[age]&quot;: &quot;beta * susceptibility[age] * apply_along(C[age:s,age] * I[age:s] / N[age:s], age=s, kernel=sum)&quot;
+transitions:
+  - name: infection
+    from: &quot;S[age]&quot;
+    to: &quot;E[age]&quot;
+    rate: &quot;foi[age]&quot;
+  - name: progression
+    from: &quot;E[age]&quot;
+    to: &quot;I[age]&quot;
+    rate: &quot;kappa&quot;
+  - name: recovery
+    from: &quot;I[age]&quot;
+    to: &quot;R[age]&quot;
+    rate: &quot;gamma&quot;
+# Optional provider seed metadata; runtime values are supplied separately.
+initial_state:
+  &quot;S[age]&quot;: {shaped: S0, axes: [age]}
+  &quot;E[age]&quot;: {shaped: E0, axes: [age]}
+  &quot;I[age]&quot;: {shaped: I0, axes: [age]}
+  &quot;R[age]&quot;: {shaped: R0, axes: [age]}
 </code></pre>
-<p>And then</p>
-<pre><code class="language-python">&gt;&gt;&gt; foo
-6.283185307179586
+<p><code>state</code> order fixes the flat layout: all young/old S cells, then E, I, and R.
+Each bracketed state carries only its listed axes. Bare states are scalar;
+there is no automatic inheritance of every declared axis. Quote selectors in
+YAML flow lists, because their brackets and commas are part of the string.</p>
+<p>An alias is an expression, not another compartment. <code>N[age]</code> is the current
+population in that age bin. <code>C[source_age, target_age]</code> has source rows and target
+columns: <code>C[age:s,age]</code> binds the first index to source <code>s</code>, keeps the second at
+the current target age, and sums the source prevalence <code>I/N</code>. Use an asymmetric
+matrix while checking orientation; a symmetric matrix can hide a transpose.</p>
+<p>A transition with <code>from</code> uses a <strong>per-capita hazard</strong>: the infection flow is
+<code>foi[age] * S[age]</code>, not just <code>foi[age]</code>. Do not multiply by the source a second
+time in its rate. <code>from</code> omitted/null creates an absolute source inflow; <code>to</code>
+omitted/null creates a sink whose flow is still hazard times the source.
+A closed transition subtracts and adds the same flow, preserving population.</p>
+<p><code>initial_state</code> records provider seed parameter names. It does not allocate
+or initialize core arrays. A consuming framework resolves <code>S0</code>, <code>E0</code>, <code>I0</code>, and
+<code>R0</code>; core callers supply the state themselves as below. The shaped form states
+the parameter's axis order explicitly. A scalar mapping such as <code>S: S0</code> or a
+per-cell template such as <code>"S[age]": "S0[age]"</code> is also supported.</p>
+<h2 id="evaluate-the-example">Evaluate the example<a class="headerlink" href="#evaluate-the-example" title="Permanent link">&para;</a></h2>
+<p>Run from the directory containing <code>examples/age-seir.yaml</code>. The scalar parameters
+<code>beta</code>, <code>kappa</code>, and <code>gamma</code> are shared, <code>susceptibility</code> varies over the target
+age axis, and <code>C</code> is shared as a two-axis matrix. Arrays use float64 throughout.
+<code>compiled.param_names</code> lists inputs; <code>validate_spec(spec).parameters</code> reports
+scalar and shaped parameter axes;
+<code>compiled.template_shapes</code> describes the structured layout.</p>
+<!-- seir-evaluation -->
+
+<pre><code class="language-python">from pathlib import Path
+
+import numpy as np
+import yaml
+
+from op_system import compile_spec
+
+spec = yaml.safe_load(Path(&quot;examples/age-seir.yaml&quot;).read_text())
+compiled = compile_spec(spec)
+state = {
+    &quot;S&quot;: np.asarray([900.0, 600.0]),
+    &quot;E&quot;: np.asarray([20.0, 10.0]),
+    &quot;I&quot;: np.asarray([30.0, 40.0]),
+    &quot;R&quot;: np.asarray([50.0, 50.0]),
+}
+params = {
+    &quot;beta&quot;: 0.3,
+    &quot;kappa&quot;: 0.2,
+    &quot;gamma&quot;: 0.1,
+    &quot;susceptibility&quot;: np.asarray([1.0, 0.7]),
+    &quot;C&quot;: np.asarray([[4.0, 1.0], [2.0, 3.0]]),
+}
+flat = np.concatenate([state[name] for name in (&quot;S&quot;, &quot;E&quot;, &quot;I&quot;, &quot;R&quot;)])
+flat_rhs = compiled.eval_fn(0.0, flat, **params)
+assert compiled.pytree_eval_fn is not None
+rhs = compiled.pytree_eval_fn(0.0, state, **params)
+np.testing.assert_allclose(
+    flat_rhs, np.concatenate([rhs[name] for name in (&quot;S&quot;, &quot;E&quot;, &quot;I&quot;, &quot;R&quot;)])
+)
+np.testing.assert_allclose(sum(rhs.values()), np.zeros(2), atol=1e-12)
+print(np.round(np.stack(list(rhs.values())), 3))
 </code></pre>
+<p>Expected rows are S, E, I, R, with columns young, old:</p>
+<pre><code class="language-text">[[-63.257 -25.38 ]
+ [ 59.257  23.38 ]
+ [  1.     -2.   ]
+ [  3.      4.   ]]
+</code></pre>
+<p>This evaluates a derivative. Use a numerical engine to integrate it in time.
+For scientific checks beyond structural validation, use
+<a href="../numerical-qualification/"><code>qualify_rhs</code></a> with independently written equations
+and fixtures. The guide's CI test executes these exact YAML/Python fences and
+checks cell flows and per-age conservation against an independent loop oracle.</p>
+<h2 id="equations-and-expression-syntax">Equations and expression syntax<a class="headerlink" href="#equations-and-expression-syntax" title="Permanent link">&para;</a></h2>
+<p>Use <code>kind: expr</code> with one equation for each declared state to write derivatives
+directly. The following equations are equivalent to the transitions above when
+the same axes, aliases, and state are retained and <code>transitions</code> is removed:</p>
+<!-- seir-equations -->
+
+<pre><code class="language-yaml">kind: expr
+equations:
+  &quot;S[age]&quot;: &quot;-foi[age] * S[age]&quot;
+  &quot;E[age]&quot;: &quot;foi[age] * S[age] - kappa * E[age]&quot;
+  &quot;I[age]&quot;: &quot;kappa * E[age] - gamma * I[age]&quot;
+  &quot;R[age]&quot;: &quot;gamma * I[age]&quot;
+</code></pre>
+<p>Expressions support allowlisted arithmetic, named state/parameter references,
+aliases, and documented helper calls. They are not arbitrary Python programs:
+imports, attribute traversal, and arbitrary function calls are rejected.
+Reference a templated state as <code>I[age]</code>; a bare <code>I</code> is invalid unless a scalar
+state <code>I</code> is declared. Expression bindings use <code>age:s</code> inside brackets and
+<code>age=s</code> in reducer arguments. Endpoint pinning uses <code>"S[age=young]"</code> in transition
+selectors. See <a href="../expression-selectors/">expression selectors</a>,
+<a href="../global-state-totals/">global totals</a>, and <a href="../aging-chains/">aging chains</a>.</p>
+<h2 id="axes-and-mixing-choices">Axes and mixing choices<a class="headerlink" href="#axes-and-mixing-choices" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Axis type</th>
+<th>Coordinates and reduction</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Categorical (default)</td>
+<td>Unique nonempty labels; <code>sum_over</code> / <code>apply_along(..., kernel=sum)</code> use unweighted sums</td>
+</tr>
+<tr>
+<td>Ordinal</td>
+<td>Unique labels in declared order; reductions use sums while directional operators use the order</td>
+</tr>
+<tr>
+<td>Continuous</td>
+<td>Strictly increasing numeric coordinates; <code>integrate_over</code> / default <code>apply_along</code> use trapezoidal weights, requiring at least two points except the special constant time-table axis</td>
+</tr>
+</tbody>
+</table>
+<p>Nonuniform continuous grids carry quadrature weights; interpreting population
+counts as density values changes units. <code>sum_state()</code> totals declared cells
+without quadrature. For example, <code>sum_over(I[age:a], age=a)</code> sums discrete age
+bins, while <code>integrate_over(u[x:i], x=i)</code> integrates a field over continuous <code>x</code>.
+Time is a separate forcing axis; see <a href="../time-indexed-parameters/">time-indexed parameters</a>.</p>
+<p>Add spatial/risk axes explicitly to states and use local parameters such as
+<code>beta[loc]</code>. An independent <code>loc</code> can be declared in <code>factorize_axes: [loc]</code> only
+when no RHS, alias, or operator couples locations. The compiler rejects invalid
+factorization; see <a href="../batched-models/">independent batches</a>. Full and block
+layouts are separate choices from the runtime <a href="../array-namespaces/">array namespace</a>.</p>
+<p>Core callers supply matrix <code>C</code> as a parameter. Provider users can alternatively
+declare <code>kernels</code> with an explicit <code>value</code> matrix or a supported analytic form
+and declared numeric axes; the provider constructs and injects those values.
+Core compilation preserves these declarations as metadata and does not itself
+materialize analytic kernels. See the
+<a href="https://github.com/ACCIDDA/op_system/blob/main/flepimop2-op_system/README.md">provider README</a>
+and <a href="../../development/coverage-audit/">coverage audit</a> for generation contracts.</p>
+<h2 id="operators-and-splitting">Operators and splitting<a class="headerlink" href="#operators-and-splitting" title="Permanent link">&para;</a></h2>
+<p>An <code>operators</code> block describes processes for a consuming numerical engine,
+separately from equations/transitions. For example, an ordinal immune-state axis
+can declare advection with a rate parameter and direction, while a continuous
+trait can declare conservative jumps. Compilation exposes typed descriptors in
+<code>compiled.operators</code>; <code>eval_fn</code> alone does not advance or apply these metadata
+operators. The engine must resolve coefficients, discretization, boundaries,
+and splitting stages. Follow the <a href="../operators/">operator guide</a> for supported
+schemas and conservative reference functions; do not count a process twice by
+also including it in the RHS.</p>
+<h2 id="cross-axis-constraints-current-boundary">Cross-axis constraints: current boundary<a class="headerlink" href="#cross-axis-constraints-current-boundary" title="Permanent link">&para;</a></h2>
+<p><code>constraints</code> is currently a reserved metadata block. Public normalization
+preserves it verbatim; the private constraint parser's validation does not
+provide public masking. State expansion and reductions still cover the full
+Cartesian product. Filtering and constraint-aware reductions are tracked in
+<a href="https://github.com/ACCIDDA/op_system/issues/37">#37</a> and
+<a href="https://github.com/ACCIDDA/op_system/issues/38">#38</a>.</p>
+<p>The planned schema uses at least two axes and either <code>allow</code> or <code>exclude</code>:</p>
+<pre><code class="language-yaml"># Planned masking metadata; this does not remove current compartments.
+constraints:
+  - axes: [age, vax]
+    allow:
+      - {age: young, vax: [none]}
+      - {age: old}
+</code></pre>
+<p>An allow rule would retain its matching combinations; an omitted axis in a
+rule would match all its coordinates. An exclude rule would remove matches.
+Until filtering is implemented, represent asymmetric populations explicitly,
+for example <code>state: ["S_young", "S_old[vax]"]</code>, with equations/transitions for
+those states and independently checked totals. Do not rely on this reserved
+block to prevent invalid flows or omit state cells. Broader constraint examples
+remain tracked in <a href="https://github.com/ACCIDDA/op_system/issues/39">#39</a>.</p>
 
 
 
