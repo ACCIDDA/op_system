@@ -11,6 +11,33 @@ permissions:
   contents: 'read'
 
 jobs:
+  compiler-backends:
+    name: 'compiler (${{ matrix.backend }}, 3.12)'
+    runs-on: 'ubuntu-latest'
+    strategy:
+      fail-fast: false
+      matrix:
+        backend: ['numpy', 'jax', 'torch']
+    steps:
+      - name: 'checkout repository'
+        uses: 'actions/checkout@v6'
+        with:
+          persist-credentials: false
+      - name: 'setup uv'
+        uses: 'astral-sh/setup-uv@v7'
+        with:
+          enable-cache: true
+          cache-dependency-glob: '**/pyproject.toml'
+          python-version: '3.12'
+      - name: 'install selected core backend'
+        run: |
+          uv sync --dev
+          case '${{ matrix.backend }}' in
+            jax) uv sync --dev --extra jax ;;
+            torch) uv pip install 'torch>=2.6' --index-url https://download.pytorch.org/whl/cpu ;;
+          esac
+      - name: 'qualify selected backend without skips'
+        run: 'uv run --no-sync python scripts/qualify_backend.py ${{ matrix.backend }}'
   docs:
     name: 'docs'
     runs-on: 'ubuntu-latest'
