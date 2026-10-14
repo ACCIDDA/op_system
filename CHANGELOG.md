@@ -64,6 +64,10 @@ version; format loosely follows
   default-float precision. Native typed values remain unchanged; required CPU
   regressions cover both precisions and zero state Jacobians (#277).
 
+- Provider `erfc` mixing kernels construct float64 matrices with the standard
+  complementary error function instead of calling the unavailable `numpy.erfc`.
+  Independent value regressions cover scaled distances and positive tails (#274).
+
 - Mixed selectors in compatibility template substitution retain explicitly
   bound coordinates when substituting wildcard axes, instead of collapsing a
   partial selector to a cell name. Required CPU backend regressions qualify

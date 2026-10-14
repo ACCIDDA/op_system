@@ -58,3 +58,11 @@ parameter:
 
 Off-support entries are zero. `SparseTableParameter.support(axes)` returns
 the support positions for inference.
+
+For an `erfc` mixing kernel on numeric coordinates, declare `axes: [age, age]`
+and `params: {scale: 1.0, sigma: 2.0}`. The provider constructs the float64 host
+matrix `C[i, j] = scale * erfc(abs(age[i] - age[j]) / sigma)` once when the
+system is built. It uses Python's [complementary error function](https://docs.python.org/3/library/math.html#math.erfc)
+directly to preserve small positive tail values; SciPy is not a runtime
+dependency. Kernel declarations without axes retain their existing scalar
+`params.value` behavior.
