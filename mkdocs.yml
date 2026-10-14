@@ -51,6 +51,7 @@ nav:
       - Citation and Archiving: development/citation-and-archiving.md
   - Guides:
       - Getting Started: guides/getting-started.md
+      - Parameter Declarations: guides/parameter-declarations.md
       - Expression Selectors: guides/expression-selectors.md
       - Global State Totals: guides/global-state-totals.md
       - Operator Metadata: guides/operators.md

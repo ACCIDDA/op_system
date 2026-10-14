@@ -9,6 +9,11 @@ version; format loosely follows
 
 ### Added
 
+- Optional `parameters` declarations validate support, units, descriptions and
+  fixed/free annotations for inferred scalar, shaped and time-varying RHS
+  parameters. Compiled `param_meta` exposes immutable records without binding
+  values or changing numerical behavior (#292).
+
 - Readiness coverage audit maps axis/reducer/transition/provider/error contracts
   to existing regression suites, adds independent values for every generated
   kernel form and provider injection, and checks empty-axis boundaries (#29).

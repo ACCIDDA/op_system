@@ -44,6 +44,7 @@ def main() -> int:
                 "pytest",
                 "tests/op_system/test_backend_qualification.py",
                 "tests/op_system/test_hierarchical_benchmark.py",
+                "tests/op_system/test_parameter_metadata.py",
                 "-k",
                 args.backend,
                 "-q",

@@ -102,6 +102,7 @@ from op_system._normalize_kernels import (
     _normalize_operators,
     _normalize_state_axes,
 )
+from op_system._parameter_meta import _parameter_declaration_metadata
 from op_system._reactions import (
     ReactionArtifactIR,
     ReactionGap,
@@ -569,21 +570,30 @@ def normalize_expr_rhs(spec: Mapping[str, Any]) -> ExprRhs:  # ruff: ignore[comp
         aliases_ir_map, aliases_ir_map, _unparse_memo=unparse_memo
     )
 
+    param_names = _sorted_unique(
+        sym
+        for sym in all_syms
+        if sym not in state_set
+        and sym not in aliases_ir_map
+        and sym not in shaped_set
+        and sym not in time_varying_set
+        and sym not in axis_name_set
+        and sym not in template_base_set
+        and sym not in _SHAPED_PARAM_BUILTIN_NAMES
+    )
+    meta.update(
+        _parameter_declaration_metadata(
+            spec.get("parameters"),
+            known_names=(set(param_names) | set(shaped_params) | set(time_varying_full))
+            - set(meta.get("op_system_synth_constants", {})),
+        )
+    )
+
     return ExprRhs(
         state_names=tuple(state_expanded),
         equations=equations_strings,
         aliases=aliases_strings,
-        param_names=_sorted_unique(
-            sym
-            for sym in all_syms
-            if sym not in state_set
-            and sym not in aliases_ir_map
-            and sym not in shaped_set
-            and sym not in time_varying_set
-            and sym not in axis_name_set
-            and sym not in template_base_set
-            and sym not in _SHAPED_PARAM_BUILTIN_NAMES
-        ),
+        param_names=param_names,
         all_symbols=frozenset(all_syms | set(aliases_ir_map.keys())),
         meta=meta,
         state_templates=_build_state_templates(
@@ -2266,6 +2276,25 @@ def normalize_transitions_rhs(  # ruff: ignore[complex-structure, too-many-branc
         outer_inline_memo[id(expr)] = result_expr
         equations_ir_built_list.append(result_expr)
     equations_ir_built = tuple(equations_ir_built_list)
+    param_names = _sorted_unique(
+        sym
+        for sym in all_syms
+        if sym not in state_set
+        and sym not in aliases_ir_map
+        and sym not in shaped_set
+        and sym not in time_varying_set
+        and sym not in axis_name_set
+        and sym not in template_base_set
+        and sym not in _SHAPED_PARAM_BUILTIN_NAMES
+    )
+    meta.update(
+        _parameter_declaration_metadata(
+            spec.get("parameters"),
+            known_names=(set(param_names) | set(shaped_params) | set(time_varying_full))
+            - set(meta.get("op_system_synth_constants", {})),
+        )
+    )
+
     return TransitionsRhs(
         reactions_ir=reactions_ir,
         reaction_gaps_ir=reaction_gaps_ir,
@@ -2274,17 +2303,7 @@ def normalize_transitions_rhs(  # ruff: ignore[complex-structure, too-many-branc
         aliases=_derive_alias_strings(
             aliases_ir_map, aliases_ir_map, _unparse_memo=unparse_memo_final
         ),
-        param_names=_sorted_unique(
-            sym
-            for sym in all_syms
-            if sym not in state_set
-            and sym not in aliases_ir_map
-            and sym not in shaped_set
-            and sym not in time_varying_set
-            and sym not in axis_name_set
-            and sym not in template_base_set
-            and sym not in _SHAPED_PARAM_BUILTIN_NAMES
-        ),
+        param_names=param_names,
         all_symbols=frozenset(all_syms | set(aliases_ir_map.keys())),
         meta={**meta, "transitions": transitions_expanded},
         state_templates=_build_state_templates(
