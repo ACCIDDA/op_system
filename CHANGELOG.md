@@ -9,6 +9,13 @@ version; format loosely follows
 
 ### Added
 
+- A correctness-gated hierarchical benchmark compares handwritten and generated
+  NumPy/JAX/CPU Torch RHS layouts over independent and coupled group variants.
+  Isolated serial workers separate normalization, code generation, JAX
+  compilation, and warm evaluation, emitting dimensions, agreement, timings,
+  memory, and provenance as JSON. Small correctness cases are mandatory backend
+  checks; larger timings remain opt-in through `just benchmark` (#265).
+
 - `qualify_rhs` compares named state/parameter fixtures against independently
   supplied equations through flat, structured, and available block evaluators.
   Reports include tolerances, finite values, shapes/dtypes, and agreement

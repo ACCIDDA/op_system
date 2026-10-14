@@ -23,6 +23,11 @@ For model authoring, opt into
 reference parity and conditional balances, and request JAX state-direction
 checks separately from structural validation.
 
+The [hierarchical benchmark guide](docs/guides/hierarchical-benchmarks.md)
+compares handwritten and generated NumPy/JAX/Torch evaluation, separating
+preprocessing, backend compilation, and warm costs. Run `just benchmark` for
+opt-in timings and machine-readable results.
+
 ## Why op_system?
 
 Modelers often combine compartment hazards, templated populations, and rich

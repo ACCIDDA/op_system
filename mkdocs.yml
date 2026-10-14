@@ -55,6 +55,7 @@ nav:
       - Independent Batches: guides/batched-models.md
       - Backend Qualification: guides/backend-qualification.md
       - Numerical Qualification: guides/numerical-qualification.md
+      - Hierarchical Benchmarks: guides/hierarchical-benchmarks.md
   - API Reference:
       - OP System: api-reference/op-system.md
       - Compile: api-reference/compile.md
