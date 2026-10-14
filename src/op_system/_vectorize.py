@@ -1270,7 +1270,7 @@ def make_vectorized_eval_fn(plan: _VectorPlan) -> EvalFn:  # ruff: ignore[comple
                     xp.stack(bin_results, axis=0),
                     grp.unroll_shape + grp.vec_shape,
                 )
-                whole = xp.transpose(stacked, grp.assembly_perm)
+                whole = xp.permute_dims(stacked, grp.assembly_perm)
             pieces.append(xp.reshape(whole, (-1,)))
 
         return cast("Float64Array", xp.concatenate(pieces))
@@ -1397,7 +1397,7 @@ def make_pytree_eval_fn(plan: _VectorPlan) -> PytreeEvalFn:  # ruff: ignore[comp
                     xp.stack(bin_results, axis=0),
                     grp.unroll_shape + grp.vec_shape,
                 )
-                whole = xp.transpose(stacked, grp.assembly_perm)
+                whole = xp.permute_dims(stacked, grp.assembly_perm)
             # Return the shaped array (no flatten) keyed by template base name.
             result[grp.base] = whole
 

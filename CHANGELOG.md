@@ -7,8 +7,21 @@ version; format loosely follows
 
 ## [Unreleased]
 
+### Added
+
+- Required core compiler qualification jobs install NumPy, JAX, and CPU
+  Torch explicitly and reject missing or skipped backend tests. A synthetic
+  hierarchical model checks flat, structured, and valid block evaluation
+  against independent equations, dtype/shape/namespace preservation, JAX
+  jit/vmap/directional derivatives, and CPU Torch autograd. Coupled groups
+  are rejected when declared independent. See `just qualify` and the backend
+  capability guide; optional runtime extras remain optional (#263).
+
 ### Fixed
 
+- Generated axis reordering and vectorized assembly use Array API
+  `permute_dims`, fixing Torch evaluation of reordered axes and reducers
+  that previously called NumPy-style `transpose` (#263).
 - Axis-indexed expression normalization builds state membership, expanded
   equation lookup, and coordinate-position maps once rather than repeating
   full scans for each cell. Alias inlining uses the mapping's keys view

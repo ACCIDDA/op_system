@@ -11,6 +11,26 @@ dev: ruff mypy test
 # Run all default CI tasks
 ci: quality test docs
 
+# Qualify the core compiler separately from provider tests.
+[group('ci')]
+qualify: qualify-numpy qualify-jax qualify-torch
+
+[group('ci')]
+qualify-numpy:
+	uv sync --dev
+	uv run --no-sync python scripts/qualify_backend.py numpy
+
+[group('ci')]
+qualify-jax:
+	uv sync --dev --extra jax
+	uv run --no-sync python scripts/qualify_backend.py jax
+
+[group('ci')]
+qualify-torch:
+	uv sync --dev
+	uv pip install 'torch>=2.6' --index-url https://download.pytorch.org/whl/cpu
+	uv run --no-sync python scripts/qualify_backend.py torch
+
 # Format code in both packages
 [group('dev')]
 fmt: fmt-root fmt-provider
@@ -135,6 +155,7 @@ build-test-core:
 	uv pip install --python "${CLEANROOM}/venv/bin/python" -r "${CLEANROOM}/dev-requirements.txt"
 	cp pyproject.toml "${CLEANROOM}/pyproject.toml"
 	cp -R tests "${CLEANROOM}/tests"
+	cp -R benchmarks "${CLEANROOM}/benchmarks"
 	cd "${CLEANROOM}"
 	"${CLEANROOM}/venv/bin/pytest" --import-mode=importlib tests --quiet --exitfirst
 
