@@ -564,6 +564,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../../guides/state-representations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    State Representations
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../guides/expression-selectors/" class="md-nav__link">
         
   
@@ -1095,6 +1123,45 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#op_system.specs.AxisDeclaration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        AxisDeclaration
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#op_system.specs.AxisMeasure" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        AxisMeasure
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="AxisMeasure">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#op_system.specs.AxisMeasure.from_mapping" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        from_mapping
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#op_system.specs.ExprRhs" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1208,6 +1275,34 @@
       
     </span>
   </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#op_system.specs.StateDeclaration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        StateDeclaration
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="StateDeclaration">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#op_system.specs.StateDeclaration.from_mapping" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        from_mapping
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
         
@@ -1376,6 +1471,45 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#op_system.specs.AxisDeclaration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        AxisDeclaration
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#op_system.specs.AxisMeasure" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        AxisMeasure
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="AxisMeasure">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#op_system.specs.AxisMeasure.from_mapping" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        from_mapping
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#op_system.specs.ExprRhs" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1489,6 +1623,34 @@
       
     </span>
   </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#op_system.specs.StateDeclaration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        StateDeclaration
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="StateDeclaration">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#op_system.specs.StateDeclaration.from_mapping" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        from_mapping
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
         
@@ -1623,6 +1785,385 @@ for backward compatibility.</p>
 
 
 
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="op_system.specs.AxisDeclaration" class="doc doc-heading">
+            <code>AxisDeclaration</code>
+
+
+<a href="#op_system.specs.AxisDeclaration" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="typing.NamedTuple">NamedTuple</span></code></p>
+
+
+
+        <p>Physical interpretation of a named axis.</p>
+
+
+<p><span class="doc-section-title">Attributes:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code><span title="op_system.specs.AxisDeclaration.units">units</span></code></td>
+            <td>
+                  <code><span title="str">str</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Coordinate units, independent of measure units.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="op_system.specs.AxisDeclaration.measure">measure</span></code></td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="AxisMeasure (op_system._scientific_meta.AxisMeasure)" href="#op_system.specs.AxisMeasure">AxisMeasure</a> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Explicit measure, or None when undeclared.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="op_system.specs.AxisMeasure" class="doc doc-heading">
+            <code>AxisMeasure</code>
+
+
+<a href="#op_system.specs.AxisMeasure" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="typing.NamedTuple">NamedTuple</span></code></p>
+
+
+
+        <p>Explicit physical measure in the axis coordinate order.</p>
+
+
+<p><span class="doc-section-title">Attributes:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code><span title="op_system.specs.AxisMeasure.kind">kind</span></code></td>
+            <td>
+                  <code><span title="op_system._scientific_meta._MeasureKind">_MeasureKind</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Counting, cell widths/volumes, or point quadrature weights.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="op_system.specs.AxisMeasure.weights">weights</span></code></td>
+            <td>
+                  <code><span title="tuple">tuple</span>[<span title="float">float</span>, ...]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Finite strictly positive weights, one per coordinate.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="op_system.specs.AxisMeasure.units">units</span></code></td>
+            <td>
+                  <code><span title="str">str</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Optional measure units, without dimensional verification.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h4 id="op_system.specs.AxisMeasure.from_mapping" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">from_mapping</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">size</span><span class="p">)</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-classmethod"><code>classmethod</code></small>
+  </span>
+
+<a href="#op_system.specs.AxisMeasure.from_mapping" class="headerlink" title="Permanent link">&para;</a></h4>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Validate a measure without inferring geometry from coordinates.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>value</code>
+            </td>
+            <td>
+                  <code><span title="object">object</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Mapping with kind, optional units, and weights for cell/quadrature.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>size</code>
+            </td>
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Number of axis coordinates.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="AxisMeasure (op_system._scientific_meta.AxisMeasure)" href="#op_system.specs.AxisMeasure">AxisMeasure</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Immutable measure in coordinate order.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<p><span class="doc-section-title">Raises:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="op_system._errors.InvalidRhsSpecError">InvalidRhsSpecError</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>If the kind, units, weights or length are invalid.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+            <details class="mkdocstrings-source">
+              <summary>Source code in <code>src/op_system/_scientific_meta.py</code></summary>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">36</span>
+<span class="normal">37</span>
+<span class="normal">38</span>
+<span class="normal">39</span>
+<span class="normal">40</span>
+<span class="normal">41</span>
+<span class="normal">42</span>
+<span class="normal">43</span>
+<span class="normal">44</span>
+<span class="normal">45</span>
+<span class="normal">46</span>
+<span class="normal">47</span>
+<span class="normal">48</span>
+<span class="normal">49</span>
+<span class="normal">50</span>
+<span class="normal">51</span>
+<span class="normal">52</span>
+<span class="normal">53</span>
+<span class="normal">54</span>
+<span class="normal">55</span>
+<span class="normal">56</span>
+<span class="normal">57</span>
+<span class="normal">58</span>
+<span class="normal">59</span>
+<span class="normal">60</span>
+<span class="normal">61</span>
+<span class="normal">62</span>
+<span class="normal">63</span>
+<span class="normal">64</span>
+<span class="normal">65</span>
+<span class="normal">66</span>
+<span class="normal">67</span>
+<span class="normal">68</span>
+<span class="normal">69</span>
+<span class="normal">70</span>
+<span class="normal">71</span>
+<span class="normal">72</span>
+<span class="normal">73</span>
+<span class="normal">74</span>
+<span class="normal">75</span>
+<span class="normal">76</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="nd">@classmethod</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">from_mapping</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="nb">object</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">size</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AxisMeasure</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Validate a measure without inferring geometry from coordinates.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        value: Mapping with kind, optional units, and weights for cell/quadrature.</span>
+<span class="sd">        size: Number of axis coordinates.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        Immutable measure in coordinate order.</span>
+
+<span class="sd">    Raises:</span>
+<span class="sd">        InvalidRhsSpecError: If the kind, units, weights or length are invalid.</span>
+<span class="sd">    """</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">size</span><span class="p">,</span> <span class="nb">int</span><span class="p">)</span> <span class="ow">or</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">size</span><span class="p">,</span> <span class="nb">bool</span><span class="p">)</span> <span class="ow">or</span> <span class="n">size</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">InvalidRhsSpecError</span><span class="p">(</span>
+            <span class="n">detail</span><span class="o">=</span><span class="s2">"axis measure size must be a positive integer"</span>
+        <span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">)</span> <span class="ow">or</span> <span class="nb">set</span><span class="p">(</span><span class="n">value</span><span class="p">)</span> <span class="o">-</span> <span class="p">{</span><span class="s2">"kind"</span><span class="p">,</span> <span class="s2">"weights"</span><span class="p">,</span> <span class="s2">"units"</span><span class="p">}:</span>
+        <span class="k">raise</span> <span class="n">InvalidRhsSpecError</span><span class="p">(</span>
+            <span class="n">detail</span><span class="o">=</span><span class="s2">"axis measure must contain kind, weights and/or units"</span>
+        <span class="p">)</span>
+    <span class="n">kind</span> <span class="o">=</span> <span class="n">value</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"kind"</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">kind</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="ow">or</span> <span class="n">kind</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">{</span><span class="s2">"counting"</span><span class="p">,</span> <span class="s2">"cell"</span><span class="p">,</span> <span class="s2">"quadrature"</span><span class="p">}:</span>
+        <span class="k">raise</span> <span class="n">InvalidRhsSpecError</span><span class="p">(</span>
+            <span class="n">detail</span><span class="o">=</span><span class="s2">"axis measure kind must be counting, cell or quadrature"</span>
+        <span class="p">)</span>
+    <span class="k">if</span> <span class="n">kind</span> <span class="o">==</span> <span class="s2">"counting"</span><span class="p">:</span>
+        <span class="k">if</span> <span class="s2">"weights"</span> <span class="ow">in</span> <span class="n">value</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">InvalidRhsSpecError</span><span class="p">(</span>
+                <span class="n">detail</span><span class="o">=</span><span class="s2">"counting measure has unit weights; omit weights"</span>
+            <span class="p">)</span>
+        <span class="n">weights</span> <span class="o">=</span> <span class="p">(</span><span class="mf">1.0</span><span class="p">,)</span> <span class="o">*</span> <span class="n">size</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">raw_weights</span> <span class="o">=</span> <span class="n">value</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"weights"</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">raw_weights</span><span class="p">,</span> <span class="p">(</span><span class="nb">list</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">))</span> <span class="ow">or</span> <span class="nb">len</span><span class="p">(</span><span class="n">raw_weights</span><span class="p">)</span> <span class="o">!=</span> <span class="n">size</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">InvalidRhsSpecError</span><span class="p">(</span>
+                <span class="n">detail</span><span class="o">=</span><span class="s2">"axis measure weights must match the coordinate count"</span>
+            <span class="p">)</span>
+        <span class="n">weights</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">_positive_weight</span><span class="p">(</span><span class="n">weight</span><span class="p">)</span> <span class="k">for</span> <span class="n">weight</span> <span class="ow">in</span> <span class="n">raw_weights</span><span class="p">)</span>
+    <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="n">cast</span><span class="p">(</span><span class="s2">"_MeasureKind"</span><span class="p">,</span> <span class="n">kind</span><span class="p">),</span> <span class="n">weights</span><span class="p">,</span> <span class="n">_optional_text</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="s2">"units"</span><span class="p">))</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
 
 <div class="doc doc-object doc-class">
 
@@ -2431,6 +2972,329 @@ does not bind a value or remove a runtime parameter.</p>
 
 
 
+<h3 id="op_system.specs.StateDeclaration" class="doc doc-heading">
+            <code>StateDeclaration</code>
+
+
+<a href="#op_system.specs.StateDeclaration" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="typing.NamedTuple">NamedTuple</span></code></p>
+
+
+
+        <p>Optional representation and physical reduction requirements of a state.</p>
+
+
+<p><span class="doc-section-title">Attributes:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code><span title="op_system.specs.StateDeclaration.representation">representation</span></code></td>
+            <td>
+                  <code><span title="op_system._scientific_meta._Representation">_Representation</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Extensive counts/mass/counter or intensive density/
+concentration; None when unknown. Cumulative means an extensive
+accumulated counter, without asserting monotonicity of its equations.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="op_system.specs.StateDeclaration.units">units</span></code></td>
+            <td>
+                  <code><span title="str">str</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>State value units, without dimensional verification.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="op_system.specs.StateDeclaration.description">description</span></code></td>
+            <td>
+                  <code><span title="str">str</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Human-readable annotation.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="op_system.specs.StateDeclaration.measure_axes">measure_axes</span></code></td>
+            <td>
+                  <code><span title="tuple">tuple</span>[<span title="str">str</span>, ...] | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Axes whose measures are required for an intensive integral.
+None means undeclared; an empty tuple explicitly needs none.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h4 id="op_system.specs.StateDeclaration.from_mapping" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">from_mapping</span><span class="p">(</span><span class="n">value</span><span class="p">)</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-classmethod"><code>classmethod</code></small>
+  </span>
+
+<a href="#op_system.specs.StateDeclaration.from_mapping" class="headerlink" title="Permanent link">&para;</a></h4>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Validate a state annotation without changing its equations.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>value</code>
+            </td>
+            <td>
+                  <code><span title="object">object</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Mapping of representation, units, description and measure_axes.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="StateDeclaration (op_system._scientific_meta.StateDeclaration)" href="#op_system.specs.StateDeclaration">StateDeclaration</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Immutable declaration; omitted information remains unknown.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<p><span class="doc-section-title">Raises:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="op_system._errors.InvalidRhsSpecError">InvalidRhsSpecError</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>If fields or their values are invalid.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+            <details class="mkdocstrings-source">
+              <summary>Source code in <code>src/op_system/_scientific_meta.py</code></summary>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">109</span>
+<span class="normal">110</span>
+<span class="normal">111</span>
+<span class="normal">112</span>
+<span class="normal">113</span>
+<span class="normal">114</span>
+<span class="normal">115</span>
+<span class="normal">116</span>
+<span class="normal">117</span>
+<span class="normal">118</span>
+<span class="normal">119</span>
+<span class="normal">120</span>
+<span class="normal">121</span>
+<span class="normal">122</span>
+<span class="normal">123</span>
+<span class="normal">124</span>
+<span class="normal">125</span>
+<span class="normal">126</span>
+<span class="normal">127</span>
+<span class="normal">128</span>
+<span class="normal">129</span>
+<span class="normal">130</span>
+<span class="normal">131</span>
+<span class="normal">132</span>
+<span class="normal">133</span>
+<span class="normal">134</span>
+<span class="normal">135</span>
+<span class="normal">136</span>
+<span class="normal">137</span>
+<span class="normal">138</span>
+<span class="normal">139</span>
+<span class="normal">140</span>
+<span class="normal">141</span>
+<span class="normal">142</span>
+<span class="normal">143</span>
+<span class="normal">144</span>
+<span class="normal">145</span>
+<span class="normal">146</span>
+<span class="normal">147</span>
+<span class="normal">148</span>
+<span class="normal">149</span>
+<span class="normal">150</span>
+<span class="normal">151</span>
+<span class="normal">152</span>
+<span class="normal">153</span>
+<span class="normal">154</span>
+<span class="normal">155</span>
+<span class="normal">156</span>
+<span class="normal">157</span>
+<span class="normal">158</span>
+<span class="normal">159</span>
+<span class="normal">160</span>
+<span class="normal">161</span>
+<span class="normal">162</span>
+<span class="normal">163</span>
+<span class="normal">164</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="nd">@classmethod</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">from_mapping</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="nb">object</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">StateDeclaration</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Validate a state annotation without changing its equations.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        value: Mapping of representation, units, description and measure_axes.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        Immutable declaration; omitted information remains unknown.</span>
+
+<span class="sd">    Raises:</span>
+<span class="sd">        InvalidRhsSpecError: If fields or their values are invalid.</span>
+<span class="sd">    """</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">)</span> <span class="ow">or</span> <span class="nb">set</span><span class="p">(</span><span class="n">value</span><span class="p">)</span> <span class="o">-</span> <span class="p">{</span>
+        <span class="s2">"representation"</span><span class="p">,</span>
+        <span class="s2">"units"</span><span class="p">,</span>
+        <span class="s2">"description"</span><span class="p">,</span>
+        <span class="s2">"measure_axes"</span><span class="p">,</span>
+    <span class="p">}:</span>
+        <span class="k">raise</span> <span class="n">InvalidRhsSpecError</span><span class="p">(</span>
+            <span class="n">detail</span><span class="o">=</span><span class="s2">"state metadata contains unknown fields or is not a mapping"</span>
+        <span class="p">)</span>
+    <span class="n">representation</span> <span class="o">=</span> <span class="n">value</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"representation"</span><span class="p">)</span>
+    <span class="k">if</span> <span class="s2">"representation"</span> <span class="ow">in</span> <span class="n">value</span> <span class="ow">and</span> <span class="p">(</span>
+        <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">representation</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span>
+        <span class="ow">or</span> <span class="n">representation</span>
+        <span class="ow">not</span> <span class="ow">in</span> <span class="p">{</span><span class="s2">"counts"</span><span class="p">,</span> <span class="s2">"cell_mass"</span><span class="p">,</span> <span class="s2">"density"</span><span class="p">,</span> <span class="s2">"concentration"</span><span class="p">,</span> <span class="s2">"cumulative"</span><span class="p">}</span>
+    <span class="p">):</span>
+        <span class="k">raise</span> <span class="n">InvalidRhsSpecError</span><span class="p">(</span>
+            <span class="n">detail</span><span class="o">=</span><span class="p">(</span>
+                <span class="s2">"state representation must be counts, cell_mass, density, "</span>
+                <span class="s2">"concentration or cumulative"</span>
+            <span class="p">)</span>
+        <span class="p">)</span>
+    <span class="n">measure_axes</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="k">if</span> <span class="s2">"measure_axes"</span> <span class="ow">in</span> <span class="n">value</span><span class="p">:</span>
+        <span class="n">axes</span> <span class="o">=</span> <span class="n">value</span><span class="p">[</span><span class="s2">"measure_axes"</span><span class="p">]</span>
+        <span class="k">if</span> <span class="p">(</span>
+            <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">axes</span><span class="p">,</span> <span class="p">(</span><span class="nb">list</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">))</span>
+            <span class="ow">or</span> <span class="nb">any</span><span class="p">(</span><span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">axis</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">axis</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span> <span class="k">for</span> <span class="n">axis</span> <span class="ow">in</span> <span class="n">axes</span><span class="p">)</span>
+            <span class="ow">or</span> <span class="nb">len</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="n">axes</span><span class="p">))</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="n">axes</span><span class="p">)</span>
+        <span class="p">):</span>
+            <span class="k">raise</span> <span class="n">InvalidRhsSpecError</span><span class="p">(</span>
+                <span class="n">detail</span><span class="o">=</span><span class="s2">"state measure_axes must list unique nonempty axis names"</span>
+            <span class="p">)</span>
+        <span class="n">measure_axes</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">axes</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">representation</span> <span class="ow">in</span> <span class="p">{</span><span class="s2">"counts"</span><span class="p">,</span> <span class="s2">"cell_mass"</span><span class="p">,</span> <span class="s2">"cumulative"</span><span class="p">}</span> <span class="ow">and</span> <span class="n">measure_axes</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">InvalidRhsSpecError</span><span class="p">(</span>
+                <span class="n">detail</span><span class="o">=</span><span class="s2">"extensive states do not require measure weights"</span>
+            <span class="p">)</span>
+    <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span>
+        <span class="n">cast</span><span class="p">(</span><span class="s2">"_Representation | None"</span><span class="p">,</span> <span class="n">representation</span><span class="p">),</span>
+        <span class="n">_optional_text</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="s2">"units"</span><span class="p">),</span>
+        <span class="n">_optional_text</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="s2">"description"</span><span class="p">),</span>
+        <span class="n">measure_axes</span><span class="p">,</span>
+    <span class="p">)</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
 <h3 id="op_system.specs.StateTemplate" class="doc doc-heading">
               <code class="highlight language-python"><span class="n">StateTemplate</span><span class="p">(</span><span class="n">base</span><span class="p">,</span> <span class="n">axes</span><span class="p">,</span> <span class="n">shape</span><span class="p">,</span> <span class="n">expanded_names</span><span class="p">,</span> <span class="n">coord_assignments</span><span class="p">,</span> <span class="n">offset</span><span class="p">)</span></code>
 
@@ -2769,8 +3633,7 @@ as the union type when you need to accept both kinds.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/op_system/_normalize.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">381</span>
-<span class="normal">382</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">382</span>
 <span class="normal">383</span>
 <span class="normal">384</span>
 <span class="normal">385</span>
@@ -3004,7 +3867,17 @@ as the union type when you need to accept both kinds.</p>
 <span class="normal">613</span>
 <span class="normal">614</span>
 <span class="normal">615</span>
-<span class="normal">616</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">normalize_expr_rhs</span><span class="p">(</span><span class="n">spec</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">ExprRhs</span><span class="p">:</span>  <span class="c1"># ruff: ignore[complex-structure, too-many-locals, too-many-statements]</span>
+<span class="normal">616</span>
+<span class="normal">617</span>
+<span class="normal">618</span>
+<span class="normal">619</span>
+<span class="normal">620</span>
+<span class="normal">621</span>
+<span class="normal">622</span>
+<span class="normal">623</span>
+<span class="normal">624</span>
+<span class="normal">625</span>
+<span class="normal">626</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">normalize_expr_rhs</span><span class="p">(</span><span class="n">spec</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">ExprRhs</span><span class="p">:</span>  <span class="c1"># ruff: ignore[complex-structure, too-many-locals, too-many-statements]</span>
 <span class="w">    </span><span class="sd">"""Normalize an expression-based RHS specification.</span>
 
 <span class="sd">    Args:</span>
@@ -3215,6 +4088,20 @@ as the union type when you need to accept both kinds.</p>
         <span class="p">)</span>
     <span class="p">)</span>
 
+    <span class="n">state_templates</span> <span class="o">=</span> <span class="n">_build_state_templates</span><span class="p">(</span>
+        <span class="n">state_raw</span><span class="p">,</span>
+        <span class="n">axes</span><span class="o">=</span><span class="n">axes_meta</span><span class="p">,</span>
+        <span class="n">state_template_map</span><span class="o">=</span><span class="n">state_template_map</span><span class="p">,</span>
+        <span class="n">state_expanded</span><span class="o">=</span><span class="n">state_expanded</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">meta</span><span class="o">.</span><span class="n">update</span><span class="p">(</span>
+        <span class="n">_state_declaration_metadata</span><span class="p">(</span>
+            <span class="n">spec</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"state_metadata"</span><span class="p">),</span>
+            <span class="n">templates</span><span class="o">=</span><span class="n">state_templates</span><span class="p">,</span>
+            <span class="n">axes</span><span class="o">=</span><span class="n">axes_meta</span><span class="p">,</span>
+            <span class="n">state_axes</span><span class="o">=</span><span class="n">meta_parts</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span>
+        <span class="p">)</span>
+    <span class="p">)</span>
     <span class="k">return</span> <span class="n">ExprRhs</span><span class="p">(</span>
         <span class="n">state_names</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(</span><span class="n">state_expanded</span><span class="p">),</span>
         <span class="n">equations</span><span class="o">=</span><span class="n">equations_strings</span><span class="p">,</span>
@@ -3222,12 +4109,7 @@ as the union type when you need to accept both kinds.</p>
         <span class="n">param_names</span><span class="o">=</span><span class="n">param_names</span><span class="p">,</span>
         <span class="n">all_symbols</span><span class="o">=</span><span class="nb">frozenset</span><span class="p">(</span><span class="n">all_syms</span> <span class="o">|</span> <span class="nb">set</span><span class="p">(</span><span class="n">aliases_ir_map</span><span class="o">.</span><span class="n">keys</span><span class="p">())),</span>
         <span class="n">meta</span><span class="o">=</span><span class="n">meta</span><span class="p">,</span>
-        <span class="n">state_templates</span><span class="o">=</span><span class="n">_build_state_templates</span><span class="p">(</span>
-            <span class="n">state_raw</span><span class="p">,</span>
-            <span class="n">axes</span><span class="o">=</span><span class="n">axes_meta</span><span class="p">,</span>
-            <span class="n">state_template_map</span><span class="o">=</span><span class="n">state_template_map</span><span class="p">,</span>
-            <span class="n">state_expanded</span><span class="o">=</span><span class="n">state_expanded</span><span class="p">,</span>
-        <span class="p">),</span>
+        <span class="n">state_templates</span><span class="o">=</span><span class="n">state_templates</span><span class="p">,</span>
         <span class="n">shaped_params</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(</span><span class="nb">sorted</span><span class="p">(</span><span class="n">shaped_params</span><span class="o">.</span><span class="n">items</span><span class="p">())),</span>
         <span class="n">time_varying_params</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(</span><span class="nb">sorted</span><span class="p">(</span><span class="n">time_varying_full</span><span class="o">.</span><span class="n">items</span><span class="p">())),</span>
         <span class="n">aliases_ir</span><span class="o">=</span><span class="n">aliases_ir_map</span><span class="p">,</span>
@@ -3349,8 +4231,7 @@ as the union type when you need to accept both kinds.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/op_system/_normalize.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">351</span>
-<span class="normal">352</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">352</span>
 <span class="normal">353</span>
 <span class="normal">354</span>
 <span class="normal">355</span>
@@ -3376,7 +4257,8 @@ as the union type when you need to accept both kinds.</p>
 <span class="normal">375</span>
 <span class="normal">376</span>
 <span class="normal">377</span>
-<span class="normal">378</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">normalize_rhs</span><span class="p">(</span><span class="n">spec</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">NormalizedRhs</span><span class="p">:</span>
+<span class="normal">378</span>
+<span class="normal">379</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">normalize_rhs</span><span class="p">(</span><span class="n">spec</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">NormalizedRhs</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Normalize a RHS specification dict into a backend-facing representation.</span>
 
 <span class="sd">    Args:</span>
@@ -3476,17 +4358,7 @@ as the union type when you need to accept both kinds.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/op_system/_normalize.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1924</span>
-<span class="normal">1925</span>
-<span class="normal">1926</span>
-<span class="normal">1927</span>
-<span class="normal">1928</span>
-<span class="normal">1929</span>
-<span class="normal">1930</span>
-<span class="normal">1931</span>
-<span class="normal">1932</span>
-<span class="normal">1933</span>
-<span class="normal">1934</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1934</span>
 <span class="normal">1935</span>
 <span class="normal">1936</span>
 <span class="normal">1937</span>
@@ -3878,7 +4750,26 @@ as the union type when you need to accept both kinds.</p>
 <span class="normal">2323</span>
 <span class="normal">2324</span>
 <span class="normal">2325</span>
-<span class="normal">2326</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">normalize_transitions_rhs</span><span class="p">(</span>  <span class="c1"># ruff: ignore[complex-structure, too-many-branches, too-many-locals, too-many-statements]</span>
+<span class="normal">2326</span>
+<span class="normal">2327</span>
+<span class="normal">2328</span>
+<span class="normal">2329</span>
+<span class="normal">2330</span>
+<span class="normal">2331</span>
+<span class="normal">2332</span>
+<span class="normal">2333</span>
+<span class="normal">2334</span>
+<span class="normal">2335</span>
+<span class="normal">2336</span>
+<span class="normal">2337</span>
+<span class="normal">2338</span>
+<span class="normal">2339</span>
+<span class="normal">2340</span>
+<span class="normal">2341</span>
+<span class="normal">2342</span>
+<span class="normal">2343</span>
+<span class="normal">2344</span>
+<span class="normal">2345</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">normalize_transitions_rhs</span><span class="p">(</span>  <span class="c1"># ruff: ignore[complex-structure, too-many-branches, too-many-locals, too-many-statements]</span>
     <span class="n">spec</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TransitionsRhs</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Normalize a transition-based RHS specification (diagram/hazard semantics).</span>
@@ -4252,6 +5143,20 @@ as the union type when you need to accept both kinds.</p>
         <span class="p">)</span>
     <span class="p">)</span>
 
+    <span class="n">state_templates</span> <span class="o">=</span> <span class="n">_build_state_templates</span><span class="p">(</span>
+        <span class="n">state_raw</span><span class="p">,</span>
+        <span class="n">axes</span><span class="o">=</span><span class="n">axes_meta</span><span class="p">,</span>
+        <span class="n">state_template_map</span><span class="o">=</span><span class="n">state_template_map</span><span class="p">,</span>
+        <span class="n">state_expanded</span><span class="o">=</span><span class="n">state_expanded</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">meta</span><span class="o">.</span><span class="n">update</span><span class="p">(</span>
+        <span class="n">_state_declaration_metadata</span><span class="p">(</span>
+            <span class="n">spec</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"state_metadata"</span><span class="p">),</span>
+            <span class="n">templates</span><span class="o">=</span><span class="n">state_templates</span><span class="p">,</span>
+            <span class="n">axes</span><span class="o">=</span><span class="n">axes_meta</span><span class="p">,</span>
+            <span class="n">state_axes</span><span class="o">=</span><span class="n">meta_parts</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span>
+        <span class="p">)</span>
+    <span class="p">)</span>
     <span class="k">return</span> <span class="n">TransitionsRhs</span><span class="p">(</span>
         <span class="n">reactions_ir</span><span class="o">=</span><span class="n">reactions_ir</span><span class="p">,</span>
         <span class="n">reaction_gaps_ir</span><span class="o">=</span><span class="n">reaction_gaps_ir</span><span class="p">,</span>
@@ -4263,12 +5168,7 @@ as the union type when you need to accept both kinds.</p>
         <span class="n">param_names</span><span class="o">=</span><span class="n">param_names</span><span class="p">,</span>
         <span class="n">all_symbols</span><span class="o">=</span><span class="nb">frozenset</span><span class="p">(</span><span class="n">all_syms</span> <span class="o">|</span> <span class="nb">set</span><span class="p">(</span><span class="n">aliases_ir_map</span><span class="o">.</span><span class="n">keys</span><span class="p">())),</span>
         <span class="n">meta</span><span class="o">=</span><span class="p">{</span><span class="o">**</span><span class="n">meta</span><span class="p">,</span> <span class="s2">"transitions"</span><span class="p">:</span> <span class="n">transitions_expanded</span><span class="p">},</span>
-        <span class="n">state_templates</span><span class="o">=</span><span class="n">_build_state_templates</span><span class="p">(</span>
-            <span class="n">state_raw</span><span class="p">,</span>
-            <span class="n">axes</span><span class="o">=</span><span class="n">axes_meta</span><span class="p">,</span>
-            <span class="n">state_template_map</span><span class="o">=</span><span class="n">state_template_map</span><span class="p">,</span>
-            <span class="n">state_expanded</span><span class="o">=</span><span class="n">state_expanded</span><span class="p">,</span>
-        <span class="p">),</span>
+        <span class="n">state_templates</span><span class="o">=</span><span class="n">state_templates</span><span class="p">,</span>
         <span class="n">shaped_params</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(</span><span class="nb">sorted</span><span class="p">(</span><span class="n">shaped_params</span><span class="o">.</span><span class="n">items</span><span class="p">())),</span>
         <span class="n">time_varying_params</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(</span><span class="nb">sorted</span><span class="p">(</span><span class="n">time_varying_full</span><span class="o">.</span><span class="n">items</span><span class="p">())),</span>
         <span class="n">aliases_ir</span><span class="o">=</span><span class="n">aliases_ir_map</span><span class="p">,</span>
