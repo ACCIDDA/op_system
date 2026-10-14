@@ -113,6 +113,7 @@ from op_system._templates import (
     PinnedToken,
     WildcardToken,
     _apply_template_substitutions,
+    _build_axis_positions,
     _extract_placeholders_from_expr,
     build_axis_lookup,
     parse_selector,
@@ -538,6 +539,7 @@ def normalize_expr_rhs(spec: Mapping[str, Any]) -> ExprRhs:  # ruff: ignore[comp
             a for a in factorize_axes_raw if isinstance(a, str) and a in known_axes
         ]
 
+    state_set = set(state_expanded)
     shaped_set = set(shaped_params)
     time_varying_set = set(time_varying_full)
     axis_name_set = set(axis_lookup_dict)
@@ -561,7 +563,7 @@ def normalize_expr_rhs(spec: Mapping[str, Any]) -> ExprRhs:  # ruff: ignore[comp
         param_names=_sorted_unique(
             sym
             for sym in all_syms
-            if sym not in set(state_expanded)
+            if sym not in state_set
             and sym not in aliases_ir_map
             and sym not in shaped_set
             and sym not in time_varying_set
@@ -724,6 +726,7 @@ def _rate_ir_for_combo(  # ruff: ignore[too-many-arguments]
     axes: list[dict[str, Any]],
     shaped: Mapping[str, tuple[str, ...]],
     ax_lookup_dict: Mapping[str, list[str]],
+    ax_positions: Mapping[str, Mapping[str, int]],
     rate_ir_reduce_memo: dict[tuple[str, ...], Expr],
     rate_ir_full_memo: dict[tuple[str, ...], Expr],
 ) -> tuple[Expr, Expr, dict[str, str] | None]:
@@ -743,7 +746,7 @@ def _rate_ir_for_combo(  # ruff: ignore[too-many-arguments]
             ir_rate_raw,
             assignment=assignment,
             shaped_params=shaped,
-            axis_lookup=ax_lookup_dict,
+            axis_positions=ax_positions,
         )
         rate_ir_reduce_memo[rate_key] = cached_rate_reduce
     cached_rate_full = rate_ir_full_memo.get(rate_key)
@@ -1336,6 +1339,7 @@ def _build_transition_equations_ir(  # ruff: ignore[complex-structure, too-many-
     shaped = shaped_params or {}
     masks = mask_names or {}
     ax_lookup_dict = dict(axis_lookup)
+    ax_positions = _build_axis_positions(ax_lookup_dict)
     alias_base_set: set[str] = set(alias_bases or ())
     d_ir_full: dict[str, list[Expr]] = {s: [] for s in state_expanded}
     d_ir_reduce: dict[str, list[Expr]] = {s: [] for s in state_expanded}
@@ -1723,6 +1727,7 @@ def _build_transition_equations_ir(  # ruff: ignore[complex-structure, too-many-
                         axes=axes,
                         shaped=shaped,
                         ax_lookup_dict=ax_lookup_dict,
+                        ax_positions=ax_positions,
                         rate_ir_reduce_memo=rate_ir_reduce_memo,
                         rate_ir_full_memo=rate_ir_full_memo,
                     )

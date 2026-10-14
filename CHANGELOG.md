@@ -7,6 +7,15 @@ version; format loosely follows
 
 ## [Unreleased]
 
+### Fixed
+
+- Axis-indexed expression normalization builds state membership, expanded
+  equation lookup, and coordinate-position maps once rather than repeating
+  full scans for each cell. Alias inlining uses the mapping's keys view
+  instead of rebuilding the expanded alias set. Coordinate order, explicit
+  cell equation precedence, shaped parameters, and validation errors are
+  preserved; transition normalization shares the coordinate maps (#267).
+
 ## [0.7.0] - 2026-10-06
 
 ### Added

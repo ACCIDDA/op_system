@@ -36,7 +36,7 @@ from ._ir import (
     free_symbols,
     substitute,
 )
-from ._templates import _render_template_name
+from ._templates import _build_axis_positions, _render_template_name
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping, Sequence
@@ -71,27 +71,24 @@ def _rewrite_shaped_indices(
     *,
     assignment: Mapping[str, str],
     registered: tuple[str, ...],
-    axis_lookup: Mapping[str, Sequence[str]],
+    axis_positions: Mapping[str, Mapping[str, int]],
 ) -> tuple[AxisIndex, ...] | None:
     """Rewrite shaped-parameter placeholders to literal integer coords.
 
     Returns:
         Tuple of literal-coord ``AxisIndex`` entries, or ``None`` if the
         axes don't match the registered axes order, an axis is missing
-        from ``axis_lookup``, or a coord isn't in its axis.
+        from ``axis_positions``, or a coord isn't in its axis.
     """
     if tuple(axes) != registered:
         return None
     out: list[AxisIndex] = []
     for ax in registered:
-        coords = axis_lookup.get(ax)
-        if coords is None:
+        positions = axis_positions.get(ax)
+        coord = assignment.get(ax)
+        if positions is None or coord is None or coord not in positions:
             return None
-        try:
-            i = coords.index(assignment[ax])
-        except (KeyError, ValueError):
-            return None
-        out.append(AxisIndex(axis="", coord=str(i)))
+        out.append(AxisIndex(axis="", coord=str(positions[coord])))
     return tuple(out)
 
 
@@ -100,7 +97,7 @@ def _expand_subscript(
     *,
     assignment: Mapping[str, str],
     shaped_params: Mapping[str, tuple[str, ...]],
-    axis_lookup: Mapping[str, Sequence[str]] | None,
+    axis_positions: Mapping[str, Mapping[str, int]] | None,
 ) -> Expr:
     axes = _expandable_axes(sub.indices)
     if axes is None or not axes:
@@ -108,12 +105,12 @@ def _expand_subscript(
     if any(ax not in assignment for ax in axes):
         return sub
 
-    if sub.name in shaped_params and axis_lookup is not None:
+    if sub.name in shaped_params and axis_positions is not None:
         new_indices = _rewrite_shaped_indices(
             axes,
             assignment=assignment,
             registered=shaped_params[sub.name],
-            axis_lookup=axis_lookup,
+            axis_positions=axis_positions,
         )
         if new_indices is None:
             return sub
@@ -121,6 +118,26 @@ def _expand_subscript(
 
     rendered = _render_template_name(sub.name, list(axes), assignment)
     return Sym(name=rendered)
+
+
+def _resolve_axis_positions(
+    axis_lookup: Mapping[str, Sequence[str]] | None,
+    axis_positions: Mapping[str, Mapping[str, int]] | None,
+    *,
+    rewrites_possible: bool,
+) -> Mapping[str, Mapping[str, int]] | None:
+    """Return ``axis_positions``, building it from ``axis_lookup`` if needed.
+
+    Building costs one pass over every coordinate, so it is skipped when no
+    shaped-parameter rewrite can happen (no shaped parameters or an empty
+    assignment) and when the caller already supplied the positions.
+
+    Returns:
+        The positions to thread through the expansion, or ``None``.
+    """
+    if axis_positions is not None or axis_lookup is None or not rewrites_possible:
+        return axis_positions
+    return _build_axis_positions(axis_lookup)
 
 
 _EMPTY_AXES: frozenset[str] = frozenset()
@@ -199,6 +216,7 @@ def expand_inline_templates(
     assignment: Mapping[str, str],
     shaped_params: Mapping[str, tuple[str, ...]] | None = None,
     axis_lookup: Mapping[str, Sequence[str]] | None = None,
+    axis_positions: Mapping[str, Mapping[str, int]] | None = None,
     _free_axes_memo: dict[int, frozenset[str]] | None = None,
     _expand_result_memo: _ExpandResultMemo | None = None,
 ) -> Expr:
@@ -210,11 +228,15 @@ def expand_inline_templates(
             string (e.g. ``{"age": "0_5", "pop": "p1"}``).
         shaped_params: Optional mapping from shaped-parameter base name to
             its registered axis tuple. When provided alongside
-            ``axis_lookup``, subscripts whose base names match are rewritten
-            to literal integer coords instead of being expanded to scalar
-            symbols.
+            ``axis_lookup`` or ``axis_positions``, subscripts whose base
+            names match are rewritten to literal integer coords instead of
+            being expanded to scalar symbols.
         axis_lookup: Optional mapping from axis name to its coord list,
             used to resolve shaped-parameter indices.
+        axis_positions: Optional ``_build_axis_positions(axis_lookup)``,
+            used instead of ``axis_lookup`` when given. Callers that expand
+            once per coordinate build it once and pass it, so each call
+            looks positions up rather than rebuilding them (issue #267).
         _free_axes_memo: Optional id-keyed cache of the per-subtree
             unbound-axis set. When supplied, the walk short-circuits at
             compound nodes whose free-axis set is disjoint from
@@ -244,6 +266,9 @@ def expand_inline_templates(
         TypeError: If ``expr`` contains an unsupported IR node type.
     """
     shaped = shaped_params or {}
+    axis_positions = _resolve_axis_positions(
+        axis_lookup, axis_positions, rewrites_possible=bool(shaped and assignment)
+    )
 
     if isinstance(expr, (Literal, Sym)):
         return expr
@@ -252,7 +277,7 @@ def expand_inline_templates(
             expr,
             assignment=assignment,
             shaped_params=shaped,
-            axis_lookup=axis_lookup,
+            axis_positions=axis_positions,
         )
     # Compound nodes (Apply / Reduce / HistoryOp): skip the recursion entirely when
     # the cached free-axis set is disjoint from ``assignment``. This is
@@ -294,7 +319,7 @@ def expand_inline_templates(
             expr,
             assignment=assignment,
             shaped_params=shaped,
-            axis_lookup=axis_lookup,
+            axis_positions=axis_positions,
             free_axes_memo=_free_axes_memo,
             expand_result_memo=_expand_result_memo,
         )
@@ -303,7 +328,7 @@ def expand_inline_templates(
             expr,
             assignment=assignment,
             shaped_params=shaped,
-            axis_lookup=axis_lookup,
+            axis_positions=axis_positions,
             free_axes_memo=_free_axes_memo,
             expand_result_memo=_expand_result_memo,
         )
@@ -312,7 +337,7 @@ def expand_inline_templates(
             expr,
             assignment=assignment,
             shaped_params=shaped,
-            axis_lookup=axis_lookup,
+            axis_positions=axis_positions,
             free_axes_memo=_free_axes_memo,
             expand_result_memo=_expand_result_memo,
         )
@@ -329,7 +354,7 @@ def _expand_apply(  # ruff: ignore[too-many-arguments]
     *,
     assignment: Mapping[str, str],
     shaped_params: Mapping[str, tuple[str, ...]],
-    axis_lookup: Mapping[str, Sequence[str]] | None,
+    axis_positions: Mapping[str, Mapping[str, int]] | None,
     free_axes_memo: dict[int, frozenset[str]] | None,
     expand_result_memo: _ExpandResultMemo | None = None,
 ) -> Expr:
@@ -338,7 +363,7 @@ def _expand_apply(  # ruff: ignore[too-many-arguments]
             arg,
             assignment=assignment,
             shaped_params=shaped_params,
-            axis_lookup=axis_lookup,
+            axis_positions=axis_positions,
             _free_axes_memo=free_axes_memo,
             _expand_result_memo=expand_result_memo,
         )
@@ -354,7 +379,7 @@ def _expand_reduce(  # ruff: ignore[too-many-arguments]
     *,
     assignment: Mapping[str, str],
     shaped_params: Mapping[str, tuple[str, ...]],
-    axis_lookup: Mapping[str, Sequence[str]] | None,
+    axis_positions: Mapping[str, Mapping[str, int]] | None,
     free_axes_memo: dict[int, frozenset[str]] | None,
     expand_result_memo: _ExpandResultMemo | None = None,
 ) -> Expr:
@@ -370,7 +395,7 @@ def _expand_reduce(  # ruff: ignore[too-many-arguments]
         expr.body,
         assignment=inner_assignment,
         shaped_params=shaped_params,
-        axis_lookup=axis_lookup,
+        axis_positions=axis_positions,
         _free_axes_memo=free_axes_memo,
         _expand_result_memo=expand_result_memo,
     )
@@ -390,7 +415,7 @@ def _expand_history_op(  # ruff: ignore[too-many-arguments]
     *,
     assignment: Mapping[str, str],
     shaped_params: Mapping[str, tuple[str, ...]],
-    axis_lookup: Mapping[str, Sequence[str]] | None,
+    axis_positions: Mapping[str, Mapping[str, int]] | None,
     free_axes_memo: dict[int, frozenset[str]] | None,
     expand_result_memo: _ExpandResultMemo | None = None,
 ) -> Expr:
@@ -398,7 +423,7 @@ def _expand_history_op(  # ruff: ignore[too-many-arguments]
         expr.body,
         assignment=assignment,
         shaped_params=shaped_params,
-        axis_lookup=axis_lookup,
+        axis_positions=axis_positions,
         _free_axes_memo=free_axes_memo,
         _expand_result_memo=expand_result_memo,
     )
@@ -409,7 +434,7 @@ def _expand_history_op(  # ruff: ignore[too-many-arguments]
                 opt_expr,
                 assignment=assignment,
                 shaped_params=shaped_params,
-                axis_lookup=axis_lookup,
+                axis_positions=axis_positions,
                 _free_axes_memo=free_axes_memo,
                 _expand_result_memo=expand_result_memo,
             ),
@@ -532,6 +557,7 @@ def expand_over_axes(
         return [({}, expr)]
 
     coord_lists = [list(axis_lookup[ax]) for ax in axis_list]
+    axis_positions = _build_axis_positions(axis_lookup)
     out: list[tuple[dict[str, str], Expr]] = []
     for combo in product(*coord_lists):
         assignment = dict(zip(axis_list, combo, strict=True))
@@ -541,7 +567,7 @@ def expand_over_axes(
                 expr,
                 assignment=assignment,
                 shaped_params=shaped_params,
-                axis_lookup=axis_lookup,
+                axis_positions=axis_positions,
             ),
         ))
     return out
@@ -729,7 +755,11 @@ def inline_aliases(  # ruff: ignore[complex-structure, too-many-arguments]
 
     if memo is None:
         memo = _InlineMemo()
-    keys = set(aliases)
+    # A keys view, not ``set(aliases)``: per-cell alias maps have one entry
+    # per coordinate, and building that set on every call made inlining
+    # every cell quadratic in the axis size. ``symbols & keys`` iterates
+    # only ``symbols`` (issue #267).
+    keys = aliases.keys()
     # Precompute, for each alias body, which other alias names it references.
     # The next "live" set after a substitution is exactly the union of these
     # entries over the just-inlined names, so we never need to re-walk the
@@ -756,7 +786,7 @@ def inline_aliases(  # ruff: ignore[complex-structure, too-many-arguments]
         cached = body_refs.get(name)
         if cached is not None:
             return cached
-        refs = free_symbols(aliases[name], memo) & keys
+        refs = frozenset(free_symbols(aliases[name], memo) & keys)
         body_refs[name] = refs
         return refs
 
@@ -765,7 +795,7 @@ def inline_aliases(  # ruff: ignore[complex-structure, too-many-arguments]
     # caller; the intermediates below are ours to retain.
     retain = getattr(memo, "retain", _discard)
     current = expr
-    live = free_symbols(current, memo) & keys
+    live = frozenset(free_symbols(current, memo) & keys)
     for _ in range(max_depth):
         if not live:
             if result_memo is not None:

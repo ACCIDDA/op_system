@@ -52,6 +52,7 @@ nav:
       - Time-indexed Parameters: guides/time-indexed-parameters.md
       - Renewal Births: guides/renewal-births.md
       - Aging Chains: guides/aging-chains.md
+      - Independent Batches: guides/batched-models.md
   - API Reference:
       - OP System: api-reference/op-system.md
       - Compile: api-reference/compile.md

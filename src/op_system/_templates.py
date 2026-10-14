@@ -165,6 +165,34 @@ def build_axis_lookup(axes: list[dict[str, Any]]) -> dict[str, list[str]]:
     return {ax["name"]: [str(c) for c in ax.get("coords", [])] for ax in axes}
 
 
+def _build_axis_positions(
+    axis_lookup: Mapping[str, Sequence[str]],
+) -> dict[str, dict[str, int]]:
+    """Build a ``{axis_name: {coord: position}}`` mapping from an axis lookup.
+
+    Normalization resolves one coordinate per cell; ``coords.index(coord)``
+    scans the whole axis each time, which made it quadratic in the axis
+    size (issue #267). Build this once per pass and look positions up
+    instead. Axis coordinates are validated unique, so each coordinate has
+    exactly one position.
+
+    Args:
+        axis_lookup: Mapping of axis name to its ordered coordinate list,
+            as returned by :func:`build_axis_lookup`.
+
+    Returns:
+        Dict mapping each axis name to a coordinate-to-position dict.
+
+    Examples:
+        >>> _build_axis_positions({"age": ["y", "o"], "x": []})
+        {'age': {'y': 0, 'o': 1}, 'x': {}}
+    """
+    return {
+        axis: {coord: i for i, coord in enumerate(coords)}
+        for axis, coords in axis_lookup.items()
+    }
+
+
 def parse_selector(s: str) -> tuple[str, list[SelectorToken]]:
     """Parse a selector string into a base name and a list of tokens.
 
