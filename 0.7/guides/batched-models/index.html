@@ -1018,6 +1018,12 @@ compiler or GPU support.</p>
 every workload. An equation such as <code>sum_over(X[draw:d], draw=d)</code> couples the
 draws and requires the monolithic evaluator. Removing that coupling to obtain
 a block evaluator would change the model.</p>
+<p>Local rate aliases retain the same equations in full and block evaluation. For
+example, <code>foi[loc] = beta * r0_loc[loc] * I[loc]</code> uses a shared <code>beta</code> and a
+group-local <code>r0_loc</code>. Supply the selected local rate with the corresponding
+single-group state; expression and transition specifications should produce
+the same cell flows. Required CPU qualification checks this behavior in float32
+and float64, including JAX compilation of the stripped evaluator.</p>
 
 
 
