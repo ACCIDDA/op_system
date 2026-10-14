@@ -25,6 +25,7 @@ from op_system._normalize import (
     normalize_rhs,
     normalize_transitions_rhs,
 )
+from op_system._parameter_meta import ParameterDeclaration, ParameterSupport
 from op_system._symbols import ExpressionString
 from op_system._templates import PinnedToken, SelectorToken, WildcardToken
 
@@ -32,6 +33,8 @@ __all__ = [
     "ExprRhs",
     "ExpressionString",
     "NormalizedRhs",
+    "ParameterDeclaration",
+    "ParameterSupport",
     "PinnedToken",
     "SelectorToken",
     "StateTemplate",

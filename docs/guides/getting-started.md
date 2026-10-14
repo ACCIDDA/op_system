@@ -11,6 +11,10 @@ The compiler accepts a Python mapping. YAML/JSON loading is a caller concern;
 returns a normalized model without compilation, and `validate_spec(spec)`
 returns a structural report. There is no public `load_spec` file loader.
 
+Optional [parameter declarations](parameter-declarations.md) attach support,
+units, descriptions and fixed/free status to inferred RHS parameters for
+downstream consumers, without changing numerical evaluation.
+
 ## A complete age-structured SEIR model
 
 Save the following as `examples/age-seir.yaml` (create the `examples` directory

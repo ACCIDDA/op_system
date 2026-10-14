@@ -60,6 +60,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Iterable, Mapping, Sequence
     from types import CodeType
 
+    from op_system._parameter_meta import ParameterDeclaration
     from op_system._reactions import ReactionReactantIR
 
     from .specs import NormalizedRhs
@@ -518,6 +519,11 @@ class CompiledRhs:
     _rhs: NormalizedRhs | None = field(
         default=None, repr=False, compare=False, hash=False
     )
+    # A detached, read-only snapshot of optional scientific annotations.
+    # This is appended to retain positional constructor compatibility.
+    param_meta: Mapping[str, ParameterDeclaration] = field(
+        default_factory=lambda: MappingProxyType({})
+    )
 
     def bind(
         self, params: Mapping[str, object]
@@ -566,6 +572,7 @@ class CompiledRhs:
         # frozen+slots dataclass: bypass __setattr__ via object.__setattr__
         object.__setattr__(self, "state_names", rebuilt.state_names)
         object.__setattr__(self, "param_names", rebuilt.param_names)
+        object.__setattr__(self, "param_meta", rebuilt.param_meta)
         object.__setattr__(self, "eval_fn", rebuilt.eval_fn)
         object.__setattr__(self, "meta", rebuilt.meta)
         object.__setattr__(self, "operators", rebuilt.operators)
@@ -2414,6 +2421,14 @@ def compile_rhs(rhs: NormalizedRhs, *, xp: object | None = None) -> CompiledRhs:
         param_names=tuple(rhs.param_names),
         eval_fn=eval_fn,
         meta=rhs.meta,
+        param_meta=MappingProxyType(
+            dict(
+                cast(
+                    "Mapping[str, ParameterDeclaration]",
+                    rhs.meta.get("parameter_declarations", {}),
+                )
+            )
+        ),
         operators=_parse_operator_descriptors(rhs.meta),
         factorize_axes=_parse_factorize_axes(rhs.meta),
         block_axes=block_axes,
