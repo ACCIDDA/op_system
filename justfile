@@ -188,9 +188,11 @@ build-test-provider:
 	cp {{provider_dir}}/pyproject.toml "${CLEANROOM}/pyproject.toml"
 	cp -R {{provider_dir}}/src "${CLEANROOM}/src"
 	cp -R {{provider_dir}}/tests "${CLEANROOM}/tests"
+	cp scripts/qualify_provider_types.py "${CLEANROOM}/qualify_provider_types.py"
 	cd "${CLEANROOM}"
 	export PATH="${CLEANROOM}/venv/bin:${PATH}"
 	"${CLEANROOM}/venv/bin/pytest" --import-mode=importlib tests --quiet --exitfirst
+	"${CLEANROOM}/venv/bin/python" qualify_provider_types.py
 
 [group('ci')]
 build-test: build-test-core build-test-provider
