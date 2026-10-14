@@ -69,9 +69,37 @@ matrix while checking orientation; a symmetric matrix can hide a transpose.
 
 A transition with `from` uses a **per-capita hazard**: the infection flow is
 `foi[age] * S[age]`, not just `foi[age]`. Do not multiply by the source a second
-time in its rate. `from` omitted/null creates an absolute source inflow; `to`
-omitted/null creates a sink whose flow is still hazard times the source.
+time in its rate. `from` omitted/null creates an absolute source inflow.
+`to` must name a declared state: omitted/null sink destinations are currently
+unsupported and fail validation. Use an expression equation for an open loss,
+or track the loss in an explicit compartment. The latter retains the lost
+amount in the declared state total and exports a closed transfer reaction.
 A closed transition subtracts and adds the same flow, preserving population.
+
+These standalone alternatives both give `x' = -k*x`; the explicit loss
+compartment additionally gives `loss' = k*x`:
+
+<!-- loss-alternatives -->
+```python
+import numpy as np
+from op_system import compile_spec
+
+open_loss = compile_spec({
+    "kind": "expr",
+    "state": ["x"],
+    "equations": {"x": "-k*x"},
+})
+tracked_loss = compile_spec({
+    "kind": "transitions",
+    "state": ["x", "loss"],
+    "transitions": [{"name": "loss", "from": "x", "to": "loss", "rate": "k"}],
+})
+open_derivative = open_loss.eval_fn(0.0, np.asarray([3.0]), k=2.0)  # [-6]
+tracked_derivative = tracked_loss.eval_fn(0.0, np.asarray([3.0, 0.0]), k=2.0)  # [-6, 6]
+```
+
+Expression equations do not currently export executable jump reactions; choose
+the representation required by the consuming deterministic/stochastic engine.
 
 `initial_state` records provider seed parameter names. It does not allocate
 or initialize core arrays. A consuming framework resolves `S0`, `E0`, `I0`, and

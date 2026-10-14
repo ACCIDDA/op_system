@@ -7,13 +7,13 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
+import pytest
 import yaml  # type: ignore[import-untyped]
 
 from op_system import compile_spec, validate_spec
+from op_system._errors import InvalidRhsSpecError
 
 if TYPE_CHECKING:
-    import pytest
-
     from op_system import CompiledRhs
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -107,3 +107,34 @@ def test_constraint_metadata_does_not_mask_public_state_expansion() -> None:
         compiled.eval_fn(0.0, np.asarray([1.0, 2.0, 3.0, 4.0])),
         [-1.0, -2.0, -3.0, -4.0],
     )
+
+
+def test_loss_alternatives_from_actual_guide() -> None:
+    """Documented open/tracked losses match independent equations and export scope."""
+    namespace: dict[str, Any] = {}
+    exec(_snippet("loss-alternatives", "python"), namespace)  # ruff: ignore[exec-builtin]
+    np.testing.assert_array_equal(namespace["open_derivative"], [-6.0])
+    np.testing.assert_array_equal(namespace["tracked_derivative"], [-6.0, 6.0])
+    open_loss: CompiledRhs = namespace["open_loss"]
+    tracked_loss: CompiledRhs = namespace["tracked_loss"]
+    assert open_loss.reactions == ()
+    assert open_loss.reaction_gaps
+    assert len(tracked_loss.reactions) == 1
+    assert tracked_loss.reaction_gaps == ()
+
+
+@pytest.mark.parametrize("include_destination", [False, True])
+def test_sink_destination_is_outside_public_transition_schema(
+    *,
+    include_destination: bool,
+) -> None:
+    """Missing/null destinations fail rather than exporting incomplete reactions."""
+    transition: dict[str, object] = {"from": "x", "rate": "k"}
+    if include_destination:
+        transition["to"] = None
+    with pytest.raises(InvalidRhsSpecError, match="to"):
+        compile_spec({
+            "kind": "transitions",
+            "state": ["x"],
+            "transitions": [transition],
+        })
