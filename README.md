@@ -247,15 +247,15 @@ spec:
   axes:
     - {name: age, coords: [child, adult]}
     - {name: vax, coords: [u, v]}
-  state: [S[age,vax], E[age,vax], I[age]]
+  state: ["S[age,vax]", "E[age,vax]", "I[age]"]
   transitions:
     - name: infection
       from: S[age,vax]
       to: E[age,vax]
       rate: beta * I[age]
       reactants:
-        - {state: S[age,vax], order: 1}
-        - {state: I[age], order: 1}  # catalytic: not consumed
+        - {state: "S[age,vax]", order: 1}
+        - {state: "I[age]", order: 1}  # catalytic: not consumed
 ```
 
 The compiled reaction exposes these entries as array-neutral structural
@@ -327,7 +327,7 @@ spec:
   axes:
     - {name: age,  coords: [child, adult]}
     - {name: vax,  coords: [u, v]}
-  state: [S[age,vax], I[age,vax], R[age,vax]]
+  state: ["S[age,vax]", "I[age,vax]", "R[age,vax]"]
   aliases:
     lambda[age]: beta * apply_along(vax=j, I[age,vax=j]) / sum_state()
   equations:
@@ -350,7 +350,7 @@ spec:
   axes:
     - {name: vax, coords: [u, v]}
     - {name: imm, type: ordinal, coords: [x0, x1, x2, x3]}
-  state: [X[vax, imm]]
+  state: ["X[vax, imm]"]
   transitions:
     - from: X[vax, imm:i]            # waning along a generator G
       to:   X[vax, imm:j]
@@ -384,7 +384,7 @@ spec:
   axes:
     - {name: age, coords: [child, adult]}
     - {name: imm, type: ordinal, coords: [x0, x1, x2]}
-  state: [I3[age], X[age,imm]]
+  state: ["I3[age]", "X[age,imm]"]
   transitions:
     - from: I3[age]
       to: X[age,imm:j]
@@ -435,7 +435,7 @@ spec:
   kind: transitions
   axes:
     - {name: age, type: ordinal, coords: [a0, a1, a2, a3]}
-  state: [S[age], I[age]]
+  state: ["S[age]", "I[age]"]
   transitions:
     - name: aging
       coord_shift: {axis: age, step: 1, rate: "aging_rate[age]", boundary: absorb}
@@ -459,7 +459,7 @@ spec:
       domain: {lb: 0.0, ub: 10.0}
       size: 5
       spacing: linear
-  state: [u[x]]
+  state: ["u[x]"]
   state_axes: {u: [x]}
   kernels:
     - {name: K, axes: [x], form: gaussian, params: {scale: 1.0, sigma: 0.5}}

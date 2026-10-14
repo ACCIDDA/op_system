@@ -165,6 +165,7 @@ build-test-core:
 	uv pip install --python "${CLEANROOM}/venv/bin/python" "${CLEANROOM}/dist"/*.whl
 	uv pip install --python "${CLEANROOM}/venv/bin/python" -r "${CLEANROOM}/dev-requirements.txt"
 	cp pyproject.toml "${CLEANROOM}/pyproject.toml"
+	cp README.md "${CLEANROOM}/README.md"
 	cp -R tests "${CLEANROOM}/tests"
 	cp -R benchmarks "${CLEANROOM}/benchmarks"
 	cd "${CLEANROOM}"
