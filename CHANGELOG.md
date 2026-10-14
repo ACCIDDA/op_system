@@ -17,6 +17,11 @@ version; format loosely follows
   engines and framework providers. Compiler keyword compatibility is preserved;
   no compile-time `array_backend` configuration is introduced (#79).
 
+- Runnable YAML model guide covers states/seeds, hazards versus absolute
+  inflows, categorical/ordinal/continuous axes, mixing orientation, syntax,
+  operators and the reserved constraint boundary. Exact SEIR snippets run
+  against independent cell flows in source and installed-wheel tests (#45).
+
 - Required installed-provider typing qualification verifies the shipped
   `py.typed` marker, public state/stepper types, and rejection of invalid state
   arguments. Clean-wheel tests and a dedicated CI job run the downstream check;

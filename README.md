@@ -199,6 +199,12 @@ solve = jax.jit(lambda y: compiled.eval_fn(0.0, y, beta=0.3, gamma=0.1))
 For diffrax-based ODE solves and NUTS / HMC inference, install the
 `jax-inference` extra above.
 
+For a complete, executable age-structured SEIR model, see the
+[model specification guide](https://accidda.github.io/op_system/guides/getting-started/)
+and [checked YAML example](examples/age-seir.yaml). The guide covers state seeds,
+hazard rates, axis/mixing units, expressions, operator metadata, and the current
+constraint boundary.
+
 ## YAML examples
 
 The full guide of YAML patterns — including templates, axis asymmetry,
