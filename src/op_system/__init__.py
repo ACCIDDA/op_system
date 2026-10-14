@@ -60,6 +60,7 @@ from .compile import (
     StateDict,
     compile_rhs,
 )
+from .observables import CompiledObservable, ObservableEvalFn, ObservablePytreeEvalFn
 from .qualification import (
     InvariantCheck,
     QualificationConfig,
@@ -73,6 +74,8 @@ from .specs import (
     ExpressionString,
     ExprRhs,
     NormalizedRhs,
+    ObservableDefinition,
+    ObservableReduction,
     ParameterDeclaration,
     ParameterSupport,
     StateDeclaration,
@@ -162,6 +165,7 @@ __all__ = [
     "AxisMeasure",
     "BlockAxisInfo",
     "BodyEvalFn",
+    "CompiledObservable",
     "CompiledReactant",
     "CompiledReaction",
     "CompiledRhs",
@@ -171,6 +175,10 @@ __all__ = [
     "IdentifierString",
     "InvariantCheck",
     "NormalizedRhs",
+    "ObservableDefinition",
+    "ObservableEvalFn",
+    "ObservablePytreeEvalFn",
+    "ObservableReduction",
     "OperatorDescriptor",
     "ParameterDeclaration",
     "ParameterSupport",

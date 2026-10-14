@@ -132,3 +132,6 @@ Existing specs need no migration. When annotating a state, review whether its
 values are extensive or intensive and supply the measure explicitly. This
 interface does not convert representations, constrain signs or counters, or
 certify scientific validity.
+
+Use [named latent observables](latent-observables.md) to compile these explicit
+physical reductions into independently discoverable fixed-mesh outputs.

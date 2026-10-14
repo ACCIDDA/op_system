@@ -9,6 +9,15 @@ version; format loosely follows
 
 ### Added
 
+- Optional named `observables` compile independent state/parameter/time
+  expressions, declared-node samples, counters, unweighted sums and explicit
+  physical integrals into native flat/PyTree evaluators. Read-only compiled
+  metadata exports output shapes/coordinates, direct dependencies and applied
+  measures. Observable-only parameters leave RHS binding requirements unchanged.
+  NumPy/JAX/CPU Torch qualification covers the initial arithmetic/exp, indexing,
+  broadcasting and reduction paths; numerical time/mesh adapters remain consumer
+  responsibilities (#294).
+
 - Optional `state_metadata` declares counts, cell mass, densities/concentrations
   and extensive cumulative counters. Axes can declare aligned counting, cell
   or point-quadrature measures. Read-only `CompiledRhs.state_meta`/`axis_meta`

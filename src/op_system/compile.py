@@ -51,6 +51,10 @@ from op_system._ir import (
     walk,
 )
 from op_system._normalize import ExprRhs, TransitionsRhs
+from op_system._observables import (
+    CompiledObservable,
+    _compile_observables,
+)
 from op_system._operators import OperatorDescriptor
 from op_system._reactions import ReactionGap, reaction_gap_for, routed_axis_label
 from op_system._scientific_meta import _axis_declarations
@@ -532,6 +536,12 @@ class CompiledRhs:
     axis_meta: Mapping[str, AxisDeclaration] = field(
         default_factory=lambda: MappingProxyType({})
     )
+    observables: Mapping[str, CompiledObservable] = field(
+        default_factory=lambda: MappingProxyType({}),
+        compare=False,
+        hash=False,
+        repr=False,
+    )
 
     def bind(
         self, params: Mapping[str, object]
@@ -583,6 +593,7 @@ class CompiledRhs:
         object.__setattr__(self, "param_meta", rebuilt.param_meta)
         object.__setattr__(self, "state_meta", rebuilt.state_meta)
         object.__setattr__(self, "axis_meta", rebuilt.axis_meta)
+        object.__setattr__(self, "observables", rebuilt.observables)
         object.__setattr__(self, "eval_fn", rebuilt.eval_fn)
         object.__setattr__(self, "meta", rebuilt.meta)
         object.__setattr__(self, "operators", rebuilt.operators)
@@ -2453,6 +2464,7 @@ def compile_rhs(rhs: NormalizedRhs, *, xp: object | None = None) -> CompiledRhs:
             )
         ),
         operators=_parse_operator_descriptors(rhs.meta),
+        observables=MappingProxyType(_compile_observables(rhs)),
         factorize_axes=_parse_factorize_axes(rhs.meta),
         block_axes=block_axes,
         pytree_eval_fn=pytree_eval_fn,

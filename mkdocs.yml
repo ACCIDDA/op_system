@@ -53,6 +53,7 @@ nav:
       - Getting Started: guides/getting-started.md
       - Parameter Declarations: guides/parameter-declarations.md
       - State Representations: guides/state-representations.md
+      - Latent Observables: guides/latent-observables.md
       - Expression Selectors: guides/expression-selectors.md
       - Global State Totals: guides/global-state-totals.md
       - Operator Metadata: guides/operators.md
@@ -67,6 +68,7 @@ nav:
   - API Reference:
       - OP System: api-reference/op-system.md
       - Compile: api-reference/compile.md
+      - Observables: api-reference/observables.md
       - Qualification: api-reference/qualification.md
       - Specs: api-reference/specs.md
       - Validate: api-reference/validate.md
