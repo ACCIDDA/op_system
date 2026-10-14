@@ -17,6 +17,12 @@ capability matrix are documented in the
 [backend guide](docs/guides/backend-qualification.md). Run `just qualify`
 alongside the baseline compiler/provider checks when preparing a contribution.
 
+For model authoring, opt into
+[numerical qualification](docs/guides/numerical-qualification.md) with
+`qualify_rhs`: compare named fixtures against independent equations, inspect
+reference parity and conditional balances, and request JAX state-direction
+checks separately from structural validation.
+
 ## Why op_system?
 
 Modelers often combine compartment hazards, templated populations, and rich
