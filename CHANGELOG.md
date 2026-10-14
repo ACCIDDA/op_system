@@ -9,6 +9,14 @@ version; format loosely follows
 
 ### Added
 
+- `qualify_rhs` compares named state/parameter fixtures against independently
+  supplied equations through flat, structured, and available block evaluators.
+  Reports include tolerances, finite values, shapes/dtypes, and agreement
+  diagnostics; conditional `InvariantCheck` callbacks and optional JAX state
+  directions add balance and derivative checks. Unavailable block layouts,
+  wrong references, and callback failures are reported explicitly without
+  changing structural validation or normal RHS evaluation (#264).
+
 - Required core compiler qualification jobs install NumPy, JAX, and CPU
   Torch explicitly and reject missing or skipped backend tests. A synthetic
   hierarchical model checks flat, structured, and valid block evaluation

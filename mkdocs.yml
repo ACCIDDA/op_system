@@ -54,8 +54,10 @@ nav:
       - Aging Chains: guides/aging-chains.md
       - Independent Batches: guides/batched-models.md
       - Backend Qualification: guides/backend-qualification.md
+      - Numerical Qualification: guides/numerical-qualification.md
   - API Reference:
       - OP System: api-reference/op-system.md
       - Compile: api-reference/compile.md
+      - Qualification: api-reference/qualification.md
       - Specs: api-reference/specs.md
       - Validate: api-reference/validate.md
