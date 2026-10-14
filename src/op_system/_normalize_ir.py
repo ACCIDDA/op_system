@@ -32,6 +32,7 @@ from op_system._templates import (
     _INLINE_TEMPLATE_RE,
     PinnedToken,
     WildcardToken,
+    _build_axis_positions,
     build_axis_lookup,
     expand_selector,
     parse_selector,
@@ -688,12 +689,13 @@ def _parse_alias_body(  # ruff: ignore[too-many-arguments]
     fa_full_memo: dict[int, frozenset[str]] = {}
     fa_raw_result_memo: _ExpandResultMemo = {}
     fa_full_result_memo: _ExpandResultMemo = {}
+    ax_positions = _build_axis_positions(ax_lookup)
     for expanded_name, assignment in alias_template_map[canonical_name]:
         reduce_parsed[expanded_name] = expand_inline_templates(
             ir_raw,
             assignment=assignment,
             shaped_params=shaped,
-            axis_lookup=ax_lookup,
+            axis_positions=ax_positions,
             _free_axes_memo=fa_raw_memo,
             _expand_result_memo=fa_raw_result_memo,
         )
@@ -701,7 +703,7 @@ def _parse_alias_body(  # ruff: ignore[too-many-arguments]
             ir_full_root,
             assignment=assignment,
             shaped_params=shaped,
-            axis_lookup=ax_lookup,
+            axis_positions=ax_positions,
             _free_axes_memo=fa_full_memo,
             _expand_result_memo=fa_full_result_memo,
         )
@@ -813,35 +815,31 @@ def _build_aliases_ir_from_raw(
 def _lookup_cell_expr(
     cell: str,
     equations_map: Mapping[str, Any],
-    template_map: Mapping[str, Sequence[tuple[str, Mapping[str, str]]]],
+    cell_templates: Mapping[str, str],
 ) -> str:
     """Return the raw equation string for *cell*.
+
+    Args:
+        cell: Expanded state cell name.
+        equations_map: Raw ``equations`` block, keyed by cell or template.
+        cell_templates: Expanded cell name to the first template key in
+            ``equations_map`` that expands to it. Built once per spec, so
+            each lookup is constant time rather than a scan of every
+            template's variants (issue #267).
 
     Raises:
         InvalidRhsSpecError: If the cell has no equation or its body is not a
             non-empty string.
     """
-    if cell in equations_map:
-        raw = equations_map[cell]
-        if not isinstance(raw, str) or not raw.strip():
-            raise InvalidRhsSpecError(
-                detail=f"equations[{cell!r}] must be a non-empty string"
-            )
-        return raw.strip()
-    for template_key, variants in template_map.items():
-        if template_key not in equations_map:
-            continue
-        for expanded_name, _ in variants:
-            if expanded_name == cell:
-                raw = equations_map[template_key]
-                if not isinstance(raw, str) or not raw.strip():
-                    raise InvalidRhsSpecError(
-                        detail=(
-                            f"equations[{template_key!r}] must be a non-empty string"
-                        )
-                    )
-                return raw.strip()
-    raise InvalidRhsSpecError(detail=f"Missing equation for state {cell!r}")
+    key = cell if cell in equations_map else cell_templates.get(cell)
+    if key is None:
+        raise InvalidRhsSpecError(detail=f"Missing equation for state {cell!r}")
+    raw = equations_map[key]
+    if not isinstance(raw, str) or not raw.strip():
+        raise InvalidRhsSpecError(
+            detail=f"equations[{key!r}] must be a non-empty string"
+        )
+    return raw.strip()
 
 
 def _build_equations_ir_from_raw(  # ruff: ignore[too-many-arguments, too-many-locals]
@@ -867,14 +865,19 @@ def _build_equations_ir_from_raw(  # ruff: ignore[too-many-arguments, too-many-l
         ``(equations_ir, equations_ir_reduce, all_syms)``
     """
     cell_to_assignment: dict[str, dict[str, str]] = {}
-    for variants in template_map.values():
+    cell_templates: dict[str, str] = {}
+    for template_key, variants in template_map.items():
+        has_equation = template_key in equations_map
         for cell, asgmt in variants:
             cell_to_assignment[cell] = dict(asgmt)
+            if has_equation:
+                cell_templates.setdefault(cell, template_key)
 
     cell_to_expr = {
-        cell: _lookup_cell_expr(cell, equations_map, template_map)
+        cell: _lookup_cell_expr(cell, equations_map, cell_templates)
         for cell in state_expanded
     }
+    axis_positions = _build_axis_positions(axis_lookup)
 
     alias_memo = _InlineMemo()
     alias_cycle_ok = False
@@ -898,7 +901,7 @@ def _build_equations_ir_from_raw(  # ruff: ignore[too-many-arguments, too-many-l
                 ir,
                 assignment=assignment,
                 shaped_params=shaped_params,
-                axis_lookup=axis_lookup,
+                axis_positions=axis_positions,
             )
             out_reduce.append(ir_tmpl)
             assignments.append(dict(assignment))
