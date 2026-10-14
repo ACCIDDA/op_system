@@ -3,7 +3,7 @@
 Use the repository's [CITATION.cff](https://github.com/ACCIDDA/op_system/blob/main/CITATION.cff)
 to credit the software. The record describes the shared `op_system` and
 `flepimop2-op_system` release and retains the authors/order from the two package
-metadata files. Core is MIT-licensed; the adapter is GPLv3-licensed. Record both
+metadata files. Core is MIT-licensed; the adapter is GPLv3-or-later licensed. Record both
 distribution versions when using the adapter, plus backend and flepimop2 versions
 needed to reproduce the calculation.
 
@@ -39,6 +39,11 @@ unindexed records cannot be verified from this checkout. No DOI is invented in
 package-index artifacts without itself performing an archival deposit.
 
 ## Software-paper release archive plan
+
+The maintainer has selected the ACCIDDA Zenodo archive for this release;
+[#273](https://github.com/ACCIDDA/op_system/issues/273) tracks the deposit and
+verified DOI. Complete the JOSS readiness milestone before freezing the archive
+release.
 
 Before a paper release, the release maintainer must check existing archive
 records and the repository's connected archival account. Reuse the established

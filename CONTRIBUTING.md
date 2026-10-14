@@ -106,7 +106,7 @@ The two distributions share one version and one `vX.Y.Z` GitHub release. The
 release workflow publishes core before provider. See
 [creating a release](docs/development/creating-a-release.md) for validation and
 publishing; publishing is a separate maintainer action from merging a PR.
-Core uses MIT; the provider uses GPLv3. Preserve the applicable license and
+Core uses MIT; the provider uses GPLv3 or later. Preserve the applicable license and
 existing attribution when moving or reusing code.
 
 Use the [documentation version selector](https://accidda.github.io/op_system/)
