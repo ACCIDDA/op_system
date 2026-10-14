@@ -732,6 +732,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../../guides/array-namespaces/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Array Namespaces
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../guides/backend-qualification/" class="md-nav__link">
         
   
@@ -5122,8 +5150,8 @@ correctness wrapping.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p><strong>Deprecated.</strong> Formerly the compile-time array backend
-namespace. Now ignored — the namespace is resolved per call
+                <p><strong>Deprecated.</strong> Formerly the compile-time array namespace.
+Now ignored — the namespace is resolved per call
 from the input <code>y</code>. Will be removed in a future release.</p>
               </div>
             </td>
@@ -5377,8 +5405,8 @@ from the input <code>y</code>. Will be removed in a future release.</p>
 
 <span class="sd">    Args:</span>
 <span class="sd">        rhs: Normalized RHS produced by `op_system.specs.normalize_rhs`.</span>
-<span class="sd">        xp: **Deprecated.** Formerly the compile-time array backend</span>
-<span class="sd">            namespace. Now ignored — the namespace is resolved per call</span>
+<span class="sd">        xp: **Deprecated.** Formerly the compile-time array namespace.</span>
+<span class="sd">            Now ignored — the namespace is resolved per call</span>
 <span class="sd">            from the input ``y``. Will be removed in a future release.</span>
 
 <span class="sd">    Returns:</span>
@@ -5505,8 +5533,10 @@ from the input <code>y</code>. Will be removed in a future release.</p>
 <p>The compiled <code>eval_fn</code> is <strong>namespace-polymorphic</strong>: it infers its
 array namespace from the input <code>y</code> at call time
 (through <code>array_api_compat.array_namespace</code>), so one callable handles
-NumPy, JAX (concrete and traced), and any other Array-API backend
-natively. No compile-time backend selection is required.</p>
+NumPy, JAX (concrete and traced), and other qualified array namespaces
+natively. This selects array operations; a downstream numerical engine
+separately selects integration methods. No compile-time namespace
+selection is required.</p>
 
 
 <p><span class="doc-section-title">Parameters:</span></p>
@@ -5545,8 +5575,8 @@ natively. No compile-time backend selection is required.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p><strong>Deprecated.</strong> Formerly the compile-time array backend
-namespace. Now ignored — see <code>compile_rhs</code> for details.
+                <p><strong>Deprecated.</strong> Formerly the compile-time array namespace.
+Now ignored — see <code>compile_rhs</code> for details.
 Will be removed in a future release.</p>
               </div>
             </td>
@@ -5564,7 +5594,7 @@ Will be removed in a future release.</p>
             <td>
               <div class="doc-md-description">
                 <p><strong>Deprecated.</strong> Formerly selected the compile-time
-backend (<code>"numpy"</code> or <code>"jax"</code>). Now ignored. Will be
+array namespace (<code>"numpy"</code> or <code>"jax"</code>). Now ignored. Will be
 removed in a future release.</p>
               </div>
             </td>
@@ -5646,7 +5676,9 @@ removed in a future release.</p>
 <span class="normal">135</span>
 <span class="normal">136</span>
 <span class="normal">137</span>
-<span class="normal">138</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">compile_spec</span><span class="p">(</span>  <span class="c1"># ruff: ignore[non-empty-init-module]</span>
+<span class="normal">138</span>
+<span class="normal">139</span>
+<span class="normal">140</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">compile_spec</span><span class="p">(</span>  <span class="c1"># ruff: ignore[non-empty-init-module]</span>
     <span class="n">spec</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">object</span><span class="p">],</span>
     <span class="o">*</span><span class="p">,</span>
     <span class="n">xp</span><span class="p">:</span> <span class="nb">object</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -5660,16 +5692,18 @@ removed in a future release.</p>
 <span class="sd">    The compiled ``eval_fn`` is **namespace-polymorphic**: it infers its</span>
 <span class="sd">    array namespace from the input ``y`` at call time</span>
 <span class="sd">    (through ``array_api_compat.array_namespace``), so one callable handles</span>
-<span class="sd">    NumPy, JAX (concrete and traced), and any other Array-API backend</span>
-<span class="sd">    natively. No compile-time backend selection is required.</span>
+<span class="sd">    NumPy, JAX (concrete and traced), and other qualified array namespaces</span>
+<span class="sd">    natively. This selects array operations; a downstream numerical engine</span>
+<span class="sd">    separately selects integration methods. No compile-time namespace</span>
+<span class="sd">    selection is required.</span>
 
 <span class="sd">    Args:</span>
 <span class="sd">        spec: Raw RHS specification mapping (YAML/JSON friendly).</span>
-<span class="sd">        xp: **Deprecated.** Formerly the compile-time array backend</span>
-<span class="sd">            namespace. Now ignored — see ``compile_rhs`` for details.</span>
+<span class="sd">        xp: **Deprecated.** Formerly the compile-time array namespace.</span>
+<span class="sd">            Now ignored — see ``compile_rhs`` for details.</span>
 <span class="sd">            Will be removed in a future release.</span>
 <span class="sd">        backend: **Deprecated.** Formerly selected the compile-time</span>
-<span class="sd">            backend (``"numpy"`` or ``"jax"``). Now ignored. Will be</span>
+<span class="sd">            array namespace (``"numpy"`` or ``"jax"``). Now ignored. Will be</span>
 <span class="sd">            removed in a future release.</span>
 
 <span class="sd">    Returns:</span>

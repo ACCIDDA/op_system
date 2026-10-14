@@ -320,10 +320,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#backend-boundary" class="md-nav__link">
+  <a href="#array-namespace-boundary" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Backend boundary
+        Array namespace boundary
       
     </span>
   </a>
@@ -821,6 +821,34 @@
   
   
     <li class="md-nav__item">
+      <a href="guides/array-namespaces/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Array Namespaces
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="guides/backend-qualification/" class="md-nav__link">
         
   
@@ -1148,10 +1176,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#backend-boundary" class="md-nav__link">
+  <a href="#array-namespace-boundary" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Backend boundary
+        Array namespace boundary
       
     </span>
   </a>
@@ -1208,8 +1236,10 @@ tensors. Other Array API implementations may work through
 </ul>
 <p>See the <a href="https://github.com/ACCIDDA/op_system#readme">repository README</a> for a
 worked example and the navigation for the specification and API references.</p>
-<h2 id="backend-boundary">Backend boundary<a class="headerlink" href="#backend-boundary" title="Permanent link">&para;</a></h2>
-<p>Backend selection happens from the input arrays at call time. Keep model
+<h2 id="array-namespace-boundary">Array namespace boundary<a class="headerlink" href="#array-namespace-boundary" title="Permanent link">&para;</a></h2>
+<p>The array namespace is selected from input arrays at call time. A numerical
+engine selects integration methods, while a provider adapts framework interfaces.
+See <a href="guides/array-namespaces/">array namespace terminology</a>. Keep model
 expressions within the documented allowlist, and validate an additional backend
 against the package's conformance tests before treating it as supported in a
 production workflow.</p>
