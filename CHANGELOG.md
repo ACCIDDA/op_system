@@ -53,6 +53,12 @@ version; format loosely follows
 
 ### Fixed
 
+- `sum_state()` lowers on the vectorized path and totals declared buffers
+  through native reductions in flat, structured, and reaction evaluation.
+  Totals exclude aliases/parameters and refresh per call. Global totals reject
+  invalid block factorization; README chain examples distinguish the generated
+  prefix from a separately declared base compartment (#260).
+
 - Mixed selectors in compatibility template substitution retain explicitly
   bound coordinates when substituting wildcard axes, instead of collapsing a
   partial selector to a cell name. Required CPU backend regressions qualify

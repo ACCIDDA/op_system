@@ -24,7 +24,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from op_system._errors import UnsupportedFeatureError
-from op_system._ir import Reduce, Subscript, walk
+from op_system._ir import Apply, Reduce, Subscript, walk
 
 if TYPE_CHECKING:
     from op_system._ir import Expr
@@ -156,6 +156,15 @@ def _check_expr_separable(
         UnsupportedFeatureError: On the first violation found.
     """
     for node in walk(expr):
+        if isinstance(node, Apply) and node.op == "sum_state":
+            raise UnsupportedFeatureError(
+                feature=f"factorize_axes={axis_name!r}",
+                detail=(
+                    f"{label!r} uses sum_state(), which totals all declared "
+                    f"state buffers across axis {axis_name!r}; use a local "
+                    "reduction when the intended model is independent."
+                ),
+            )
         if isinstance(node, Reduce):
             for binding_axis, _ in node.bindings:
                 if binding_axis == axis_name:
