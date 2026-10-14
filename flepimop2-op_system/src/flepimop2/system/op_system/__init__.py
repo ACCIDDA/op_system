@@ -100,9 +100,10 @@ class OpSystemSystem(SystemABC, module="flepimop2.system.op_system"):  # ruff: i
 
         The compiled ``eval_fn`` is **namespace-polymorphic**: it infers
         its array namespace from the input ``state`` at call time via
-        ``state.__array_namespace__()``. Callers therefore pick the
-        backend (NumPy, JAX, ...) by passing arrays of that namespace;
-        the connector performs no backend coercion.
+        ``array_api_compat.array_namespace``. Callers select the array
+        namespace (NumPy, JAX, Torch) through runtime state arrays. The
+        system provider and numerical engine are separate framework modules;
+        provider configuration performs no array namespace coercion.
         """
         del context
 

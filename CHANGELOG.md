@@ -13,6 +13,10 @@ version; format loosely follows
   to existing regression suites, adds independent values for every generated
   kernel form and provider injection, and checks empty-axis boundaries (#29).
 
+- Terminology guidance distinguishes runtime array namespaces from numerical
+  engines and framework providers. Compiler keyword compatibility is preserved;
+  no compile-time `array_backend` configuration is introduced (#79).
+
 - Required installed-provider typing qualification verifies the shipped
   `py.typed` marker, public state/stepper types, and rejection of invalid state
   arguments. Clean-wheel tests and a dedicated CI job run the downstream check;

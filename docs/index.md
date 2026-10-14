@@ -27,9 +27,11 @@ pip install op-system
 See the [repository README](https://github.com/ACCIDDA/op_system#readme) for a
 worked example and the navigation for the specification and API references.
 
-## Backend boundary
+## Array namespace boundary
 
-Backend selection happens from the input arrays at call time. Keep model
+The array namespace is selected from input arrays at call time. A numerical
+engine selects integration methods, while a provider adapts framework interfaces.
+See [array namespace terminology](guides/array-namespaces.md). Keep model
 expressions within the documented allowlist, and validate an additional backend
 against the package's conformance tests before treating it as supported in a
 production workflow.

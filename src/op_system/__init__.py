@@ -108,16 +108,18 @@ def compile_spec(  # ruff: ignore[non-empty-init-module]
     The compiled ``eval_fn`` is **namespace-polymorphic**: it infers its
     array namespace from the input ``y`` at call time
     (through ``array_api_compat.array_namespace``), so one callable handles
-    NumPy, JAX (concrete and traced), and any other Array-API backend
-    natively. No compile-time backend selection is required.
+    NumPy, JAX (concrete and traced), and other qualified array namespaces
+    natively. This selects array operations; a downstream numerical engine
+    separately selects integration methods. No compile-time namespace
+    selection is required.
 
     Args:
         spec: Raw RHS specification mapping (YAML/JSON friendly).
-        xp: **Deprecated.** Formerly the compile-time array backend
-            namespace. Now ignored — see ``compile_rhs`` for details.
+        xp: **Deprecated.** Formerly the compile-time array namespace.
+            Now ignored — see ``compile_rhs`` for details.
             Will be removed in a future release.
         backend: **Deprecated.** Formerly selected the compile-time
-            backend (``"numpy"`` or ``"jax"``). Now ignored. Will be
+            array namespace (``"numpy"`` or ``"jax"``). Now ignored. Will be
             removed in a future release.
 
     Returns:
