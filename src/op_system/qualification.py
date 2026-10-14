@@ -184,3 +184,153 @@ class QualificationReport:
         }
 
 
+def _host(value: object) -> np.ndarray:
+    values = cast("Any", value)
+    if hasattr(values, "detach"):
+        values = values.detach().cpu().numpy()
+    return np.asarray(values)
+
+
+def _select(value: object, axis: int | None, index: int) -> Any:  # ruff: ignore[any-type]
+    if axis is None:
+        return value
+    xp = array_namespace(value)
+    shape = cast("Any", value).shape
+    return xp.permute_dims(value, (axis, *(i for i in range(len(shape)) if i != axis)))[
+        index
+    ]
+
+
+def _evaluate(
+    compiled: CompiledRhs, fixture: QualificationFixture, evaluator: Evaluator
+) -> Mapping[str, Array]:
+    shapes = compiled.template_shapes or dict.fromkeys(compiled.state_names, ())
+    if set(fixture.state) != set(shapes):
+        msg = f"state keys must match compiled templates {tuple(shapes)}"
+        raise ValueError(msg)
+    for name, shape in shapes.items():
+        if fixture.state[name].shape != shape:
+            msg = (
+                f"state {name!r} has shape {fixture.state[name].shape}; "
+                f"expected {shape}"
+            )
+            raise ValueError(msg)
+    if evaluator == "structured":
+        if compiled.pytree_eval_fn is None:
+            msg = "structured evaluator is unavailable"
+            raise ValueError(msg)
+        return compiled.pytree_eval_fn(
+            fixture.time, cast("StateDict", dict(fixture.state)), **fixture.params
+        )
+    xp = array_namespace(next(iter(fixture.state.values())))
+    if evaluator == "flat":
+        return _evaluate_flat(compiled, fixture, shapes, xp)
+    block = compiled.block_pytree_eval_fn
+    if block is None or not compiled.block_axes:
+        msg = (
+            "block evaluator is unavailable; "
+            "coupled models cannot be treated as independent"
+        )
+        raise ValueError(msg)
+    info = compiled.block_axes[0]
+    if set(info.state_axis_pos) != set(shapes):
+        msg = "block qualification requires the block axis on every state template"
+        raise ValueError(msg)
+    blocks = [
+        block(
+            fixture.time,
+            {
+                name: _select(value, info.state_axis_pos[name], index)
+                for name, value in fixture.state.items()
+            },
+            **{
+                name: _select(value, info.param_axis_pos.get(name), index)
+                for name, value in fixture.params.items()
+            },
+        )
+        for index in range(info.size)
+    ]
+    return {
+        name: xp.stack([item[name] for item in blocks], axis=info.state_axis_pos[name])
+        for name in shapes
+    }
+
+
+def _evaluate_flat(
+    compiled: CompiledRhs,
+    fixture: QualificationFixture,
+    shapes: Mapping[str, tuple[int, ...]],
+    xp: Any,  # ruff: ignore[any-type]
+) -> Mapping[str, Array]:
+    flat = xp.concat([xp.reshape(fixture.state[name], (-1,)) for name in shapes])
+    result = compiled.eval_fn(fixture.time, flat, **fixture.params)
+    if result.shape != flat.shape:
+        msg = f"flat evaluator returned shape {result.shape}; expected {flat.shape}"
+        raise ValueError(msg)
+    if array_namespace(result) is not xp:
+        msg = "flat evaluator changed the input array namespace"
+        raise ValueError(msg)
+    output = {}
+    offset = 0
+    for name, shape in shapes.items():
+        size = math.prod(shape)
+        output[name] = xp.reshape(cast("Any", result)[offset : offset + size], shape)
+        offset += size
+    return output
+
+
+def _compare(
+    name: str,
+    initial: Array,
+    actual: Array,
+    expected: Array,
+    config: QualificationConfig,
+) -> ArrayComparison:
+    value, reference = _host(actual), _host(expected)
+    errors = []
+    if value.shape != initial.shape or reference.shape != initial.shape:
+        errors.append(
+            f"shape mismatch: input {initial.shape}, result {value.shape}, "
+            f"reference {reference.shape}"
+        )
+    if actual.dtype != initial.dtype:
+        errors.append(f"dtype changed from {initial.dtype} to {actual.dtype}")
+    if array_namespace(actual) is not array_namespace(initial):
+        errors.append("output changed the input array namespace")
+    finite = bool(
+        np.isfinite(_host(initial)).all()
+        and np.isfinite(value).all()
+        and np.isfinite(reference).all()
+    )
+    maximum, relative = None, None
+    if not finite:
+        errors.append("input, result, or reference contains non-finite values")
+    if value.size == 0:
+        errors.append("empty arrays do not provide numerical qualification")
+    if finite and value.size and value.shape == reference.shape:
+        with np.errstate(over="ignore", invalid="ignore", divide="ignore"):
+            difference = np.abs(value - reference)
+            raw_maximum = float(np.max(difference))
+            maximum = raw_maximum if math.isfinite(raw_maximum) else None
+            denominator = np.maximum(
+                np.abs(reference), max(config.atol, np.finfo(np.float64).tiny)
+            )
+            raw_relative = float(np.max(difference / denominator))
+            relative = raw_relative if math.isfinite(raw_relative) else None
+        if not np.allclose(value, reference, rtol=config.rtol, atol=config.atol):
+            errors.append(f"reference disagreement: maximum absolute error {maximum}")
+    return ArrayComparison(
+        name,
+        value.shape,
+        reference.shape,
+        str(initial.dtype),
+        str(actual.dtype),
+        str(expected.dtype),
+        finite,
+        not errors,
+        maximum,
+        relative,
+        tuple(errors),
+    )
+
+
