@@ -168,6 +168,9 @@ build-test-core:
 	cp README.md "${CLEANROOM}/README.md"
 	cp -R tests "${CLEANROOM}/tests"
 	cp -R benchmarks "${CLEANROOM}/benchmarks"
+	cp -R examples "${CLEANROOM}/examples"
+	mkdir -p "${CLEANROOM}/docs/guides"
+	cp docs/guides/getting-started.md "${CLEANROOM}/docs/guides/getting-started.md"
 	cd "${CLEANROOM}"
 	"${CLEANROOM}/venv/bin/pytest" --import-mode=importlib tests --quiet --exitfirst
 

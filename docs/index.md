@@ -17,14 +17,17 @@ pip install op-system
 
 ## Main interfaces
 
-- `load_spec(...)` validates and normalizes a model specification.
+- `compile_spec(...)` validates, normalizes, and compiles a loaded mapping.
+- `normalize_rhs(...)` normalizes without compilation.
+- `validate_spec(...)` returns a structural validation report.
 - `compile_rhs(...)` creates a reusable `CompiledRhs` object.
 - `CompiledRhs.eval_fn(...)` evaluates a flat state vector.
 - `CompiledRhs.pytree_eval_fn(...)` evaluates shaped state mappings.
 - `CompiledRhs.block_pytree_eval_fn(...)` supports hierarchical block-axis
   vectorization using the specification's `factorize_axes` declaration.
 
-See the [repository README](https://github.com/ACCIDDA/op_system#readme) for a
+Start with the [model specification guide](guides/getting-started.md) and its
+executable age-structured SEIR example. See the [repository README](https://github.com/ACCIDDA/op_system#readme) for a
 worked example and the navigation for the specification and API references.
 
 ## Array namespace boundary

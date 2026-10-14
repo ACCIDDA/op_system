@@ -1,0 +1,29 @@
+# Shared rate beta; susceptibility varies by target age group.
+kind: transitions
+axes:
+  - name: age
+    type: categorical
+    coords: [young, old]
+state: ["S[age]", "E[age]", "I[age]", "R[age]"]
+aliases:
+  "N[age]": "S[age] + E[age] + I[age] + R[age]"
+  "foi[age]": "beta * susceptibility[age] * apply_along(C[age:s,age] * I[age:s] / N[age:s], age=s, kernel=sum)"
+transitions:
+  - name: infection
+    from: "S[age]"
+    to: "E[age]"
+    rate: "foi[age]"
+  - name: progression
+    from: "E[age]"
+    to: "I[age]"
+    rate: "kappa"
+  - name: recovery
+    from: "I[age]"
+    to: "R[age]"
+    rate: "gamma"
+# Optional provider seed metadata; runtime values are supplied separately.
+initial_state:
+  "S[age]": {shaped: S0, axes: [age]}
+  "E[age]": {shaped: E0, axes: [age]}
+  "I[age]": {shaped: I0, axes: [age]}
+  "R[age]": {shaped: R0, axes: [age]}
