@@ -15,6 +15,7 @@ import re
 
 from op_system._errors import InvalidRhsSpecError
 from op_system._helpers import _as_number, _ensure_mapping
+from op_system._scientific_meta import AxisMeasure
 
 _STATE_TEMPLATE_RE = re.compile(r"\s*([A-Za-z_][A-Za-z0-9_]*)\[(.+)\]\s*")
 
@@ -263,6 +264,10 @@ def _normalize_single_axis(
     units = _normalize_axis_units(ax_map, idx=idx)
     if units is not None:
         axis_out["units"] = units
+    if "measure" in ax_map:
+        axis_out["measure"] = AxisMeasure.from_mapping(
+            ax_map["measure"], size=resolved_size
+        )
     return axis_out
 
 

@@ -9,6 +9,14 @@ version; format loosely follows
 
 ### Added
 
+- Optional `state_metadata` declares counts, cell mass, densities/concentrations
+  and extensive cumulative counters. Axes can declare aligned counting, cell
+  or point-quadrature measures. Read-only `CompiledRhs.state_meta`/`axis_meta`
+  export immutable records with unknown annotations retained as unknown.
+  Nonuniform cell-volume examples distinguish physical integrals from existing
+  point quadrature and unweighted `sum_state()`; metadata leaves equations and
+  reductions unchanged (#293).
+
 - Optional `parameters` declarations validate support, units, descriptions and
   fixed/free annotations for inferred scalar, shaped and time-varying RHS
   parameters. Compiled `param_meta` exposes immutable records without binding

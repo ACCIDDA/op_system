@@ -26,10 +26,13 @@ from op_system._normalize import (
     normalize_transitions_rhs,
 )
 from op_system._parameter_meta import ParameterDeclaration, ParameterSupport
+from op_system._scientific_meta import AxisDeclaration, AxisMeasure, StateDeclaration
 from op_system._symbols import ExpressionString
 from op_system._templates import PinnedToken, SelectorToken, WildcardToken
 
 __all__ = [
+    "AxisDeclaration",
+    "AxisMeasure",
     "ExprRhs",
     "ExpressionString",
     "NormalizedRhs",
@@ -37,6 +40,7 @@ __all__ = [
     "ParameterSupport",
     "PinnedToken",
     "SelectorToken",
+    "StateDeclaration",
     "StateTemplate",
     "TransitionsRhs",
     "WildcardToken",

@@ -52,6 +52,7 @@ nav:
   - Guides:
       - Getting Started: guides/getting-started.md
       - Parameter Declarations: guides/parameter-declarations.md
+      - State Representations: guides/state-representations.md
       - Expression Selectors: guides/expression-selectors.md
       - Global State Totals: guides/global-state-totals.md
       - Operator Metadata: guides/operators.md

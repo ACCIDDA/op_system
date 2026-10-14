@@ -111,6 +111,7 @@ from op_system._reactions import (
     offdiag_constant_name,
     routing_offdiag_axis,
 )
+from op_system._scientific_meta import _state_declaration_metadata
 from op_system._templates import (
     PinnedToken,
     WildcardToken,
@@ -589,6 +590,20 @@ def normalize_expr_rhs(spec: Mapping[str, Any]) -> ExprRhs:  # ruff: ignore[comp
         )
     )
 
+    state_templates = _build_state_templates(
+        state_raw,
+        axes=axes_meta,
+        state_template_map=state_template_map,
+        state_expanded=state_expanded,
+    )
+    meta.update(
+        _state_declaration_metadata(
+            spec.get("state_metadata"),
+            templates=state_templates,
+            axes=axes_meta,
+            state_axes=meta_parts[1],
+        )
+    )
     return ExprRhs(
         state_names=tuple(state_expanded),
         equations=equations_strings,
@@ -596,12 +611,7 @@ def normalize_expr_rhs(spec: Mapping[str, Any]) -> ExprRhs:  # ruff: ignore[comp
         param_names=param_names,
         all_symbols=frozenset(all_syms | set(aliases_ir_map.keys())),
         meta=meta,
-        state_templates=_build_state_templates(
-            state_raw,
-            axes=axes_meta,
-            state_template_map=state_template_map,
-            state_expanded=state_expanded,
-        ),
+        state_templates=state_templates,
         shaped_params=tuple(sorted(shaped_params.items())),
         time_varying_params=tuple(sorted(time_varying_full.items())),
         aliases_ir=aliases_ir_map,
@@ -2295,6 +2305,20 @@ def normalize_transitions_rhs(  # ruff: ignore[complex-structure, too-many-branc
         )
     )
 
+    state_templates = _build_state_templates(
+        state_raw,
+        axes=axes_meta,
+        state_template_map=state_template_map,
+        state_expanded=state_expanded,
+    )
+    meta.update(
+        _state_declaration_metadata(
+            spec.get("state_metadata"),
+            templates=state_templates,
+            axes=axes_meta,
+            state_axes=meta_parts[1],
+        )
+    )
     return TransitionsRhs(
         reactions_ir=reactions_ir,
         reaction_gaps_ir=reaction_gaps_ir,
@@ -2306,12 +2330,7 @@ def normalize_transitions_rhs(  # ruff: ignore[complex-structure, too-many-branc
         param_names=param_names,
         all_symbols=frozenset(all_syms | set(aliases_ir_map.keys())),
         meta={**meta, "transitions": transitions_expanded},
-        state_templates=_build_state_templates(
-            state_raw,
-            axes=axes_meta,
-            state_template_map=state_template_map,
-            state_expanded=state_expanded,
-        ),
+        state_templates=state_templates,
         shaped_params=tuple(sorted(shaped_params.items())),
         time_varying_params=tuple(sorted(time_varying_full.items())),
         aliases_ir=aliases_ir_map,
