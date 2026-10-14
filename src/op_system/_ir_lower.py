@@ -272,7 +272,7 @@ def lower_subscript_to_buffer(  # ruff: ignore[complex-structure, too-many-argum
 
 def _transpose(node: ast.expr, perm: tuple[int, ...]) -> ast.expr:
     return ast.Call(
-        func=ast.Attribute(value=_name("np"), attr="transpose", ctx=ast.Load()),
+        func=ast.Attribute(value=_name("np"), attr="permute_dims", ctx=ast.Load()),
         args=[
             node,
             ast.Tuple(elts=[ast.Constant(value=p) for p in perm], ctx=ast.Load()),
