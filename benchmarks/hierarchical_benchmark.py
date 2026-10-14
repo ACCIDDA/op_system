@@ -195,3 +195,213 @@ def _measure(  # ruff: ignore[too-many-arguments]
     }
 
 
+def _compile_case(
+    case: BenchmarkCase, repeats: int
+) -> tuple[CompiledRhs, dict[str, object], dict[str, object], int]:
+    specification = model_spec(case.groups, case.stages, coupled=case.coupled)
+    normalize_samples, compile_samples = [], []
+    for _ in range(repeats):
+        start = time.perf_counter()
+        normalized = normalize_rhs(specification)
+        normalize_samples.append(time.perf_counter() - start)
+        start = time.perf_counter()
+        compiled = compile_rhs(normalized)
+        compile_samples.append(time.perf_counter() - start)
+    size = len(json.dumps(specification, separators=(",", ":")).encode())
+    return compiled, _summary(normalize_samples), _summary(compile_samples), size
+
+
+def _backend_arrays(
+    case: BenchmarkCase,
+    state: Any,  # ruff: ignore[any-type]
+    params: Any,  # ruff: ignore[any-type]
+) -> tuple[Any, Any, Any, Any]:
+    module = np if case.backend == "numpy" else importlib.import_module(case.backend)
+    namespace = (
+        importlib.import_module("jax.numpy") if case.backend == "jax" else module
+    )
+    state = {
+        name: namespace.asarray(value, dtype=getattr(namespace, case.dtype))
+        for name, value in state.items()
+    }
+    params = {
+        name: namespace.asarray(value, dtype=getattr(namespace, case.dtype))
+        for name, value in params.items()
+    }
+    _synchronize(state)
+    return module, array_namespace(state["A"]), state, params
+
+
+def _agreement(  # ruff: ignore[too-many-arguments, too-many-positional-arguments]
+    function: Callable[..., Any],
+    state: Any,  # ruff: ignore[any-type]
+    params: Any,  # ruff: ignore[any-type]
+    reference: Any,  # ruff: ignore[any-type]
+    module: Any,  # ruff: ignore[any-type]
+    xp: Any,  # ruff: ignore[any-type]
+    dtype: str,
+    reference_derivative: float,
+) -> dict[str, object]:
+    tolerance = 2e-5 if dtype == "float32" else 1e-10
+    output = function(state, params)
+    _synchronize(output)
+    maximum = 0.0
+    for template in TEMPLATES:
+        actual = _host(output[template])
+        if (
+            output[template].dtype != state[template].dtype
+            or array_namespace(output[template]) is not xp
+        ):
+            msg = f"{template} changed dtype or namespace"
+            raise AssertionError(msg)
+        np.testing.assert_allclose(
+            actual, reference[template], rtol=tolerance, atol=tolerance
+        )
+        maximum = max(maximum, float(np.max(np.abs(actual - reference[template]))))
+    derivative = _gain_derivative(function, state, params, module, xp)
+    derivative_rtol = 3e-3 if dtype == "float32" else 1e-7
+    if derivative is not None:
+        np.testing.assert_allclose(
+            derivative, reference_derivative, rtol=derivative_rtol, atol=1e-8
+        )
+    return {
+        "value_rtol": tolerance,
+        "value_atol": tolerance,
+        "max_abs_value_error": maximum,
+        "gain_derivative": derivative,
+        "reference_gain_derivative": reference_derivative,
+        "gain_derivative_rtol": derivative_rtol,
+        "gain_derivative_atol": 1e-8,
+        "gain_derivative_abs_error": abs(derivative - reference_derivative)
+        if derivative is not None
+        else None,
+    }
+
+
+def _environment(module: Any) -> dict[str, object]:  # ruff: ignore[any-type]
+    processor = platform.processor()
+    cpuinfo = Path("/proc/cpuinfo")
+    if cpuinfo.is_file():
+        processor = next(
+            (
+                line.partition(":")[2].strip()
+                for line in cpuinfo.read_text(encoding="utf-8").splitlines()
+                if line.startswith("model name")
+            ),
+            processor,
+        )
+    return {
+        "python": platform.python_version(),
+        "op_system": version("op_system"),
+        "numpy": np.__version__,
+        "backend_version": module.__version__,
+        "platform": platform.platform(),
+        "machine": platform.machine(),
+        "processor": processor,
+        "cpu_count": os.cpu_count(),
+        "thread_settings": {
+            name: os.environ.get(name)
+            for name in [
+                "OMP_NUM_THREADS",
+                "OPENBLAS_NUM_THREADS",
+                "MKL_NUM_THREADS",
+                "JAX_PLATFORMS",
+                "JAX_ENABLE_X64",
+            ]
+        },
+    }
+
+
+def run_case(  # ruff: ignore[too-many-locals]
+    case: BenchmarkCase, policy: RepeatPolicy | None = None, *, measure: bool = True
+) -> dict[str, object]:
+    """Qualify a case and optionally measure serial compiler/evaluator costs.
+
+    Agreement failures raise AssertionError before timings are reported.
+
+    Returns:
+        Strict-JSON-compatible dimensions, provenance, agreement, and timings.
+
+    Raises:
+        ValueError: If a dimension, backend, precision, or repeat control is invalid.
+    """
+    policy = policy or RepeatPolicy()
+    if case.backend not in {"numpy", "jax", "torch"} or case.dtype not in {
+        "float32",
+        "float64",
+    }:
+        msg = "choose numpy/jax/torch and float32/float64"
+        raise ValueError(msg)
+    if (
+        case.groups < 1
+        or case.stages < 1
+        or policy.repeats < 1
+        or policy.inner_loops < 1
+        or policy.warmups < 0
+    ):
+        msg = (
+            "dimensions, repeats, and inner loops must be positive; "
+            "warmups non-negative"
+        )
+        raise ValueError(msg)
+    compiled, normalization, compilation, size = _compile_case(
+        case, policy.repeats if measure else 1
+    )
+    raw_state, raw_params = fixture(
+        case.groups, case.stages, dtype=case.dtype, coupled=case.coupled
+    )
+    reference = reference_rhs(raw_state, raw_params, coupled=case.coupled)
+    start = time.perf_counter()
+    module, xp, state, params = _backend_arrays(case, raw_state, raw_params)
+    setup = time.perf_counter() - start
+    fd_step = 2e-3 if case.dtype == "float32" else 1e-5
+    reference_derivative = _reference_gain_derivative(
+        raw_state, raw_params, coupled=case.coupled, step=fd_step
+    )
+    evaluators = _layouts(compiled, module, xp, coupled=case.coupled)
+    results = {}
+    for name, function in evaluators.items():
+        agreement = _agreement(
+            function,
+            state,
+            params,
+            reference,
+            module,
+            xp,
+            case.dtype,
+            reference_derivative,
+        )
+        results[name] = {
+            **agreement,
+            "gain_derivative_step": fd_step,
+            "timings": _measure(
+                function, state, params, module, policy, jit=case.backend == "jax"
+            )
+            if measure
+            else None,
+        }
+    peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    return {
+        "case": case._asdict(),
+        "status": "qualified",
+        "policy": policy._asdict(),
+        "fixture": "benchmarks.hierarchical_model.fixture; deterministic, no seed",
+        "specification_json_bytes": size,
+        "state_elements": 3 * case.groups * case.stages,
+        "local_parameter_elements": case.groups,
+        "shared_kernel_elements": case.stages**2,
+        "fixture_bytes": sum(
+            value.nbytes for value in [*raw_state.values(), *raw_params.values()]
+        ),
+        "normalize": normalization if measure else None,
+        "compile_rhs": compilation if measure else None,
+        "backend_setup_seconds": setup if measure else None,
+        "evaluators": results,
+        "block_unavailable_reason": "group reduction couples groups"
+        if case.coupled
+        else None,
+        "process_peak_rss_bytes": int(
+            peak if platform.system() == "Darwin" else peak * 1024
+        ),
+        "environment": _environment(module),
+    }
