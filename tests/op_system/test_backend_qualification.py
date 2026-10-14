@@ -34,6 +34,208 @@ CASES = [
 BACKENDS = ("numpy", "jax", "torch")
 
 
+def _total_spec(layout: str, *, alias: bool) -> dict[str, Any]:
+    suffix = "" if layout == "scalar" else "[group,age]"
+    population = "N" if alias else "sum_state()"
+    spec: dict[str, Any] = {
+        "kind": "expr",
+        "state": [name + suffix for name in ["S", "I", "R"]],
+        "equations": {
+            "S" + suffix: f"-beta * S{suffix} * I{suffix} / {population}",
+            "I" + suffix: (
+                f"beta * S{suffix} * I{suffix} / {population} - gamma * I{suffix}"
+            ),
+            "R" + suffix: f"gamma * I{suffix}",
+        },
+    }
+    if layout != "scalar":
+        spec["axes"] = [
+            {"name": "group", "coords": ["a", "b"]},
+            {"name": "age", "type": "continuous", "coords": [0.0, 0.5, 2.0]},
+        ]
+    if layout == "mixed":
+        spec["state"].append("Z")
+        spec["equations"]["Z"] = "Z - Z"
+    if alias:
+        spec["aliases"] = {"N": "sum_state()"}
+    return spec
+
+
+def _total_reference(
+    state: dict[str, Any], beta: float, gamma: float
+) -> dict[str, np.ndarray]:
+    values = {name: _host(value) for name, value in state.items() if name != "extra"}
+    total = sum(float(value) for array in values.values() for value in array.ravel())
+    flow = beta * values["S"] * values["I"] / total
+    recovery = gamma * values["I"]
+    result = {"S": -flow, "I": flow - recovery, "R": recovery}
+    if "Z" in values:
+        result["Z"] = np.zeros_like(values["Z"])
+    return result
+
+
+@pytest.mark.parametrize("backend", BACKENDS)
+@pytest.mark.parametrize("dtype", ["float32", "float64"])
+@pytest.mark.parametrize("layout", ["scalar", "shaped", "mixed"])
+@pytest.mark.parametrize("alias", [False, True])
+def test_global_state_total_layouts(
+    backend: str, dtype: str, layout: str, *, alias: bool
+) -> None:
+    """Global totals include every declared state exactly once and remain native."""
+    compiled = compile_spec(_total_spec(layout, alias=alias))
+    assert compiled.pytree_eval_fn is not None
+    raw = {
+        name: np.asarray(value, dtype=dtype)
+        for name, value in {"S": 9.0, "I": 1.0, "R": 2.0}.items()
+    }
+    if layout != "scalar":
+        raw = {
+            name: value + np.arange(6, dtype=dtype).reshape(2, 3) / 10
+            for name, value in raw.items()
+        }
+    if layout == "mixed":
+        raw["Z"] = np.asarray(3.0, dtype=dtype)
+    with _precision(backend):
+        module = (
+            np
+            if backend == "numpy"
+            else pytest.importorskip("jax.numpy" if backend == "jax" else "torch")
+        )
+        state = {name: module.asarray(value) for name, value in raw.items()}
+        xp = array_namespace(state["S"])
+        params = {
+            "beta": module.asarray(np.asarray(0.4, dtype=dtype)),
+            "gamma": module.asarray(np.asarray(0.1, dtype=dtype)),
+        }
+        operation = compiled.pytree_eval_fn
+        if backend == "jax":
+            operation = pytest.importorskip("jax").jit(operation)
+        expected = _total_reference(state, 0.4, 0.1)
+        result = operation(
+            0.0,
+            {**state, "extra": module.asarray(np.asarray(1000.0, dtype=dtype))},
+            **params,
+        )
+        tolerance = 3e-6 if dtype == "float32" else 1e-12
+        for name, value in result.items():
+            assert value.shape == raw[name].shape
+            assert value.dtype == state[name].dtype
+            assert array_namespace(value) is xp
+            np.testing.assert_allclose(_host(value), expected[name], rtol=tolerance)
+        flat = compiled.eval_fn(
+            0.0,
+            xp.concat([xp.reshape(value, (-1,)) for value in state.values()]),
+            **params,
+        )
+        np.testing.assert_allclose(
+            _host(flat),
+            np.concatenate([value.ravel() for value in expected.values()]),
+            rtol=tolerance,
+        )
+        altered = {**state, "R": state["R"] * 2}
+        refreshed = operation(0.0, altered, **params)
+        for name, value in _total_reference(altered, 0.4, 0.1).items():
+            np.testing.assert_allclose(_host(refreshed[name]), value, rtol=tolerance)
+
+
+@pytest.mark.parametrize("backend", BACKENDS)
+def test_global_total_prevents_block_factorization(backend: str) -> None:
+    """A cached total remains a cross-group dependency rather than a local rate."""
+    pytest.importorskip(backend)
+    spec = _total_spec("shaped", alias=True)
+    spec["factorize_axes"] = ["group"]
+    with pytest.raises(UnsupportedFeatureError, match=r"sum_state.*group"):
+        compile_spec(spec)
+
+
+def _reaction_total_reference(
+    state: dict[str, np.ndarray], gain: float, total: float
+) -> float:
+    flow = gain * state["S"].astype(np.float64) * state["I"] / total
+    recovery = 0.1 * state["I"].astype(np.float64)
+    return float(np.sum(flow**2) + np.sum(recovery**2))
+
+
+@pytest.mark.parametrize("backend", BACKENDS)
+@pytest.mark.parametrize("dtype", ["float32", "float64"])
+def test_global_total_reaction_values_and_parameter_derivatives(
+    backend: str, dtype: str
+) -> None:
+    """Exported propensities retain native global reductions and their AD graph."""
+    spec = _total_spec("mixed", alias=True)
+    spec["kind"] = "transitions"
+    del spec["equations"]
+    spec["transitions"] = [
+        {
+            "name": "inf",
+            "from": "S[group,age]",
+            "to": "I[group,age]",
+            "rate": "beta * I[group,age] / N",
+        },
+        {"name": "rec", "from": "I[group,age]", "to": "R[group,age]", "rate": "gamma"},
+    ]
+    compiled = compile_spec(spec)
+    assert compiled.reaction_gaps == ()
+    assert len(compiled.reactions) == 2
+    raw = {
+        name: np.full((2, 3), value, dtype=dtype)
+        for name, value in {"S": 9.0, "I": 1.0, "R": 2.0}.items()
+    }
+    raw["Z"] = np.asarray(3.0, dtype=dtype)
+    total = sum(float(value) for array in raw.values() for value in array.ravel())
+    with _precision(backend):
+        module = (
+            np
+            if backend == "numpy"
+            else pytest.importorskip("jax.numpy" if backend == "jax" else "torch")
+        )
+        state = {name: module.asarray(value) for name, value in raw.items()}
+        beta = module.asarray(np.asarray(0.4, dtype=dtype))
+        gamma = module.asarray(np.asarray(0.1, dtype=dtype))
+        xp = array_namespace(state["S"])
+        tolerance = 3e-6 if dtype == "float32" else 1e-12
+        for reaction, expected in zip(
+            compiled.reactions,
+            [0.4 * raw["S"] * raw["I"] / total, 0.1 * raw["I"]],
+            strict=True,
+        ):
+            operation = reaction.propensity_fn
+            if backend == "jax":
+                operation = pytest.importorskip("jax").jit(operation)
+            actual = operation(0.0, state, beta=beta, gamma=gamma)
+            assert array_namespace(actual) is xp
+            assert getattr(actual, "dtype", None) == state["S"].dtype
+            np.testing.assert_allclose(_host(actual), expected, rtol=tolerance)
+
+        def objective(gain: Any) -> Any:  # ruff: ignore[any-type]
+            return sum(
+                xp.sum(
+                    xp.square(
+                        reaction.propensity_fn(0.0, state, beta=gain, gamma=gamma)
+                    )
+                )
+                for reaction in compiled.reactions
+            )
+
+        if backend == "numpy":
+            return
+        if backend == "jax":
+            derivative = float(pytest.importorskip("jax").grad(objective)(beta))
+        else:
+            gain = beta.detach().clone().requires_grad_()
+            derivative = float(module.autograd.grad(objective(gain), gain)[0].detach())
+        step = 2e-3 if dtype == "float32" else 1e-5
+        np.testing.assert_allclose(
+            derivative,
+            (
+                _reaction_total_reference(raw, 0.4 + step, total)
+                - _reaction_total_reference(raw, 0.4 - step, total)
+            )
+            / (2 * step),
+            rtol=3e-3 if dtype == "float32" else 1e-7,
+        )
+
+
 @pytest.mark.parametrize("backend", BACKENDS)
 @pytest.mark.parametrize("dtype", ["float32", "float64"])
 def test_mixed_alias_reductions_preserve_all_state_axes(
