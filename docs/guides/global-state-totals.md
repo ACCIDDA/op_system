@@ -6,6 +6,11 @@ synthetic operator constants, and extra keys supplied to a structured evaluator
 are not additional states. The result is an unweighted sum; continuous-axis
 quadrature remains an explicit modeling choice through the integration helpers.
 
+Optional [state representations and physical measures](state-representations.md)
+describe extensive counts/mass and intensive densities without changing this
+helper. A density's physical integral requires its declared measure; an
+unweighted density sum generally has a different meaning.
+
 The helper works in expressions, aliases, transition rates, and exported
 reaction propensities on qualified CPU backends. Flat and structured evaluation
 use native array reductions, so JAX tracing and Torch parameter gradients retain

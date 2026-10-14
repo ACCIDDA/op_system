@@ -53,6 +53,7 @@ from op_system._ir import (
 from op_system._normalize import ExprRhs, TransitionsRhs
 from op_system._operators import OperatorDescriptor
 from op_system._reactions import ReactionGap, reaction_gap_for, routed_axis_label
+from op_system._scientific_meta import _axis_declarations
 from op_system._state_helpers import _bind_sum_state
 from op_system._symbols import parse_expression_string
 
@@ -62,6 +63,7 @@ if TYPE_CHECKING:
 
     from op_system._parameter_meta import ParameterDeclaration
     from op_system._reactions import ReactionReactantIR
+    from op_system._scientific_meta import AxisDeclaration, StateDeclaration
 
     from .specs import NormalizedRhs
 
@@ -524,6 +526,12 @@ class CompiledRhs:
     param_meta: Mapping[str, ParameterDeclaration] = field(
         default_factory=lambda: MappingProxyType({})
     )
+    state_meta: Mapping[str, StateDeclaration] = field(
+        default_factory=lambda: MappingProxyType({})
+    )
+    axis_meta: Mapping[str, AxisDeclaration] = field(
+        default_factory=lambda: MappingProxyType({})
+    )
 
     def bind(
         self, params: Mapping[str, object]
@@ -573,6 +581,8 @@ class CompiledRhs:
         object.__setattr__(self, "state_names", rebuilt.state_names)
         object.__setattr__(self, "param_names", rebuilt.param_names)
         object.__setattr__(self, "param_meta", rebuilt.param_meta)
+        object.__setattr__(self, "state_meta", rebuilt.state_meta)
+        object.__setattr__(self, "axis_meta", rebuilt.axis_meta)
         object.__setattr__(self, "eval_fn", rebuilt.eval_fn)
         object.__setattr__(self, "meta", rebuilt.meta)
         object.__setattr__(self, "operators", rebuilt.operators)
@@ -2427,6 +2437,19 @@ def compile_rhs(rhs: NormalizedRhs, *, xp: object | None = None) -> CompiledRhs:
                     "Mapping[str, ParameterDeclaration]",
                     rhs.meta.get("parameter_declarations", {}),
                 )
+            )
+        ),
+        state_meta=MappingProxyType(
+            dict(
+                cast(
+                    "Mapping[str, StateDeclaration]",
+                    rhs.meta.get("state_declarations", {}),
+                )
+            )
+        ),
+        axis_meta=MappingProxyType(
+            _axis_declarations(
+                cast("Sequence[Mapping[str, object]]", rhs.meta.get("axes", ()))
             )
         ),
         operators=_parse_operator_descriptors(rhs.meta),
