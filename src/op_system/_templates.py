@@ -601,6 +601,19 @@ def _apply_template_substitutions(
                 axis_lookup=axis_lookup,
                 fallback=match.group(0),
             )
+        if "=" in inner:
+            # This compatibility string helper also expands initial-state
+            # parameter names and transition labels. Mixed selectors must
+            # retain their bound entries instead of collapsing a partial
+            # assignment into a cell name and losing the remaining axes.
+            bindings = [
+                part.strip()
+                if "=" in part
+                else f"{part.strip()}={assignment[part.strip()]}"
+                for part in inner.split(",")
+                if part.strip()
+            ]
+            return f"{inner_base}[{', '.join(bindings)}]"
         return _render_template_name(inner_base, phs, assignment)
 
     return _INLINE_TEMPLATE_RE.sub(_inline_replacer, expr_out)
