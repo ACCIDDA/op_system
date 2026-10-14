@@ -9,6 +9,11 @@ version; format loosely follows
 
 ### Added
 
+- Required installed-provider typing qualification verifies the shipped
+  `py.typed` marker, public state/stepper types, and rejection of invalid state
+  arguments. Clean-wheel tests and a dedicated CI job run the downstream check;
+  provider source typing remains isolated from the core environment (#60).
+
 - A correctness-gated hierarchical benchmark compares handwritten and generated
   NumPy/JAX/CPU Torch RHS layouts over independent and coupled group variants.
   Isolated serial workers separate normalization, code generation, JAX

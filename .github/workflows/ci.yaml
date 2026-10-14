@@ -11,6 +11,29 @@ permissions:
   contents: 'read'
 
 jobs:
+  provider-typing:
+    name: 'provider-typing'
+    runs-on: 'ubuntu-latest'
+    steps:
+      - name: 'checkout repository'
+        uses: 'actions/checkout@v6'
+        with:
+          persist-credentials: false
+      - name: 'install just'
+        uses: 'taiki-e/install-action@v2'
+        with:
+          tool: 'just'
+      - name: 'setup uv'
+        uses: 'astral-sh/setup-uv@v7'
+        with:
+          python-version: '3.12'
+      - name: 'qualify installed provider types'
+        run: |
+          uv sync --dev
+          just provider-sync
+          just build-test-provider
+        env:
+          UV_PYTHON_VERSION: '3.12'
   citation:
     name: 'citation'
     runs-on: 'ubuntu-latest'

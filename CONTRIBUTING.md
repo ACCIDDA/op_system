@@ -68,6 +68,13 @@ jobs `compiler (numpy, 3.12)`, `compiler (jax, 3.12)`, and
 `compiler (torch, 3.12)` are required alongside baseline docs/quality/build and
 Python 3.11–3.13 test jobs. Provider tests remain a separate compatibility layer.
 
+The `provider-typing` job verifies the provider's installed wheel, including its
+`py.typed` marker and strict downstream typing of public state/stepper interfaces.
+It also requires an invalid state argument to be rejected by the type checker.
+The root mypy exclusion for `flepimop2-op_system/` is intentional: the adapter
+runs strict checks in its own dependency environment through `mypy-provider`.
+Run `just build-all` to include the installed consumer check locally.
+
 Optional GPU checks require suitable hardware and are outside the required CPU
 matrix. Large timing runs are opt-in; benchmark correctness is checked in CI,
 but there are no timing thresholds. See

@@ -8,6 +8,12 @@ Bound system steppers accept and return Flepimop2's backend-neutral `Array`
 protocol. The provider performs no state conversion: NumPy, JAX, and other
 supported namespaces are selected by the state supplied by the engine.
 
+The wheel ships `py.typed` for downstream type checking. Repository quality
+checks run strict mypy on the adapter in its separate environment; the root
+compiler's mypy exclusion does not bypass that check. `just build-all` and CI's
+`provider-typing` job additionally check the installed wheel's public types and
+verify that an invalid state argument fails strict downstream typing.
+
 System options preserve normalized axis metadata for engine providers:
 `axis_order`, `axis_sizes`, numeric `axis_coords`, original `axis_labels`, and
 declared `axis_types`. Consumers can therefore distinguish categorical,
