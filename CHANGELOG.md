@@ -57,6 +57,10 @@ version; format loosely follows
 
 ### Fixed
 
+- README YAML flow collections quote bracketed state/reactant selectors, so
+  examples load with a standard YAML parser before compiler validation. Source
+  and installed-wheel suites parse every README YAML fence (#286).
+
 - Vectorized continuous reductions construct quadrature weights through the
   runtime Array API, using the floating state dtype/device. This fixes CPU
   Torch evaluation and float32 promotion on NumPy/JAX; analytic mixed-axis
