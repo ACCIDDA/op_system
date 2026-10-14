@@ -78,3 +78,10 @@ provider checks, and wheel validation remain required alongside qualification.
 
 Scientific validity, agreement across untested parameter regimes, and solution
 accuracy of a downstream ODE/PDE integrator require separate evidence.
+
+Literal RHS values, including zero and aliased constants, inherit the qualified
+floating state's precision during assembly. Flat, structured, and available
+block evaluation preserve dtype and namespace. Explicitly typed array-valued
+parameters retain their own precision; this rule does not coerce deliberately
+mixed-precision input arrays into the state dtype. Constant forcing has a zero
+state Jacobian under the tested JAX and Torch functional AD transforms.

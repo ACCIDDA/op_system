@@ -899,6 +899,7 @@ def _evaluate_equations(
     eq_code: list[CodeType],
     env: Mapping[str, object],
     xp: Any,  # ruff: ignore[any-type]
+    state_dtype: object | None = None,
 ) -> Float64Array:
     """Evaluate equation code objects against an environment.
 
@@ -917,7 +918,9 @@ def _evaluate_equations(
         out_vals.append(val)
 
     array_values = [
-        value if getattr(value, "dtype", None) is not None else xp.asarray(value)
+        value
+        if getattr(value, "dtype", None) is not None
+        else xp.asarray(value, dtype=state_dtype)
         for value in out_vals
     ]
     return cast("Float64Array", xp.stack(array_values))
@@ -988,7 +991,9 @@ def _make_eval_fn(
         if cse_code:
             _evaluate_cse_bindings(cse_code, env=env)
 
-        return _evaluate_equations(eq_code=eq_code, env=env, xp=xp)
+        return _evaluate_equations(
+            eq_code=eq_code, env=env, xp=xp, state_dtype=getattr(y_arr, "dtype", None)
+        )
 
     return eval_fn
 

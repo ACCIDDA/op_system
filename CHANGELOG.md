@@ -59,6 +59,11 @@ version; format loosely follows
   invalid block factorization; README chain examples distinguish the generated
   prefix from a separately declared base compartment (#260).
 
+- Untyped RHS literals and constant aliases inherit the floating state dtype
+  in flat, structured, and block assembly instead of using backend integer or
+  default-float precision. Native typed values remain unchanged; required CPU
+  regressions cover both precisions and zero state Jacobians (#277).
+
 - Mixed selectors in compatibility template substitution retain explicitly
   bound coordinates when substituting wildcard axes, instead of collapsing a
   partial selector to a cell name. Required CPU backend regressions qualify

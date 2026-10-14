@@ -1225,6 +1225,8 @@ def make_vectorized_eval_fn(plan: _VectorPlan) -> EvalFn:  # ruff: ignore[comple
             except (NameError, ValueError, TypeError, ArithmeticError) as exc:
                 msg = f"alias {base!r} evaluation failed: {exc!r}"
                 raise ValueError(msg) from exc
+            if getattr(val, "dtype", None) is None:
+                val = xp.asarray(val, dtype=getattr(y_arr, "dtype", None))
             if shape:
                 val = xp.broadcast_to(val, shape)
             env[f"{base}_buf"] = val
@@ -1260,7 +1262,9 @@ def make_vectorized_eval_fn(plan: _VectorPlan) -> EvalFn:  # ruff: ignore[comple
                     msg = f"equation {grp.base!r} evaluation failed: {exc!r}"
                     raise ValueError(msg) from exc
                 arr_value = (
-                    val if getattr(val, "dtype", None) is not None else xp.asarray(val)
+                    val
+                    if getattr(val, "dtype", None) is not None
+                    else xp.asarray(val, dtype=getattr(y_arr, "dtype", None))
                 )
                 arr = xp.broadcast_to(arr_value, grp.vec_shape)
                 bin_results.append(arr)
@@ -1357,6 +1361,8 @@ def make_pytree_eval_fn(plan: _VectorPlan) -> PytreeEvalFn:  # ruff: ignore[comp
             except (NameError, ValueError, TypeError, ArithmeticError) as exc:
                 msg = f"alias {base!r} evaluation failed: {exc!r}"
                 raise ValueError(msg) from exc
+            if getattr(val, "dtype", None) is None:
+                val = xp.asarray(val, dtype=getattr(first_val, "dtype", None))
             if shape:
                 val = xp.broadcast_to(val, shape)
             env[f"{base}_buf"] = val
@@ -1390,7 +1396,9 @@ def make_pytree_eval_fn(plan: _VectorPlan) -> PytreeEvalFn:  # ruff: ignore[comp
                     msg = f"equation {grp.base!r} evaluation failed: {exc!r}"
                     raise ValueError(msg) from exc
                 arr_value = (
-                    val if getattr(val, "dtype", None) is not None else xp.asarray(val)
+                    val
+                    if getattr(val, "dtype", None) is not None
+                    else xp.asarray(val, dtype=getattr(y[grp.base], "dtype", None))
                 )
                 arr = xp.broadcast_to(arr_value, grp.vec_shape)
                 bin_results.append(arr)
