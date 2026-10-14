@@ -443,3 +443,155 @@ def _derivative_result(
     )
 
 
+def _inspect_fixture(  # ruff: ignore[too-many-arguments]
+    compiled: CompiledRhs,
+    fixture: QualificationFixture,
+    reference: ReferenceRhs,
+    evaluator: Evaluator,
+    config: QualificationConfig,
+    *,
+    invariants: Sequence[InvariantCheck],
+    backend: str,
+) -> FixtureQualification:
+    actual = _evaluate(compiled, fixture, evaluator)
+    expected = reference(fixture.time, fixture.state, fixture.params)
+    if set(actual) != set(fixture.state) or set(expected) != set(fixture.state):
+        msg = "reference and result keys must match the fixture state"
+        raise ValueError(msg)
+    arrays = tuple(
+        _compare(name, fixture.state[name], actual[name], expected[name], config)
+        for name in fixture.state
+    )
+    checks = tuple(_balance(item, fixture, actual) for item in invariants)
+    derivative = None
+    if fixture.direction is not None:
+        try:
+            derivative = _directional(compiled, fixture, reference, evaluator, config)
+        except Exception as exc:  # ruff: ignore[blind-except]
+            derivative = _derivative_result(
+                config,
+                passed=False,
+                maximum=None,
+                errors=(f"{type(exc).__name__}: {exc}",),
+            )
+    return FixtureQualification(
+        fixture.name,
+        evaluator,
+        backend,
+        float(fixture.time),
+        config.rtol,
+        config.atol,
+        arrays,
+        checks,
+        derivative,
+    )
+
+
+def _qualify_fixture(  # ruff: ignore[too-many-arguments]
+    compiled: CompiledRhs,
+    fixture: QualificationFixture,
+    reference: ReferenceRhs,
+    evaluator: Evaluator,
+    config: QualificationConfig,
+    *,
+    invariants: Sequence[InvariantCheck],
+) -> FixtureQualification:
+    backend = "unknown"
+    try:
+        backend = array_namespace(next(iter(fixture.state.values()))).__name__
+        return _inspect_fixture(
+            compiled,
+            fixture,
+            reference,
+            evaluator,
+            config,
+            invariants=invariants,
+            backend=backend,
+        )
+    except Exception as exc:  # ruff: ignore[blind-except]
+        # Arbitrary user callbacks are qualification failures. Cancellation
+        # and other BaseException subclasses still propagate normally.
+        return FixtureQualification(
+            fixture.name,
+            evaluator,
+            backend,
+            float(fixture.time),
+            config.rtol,
+            config.atol,
+            errors=(f"{type(exc).__name__}: {exc}",),
+        )
+
+
+def qualify_rhs(  # ruff: ignore[too-many-arguments]
+    compiled: CompiledRhs,
+    fixtures: Sequence[QualificationFixture],
+    reference: ReferenceRhs,
+    *,
+    evaluators: Sequence[Evaluator] = ("flat", "structured"),
+    config: QualificationConfig | None = None,
+    invariants: Sequence[InvariantCheck] = (),
+) -> QualificationReport:
+    """Compare compiled layouts against independently supplied equations.
+
+    Args:
+        compiled: Compiled RHS to inspect; structural validation is separate.
+        fixtures: Named structured state/parameter fixtures. Supply a JAX
+            state ``direction`` to request an additional derivative check.
+        reference: Independent ``reference(t, state, params)`` returning
+            derivatives keyed by the same state templates.
+        evaluators: Requested layouts. Unavailable layouts produce failed
+            records rather than silently falling back to another evaluator.
+        config: Reference and derivative tolerances. Defaults assume double
+            precision; adjust the tolerances and difference step for float32.
+        invariants: Residual-to-zero callbacks with stated conditions and
+            individual absolute tolerances, such as closed-system balance.
+
+    Returns:
+        Eager host diagnostics for every requested combination. Fixture-based
+        agreement is not a proof of scientific validity or solution accuracy.
+
+    Raises:
+        ValueError: If fixtures/evaluators are empty, fixture names/time are
+            invalid, or an invariant lacks valid conditions/tolerances.
+    """
+    controls = config or QualificationConfig()
+    if not fixtures or not evaluators:
+        msg = "at least one fixture and evaluator are required"
+        raise ValueError(msg)
+    names = [item.name for item in fixtures]
+    if len(set(names)) != len(names) or any(not name.strip() for name in names):
+        msg = "fixture names must be unique and non-empty"
+        raise ValueError(msg)
+    if any(not math.isfinite(item.time) for item in fixtures):
+        msg = "fixture times must be finite"
+        raise ValueError(msg)
+    if any(name not in {"flat", "structured", "block"} for name in evaluators):
+        msg = "unknown evaluator"
+        raise ValueError(msg)
+    if any(
+        not item.condition.strip() or not math.isfinite(item.atol) or item.atol < 0
+        for item in invariants
+    ):
+        msg = "invariant checks need conditions and finite non-negative tolerances"
+        raise ValueError(msg)
+    return QualificationReport(
+        tuple(
+            _qualify_fixture(
+                compiled, item, reference, evaluator, controls, invariants=invariants
+            )
+            for item in fixtures
+            for evaluator in evaluators
+        )
+    )
+
+
+__all__ = [
+    "ArrayComparison",
+    "FixtureQualification",
+    "InvariantCheck",
+    "NumericalCheck",
+    "QualificationConfig",
+    "QualificationFixture",
+    "QualificationReport",
+    "qualify_rhs",
+]

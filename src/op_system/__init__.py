@@ -60,6 +60,13 @@ from .compile import (
     StateDict,
     compile_rhs,
 )
+from .qualification import (
+    InvariantCheck,
+    QualificationConfig,
+    QualificationFixture,
+    QualificationReport,
+    qualify_rhs,
+)
 from .specs import (
     ExpressionString,
     ExprRhs,
@@ -153,9 +160,13 @@ __all__ = [
     "ExprRhs",
     "ExpressionString",
     "IdentifierString",
+    "InvariantCheck",
     "NormalizedRhs",
     "OperatorDescriptor",
     "PytreeEvalFn",
+    "QualificationConfig",
+    "QualificationFixture",
+    "QualificationReport",
     "ReactionGap",
     "ReactionPropensityFn",
     "ShapeGroup",
@@ -174,6 +185,7 @@ __all__ = [
     "normalize_expr_rhs",
     "normalize_rhs",
     "normalize_transitions_rhs",
+    "qualify_rhs",
     "validate_axis_kernel_matrix",
     "validate_jump_integral_kernel",
     "validate_spec",
