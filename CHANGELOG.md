@@ -60,6 +60,12 @@ version; format loosely follows
   selector guidance distinguishes modern colon expressions from legacy string
   substitution (#113).
 
+- Raw equations, transition rates, and alias bodies reject bare references to
+  templated state bases during normalization, with context and an indexed-form
+  suggestion. This prevents compile-success/runtime-NameError failures without
+  changing valid scalar/indexed references or generated block symbols. Cached
+  IR is inspected once per distinct raw expression before expansion (#259).
+
 - Generated axis reordering and vectorized assembly use Array API
   `permute_dims`, fixing Torch evaluation of reordered axes and reducers
   that previously called NumPy-style `transpose` (#263).

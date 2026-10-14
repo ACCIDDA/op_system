@@ -169,6 +169,12 @@ for the exact schema, units, and Array-API reference functions.
 are deprecated and ignored — the compiled callable infers its array
 namespace from the input `y` on every call.
 
+Reference a templated state with its axes, such as `I[age]`. A bare `I` for a
+declared `I[age]` is rejected during normalization, including when it appears
+inside an alias. Ordinary scalar states remain valid by bare name. Validation
+reports identify the offending equation, transition rate, or alias and suggest
+the indexed form, before any numerical evaluator is constructed.
+
 ## JAX usage
 
 ```python

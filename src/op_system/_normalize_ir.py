@@ -19,8 +19,8 @@ if TYPE_CHECKING:
     from collections.abc import Iterable
 
 from op_system._axes import _normalize_bracket_key
-from op_system._errors import InvalidRhsSpecError
-from op_system._ir import Expr, free_symbols, parse_expr_to_ir, unparse_ir
+from op_system._errors import InvalidExpressionError, InvalidRhsSpecError
+from op_system._ir import Expr, Sym, free_symbols, parse_expr_to_ir, unparse_ir, walk
 from op_system._ir_templates import (
     _detect_alias_cycle,
     _ExpandResultMemo,
@@ -41,6 +41,49 @@ from op_system._templates import (
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
+
+def _validate_bare_template_references(
+    state_raw: Sequence[str],
+    state_expanded: Sequence[str],
+    expressions: Iterable[tuple[str, object]],
+) -> None:
+    """Reject unresolved bare state bases in raw expressions before expansion.
+
+    Reuse the expression parser's cache and inspect each distinct raw body once;
+    generated block symbols and indexed references remain valid.
+
+    Raises:
+        InvalidRhsSpecError: If a state template is referenced without its axes.
+    """
+    scalar_names = set(state_expanded)
+    selectors = {}
+    for declaration in state_raw:
+        base, tokens = parse_selector(declaration)
+        if tokens and base not in scalar_names:
+            selectors[base] = f"{base}[{','.join(token.axis for token in tokens)}]"
+    if not selectors:
+        return
+    checked: set[str] = set()
+    old_limit = sys.getrecursionlimit()
+    with _raise_recursion_limit(max(old_limit, 10_000), old_limit):
+        for context, body in expressions:
+            if not isinstance(body, str) or body in checked:
+                continue
+            checked.add(body)
+            try:
+                expression = parse_expr_to_ir(body, lower_helpers=True)
+            except InvalidExpressionError:
+                # Keep the existing stage-specific syntax error and context.
+                continue
+            for node in walk(expression):
+                if isinstance(node, Sym) and node.name in selectors:
+                    raise InvalidRhsSpecError(
+                        detail=(
+                            f"{context} references templated state {node.name!r} "
+                            f"without its axes; write {selectors[node.name]}"
+                        )
+                    )
 
 
 @contextlib.contextmanager
