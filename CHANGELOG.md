@@ -53,6 +53,13 @@ version; format loosely follows
 
 ### Fixed
 
+- Mixed selectors in compatibility template substitution retain explicitly
+  bound coordinates when substituting wildcard axes, instead of collapsing a
+  partial selector to a cell name. Required CPU backend regressions qualify
+  nested typed-IR alias reductions over all state axes in both precisions;
+  selector guidance distinguishes modern colon expressions from legacy string
+  substitution (#113).
+
 - Generated axis reordering and vectorized assembly use Array API
   `permute_dims`, fixing Torch evaluation of reordered axes and reducers
   that previously called NumPy-style `transpose` (#263).

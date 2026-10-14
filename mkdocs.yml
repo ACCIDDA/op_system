@@ -50,6 +50,7 @@ nav:
       - Citation and Archiving: development/citation-and-archiving.md
   - Guides:
       - Getting Started: guides/getting-started.md
+      - Expression Selectors: guides/expression-selectors.md
       - Operator Metadata: guides/operators.md
       - Time-indexed Parameters: guides/time-indexed-parameters.md
       - Renewal Births: guides/renewal-births.md

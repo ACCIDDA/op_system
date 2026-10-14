@@ -34,6 +34,91 @@ CASES = [
 BACKENDS = ("numpy", "jax", "torch")
 
 
+@pytest.mark.parametrize("backend", BACKENDS)
+@pytest.mark.parametrize("dtype", ["float32", "float64"])
+def test_mixed_alias_reductions_preserve_all_state_axes(
+    backend: str, dtype: str
+) -> None:
+    """Wildcard group selection and nested bound coordinates retain every cell."""
+    spec: dict[str, Any] = {
+        "kind": "expr",
+        "axes": [
+            {"name": axis, "coords": [f"{axis}0", f"{axis}1"]}
+            for axis in ["loc", "age", "vax", "imm"]
+        ],
+        "factorize_axes": ["loc"],
+        "state": ["X[loc,age,vax,imm]", "I1[loc,age,vax]", "E[loc,age,vax]"],
+        "aliases": {
+            "foi[loc]": (
+                "apply_along(apply_along(I1[loc,age:ap,vax:v] + "
+                "apply_along(X[loc,age:ap,vax:v,imm:k], imm=k, kernel=sum), "
+                "vax=v, kernel=sum), age=ap, kernel=sum)"
+            )
+        },
+        "equations": {
+            "X[loc,age,vax,imm]": "-foi[loc] * X[loc,age,vax,imm]",
+            "I1[loc,age,vax]": "0 * I1[loc,age,vax]",
+            "E[loc,age,vax]": (
+                "foi[loc] * apply_along(X[loc,age,vax,imm:k], imm=k, kernel=sum)"
+            ),
+        },
+    }
+    compiled = compile_spec(spec)
+    assert compiled.param_names == ()
+    assert compiled.pytree_eval_fn is not None
+    assert compiled.block_pytree_eval_fn is not None
+    raw = {
+        "X": np.linspace(0.1, 1.6, 16, dtype=dtype).reshape(2, 2, 2, 2),
+        "I1": np.linspace(0.3, 2.4, 8, dtype=dtype).reshape(2, 2, 2),
+        "E": np.zeros((2, 2, 2), dtype=dtype),
+    }
+    expected = {name: np.zeros_like(value) for name, value in raw.items()}
+    for loc in range(2):
+        foi = sum(float(value) for value in raw["I1"][loc].ravel()) + sum(
+            float(value) for value in raw["X"][loc].ravel()
+        )
+        for age in range(2):
+            for vax in range(2):
+                for imm in range(2):
+                    flow = foi * float(raw["X"][loc, age, vax, imm])
+                    expected["X"][loc, age, vax, imm] = -flow
+                    expected["E"][loc, age, vax] += flow
+    with _precision(backend):
+        module = (
+            np
+            if backend == "numpy"
+            else pytest.importorskip("jax.numpy" if backend == "jax" else "torch")
+        )
+        state = {name: module.asarray(value) for name, value in raw.items()}
+        xp = array_namespace(state["X"])
+        result = compiled.pytree_eval_fn(0.0, state)
+        tolerance = 2e-6 if dtype == "float32" else 1e-12
+        for name, host_value in raw.items():
+            assert result[name].shape == host_value.shape
+            assert result[name].dtype == state[name].dtype
+            assert array_namespace(result[name]) is xp
+            np.testing.assert_allclose(
+                _host(result[name]), expected[name], rtol=tolerance
+            )
+        flat = compiled.eval_fn(
+            0.0, xp.concat([xp.reshape(value, (-1,)) for value in state.values()])
+        )
+        np.testing.assert_allclose(
+            _host(flat),
+            np.concatenate([value.ravel() for value in expected.values()]),
+            rtol=tolerance,
+        )
+        block = compiled.block_pytree_eval_fn
+        if backend == "jax":
+            block = pytest.importorskip("jax").jit(block)
+        for loc in range(2):
+            part = block(0.0, {name: value[loc] for name, value in state.items()})
+            for name in raw:
+                np.testing.assert_allclose(
+                    _host(part[name]), expected[name][loc], rtol=tolerance
+                )
+
+
 @contextmanager
 def _precision(backend: str) -> Iterator[None]:
     if backend != "jax":
