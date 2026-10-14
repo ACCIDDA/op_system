@@ -30,6 +30,14 @@ unqualified.
 | Directional derivatives against independent finite differences | No AD contract | Qualified | Autograd qualified in float64 |
 | CUDA/CuPy and other GPU execution | Unqualified here | Unqualified here | Unqualified here |
 
+[Named latent observables](latent-observables.md) have a separate initial
+operation boundary: arithmetic/exp, broadcasting, declared-node/counter
+selection and explicit reductions. Their required tests check independent
+nonuniform-grid values, JAX float64 JIT/vmap and state/parameter/time derivatives,
+and Torch float64/float32 autograd. Static measure/coordinate metadata is outside
+that derivative contract. Broader RHS qualification does not automatically
+qualify additional observable operations or devices.
+
 GPU qualification remains tracked separately in #182. The matrix describes
 the tested workload and paths, not every combination of compiler operators,
 backend versions, devices, or automatic differentiation transforms.

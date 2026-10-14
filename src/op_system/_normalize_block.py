@@ -383,6 +383,9 @@ def strip_block_axis(rhs: NormalizedRhs, axis_name: str) -> NormalizedRhs:  # ru
     # 8. Strip meta: remove axis_name from factorize_axes and axes list
     # ------------------------------------------------------------------
     meta: dict[str, Any] = dict(rhs.meta)
+    # The stripped evaluator represents dynamics only; global observations
+    # remain on the original full-mesh compiled model.
+    meta.pop("op_system_observables_ir", None)
     meta["factorize_axes"] = [a for a in factorize_axes if a != axis_name]
     new_axes_meta = [ax for ax in axes_meta if ax.get("name") != axis_name]
     meta["axes"] = new_axes_meta

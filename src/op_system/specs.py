@@ -25,6 +25,7 @@ from op_system._normalize import (
     normalize_rhs,
     normalize_transitions_rhs,
 )
+from op_system._observables import ObservableDefinition, ObservableReduction
 from op_system._parameter_meta import ParameterDeclaration, ParameterSupport
 from op_system._scientific_meta import AxisDeclaration, AxisMeasure, StateDeclaration
 from op_system._symbols import ExpressionString
@@ -36,6 +37,8 @@ __all__ = [
     "ExprRhs",
     "ExpressionString",
     "NormalizedRhs",
+    "ObservableDefinition",
+    "ObservableReduction",
     "ParameterDeclaration",
     "ParameterSupport",
     "PinnedToken",

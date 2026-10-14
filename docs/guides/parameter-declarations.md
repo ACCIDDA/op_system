@@ -71,3 +71,8 @@ For example, a logit transform covers the interior of a closed unit interval;
 endpoint atoms require their own statistical treatment. Array namespace,
 dtype and differentiation behavior remain properties of the numerical
 evaluation, independent of these static annotations.
+
+[Named latent observables](latent-observables.md) can infer additional scalar or
+shaped parameters and annotate them in this same `parameters` block. Those names
+appear in `param_meta` and in each observable's `parameter_shapes`, while the
+existing RHS binding requirements and `param_names` remain unchanged.

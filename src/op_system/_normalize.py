@@ -29,9 +29,9 @@ import contextlib
 import re
 import sys
 from collections.abc import Mapping as _MappingABC
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from itertools import chain, product
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypeVar, cast
 
 if TYPE_CHECKING:
     from collections.abc import Collection, Iterable, Iterator, Mapping, Sequence
@@ -102,6 +102,7 @@ from op_system._normalize_kernels import (
     _normalize_operators,
     _normalize_state_axes,
 )
+from op_system._observables import _normalize_observables, _ObservableIR
 from op_system._parameter_meta import _parameter_declaration_metadata
 from op_system._reactions import (
     ReactionArtifactIR,
@@ -169,6 +170,13 @@ class _RhsBase:
     equations_ir_reduce: Sequence[Expr | None] = ()
     alias_templates: tuple[StateTemplate, ...] = ()
 
+    @property
+    def observables_ir(self) -> tuple[_ObservableIR, ...]:
+        """Compact observable IR in metadata, preserving legacy dataclass slots."""
+        return cast(
+            "tuple[_ObservableIR, ...]", self.meta.get("op_system_observables_ir", ())
+        )
+
 
 @dataclass(frozen=True, slots=True)
 class ExprRhs(_RhsBase):
@@ -203,6 +211,36 @@ class TransitionsRhs(_RhsBase):
 #: Use ``isinstance(rhs, ExprRhs)`` / ``isinstance(rhs, TransitionsRhs)`` to
 #: dispatch, rather than the legacy ``rhs.kind == "expr"`` string check.
 NormalizedRhs = ExprRhs | TransitionsRhs
+
+_RhsT = TypeVar("_RhsT", ExprRhs, TransitionsRhs)
+
+
+def _finish_observables(rhs: _RhsT, spec: Mapping[str, Any]) -> _RhsT:
+    """Attach independent observable dependencies and parameter annotations.
+
+    Returns:
+        The same RHS variant without altering equation parameter requirements.
+    """
+    observables = _normalize_observables(spec.get("observables"), rhs=rhs)
+    known_names = (
+        set(rhs.param_names)
+        | set(dict(rhs.shaped_params))
+        | set(dict(rhs.time_varying_params))
+    )
+    known_names.update(
+        name for observable in observables for name, _ in observable.parameter_axes
+    )
+    metadata = dict(rhs.meta)
+    metadata.update(
+        _parameter_declaration_metadata(
+            spec.get("parameters"),
+            known_names=known_names
+            - set(metadata.get("op_system_synth_constants", {})),
+        )
+    )
+    if observables:
+        metadata["op_system_observables_ir"] = observables
+    return replace(rhs, meta=metadata)
 
 
 # ---------------------------------------------------------------------------
@@ -582,13 +620,6 @@ def normalize_expr_rhs(spec: Mapping[str, Any]) -> ExprRhs:  # ruff: ignore[comp
         and sym not in template_base_set
         and sym not in _SHAPED_PARAM_BUILTIN_NAMES
     )
-    meta.update(
-        _parameter_declaration_metadata(
-            spec.get("parameters"),
-            known_names=(set(param_names) | set(shaped_params) | set(time_varying_full))
-            - set(meta.get("op_system_synth_constants", {})),
-        )
-    )
 
     state_templates = _build_state_templates(
         state_raw,
@@ -604,7 +635,7 @@ def normalize_expr_rhs(spec: Mapping[str, Any]) -> ExprRhs:  # ruff: ignore[comp
             state_axes=meta_parts[1],
         )
     )
-    return ExprRhs(
+    normalized = ExprRhs(
         state_names=tuple(state_expanded),
         equations=equations_strings,
         aliases=aliases_strings,
@@ -624,6 +655,7 @@ def normalize_expr_rhs(spec: Mapping[str, Any]) -> ExprRhs:  # ruff: ignore[comp
             alias_template_map=alias_template_map,
         ),
     )
+    return _finish_observables(normalized, spec)
 
 
 # ---------------------------------------------------------------------------
@@ -2297,13 +2329,6 @@ def normalize_transitions_rhs(  # ruff: ignore[complex-structure, too-many-branc
         and sym not in template_base_set
         and sym not in _SHAPED_PARAM_BUILTIN_NAMES
     )
-    meta.update(
-        _parameter_declaration_metadata(
-            spec.get("parameters"),
-            known_names=(set(param_names) | set(shaped_params) | set(time_varying_full))
-            - set(meta.get("op_system_synth_constants", {})),
-        )
-    )
 
     state_templates = _build_state_templates(
         state_raw,
@@ -2319,7 +2344,7 @@ def normalize_transitions_rhs(  # ruff: ignore[complex-structure, too-many-branc
             state_axes=meta_parts[1],
         )
     )
-    return TransitionsRhs(
+    normalized = TransitionsRhs(
         reactions_ir=reactions_ir,
         reaction_gaps_ir=reaction_gaps_ir,
         state_names=tuple(state_expanded),
@@ -2343,3 +2368,4 @@ def normalize_transitions_rhs(  # ruff: ignore[complex-structure, too-many-branc
             alias_template_map=alias_template_map,
         ),
     )
+    return _finish_observables(normalized, spec)
