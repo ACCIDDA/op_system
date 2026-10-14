@@ -34,6 +34,12 @@ def main() -> None:
         }
         for person in citation["authors"]
     ]
+    if citation["license"] != ["MIT", "GPL-3.0-or-later"]:
+        msg = (
+            "Citation licenses must match the core MIT and "
+            "provider GPLv3-or-later grants"
+        )
+        raise SystemExit(msg)
     shared = str(citation["version"])
     for project in projects:
         if project["version"] != shared or project["authors"] != authors:

@@ -70,6 +70,10 @@ version; format loosely follows
   examples load with a standard YAML parser before compiler validation. Source
   and installed-wheel suites parse every README YAML fence (#286).
 
+- Shared citation metadata records `GPL-3.0-or-later` for the provider, matching
+  its existing source grants, alongside core MIT. Citation validation rejects
+  license drift; this corrects metadata without changing either grant (#275).
+
 - Vectorized continuous reductions construct quadrature weights through the
   runtime Array API, using the floating state dtype/device. This fixes CPU
   Torch evaluation and float32 promotion on NumPy/JAX; analytic mixed-axis

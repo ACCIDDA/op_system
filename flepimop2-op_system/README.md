@@ -70,3 +70,7 @@ system is built. It uses Python's [complementary error function](https://docs.py
 directly to preserve small positive tail values; SciPy is not a runtime
 dependency. Kernel declarations without axes retain their existing scalar
 `params.value` behavior.
+
+The provider source headers grant GPL version 3 **or any later version**
+(`GPL-3.0-or-later`). The standalone core uses MIT. The shared citation records
+both existing grants; preserve the relevant license when reusing code.
