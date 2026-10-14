@@ -51,6 +51,7 @@ nav:
   - Guides:
       - Getting Started: guides/getting-started.md
       - Expression Selectors: guides/expression-selectors.md
+      - Global State Totals: guides/global-state-totals.md
       - Operator Metadata: guides/operators.md
       - Time-indexed Parameters: guides/time-indexed-parameters.md
       - Renewal Births: guides/renewal-births.md

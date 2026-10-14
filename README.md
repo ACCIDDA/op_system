@@ -405,26 +405,28 @@ input responsibility, consistent with other transition rates.
 ```yaml
 spec:
   kind: transitions
-  state: [S, I, R]
+  state: [S, R]
+  aliases:
+    infectious: I1 + I2 + I3
   chain:
     - name: I
       length: 3
-      entry:   {from: S, rate: beta * S / sum_state()}
+      entry:   {from: S, rate: beta * infectious / sum_state()}
       forward: [gamma12, gamma23]
       exit:    {to: R, rate: gamma3r}
   transitions: []
 ```
 
 `chain` synthesizes the staged compartments (`I1..I3`) and the internal
-forward / exit transitions; declare only the base `I` in `state`. The
+forward / exit transitions. Its name is a prefix; declaring `I` separately
+would add an extra compartment to the population total. The
 generated transitions publish reactions named `I_entry`, `I_advance_1`,
-`I_advance_2`, and `I_exit`. A stage whose rate reads no state is already
-complete for adaptive stochastic solvers. For the others, list the reactants
-beyond each consumed stage: `entry.catalysts` for the entry rate (here
-`[{state: I1, order: 1}, ...]` for every infectious stage it reads) and the
-chain's `catalysts` for the forward and exit rates. `catalysts: auto` infers
-them instead when a rate is a single product of states, like
-`reactants: auto`.
+`I_advance_2`, and `I_exit`. Export does not certify a mass-action description
+or elasticity bound for the population-normalized entry rate. Follow the
+chosen stochastic engine's reactant/dependency requirements separately;
+`reactants: auto` and `catalysts: auto` retain their documented restrictions.
+See [global state totals](docs/guides/global-state-totals.md) for evaluator,
+coupling, and chain semantics.
 
 ### Axis-wide aging with `coord_shift`
 
