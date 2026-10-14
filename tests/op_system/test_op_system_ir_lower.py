@@ -26,9 +26,11 @@ from op_system._ir_lower import (
     lower_subscript_to_buffer,
     lower_to_vector_ast,
 )
+from op_system._state_helpers import _bind_quadrature_weights
 
 
 def _eval(expr: ast.expr, env: dict[str, Any]) -> Any:  # ruff: ignore[any-type]
+    _bind_quadrature_weights(env, np.asarray(0.0), env.get("np", np))
     tree = ast.Expression(body=expr)
     ast.fix_missing_locations(tree)
     code = compile(tree, "<test>", "eval")

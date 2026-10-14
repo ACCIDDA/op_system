@@ -705,3 +705,76 @@ def test_block_alias_and_local_parameter_regression(
                     sign * expected[index],
                     rtol=tolerance,
                 )
+
+
+@pytest.mark.parametrize("backend", BACKENDS)
+@pytest.mark.parametrize("dtype", ["float32", "float64"])
+@pytest.mark.parametrize("helper", ["named", "apply"])
+def test_mixed_axis_reduction_integrates_bilinear_field(
+    backend: str, dtype: str, helper: str
+) -> None:
+    """Nested mixed-axis reductions equal an analytic integral on nonuniform grids."""
+    expression = (
+        "sum_over(integrate_over(U[group:g,x:i,y:j], x=i, y=j), group=g)"
+        if helper == "named"
+        else "apply_along(apply_along(U[group:g,x:i,y:j], x=i, y=j), group=g)"
+    )
+    compiled = compile_spec({
+        "kind": "expr",
+        "axes": [
+            {"name": "group", "coords": ["a", "b"]},
+            {"name": "x", "type": "continuous", "coords": [0.0, 1.0, 3.0]},
+            {"name": "y", "type": "continuous", "coords": [0.0, 2.0]},
+        ],
+        "state": ["U[group,x,y]", "T"],
+        "equations": {"U[group,x,y]": "U[group,x,y] - U[group,x,y]", "T": expression},
+    })
+    raw = np.empty((2, 3, 2), dtype=dtype)
+    for g, offset in enumerate([1.0, 2.0]):
+        for i, x in enumerate([0.0, 1.0, 3.0]):
+            for j, y in enumerate([0.0, 2.0]):
+                raw[g, i, j] = offset + 2 * x + 3 * y
+    # Integral over [0,3] x [0,2]: 6*(offset+6), summed over two groups.
+    expected = np.asarray([*np.zeros(12), 90.0], dtype=dtype)
+    assert compiled.pytree_eval_fn is not None
+    with _precision(backend):
+        module = (
+            np
+            if backend == "numpy"
+            else pytest.importorskip("jax.numpy" if backend == "jax" else "torch")
+        )
+        state = {
+            "U": module.asarray(raw),
+            "T": module.asarray(np.asarray(0.0, dtype=dtype)),
+        }
+        flat = module.asarray(
+            np.concatenate([raw.ravel(), np.asarray([0.0], dtype=dtype)])
+        )
+        result = compiled.eval_fn(0.0, flat)
+        assert result.dtype == flat.dtype
+        assert result.shape == flat.shape
+        assert array_namespace(result) is array_namespace(flat)
+        np.testing.assert_allclose(_host(result), expected, rtol=2e-6)
+        operation = compiled.pytree_eval_fn
+        if backend == "jax":
+            operation = pytest.importorskip("jax").jit(operation)
+        structured = operation(0.0, state)
+        for name, value in structured.items():
+            assert value.dtype == state[name].dtype
+            assert value.shape == state[name].shape
+            assert array_namespace(value) is array_namespace(state[name])
+        np.testing.assert_array_equal(_host(structured["U"]), np.zeros_like(raw))
+        np.testing.assert_allclose(_host(structured["T"]), 90.0, rtol=2e-6)
+
+        if backend != "numpy":
+
+            def objective(gain: Any) -> Any:  # ruff: ignore[any-type]
+                return operation(0.0, {**state, "U": gain * state["U"]})["T"]
+
+            gain = module.asarray(np.asarray(1.0, dtype=dtype))
+            if backend == "jax":
+                derivative = pytest.importorskip("jax").grad(objective)(gain)
+            else:
+                derivative = module.func.jacrev(objective)(gain)
+            assert derivative.dtype == gain.dtype
+            np.testing.assert_allclose(_host(derivative), 90.0, rtol=2e-6)
