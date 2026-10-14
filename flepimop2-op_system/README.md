@@ -4,9 +4,13 @@
 
 It packages the `flepimop2.system.op_system` provider so `flepimop2` can load and execute RHS specifications compiled by the core `op_system` package.
 
-Bound system steppers accept and return Flepimop2's backend-neutral `Array`
+Bound system steppers accept and return Flepimop2's namespace-neutral `Array`
 protocol. The provider performs no state conversion: NumPy, JAX, and other
-supported namespaces are selected by the state supplied by the engine.
+supported array namespaces are selected by the state supplied by the numerical
+engine. `module: op_system` selects this system provider; it does not select an
+array namespace. There is no `array_backend` configuration field. See the
+[terminology guide](../docs/guides/array-namespaces.md) for legacy compiler
+keyword compatibility.
 
 The wheel ships `py.typed` for downstream type checking. Repository quality
 checks run strict mypy on the adapter in its separate environment; the root

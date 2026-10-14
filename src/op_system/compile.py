@@ -2324,8 +2324,8 @@ def compile_rhs(rhs: NormalizedRhs, *, xp: object | None = None) -> CompiledRhs:
 
     Args:
         rhs: Normalized RHS produced by `op_system.specs.normalize_rhs`.
-        xp: **Deprecated.** Formerly the compile-time array backend
-            namespace. Now ignored — the namespace is resolved per call
+        xp: **Deprecated.** Formerly the compile-time array namespace.
+            Now ignored — the namespace is resolved per call
             from the input ``y``. Will be removed in a future release.
 
     Returns:

@@ -165,6 +165,11 @@ continuous axes use target trapezoidal weights; and the currently supported
 losing mass. See the [operator guide](https://accidda.github.io/op_system/guides/operators/)
 for the exact schema, units, and Array-API reference functions.
 
+Use **array namespace** (or **array backend**) for NumPy/JAX/Torch, **engine**
+for a numerical integrator, and **provider** for a framework adapter. See the
+[terminology guide](docs/guides/array-namespaces.md) for configuration boundaries
+and compatibility.
+
 `compile_spec` accepts legacy `backend=` / `xp=` keyword arguments but they
 are deprecated and ignored — the compiled callable infers its array
 namespace from the input `y` on every call.
