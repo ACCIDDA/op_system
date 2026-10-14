@@ -1254,6 +1254,11 @@ block evaluation preserve dtype and namespace. Explicitly typed array-valued
 parameters retain their own precision; this rule does not coerce deliberately
 mixed-precision input arrays into the state dtype. Constant forcing has a zero
 state Jacobian under the tested JAX and Torch functional AD transforms.</p>
+<p>Continuous-axis reduction weights use the floating state's dtype and device,
+including nested categorical sums and multi-axis trapezoidal integration.
+Analytic bilinear integrals on nonuniform grids qualify values, precision,
+namespace on all three CPU namespaces, JAX JIT, and JAX/Torch derivatives. Explicitly typed input
+arrays still follow native promotion; mixed-precision inputs remain unqualified.</p>
 
 
 
