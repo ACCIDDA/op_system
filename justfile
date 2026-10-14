@@ -31,6 +31,11 @@ qualify-torch:
 	uv pip install 'torch>=2.6' --index-url https://download.pytorch.org/whl/cpu
 	uv run --no-sync python scripts/qualify_backend.py torch
 
+# Larger serial CPU timings are opt-in; install desired backends first.
+[group('dev')]
+benchmark *args:
+	uv run --no-sync python -m scripts.benchmark_hierarchical {{args}}
+
 # Format code in both packages
 [group('dev')]
 fmt: fmt-root fmt-provider
