@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import dataclasses
 import functools
+import math
 import sys
 from collections.abc import Mapping
 from importlib import metadata
@@ -822,8 +823,14 @@ class OpSystemSystem(SystemABC, module="flepimop2.system.op_system"):  # ruff: i
         dx: np.ndarray, params: dict[str, object], scale: float
     ) -> np.ndarray:
         sigma = OpSystemSystem._as_float(params.get("sigma", 1.0))
-        result = scale * np.erfc(dx / sigma)  # type: ignore[attr-defined]
-        return np.asarray(result, dtype=np.float64)
+        # Kernel construction is a one-time host operation. Use erfc directly
+        # to retain positive tails that would round to zero in 1 - erf(x).
+        values = np.fromiter(
+            (math.erfc(float(value)) for value in (dx / sigma).flat),
+            dtype=np.float64,
+            count=dx.size,
+        )
+        return scale * values.reshape(dx.shape)
 
     @staticmethod
     def _kernel_gaussian(
