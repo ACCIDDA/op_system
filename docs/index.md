@@ -33,3 +33,9 @@ Backend selection happens from the input arrays at call time. Keep model
 expressions within the documented allowlist, and validate an additional backend
 against the package's conformance tests before treating it as supported in a
 production workflow.
+
+## Contributing and citation
+
+The [contributor guide](development/contributing.md) covers setup, focused PRs,
+required checks, and support. [Citation and archiving](development/citation-and-archiving.md)
+explains attribution, release identifiers, and the software-paper archive plan.

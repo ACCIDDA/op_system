@@ -12,6 +12,11 @@ work through `array-api-compat`, but should be qualified before production use.
 - License: MIT
 - Python: 3.11 – 3.13
 
+See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, required checks, and support.
+Use [CITATION.cff](CITATION.cff) for software attribution and the
+[citation/archive guide](docs/development/citation-and-archiving.md) for exact
+release identifiers and the software-paper archive plan.
+
 Required NumPy, JAX, and CPU Torch compiler qualification and its precise
 capability matrix are documented in the
 [backend guide](docs/guides/backend-qualification.md). Run `just qualify`
