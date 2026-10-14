@@ -30,7 +30,7 @@ import re
 import sys
 from collections.abc import Mapping as _MappingABC
 from dataclasses import dataclass, field
-from itertools import product
+from itertools import chain, product
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -95,6 +95,7 @@ from op_system._normalize_ir import (
     _scan_shaped_param_refs,
     _strip_time_axis_in_expr,
     _strip_time_axis_in_mapping,
+    _validate_bare_template_references,
 )
 from op_system._normalize_kernels import (
     _normalize_kernels,
@@ -424,6 +425,18 @@ def normalize_expr_rhs(spec: Mapping[str, Any]) -> ExprRhs:  # ruff: ignore[comp
     )
     if len(state_expanded) != len(set(state_expanded)):
         raise InvalidRhsSpecError(detail="expanded state contains duplicates")
+
+    _validate_bare_template_references(
+        state_raw,
+        state_expanded,
+        chain(
+            (
+                (f"aliases[{key!r}]", value)
+                for key, value in (meta_parts[0] or {}).items()
+            ),
+            ((f"equations[{key!r}]", value) for key, value in equations_map.items()),
+        ),
+    )
 
     # Pre-scan raw aliases + equations for shaped-parameter references before
     # alias/template expansion mangles bracketed bases into per-coord names.
@@ -1967,6 +1980,22 @@ def normalize_transitions_rhs(  # ruff: ignore[complex-structure, too-many-branc
     )
     if len(state_expanded) != len(set(state_expanded)):
         raise InvalidRhsSpecError(detail="expanded state contains duplicates")
+
+    _validate_bare_template_references(
+        state_raw,
+        state_expanded,
+        chain(
+            (
+                (f"aliases[{key!r}]", value)
+                for key, value in (meta_parts[0] or {}).items()
+            ),
+            (
+                (f"{tr.get(ORIGIN_KEY, f'transitions[{index}]')}.rate", tr.get("rate"))
+                for index, tr in enumerate(transitions_raw)
+                if isinstance(tr, _MappingABC)
+            ),
+        ),
+    )
 
     # Pre-scan raw aliases + transition rates for shaped-parameter references.
     axis_lookup_dict: dict[str, list[str]] = build_axis_lookup(axes_meta)

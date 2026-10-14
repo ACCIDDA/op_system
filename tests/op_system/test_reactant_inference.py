@@ -147,9 +147,12 @@ def test_auto_rejects_rates_without_a_structural_description(
     rate: str, reason: str
 ) -> None:
     """Inference refuses instead of guessing, naming the construct."""
-    with pytest.raises(
-        InvalidRhsSpecError, match=f"reactants: auto.*{re.escape(reason)}"
-    ):
+    pattern = (
+        re.escape(reason)
+        if reason == "without its axes"
+        else f"reactants: auto.*{re.escape(reason)}"
+    )
+    with pytest.raises(InvalidRhsSpecError, match=pattern):
         compile_spec(_spec(rate, reactants="auto"))
 
 
