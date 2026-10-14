@@ -11,6 +11,24 @@ permissions:
   contents: 'read'
 
 jobs:
+  citation:
+    name: 'citation'
+    runs-on: 'ubuntu-latest'
+    steps:
+      - name: 'checkout repository'
+        uses: 'actions/checkout@v6'
+        with:
+          persist-credentials: false
+      - name: 'install just'
+        uses: 'taiki-e/install-action@v2'
+        with:
+          tool: 'just'
+      - name: 'setup uv'
+        uses: 'astral-sh/setup-uv@v7'
+        with:
+          python-version: '3.12'
+      - name: 'validate citation syntax and released metadata'
+        run: 'just citation'
   compiler-backends:
     name: 'compiler (${{ matrix.backend }}, 3.12)'
     runs-on: 'ubuntu-latest'

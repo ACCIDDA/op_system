@@ -9,7 +9,13 @@ default: dev docs
 dev: ruff mypy test
 
 # Run all default CI tasks
-ci: quality test docs
+ci: quality test docs citation
+
+# Validate CFF syntax in an isolated tool environment.
+[group('ci')]
+citation:
+	uvx --from cffconvert==2.0.0 cffconvert --validate
+	uv run scripts/citation_metadata.py
 
 # Qualify the core compiler separately from provider tests.
 [group('ci')]
@@ -201,7 +207,7 @@ build-all: build-all-core build-all-provider
 release-check:
 	{{run}} python scripts/release_validate.py
 
-release-validate: release-check build-all
+release-validate: citation release-check build-all
 
 # Build API reference for the documentation using `mkdocstrings`
 [group('docs')]

@@ -44,8 +44,10 @@ markdown_extensions:
 nav:
   - Home: index.md
   - Development:
+      - Contributing: development/contributing.md
       - Code Style: development/code-style.md
       - Creating A Release: development/creating-a-release.md
+      - Citation and Archiving: development/citation-and-archiving.md
   - Guides:
       - Getting Started: guides/getting-started.md
       - Operator Metadata: guides/operators.md

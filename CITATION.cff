@@ -1,0 +1,33 @@
+cff-version: "1.2.0"
+message: >-
+  If you use op_system or its flepimop2 provider, please cite this software
+  and record the exact shared release version used in your methods.
+type: software
+title: "op_system: RHS specification compiler and flepimop2 provider"
+abstract: >-
+  Configuration-based specification, normalization, and compilation of
+  right-hand sides for ODE/PDE systems, with structured and block evaluation
+  and a separately distributed flepimop2 adapter.
+authors:
+  - family-names: Macdonald
+    given-names: Joshua
+    email: jmacdo16@jh.edu
+  - family-names: Pearson
+    given-names: Carl
+    email: cap1024@unc.edu
+  - family-names: Willard
+    given-names: Timothy
+    email: twillard@unc.edu
+version: "0.7.0"
+date-released: "2026-10-06"
+license:
+  - MIT
+  - GPL-3.0-only
+repository-code: "https://github.com/ACCIDDA/op_system"
+repository-artifact: "https://github.com/ACCIDDA/op_system/releases/tag/v0.7.0"
+url: "https://accidda.github.io/op_system/"
+keywords:
+  - differential equations
+  - model specification
+  - code generation
+  - array API

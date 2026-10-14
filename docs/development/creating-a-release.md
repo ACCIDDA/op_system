@@ -13,6 +13,8 @@ The release workflow treats them as a single release unit. Both package versions
 - The release version has already been updated everywhere it is declared:
   - `pyproject.toml`
   - `flepimop2-op_system/pyproject.toml`
+- `CITATION.cff` has matching version, release date, and artifact URL, with
+  maintainer-reviewed attribution from the package metadata.
 - The `CHANGELOG.md` has a section for the new version.
 - Your local environment is synced with a supported Python version.
 - You have [GitHub's `gh` CLI](https://cli.github.com/) installed and authenticated if you plan to dispatch workflows from the command line.
@@ -40,7 +42,10 @@ Use the local pre-release target before dispatching the release workflow:
 just release-validate
 ```
 
-That command does two things:
+That command performs these checks:
+
+- Validates CFF syntax and checks citation attribution, shared version, date,
+  and release URL against package metadata and the dated changelog.
 
 - Validates that the release version matches in:
   - `pyproject.toml`
@@ -132,3 +137,12 @@ Because this repository publishes two distributions from one workflow, the same 
 ## 6. Current Packaging Note
 
 The release workflow now handles the mechanics of validating, building, and sequencing both distributions together. Package-index acceptance still depends on the metadata inside each built distribution, so publishing `flepimop2-op_system` to a public index may still require follow-up packaging changes outside the workflow itself.
+
+## 7. Software-Paper Archive
+
+GitHub release and package publishing do not themselves confirm an archival
+deposit. Follow the [citation and archiving plan](citation-and-archiving.md):
+verify existing arrangements before creating a new record, archive the exact
+shared release, and record a verified version DOI and any distinct concept DOI.
+The paper should identify the tagged software and its independently retained
+benchmark/environment evidence.

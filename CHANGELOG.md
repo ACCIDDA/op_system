@@ -16,6 +16,14 @@ version; format loosely follows
   memory, and provenance as JSON. Small correctness cases are mandatory backend
   checks; larger timings remain opt-in through `just benchmark` (#265).
 
+- Root contribution and citation guidance covers clean development setup,
+  compiler/provider boundaries, baseline and required backend checks, installed
+  wheels, support, and shared releases. `CITATION.cff` preserves existing package
+  attribution and the verified release URL; `just citation` checks its schema
+  and metadata locally, in CI, and before releases. The archive guide records
+  the identifier audit and software-paper deposit plan without inventing a DOI
+  or preferred paper citation (#266).
+
 - `qualify_rhs` compares named state/parameter fixtures against independently
   supplied equations through flat, structured, and available block evaluators.
   Reports include tolerances, finite values, shapes/dtypes, and agreement
