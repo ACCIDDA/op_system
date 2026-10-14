@@ -79,6 +79,11 @@ version; format loosely follows
 
 ### Fixed
 
+- The authoring guide now states that omitted/null transition destinations are
+  unsupported. Executed examples qualify open-loss expression equations and
+  explicit loss compartments, including their different total/reaction-export
+  semantics; the compiler's supported schema is unchanged (#297).
+
 - README YAML flow collections quote bracketed state/reactant selectors, so
   examples load with a standard YAML parser before compiler validation. Source
   and installed-wheel suites parse every README YAML fence (#286).
