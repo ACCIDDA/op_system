@@ -238,6 +238,90 @@ def test_global_total_reaction_values_and_parameter_derivatives(
 
 @pytest.mark.parametrize("backend", BACKENDS)
 @pytest.mark.parametrize("dtype", ["float32", "float64"])
+@pytest.mark.parametrize("constant", ["0", "1.5"])
+@pytest.mark.parametrize("layout", ["scalar", "shaped", "alias"])
+def test_literal_rhs_preserves_state_precision(
+    backend: str, dtype: str, constant: str, layout: str
+) -> None:
+    """Untyped literals inherit the floating state precision in every layout."""
+    spec: dict[str, Any] = {
+        "kind": "expr",
+        "state": ["X"],
+        "equations": {"X": constant},
+    }
+    if layout != "scalar":
+        spec.update({
+            "axes": [{"name": "group", "coords": ["a", "b"]}],
+            "state": ["X[group]"],
+            "equations": {"X[group]": constant},
+            "factorize_axes": ["group"],
+        })
+    if layout == "alias":
+        spec["aliases"] = {"value[group]": constant}
+        spec["equations"]["X[group]"] = "value[group]"
+    compiled = compile_spec(spec)
+    assert compiled.pytree_eval_fn is not None
+    with _precision(backend):
+        module = (
+            np
+            if backend == "numpy"
+            else pytest.importorskip("jax.numpy" if backend == "jax" else "torch")
+        )
+        raw = np.asarray(2.0 if layout == "scalar" else [1.0, 2.0], dtype=dtype)
+        state = {"X": module.asarray(raw)}
+        xp = array_namespace(state["X"])
+        operation = compiled.pytree_eval_fn
+        if backend == "jax":
+            operation = pytest.importorskip("jax").jit(operation)
+        result = operation(0.0, state)["X"]
+        flat = compiled.eval_fn(0.0, xp.reshape(state["X"], (-1,)))
+        for actual in [result, flat]:
+            assert actual.dtype == state["X"].dtype
+            assert array_namespace(actual) is xp
+            np.testing.assert_allclose(_host(actual), float(constant))
+        assert result.shape == raw.shape
+        if layout != "scalar":
+            assert compiled.block_pytree_eval_fn is not None
+            block = compiled.block_pytree_eval_fn
+            if backend == "jax":
+                block = pytest.importorskip("jax").jit(block)
+            for index in range(2):
+                actual = block(0.0, {"X": state["X"][index]})["X"]
+                assert actual.dtype == state["X"].dtype
+                assert actual.shape == ()
+                np.testing.assert_allclose(_host(actual), float(constant))
+
+
+@pytest.mark.parametrize("backend", ["jax", "torch"])
+def test_constant_rhs_has_zero_state_jacobian(backend: str) -> None:
+    """Native AD transformations retain the zero derivative of literal forcing."""
+    module = pytest.importorskip(backend)
+    compiled = compile_spec({
+        "kind": "expr",
+        "axes": [{"name": "group", "coords": ["a", "b"]}],
+        "state": ["X[group]"],
+        "equations": {"X[group]": "1.5"},
+    })
+    assert compiled.pytree_eval_fn is not None
+    with _precision(backend):
+        xp = pytest.importorskip("jax.numpy") if backend == "jax" else module
+        state = xp.asarray(np.array([1.0, 2.0], dtype="float64"))
+
+        def operation(values: Any) -> Any:  # ruff: ignore[any-type]
+            assert compiled.pytree_eval_fn is not None
+            return compiled.pytree_eval_fn(0.0, {"X": values})["X"]
+
+        jacobian = (
+            module.jacfwd(operation)(state)
+            if backend == "jax"
+            else module.func.jacrev(operation)(state)
+        )
+        assert jacobian.dtype == state.dtype
+        np.testing.assert_allclose(_host(jacobian), np.zeros((2, 2)))
+
+
+@pytest.mark.parametrize("backend", BACKENDS)
+@pytest.mark.parametrize("dtype", ["float32", "float64"])
 def test_mixed_alias_reductions_preserve_all_state_axes(
     backend: str, dtype: str
 ) -> None:
