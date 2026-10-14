@@ -14,7 +14,7 @@
         <link rel="prev" href="../../development/citation-and-archiving/">
       
       
-        <link rel="next" href="../expression-selectors/">
+        <link rel="next" href="../parameter-declarations/">
       
       
         
@@ -651,6 +651,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../parameter-declarations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Parameter Declarations
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../expression-selectors/" class="md-nav__link">
         
   
@@ -1270,6 +1298,9 @@
 <code>compile_spec(spec)</code> validates, normalizes, and compiles it. <code>normalize_rhs(spec)</code>
 returns a normalized model without compilation, and <code>validate_spec(spec)</code>
 returns a structural report. There is no public <code>load_spec</code> file loader.</p>
+<p>Optional <a href="../parameter-declarations/">parameter declarations</a> attach support,
+units, descriptions and fixed/free status to inferred RHS parameters for
+downstream consumers, without changing numerical evaluation.</p>
 <h2 id="a-complete-age-structured-seir-model">A complete age-structured SEIR model<a class="headerlink" href="#a-complete-age-structured-seir-model" title="Permanent link">&para;</a></h2>
 <p>Save the following as <code>examples/age-seir.yaml</code> (create the <code>examples</code> directory
 first), or use the <a href="https://github.com/ACCIDDA/op_system/blob/main/examples/age-seir.yaml">checked example</a>.
