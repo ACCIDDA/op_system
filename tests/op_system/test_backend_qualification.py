@@ -157,3 +157,110 @@ def test_coupled_groups_reject_block_factorization(backend: str) -> None:
         compile_spec(spec)
 
 
+@pytest.mark.parametrize(("coupled", "evaluator"), CASES)
+@pytest.mark.parametrize("dtype", ["float32", "float64"])
+def test_jax_jit_vmap_and_directional_derivatives(
+    dtype: str, evaluator: str, *, coupled: bool
+) -> None:
+    """Compiled layouts support jit/vmap and derivatives checked against the oracle."""
+    jax = pytest.importorskip("jax")
+    jnp = pytest.importorskip("jax.numpy")
+    with _precision("jax"):
+        _xp, state, params = _backend_arrays("jax", dtype, coupled=coupled)
+        compiled = compile_spec(model_spec(3, 2, coupled=coupled))
+
+        def objective(gain: Any, local: Any) -> Any:  # ruff: ignore[any-type]
+            result = _evaluate(
+                compiled, evaluator, state, {**params, "gain": gain, "local": local}
+            )
+            return sum(jnp.sum(result[name] ** 2) for name in TEMPLATES)
+
+        gains = jnp.asarray([0.3, 0.4, 0.5], dtype=getattr(jnp, dtype))
+        batched = jax.jit(jax.vmap(objective, in_axes=(0, None)))(
+            gains, params["local"]
+        )
+        assert batched.shape == (3,)
+        direction = jnp.asarray([0.1, -0.2, 0.3], dtype=getattr(jnp, dtype))
+        _, tangent = jax.jit(
+            lambda g, p: jax.jvp(objective, (g, p), (jnp.ones_like(g), direction))
+        )(params["gain"], params["local"])
+        host_state = {name: _host(value) for name, value in state.items()}
+        host_params = {name: _host(value) for name, value in params.items()}
+        step = 2e-3 if dtype == "float32" else 1e-5
+
+        def reference_objective(sign: float) -> float:
+            altered = {
+                **host_params,
+                "gain": host_params["gain"] + sign * step,
+                "local": host_params["local"] + sign * step * _host(direction),
+            }
+            result = reference_rhs(host_state, altered, coupled=coupled)
+            return float(
+                sum(np.sum(value.astype(np.float64) ** 2) for value in result.values())
+            )
+
+        expected = (reference_objective(1) - reference_objective(-1)) / (2 * step)
+        np.testing.assert_allclose(
+            float(tangent), expected, rtol=2e-3 if dtype == "float32" else 1e-7
+        )
+
+
+@pytest.mark.parametrize(("coupled", "evaluator"), CASES)
+def test_torch_autograd_matches_independent_finite_differences(
+    evaluator: str, *, coupled: bool
+) -> None:
+    """CPU Torch gradients survive shared/local parameters and all supported layouts."""
+    torch = pytest.importorskip("torch")
+    _xp, state, params = _backend_arrays("torch", "float64", coupled=coupled)
+    state = {name: value.requires_grad_() for name, value in state.items()}
+    params["gain"].requires_grad_()
+    params["local"].requires_grad_()
+    compiled = compile_spec(model_spec(3, 2, coupled=coupled))
+    result = _evaluate(compiled, evaluator, state, params)
+    sum(value.square().sum() for value in result.values()).backward()
+    assert all(value.grad is not None for value in state.values())
+    assert params["gain"].grad is not None
+    assert params["local"].grad is not None
+    host_state = {name: _host(value) for name, value in state.items()}
+    host_params = {name: _host(value) for name, value in params.items()}
+    step = 1e-5
+    objectives = []
+    for sign in [1, -1]:
+        result = reference_rhs(
+            host_state,
+            {**host_params, "gain": host_params["gain"] + sign * step},
+            coupled=coupled,
+        )
+        objectives.append(float(sum(np.sum(value**2) for value in result.values())))
+    assert float(params["gain"].grad) == pytest.approx(
+        (objectives[0] - objectives[1]) / (2 * step), rel=1e-7
+    )
+    assert torch.isfinite(params["local"].grad).all()
+
+
+@pytest.mark.parametrize("backend", ["jax", "torch"])
+def test_native_block_vmap_matches_independent_groups(backend: str) -> None:
+    """Native backend mapping consumes sliced local and shared global parameters."""
+    module = pytest.importorskip(backend)
+    with _precision(backend):
+        _xp, state, params = _backend_arrays(backend, "float64", coupled=False)
+        compiled = compile_spec(model_spec(3, 2))
+        block = compiled.block_pytree_eval_fn
+        assert block is not None
+
+        def one_group(values: Any, local: Any) -> Any:  # ruff: ignore[any-type]
+            return block(0.0, values, **{**params, "local": local})
+
+        result = (
+            module.jit(module.vmap(one_group))(state, params["local"])
+            if backend == "jax"
+            else module.func.vmap(one_group)(state, params["local"])
+        )
+        expected = reference_rhs(
+            {k: _host(v) for k, v in state.items()},
+            {k: _host(v) for k, v in params.items()},
+        )
+        for name in TEMPLATES:
+            np.testing.assert_allclose(
+                _host(result[name]), expected[name], rtol=1e-12, atol=1e-12
+            )
