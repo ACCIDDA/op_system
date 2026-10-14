@@ -46,6 +46,7 @@ from op_system._ir_lower import (
     lift_cell_ir_to_template,
     lower_to_vector_ast,
 )
+from op_system._state_helpers import _bind_sum_state
 from op_system.compile import (
     _SAFE_BUILTINS,
     _check_numeric_dtype,
@@ -1213,6 +1214,8 @@ def make_vectorized_eval_fn(plan: _VectorPlan) -> EvalFn:  # ruff: ignore[comple
             slc = y_idx[tpl.offset : tpl.offset + size]
             env[f"{tpl.base}_buf"] = xp.reshape(slc, tpl.shape)
 
+        _bind_sum_state(env, tuple(tpl.base for tpl in state_templates), xp)
+
         # Eval alias buffers in declaration order.
         for base, code, shape in alias_codes:
             try:
@@ -1342,6 +1345,8 @@ def make_pytree_eval_fn(plan: _VectorPlan) -> PytreeEvalFn:  # ruff: ignore[comp
         # Build state buffers DIRECTLY from dict — no slice/reshape needed.
         for tpl in state_templates:
             env[f"{tpl.base}_buf"] = y[tpl.base]
+
+        _bind_sum_state(env, tuple(tpl.base for tpl in state_templates), xp)
 
         # Eval alias buffers (identical to flat path).
         for base, code, shape in alias_codes:

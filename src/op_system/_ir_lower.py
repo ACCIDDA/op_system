@@ -1309,7 +1309,7 @@ def _rebind_subscript_indices(  # ruff: ignore[too-many-return-statements]
     return expr
 
 
-def _lower_apply(  # ruff: ignore[too-many-arguments]
+def _lower_apply(  # ruff: ignore[too-many-arguments, too-many-return-statements]
     expr: Apply,
     *,
     target_axes: tuple[str, ...],
@@ -1341,6 +1341,10 @@ def _lower_apply(  # ruff: ignore[too-many-arguments]
 
     if expr.op == "neg" and len(expr.args) == 1:
         return ast.UnaryOp(op=ast.USub(), operand=lower(expr.args[0]))
+    if expr.op == "sum_state" and not expr.args:
+        return ast.Call(
+            func=ast.Name(id="sum_state", ctx=ast.Load()), args=[], keywords=[]
+        )
     if expr.op == "pos" and len(expr.args) == 1:
         return ast.UnaryOp(op=ast.UAdd(), operand=lower(expr.args[0]))
 

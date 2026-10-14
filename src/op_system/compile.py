@@ -53,6 +53,7 @@ from op_system._ir import (
 from op_system._normalize import ExprRhs, TransitionsRhs
 from op_system._operators import OperatorDescriptor
 from op_system._reactions import ReactionGap, reaction_gap_for, routed_axis_label
+from op_system._state_helpers import _bind_sum_state
 from op_system._symbols import parse_expression_string
 
 if TYPE_CHECKING:
@@ -1856,6 +1857,7 @@ def _make_propensity_fn(
                 env[f"{base}_buf"] = xp.reshape(xp.asarray(params[base]), shape)
         states = {base: y[base] for base in state_bases if base in y}
         env.update({f"{base}_buf": value for base, value in states.items()})
+        _bind_sum_state(env, state_bases, xp)
         # Rates reference axis-less states by bare name.
         env.update({
             base: value
