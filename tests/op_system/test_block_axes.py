@@ -9,7 +9,25 @@ import pytest
 from op_system import BlockAxisInfo, compile_rhs
 from op_system._block_axes import analyze_block_axes
 from op_system._errors import UnsupportedFeatureError
+from op_system._ir import AxisIndex, Subscript, Sym
+from op_system._normalize_block import _strip_axis_from_ir
 from op_system.specs import normalize_rhs
+
+
+@pytest.mark.parametrize("position", [0, 1])
+def test_strip_literal_parameter_index_uses_declared_axis_position(
+    position: int,
+) -> None:
+    """Numeric selectors retain the non-block dimension in either axis order."""
+    indices = (AxisIndex("", "0"), AxisIndex("", "1"))
+    axes = ("loc", "age") if position == 0 else ("age", "loc")
+    result = _strip_axis_from_ir(Subscript("local", indices), "loc", {"local": axes})
+    assert result == Subscript("local", (indices[1 - position],))
+    scalar = _strip_axis_from_ir(
+        Subscript("rate", (AxisIndex("", "0"),)), "loc", {"rate": ("loc",)}
+    )
+    assert scalar == Sym("rate")
+
 
 # ---------------------------------------------------------------------------
 # Shared spec builders

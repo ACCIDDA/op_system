@@ -14,6 +14,12 @@ version; format loosely follows
   arguments. Clean-wheel tests and a dedicated CI job run the downstream check;
   provider source typing remains isolated from the core environment (#60).
 
+- Required backend regressions verify local alias and shaped-parameter behavior
+  after block stripping in expression and transition models. Independent cell
+  flows check flat, structured, and block evaluation on NumPy, JAX, and CPU Torch
+  in both precisions; positional parameter-index regressions cover either block
+  axis position and protect the previously implemented fixes (#170).
+
 - A correctness-gated hierarchical benchmark compares handwritten and generated
   NumPy/JAX/CPU Torch RHS layouts over independent and coupled group variants.
   Isolated serial workers separate normalization, code generation, JAX

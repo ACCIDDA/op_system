@@ -49,3 +49,10 @@ Mapping blocks changes compilation and evaluation costs, and does not speed up
 every workload. An equation such as `sum_over(X[draw:d], draw=d)` couples the
 draws and requires the monolithic evaluator. Removing that coupling to obtain
 a block evaluator would change the model.
+
+Local rate aliases retain the same equations in full and block evaluation. For
+example, `foi[loc] = beta * r0_loc[loc] * I[loc]` uses a shared `beta` and a
+group-local `r0_loc`. Supply the selected local rate with the corresponding
+single-group state; expression and transition specifications should produce
+the same cell flows. Required CPU qualification checks this behavior in float32
+and float64, including JAX compilation of the stripped evaluator.

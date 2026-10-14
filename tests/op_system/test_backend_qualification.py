@@ -264,3 +264,73 @@ def test_native_block_vmap_matches_independent_groups(backend: str) -> None:
             np.testing.assert_allclose(
                 _host(result[name]), expected[name], rtol=1e-12, atol=1e-12
             )
+
+
+@pytest.mark.parametrize("backend", BACKENDS)
+@pytest.mark.parametrize("dtype", ["float32", "float64"])
+@pytest.mark.parametrize("kind", ["expr", "transitions"])
+def test_block_alias_and_local_parameter_regression(
+    backend: str, dtype: str, kind: str
+) -> None:
+    """Stripped alias symbols and sliced local rates match independent cell flows."""
+    spec: dict[str, Any] = {
+        "kind": kind,
+        "axes": [{"name": "loc", "coords": ["north", "south", "west"]}],
+        "factorize_axes": ["loc"],
+        "state": ["S[loc]", "I[loc]"],
+        "aliases": {"foi[loc]": "beta * r0_loc[loc] * I[loc]"},
+    }
+    if kind == "expr":
+        spec["equations"] = {
+            "S[loc]": "-foi[loc] * S[loc]",
+            "I[loc]": "foi[loc] * S[loc]",
+        }
+    else:
+        spec["transitions"] = [{"from": "S[loc]", "to": "I[loc]", "rate": "foi[loc]"}]
+    compiled = compile_spec(spec)
+    assert compiled.pytree_eval_fn is not None
+    assert compiled.block_pytree_eval_fn is not None
+    host_state = {
+        "S": np.array([9.0, 8.0, 11.0], dtype=dtype),
+        "I": np.array([1.0, 2.0, 3.0], dtype=dtype),
+    }
+    host_local = np.array([1.25, 0.5, 2.0], dtype=dtype)
+    beta = np.asarray(0.2, dtype=dtype)
+    expected = beta * host_local * host_state["S"] * host_state["I"]
+    with _precision(backend):
+        module = (
+            np
+            if backend == "numpy"
+            else pytest.importorskip("jax.numpy" if backend == "jax" else "torch")
+        )
+        state = {name: module.asarray(value) for name, value in host_state.items()}
+        params = {"beta": module.asarray(beta), "r0_loc": module.asarray(host_local)}
+        xp = array_namespace(state["S"])
+        structured = compiled.pytree_eval_fn(0.0, state, **params)
+        flat = compiled.eval_fn(0.0, xp.concat([state["S"], state["I"]]), **params)
+        tolerance = 2e-6 if dtype == "float32" else 1e-12
+        np.testing.assert_allclose(
+            _host(flat), np.concatenate([-expected, expected]), rtol=tolerance
+        )
+        block = compiled.block_pytree_eval_fn
+        if backend == "jax":
+            block = pytest.importorskip("jax").jit(block)
+        for index in range(3):
+            result = block(
+                0.0,
+                {name: value[index] for name, value in state.items()},
+                beta=params["beta"],
+                r0_loc=params["r0_loc"][index],
+            )
+            for name, sign in [("S", -1), ("I", 1)]:
+                assert result[name].shape == ()
+                assert result[name].dtype == state[name].dtype
+                assert array_namespace(result[name]) is xp
+                np.testing.assert_allclose(
+                    _host(result[name]), sign * expected[index], rtol=tolerance
+                )
+                np.testing.assert_allclose(
+                    _host(structured[name])[index],
+                    sign * expected[index],
+                    rtol=tolerance,
+                )
