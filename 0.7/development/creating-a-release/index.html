@@ -14,7 +14,7 @@
         <link rel="prev" href="../code-style/">
       
       
-        <link rel="next" href="../../guides/getting-started/">
+        <link rel="next" href="../citation-and-archiving/">
       
       
         
@@ -316,6 +316,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../contributing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Contributing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../code-style/" class="md-nav__link">
         
   
@@ -519,10 +547,49 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#7-software-paper-archive" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7. Software-Paper Archive
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
       
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../citation-and-archiving/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Citation and Archiving
+  
+
+    
+  </span>
+  
+  
+
+      </a>
     </li>
   
 
@@ -1177,6 +1244,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#7-software-paper-archive" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7. Software-Paper Archive
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -1207,6 +1285,8 @@
 <li>The release version has already been updated everywhere it is declared:</li>
 <li><code>pyproject.toml</code></li>
 <li><code>flepimop2-op_system/pyproject.toml</code></li>
+<li><code>CITATION.cff</code> has matching version, release date, and artifact URL, with
+  maintainer-reviewed attribution from the package metadata.</li>
 <li>The <code>CHANGELOG.md</code> has a section for the new version.</li>
 <li>Your local environment is synced with a supported Python version.</li>
 <li>You have <a href="https://cli.github.com/">GitHub's <code>gh</code> CLI</a> installed and authenticated if you plan to dispatch workflows from the command line.</li>
@@ -1227,9 +1307,15 @@ directly from an uninstalled source tree where distribution metadata is absent.<
 <p>Use the local pre-release target before dispatching the release workflow:</p>
 <pre><code class="language-shell">just release-validate
 </code></pre>
-<p>That command does two things:</p>
+<p>That command performs these checks:</p>
 <ul>
-<li>Validates that the release version matches in:</li>
+<li>
+<p>Validates CFF syntax and checks citation attribution, shared version, date,
+  and release URL against package metadata and the dated changelog.</p>
+</li>
+<li>
+<p>Validates that the release version matches in:</p>
+</li>
 <li><code>pyproject.toml</code></li>
 <li><code>flepimop2-op_system/pyproject.toml</code></li>
 <li>Runs <code>just build-all</code> to execute the clean-room build and install tests for both packages.</li>
@@ -1292,6 +1378,13 @@ directly from an uninstalled source tree where distribution metadata is absent.<
 <p>Because this repository publishes two distributions from one workflow, the same trusted publisher setup must be allowed to publish both package names on the selected index.</p>
 <h2 id="6-current-packaging-note">6. Current Packaging Note<a class="headerlink" href="#6-current-packaging-note" title="Permanent link">&para;</a></h2>
 <p>The release workflow now handles the mechanics of validating, building, and sequencing both distributions together. Package-index acceptance still depends on the metadata inside each built distribution, so publishing <code>flepimop2-op_system</code> to a public index may still require follow-up packaging changes outside the workflow itself.</p>
+<h2 id="7-software-paper-archive">7. Software-Paper Archive<a class="headerlink" href="#7-software-paper-archive" title="Permanent link">&para;</a></h2>
+<p>GitHub release and package publishing do not themselves confirm an archival
+deposit. Follow the <a href="../citation-and-archiving/">citation and archiving plan</a>:
+verify existing arrangements before creating a new record, archive the exact
+shared release, and record a verified version DOI and any distinct concept DOI.
+The paper should identify the tagged software and its independently retained
+benchmark/environment evidence.</p>
 
 
 
