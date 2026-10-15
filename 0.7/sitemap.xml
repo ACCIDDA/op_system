@@ -2,118 +2,126 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
     <url>
          <loc>https://accidda.github.io/op_system/0.7/</loc>
-         <lastmod>2026-10-14</lastmod>
+         <lastmod>2026-10-15</lastmod>
+    </url>
+    <url>
+         <loc>https://accidda.github.io/op_system/0.7/api-reference/balances/</loc>
+         <lastmod>2026-10-15</lastmod>
     </url>
     <url>
          <loc>https://accidda.github.io/op_system/0.7/api-reference/compile/</loc>
-         <lastmod>2026-10-14</lastmod>
+         <lastmod>2026-10-15</lastmod>
     </url>
     <url>
          <loc>https://accidda.github.io/op_system/0.7/api-reference/observables/</loc>
-         <lastmod>2026-10-14</lastmod>
+         <lastmod>2026-10-15</lastmod>
     </url>
     <url>
          <loc>https://accidda.github.io/op_system/0.7/api-reference/op-system/</loc>
-         <lastmod>2026-10-14</lastmod>
+         <lastmod>2026-10-15</lastmod>
     </url>
     <url>
          <loc>https://accidda.github.io/op_system/0.7/api-reference/qualification/</loc>
-         <lastmod>2026-10-14</lastmod>
+         <lastmod>2026-10-15</lastmod>
     </url>
     <url>
          <loc>https://accidda.github.io/op_system/0.7/api-reference/specs/</loc>
-         <lastmod>2026-10-14</lastmod>
+         <lastmod>2026-10-15</lastmod>
     </url>
     <url>
          <loc>https://accidda.github.io/op_system/0.7/api-reference/validate/</loc>
-         <lastmod>2026-10-14</lastmod>
+         <lastmod>2026-10-15</lastmod>
     </url>
     <url>
          <loc>https://accidda.github.io/op_system/0.7/development/block-axis-vmap-plan/</loc>
-         <lastmod>2026-10-14</lastmod>
+         <lastmod>2026-10-15</lastmod>
     </url>
     <url>
          <loc>https://accidda.github.io/op_system/0.7/development/citation-and-archiving/</loc>
-         <lastmod>2026-10-14</lastmod>
+         <lastmod>2026-10-15</lastmod>
     </url>
     <url>
          <loc>https://accidda.github.io/op_system/0.7/development/code-style/</loc>
-         <lastmod>2026-10-14</lastmod>
+         <lastmod>2026-10-15</lastmod>
     </url>
     <url>
          <loc>https://accidda.github.io/op_system/0.7/development/contributing/</loc>
-         <lastmod>2026-10-14</lastmod>
+         <lastmod>2026-10-15</lastmod>
     </url>
     <url>
          <loc>https://accidda.github.io/op_system/0.7/development/coverage-audit/</loc>
-         <lastmod>2026-10-14</lastmod>
+         <lastmod>2026-10-15</lastmod>
     </url>
     <url>
          <loc>https://accidda.github.io/op_system/0.7/development/creating-a-release/</loc>
-         <lastmod>2026-10-14</lastmod>
+         <lastmod>2026-10-15</lastmod>
     </url>
     <url>
          <loc>https://accidda.github.io/op_system/0.7/development/issue-168-block-stripped-rhs-plan/</loc>
-         <lastmod>2026-10-14</lastmod>
+         <lastmod>2026-10-15</lastmod>
     </url>
     <url>
          <loc>https://accidda.github.io/op_system/0.7/guides/aging-chains/</loc>
-         <lastmod>2026-10-14</lastmod>
+         <lastmod>2026-10-15</lastmod>
     </url>
     <url>
          <loc>https://accidda.github.io/op_system/0.7/guides/array-namespaces/</loc>
-         <lastmod>2026-10-14</lastmod>
+         <lastmod>2026-10-15</lastmod>
     </url>
     <url>
          <loc>https://accidda.github.io/op_system/0.7/guides/backend-qualification/</loc>
-         <lastmod>2026-10-14</lastmod>
+         <lastmod>2026-10-15</lastmod>
     </url>
     <url>
          <loc>https://accidda.github.io/op_system/0.7/guides/batched-models/</loc>
-         <lastmod>2026-10-14</lastmod>
+         <lastmod>2026-10-15</lastmod>
     </url>
     <url>
          <loc>https://accidda.github.io/op_system/0.7/guides/expression-selectors/</loc>
-         <lastmod>2026-10-14</lastmod>
+         <lastmod>2026-10-15</lastmod>
     </url>
     <url>
          <loc>https://accidda.github.io/op_system/0.7/guides/getting-started/</loc>
-         <lastmod>2026-10-14</lastmod>
+         <lastmod>2026-10-15</lastmod>
     </url>
     <url>
          <loc>https://accidda.github.io/op_system/0.7/guides/global-state-totals/</loc>
-         <lastmod>2026-10-14</lastmod>
+         <lastmod>2026-10-15</lastmod>
     </url>
     <url>
          <loc>https://accidda.github.io/op_system/0.7/guides/hierarchical-benchmarks/</loc>
-         <lastmod>2026-10-14</lastmod>
+         <lastmod>2026-10-15</lastmod>
     </url>
     <url>
          <loc>https://accidda.github.io/op_system/0.7/guides/latent-observables/</loc>
-         <lastmod>2026-10-14</lastmod>
+         <lastmod>2026-10-15</lastmod>
     </url>
     <url>
          <loc>https://accidda.github.io/op_system/0.7/guides/numerical-qualification/</loc>
-         <lastmod>2026-10-14</lastmod>
+         <lastmod>2026-10-15</lastmod>
     </url>
     <url>
          <loc>https://accidda.github.io/op_system/0.7/guides/operators/</loc>
-         <lastmod>2026-10-14</lastmod>
+         <lastmod>2026-10-15</lastmod>
     </url>
     <url>
          <loc>https://accidda.github.io/op_system/0.7/guides/parameter-declarations/</loc>
-         <lastmod>2026-10-14</lastmod>
+         <lastmod>2026-10-15</lastmod>
+    </url>
+    <url>
+         <loc>https://accidda.github.io/op_system/0.7/guides/reaction-balances/</loc>
+         <lastmod>2026-10-15</lastmod>
     </url>
     <url>
          <loc>https://accidda.github.io/op_system/0.7/guides/renewal-births/</loc>
-         <lastmod>2026-10-14</lastmod>
+         <lastmod>2026-10-15</lastmod>
     </url>
     <url>
          <loc>https://accidda.github.io/op_system/0.7/guides/state-representations/</loc>
-         <lastmod>2026-10-14</lastmod>
+         <lastmod>2026-10-15</lastmod>
     </url>
     <url>
          <loc>https://accidda.github.io/op_system/0.7/guides/time-indexed-parameters/</loc>
-         <lastmod>2026-10-14</lastmod>
+         <lastmod>2026-10-15</lastmod>
     </url>
 </urlset>

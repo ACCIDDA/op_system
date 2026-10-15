@@ -594,6 +594,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../reaction-balances/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Conditional Reaction Balances
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../latent-observables/" class="md-nav__link">
         
   
@@ -1092,6 +1120,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../../api-reference/balances/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Balances
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../api-reference/compile/" class="md-nav__link">
         
   
@@ -1434,6 +1490,12 @@ including nested categorical sums and multi-axis trapezoidal integration.
 Analytic bilinear integrals on nonuniform grids qualify values, precision,
 namespace on all three CPU namespaces, JAX JIT, and JAX/Torch derivatives. Explicitly typed input
 arrays still follow native promotion; mixed-precision inputs remain unqualified.</p>
+<p>Required compiler qualification also checks conditional scalar reaction balance
+artifacts against independent source-flux equations on NumPy, JAX and CPU Torch
+in float32/float64. The producer emits static exact integer weights and metadata;
+these tests qualify agreement with the represented native RHS, without claiming
+runtime integration accuracy, general stoichiometric inference or spatial and
+operator conservation. See <a href="../reaction-balances/">reaction balances</a>.</p>
 
 
 

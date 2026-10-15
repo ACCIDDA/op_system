@@ -594,6 +594,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../reaction-balances/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Conditional Reaction Balances
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../latent-observables/" class="md-nav__link">
         
   
@@ -966,6 +994,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#derived-scalar-balance-artifacts" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Derived scalar balance artifacts
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -1072,6 +1111,34 @@
     
   
     OP System
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api-reference/balances/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Balances
   
 
     
@@ -1291,6 +1358,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#derived-scalar-balance-artifacts" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Derived scalar balance artifacts
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -1407,6 +1485,13 @@ utility does not promise identical AD transforms across every backend. See the
 scientific validity, or solution accuracy of an integrator. Include varied
 fixtures, boundary cases, meaningful balance conditions, and independent
 domain-specific evidence for the conclusions you need.</p>
+<h2 id="derived-scalar-balance-artifacts">Derived scalar balance artifacts<a class="headerlink" href="#derived-scalar-balance-artifacts" title="Permanent link">&para;</a></h2>
+<p><a href="../reaction-balances/">Conditional reaction balances</a> export exact incidence
+identities, explicit source terms and coverage/assumptions for a bounded scalar
+model. They are distinct from user-supplied <code>InvariantCheck</code> callbacks and do
+not replace independent numerical/runtime qualification. Unsupported spatial,
+operator or incomplete dynamics produce no issued laws rather than a partial
+model being treated as the whole system.</p>
 
 
 
