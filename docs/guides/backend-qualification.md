@@ -99,3 +99,11 @@ including nested categorical sums and multi-axis trapezoidal integration.
 Analytic bilinear integrals on nonuniform grids qualify values, precision,
 namespace on all three CPU namespaces, JAX JIT, and JAX/Torch derivatives. Explicitly typed input
 arrays still follow native promotion; mixed-precision inputs remain unqualified.
+
+
+Required compiler qualification also checks conditional scalar reaction balance
+artifacts against independent source-flux equations on NumPy, JAX and CPU Torch
+in float32/float64. The producer emits static exact integer weights and metadata;
+these tests qualify agreement with the represented native RHS, without claiming
+runtime integration accuracy, general stoichiometric inference or spatial and
+operator conservation. See [reaction balances](reaction-balances.md).

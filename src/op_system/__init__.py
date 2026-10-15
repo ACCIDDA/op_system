@@ -49,6 +49,13 @@ from op_system._state_string import StateString
 from op_system._typing import Array
 from op_system._validate import ShapeGroup, ValidationReport, validate_spec
 
+from .balances import (
+    BalanceCoverageGap,
+    ReactionBalanceLaw,
+    ReactionBalanceReport,
+    ReactionBalanceSource,
+    reaction_balances,
+)
 from .compile import (
     BodyEvalFn,
     CompiledReactant,
@@ -163,6 +170,7 @@ __all__ = [
     "Array",
     "AxisDeclaration",
     "AxisMeasure",
+    "BalanceCoverageGap",
     "BlockAxisInfo",
     "BodyEvalFn",
     "CompiledObservable",
@@ -186,6 +194,9 @@ __all__ = [
     "QualificationConfig",
     "QualificationFixture",
     "QualificationReport",
+    "ReactionBalanceLaw",
+    "ReactionBalanceReport",
+    "ReactionBalanceSource",
     "ReactionGap",
     "ReactionPropensityFn",
     "ShapeGroup",
@@ -206,6 +217,7 @@ __all__ = [
     "normalize_rhs",
     "normalize_transitions_rhs",
     "qualify_rhs",
+    "reaction_balances",
     "validate_axis_kernel_matrix",
     "validate_jump_integral_kernel",
     "validate_spec",

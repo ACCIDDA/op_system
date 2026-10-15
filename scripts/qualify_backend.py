@@ -46,6 +46,7 @@ def main() -> int:
                 "tests/op_system/test_hierarchical_benchmark.py",
                 "tests/op_system/test_parameter_metadata.py",
                 "tests/op_system/test_scientific_metadata.py",
+                "tests/op_system/test_balances.py",
                 "tests/op_system/test_observables.py",
                 "-k",
                 args.backend,

@@ -135,3 +135,9 @@ certify scientific validity.
 
 Use [named latent observables](latent-observables.md) to compile these explicit
 physical reductions into independently discoverable fixed-mesh outputs.
+
+
+[Conditional scalar reaction balances](reaction-balances.md) retain these
+declarations without inferring physical mass or spatial weights. Known unit or
+representation conflicts within a proposed total remain visible coverage gaps;
+unknown labels remain assumptions.

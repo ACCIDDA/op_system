@@ -9,6 +9,14 @@ version; format loosely follows
 
 ### Added
 
+- `reaction_balances` exports exact integer coordinate-sum identities for fully
+  represented named scalar unit transfers, with explicit external source terms,
+  scientific declarations and applicability assumptions. Immutable reports
+  retain original omissions and withhold all laws for unsupported dynamics,
+  layouts or known metadata conflicts. Native RHS checks cover NumPy/JAX/CPU
+  Torch in both precisions; weighted spatial/operator balance extensions remain
+  outstanding on #295. Compiler storage and runtime evaluators are unchanged.
+
 - Optional named `observables` compile independent state/parameter/time
   expressions, declared-node samples, counters, unweighted sums and explicit
   physical integrals into native flat/PyTree evaluators. Read-only compiled
