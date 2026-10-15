@@ -53,6 +53,7 @@ nav:
       - Getting Started: guides/getting-started.md
       - Parameter Declarations: guides/parameter-declarations.md
       - State Representations: guides/state-representations.md
+      - Conditional Reaction Balances: guides/reaction-balances.md
       - Latent Observables: guides/latent-observables.md
       - Expression Selectors: guides/expression-selectors.md
       - Global State Totals: guides/global-state-totals.md
@@ -67,6 +68,7 @@ nav:
       - Hierarchical Benchmarks: guides/hierarchical-benchmarks.md
   - API Reference:
       - OP System: api-reference/op-system.md
+      - Balances: api-reference/balances.md
       - Compile: api-reference/compile.md
       - Observables: api-reference/observables.md
       - Qualification: api-reference/qualification.md

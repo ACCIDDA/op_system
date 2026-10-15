@@ -113,3 +113,13 @@ Agreement at selected fixtures is not a proof across all parameter regimes,
 scientific validity, or solution accuracy of an integrator. Include varied
 fixtures, boundary cases, meaningful balance conditions, and independent
 domain-specific evidence for the conclusions you need.
+
+
+## Derived scalar balance artifacts
+
+[Conditional reaction balances](reaction-balances.md) export exact incidence
+identities, explicit source terms and coverage/assumptions for a bounded scalar
+model. They are distinct from user-supplied `InvariantCheck` callbacks and do
+not replace independent numerical/runtime qualification. Unsupported spatial,
+operator or incomplete dynamics produce no issued laws rather than a partial
+model being treated as the whole system.
