@@ -101,11 +101,22 @@ tracked_derivative = tracked_loss.eval_fn(0.0, np.asarray([3.0, 0.0]), k=2.0)  #
 Expression equations do not currently export executable jump reactions; choose
 the representation required by the consuming deterministic/stochastic engine.
 
-`initial_state` records provider seed parameter names. It does not allocate
-or initialize core arrays. A consuming framework resolves `S0`, `E0`, `I0`, and
-`R0`; core callers supply the state themselves as below. The shaped form states
-the parameter's axis order explicitly. A scalar mapping such as `S: S0` or a
-per-cell template such as `"S[age]": "S0[age]"` is also supported.
+`initial_state` records provider seed parameter names and constants. It does not
+allocate or initialize core arrays. A consuming framework resolves `S0`, `E0`, `I0`,
+and `R0`; core callers supply the state themselves as below. The shaped form
+states the parameter's axis order explicitly. A scalar mapping such as `S: S0` or
+a per-cell template such as `"S[age]": "S0[age]"` is also supported.
+
+A state that starts at a known constant (typically `0` for a cumulative counter
+fed by a source-only transition) needs no seed parameter: give the key a numeric
+literal, for example `"C[age]": 0.0` or `D: 0`. The literal is broadcast to every
+cell the key selects (a pinned coordinate such as `"C[age=young]": 0.0` selects
+one), is stored as a `float` in `compiled.meta["initial_state"]`, and requests no
+provider parameter. It must be a finite real number; booleans, `nan`, and `inf`
+are rejected. There is no `{fixed: ...}`/`{value: ...}` mapping spelling, and a
+quoted `"0.0"` is still a parameter name. States omitted from `initial_state`
+are left to the consuming framework (the op_engine provider uses zero, but a
+literal records the intent explicitly).
 
 ## Evaluate the example
 

@@ -660,6 +660,25 @@ def test_requested_parameters_includes_initial_state_seeds() -> None:
     assert {"mu", "S0__vax_u", "S0__vax_v", "D0"} <= names
 
 
+def test_requested_parameters_literal_initial_state_requests_nothing() -> None:
+    """Literal numeric initial values are constants, not provider seeds."""
+    spec: dict[str, object] = {
+        "kind": "transitions",
+        "axes": [{"name": "vax", "coords": ["u", "v"]}],
+        "state": ["S[vax]", "C[vax]", "D"],
+        "transitions": [
+            {"from": "S[vax]", "to": "D", "rate": "mu"},
+            {"to": "C[vax]", "rate": "sigma * S[vax]"},
+        ],
+        "initial_state": {"S[vax]": "S0[vax]", "C[vax]": 0.0, "D": 0},
+    }
+    sys = OpSystemSystem(spec=spec)
+    assert sys.option("initial_state")["C__vax_u"] == pytest.approx(0.0)
+    names = set(sys.requested_parameters(AxisCollection()).keys())
+    assert {"mu", "sigma", "S0__vax_u", "S0__vax_v"} <= names
+    assert not {"C0", "0", "0.0", "D0"} & names
+
+
 def test_requested_parameters_excludes_mixing_kernels() -> None:
     """Mixing-kernel names are computed internally, not requested from configuration."""
     spec: dict[str, object] = {
