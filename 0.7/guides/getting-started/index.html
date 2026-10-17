@@ -1518,11 +1518,21 @@ tracked_derivative = tracked_loss.eval_fn(0.0, np.asarray([3.0, 0.0]), k=2.0)  #
 </code></pre>
 <p>Expression equations do not currently export executable jump reactions; choose
 the representation required by the consuming deterministic/stochastic engine.</p>
-<p><code>initial_state</code> records provider seed parameter names. It does not allocate
-or initialize core arrays. A consuming framework resolves <code>S0</code>, <code>E0</code>, <code>I0</code>, and
-<code>R0</code>; core callers supply the state themselves as below. The shaped form states
-the parameter's axis order explicitly. A scalar mapping such as <code>S: S0</code> or a
-per-cell template such as <code>"S[age]": "S0[age]"</code> is also supported.</p>
+<p><code>initial_state</code> records provider seed parameter names and constants. It does not
+allocate or initialize core arrays. A consuming framework resolves <code>S0</code>, <code>E0</code>, <code>I0</code>,
+and <code>R0</code>; core callers supply the state themselves as below. The shaped form
+states the parameter's axis order explicitly. A scalar mapping such as <code>S: S0</code> or
+a per-cell template such as <code>"S[age]": "S0[age]"</code> is also supported.</p>
+<p>A state that starts at a known constant (typically <code>0</code> for a cumulative counter
+fed by a source-only transition) needs no seed parameter: give the key a numeric
+literal, for example <code>"C[age]": 0.0</code> or <code>D: 0</code>. The literal is broadcast to every
+cell the key selects (a pinned coordinate such as <code>"C[age=young]": 0.0</code> selects
+one), is stored as a <code>float</code> in <code>compiled.meta["initial_state"]</code>, and requests no
+provider parameter. It must be a finite real number; booleans, <code>nan</code>, and <code>inf</code>
+are rejected. There is no <code>{fixed: ...}</code>/<code>{value: ...}</code> mapping spelling, and a
+quoted <code>"0.0"</code> is still a parameter name. States omitted from <code>initial_state</code>
+are left to the consuming framework (the op_engine provider uses zero, but a
+literal records the intent explicitly).</p>
 <h2 id="evaluate-the-example">Evaluate the example<a class="headerlink" href="#evaluate-the-example" title="Permanent link">&para;</a></h2>
 <p>Run from the directory containing <code>examples/age-seir.yaml</code>. The scalar parameters
 <code>beta</code>, <code>kappa</code>, and <code>gamma</code> are shared, <code>susceptibility</code> varies over the target
