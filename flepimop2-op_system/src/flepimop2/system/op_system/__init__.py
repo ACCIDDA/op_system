@@ -538,6 +538,8 @@ class OpSystemSystem(SystemABC, module="flepimop2.system.op_system"):  # ruff: i
             Initial-state seed names (referenced from `meta['initial_state']`
             but not necessarily from any rate expression) are also requested
             so engine plugins can assemble the state vector from `params`.
+            Literal numeric entries (``C[loc]: 0.0``) are constants and
+            request nothing.
             Mixing-kernel names are computed internally and excluded.
         """
         requests: dict[IdentifierString, ParameterRequest] = {}
@@ -590,6 +592,10 @@ class OpSystemSystem(SystemABC, module="flepimop2.system.op_system"):  # ruff: i
             requests[name] = ParameterRequest(name=name)
         init_map = (self.options or {}).get("initial_state") or {}
         for entry in init_map.values():
+            if isinstance(entry, float):
+                # Literal IC entry: a constant the engine uses directly, so no
+                # seed parameter is requested.
+                continue
             if isinstance(entry, str):
                 # Scalar IC entry: a single shared parameter.
                 if entry in requests:
@@ -620,7 +626,7 @@ class OpSystemSystem(SystemABC, module="flepimop2.system.op_system"):  # ruff: i
                 msg = (
                     f"initial_state entry has unexpected type "
                     f"{type(entry).__name__!r}; expected a parameter name "
-                    "string or a shaped-entry mapping"
+                    "string, a shaped-entry mapping or a literal number"
                 )
                 raise ValueError(msg)
         # Operator velocity/rate fields are consumed by engine plugins (not by

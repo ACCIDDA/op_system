@@ -2,13 +2,16 @@
 
 Initial-state normalization helpers for op_system RHS specs.
 
-Handles the ``initial_state`` block: scalar string form and the structured
-``{shaped, axes}`` form.  All public entry points remain in ``_normalize.py``.
+Handles the ``initial_state`` block: scalar string form, the structured
+``{shaped, axes}`` form, and literal numeric constants (``C[loc]: 0.0``).
+All public entry points remain in ``_normalize.py``.
 """
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping as _MappingABC
+from numbers import Real as _NumberABC
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -121,6 +124,43 @@ def _normalize_shaped_initial_state_value(
     return name, tuple(axes_list)
 
 
+def _expand_literal_initial_state(
+    raw_key: str,
+    raw_val: _NumberABC,
+    *,
+    axis_lookup: dict[str, list[str]],
+) -> dict[str, float]:
+    """Expand a literal numeric initial-state entry over the key's cells.
+
+    A literal IC entry gives every cell selected by the key the same constant::
+
+        C[loc, vax, age]: 0.0
+
+    Returns:
+        Mapping from each expanded state name to the value as a ``float``.
+
+    Raises:
+        InvalidRhsSpecError: If the value is a boolean or not a finite number.
+    """
+    try:
+        value = math.nan if isinstance(raw_val, bool) else float(raw_val)
+    except OverflowError:
+        value = math.nan
+    if not math.isfinite(value):
+        raise InvalidRhsSpecError(
+            detail=(
+                f"initial_state[{raw_key!r}] literal value {raw_val!r} must be "
+                "a finite real number (booleans are not numbers here)"
+            ),
+        )
+    results = expand_selector(
+        raw_key,
+        axis_lookup=axis_lookup,
+        context=f"initial_state key {raw_key!r}",
+    )
+    return {expanded_key: value for expanded_key, _assignment in results}
+
+
 def _expand_initial_state_templates(
     initial_state_raw: Mapping[str, Any] | None,
     *,
@@ -144,6 +184,14 @@ def _expand_initial_state_templates(
     expanded_keys: list[str] = []
 
     for raw_key, raw_val in initial_state_raw.items():
+        if isinstance(raw_val, _NumberABC):
+            literals = _expand_literal_initial_state(
+                raw_key, raw_val, axis_lookup=axis_lookup
+            )
+            expanded_keys.extend(literals)
+            result.update(literals)
+            continue
+
         if isinstance(raw_val, _MappingABC):
             shaped_name, shaped_axes = _normalize_shaped_initial_state_value(
                 raw_val,

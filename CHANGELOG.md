@@ -9,6 +9,13 @@ version; format loosely follows
 
 ### Added
 
+- `initial_state` accepts a literal finite number (`"C[loc,age]": 0.0`) as a
+  constant initial value broadcast over the selected cells, so cumulative
+  counters need no zero seed table. Entries are stored as floats in
+  `meta["initial_state"]`, the provider requests no parameter for them, and the
+  op_engine engine consumes them unchanged. Booleans, `nan` and `inf` are
+  rejected; string and `shaped` entries are unchanged (#303).
+
 - `reaction_balances` exports exact integer coordinate-sum identities for fully
   represented named scalar unit transfers, with explicit external source terms,
   scientific declarations and applicability assumptions. Immutable reports
