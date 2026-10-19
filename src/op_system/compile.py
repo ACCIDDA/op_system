@@ -74,6 +74,7 @@ if TYPE_CHECKING:
     from op_system._parameter_meta import ParameterDeclaration
     from op_system._reactions import ReactionArtifactIR, ReactionReactantIR
     from op_system._scientific_meta import AxisDeclaration, StateDeclaration
+    from op_system.coordinates import StateCoordinateView
     from op_system.gauges import GaugeFixMap, GaugeInfo
 
     from .specs import NormalizedRhs
@@ -583,6 +584,17 @@ class CompiledRhs:
 
     gauges: GaugeInfo | None = field(default=None, compare=False, hash=False)
     gauge_fix: GaugeFixMap | None = field(default=None, compare=False, hash=False)
+
+    def coordinate_view(self) -> StateCoordinateView:
+        """Build deterministic evaluators in the declared state coordinates.
+
+        Returns:
+            An explicit view with initial-state encoders and natural-scale
+            observations. The original evaluator/reactions remain natural.
+        """
+        from .coordinates import _build_state_coordinates  # ruff: ignore[import-outside-top-level]
+
+        return _build_state_coordinates(self)
 
     def bind(
         self, params: Mapping[str, object]

@@ -9,6 +9,15 @@ version; format loosely follows
 
 ### Added
 
+- Request mixed identity/log deterministic state coordinates with
+  `state_metadata` and an explicit `coordinate_view()`. Compile the chain rule,
+  cancel supported exact multiplicative factors before division, encode initial
+  states without floors, decode natural observations and retain native domain
+  flags. Flat, shaped and independent block evaluators preserve physical-model
+  contracts; separate operator/history composition is explicitly unsupported.
+  Checked examples explain balance errors, representability, tolerance changes,
+  derivative metadata and natural stochastic jumps (#314).
+
 - Declare shared positive scaling gauges; report seeded finite covariance/output
   checks, optional rational homogeneity detection, ranks and parameter invariant
   monomials. Scalar anchor maps bind parameters across evaluators, record native
@@ -18,14 +27,16 @@ version; format loosely follows
   fixing/analysis as documented; gauge-fixed stochastic exports fail closed
   until a jump-process scaling contract exists (#313).
 
-### Added
-
 - Lower single-axis unweighted, unfiltered rectangular kernel products to
   native matrix-vector operations, including vector products and named-axis
   transposes. Add a two-axis example, independent NumPy/JAX/CPU Torch checks,
   a generated figure/table and an optional size-sweep benchmark (#312).
 
 ### Changed
+
+- `StateDeclaration` appends the `scale` field, defaulting to `identity`. Existing
+  four-argument construction still works; consumers unpacking the record as a
+  four-item tuple must use attributes or handle the added field (#314).
 
 - Cache expression functions for vectorized flat/PyTree evaluation, binding
   fresh arguments without runtime `eval` per alias or equation. Preserve the

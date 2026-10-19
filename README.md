@@ -138,6 +138,11 @@ The compiled object exposes:
 | `meta` | Normalized metadata (axes, state_axes, kernels, operators, reserved blocks). |
 | `operators` | Tuple of `OperatorDescriptor` preserving normalized names, state selectors, coefficients, directions, boundary conditions, and kernel metadata. |
 | `reactions`, `reaction_gaps` | One `CompiledReaction` per named transition with a reaction artifact, and one `ReactionGap` per transition without one (empty when every transition is covered). |
+| `coordinate_view()` | Explicit mixed identity/log deterministic evaluators, initial-state encoders and natural-scale observations; primary evaluators and stochastic jumps stay in physical coordinates. |
+
+The development-source [log-coordinate guide](docs/guides/log-state-coordinates.md)
+explains domain checks, named fields, native differentiation, numerical balance
+errors and unsupported operator/history composition.
 
 ### Advection contract
 

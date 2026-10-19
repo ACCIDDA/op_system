@@ -5,6 +5,11 @@ state **base names**, such as `rho` for `rho[space]`, and work in expression and
 transition specifications. Partial declarations are allowed. Metadata leaves
 equations, runtime values, constraints and existing reductions unchanged.
 
+The optional `scale: log` field requests a separate deterministic
+[coordinate view](log-state-coordinates.md). It leaves the primary evaluator
+and stochastic reactions in physical coordinates; callers explicitly encode
+initial states and select the view's callbacks.
+
 ```yaml
 kind: expr
 axes:
