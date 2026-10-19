@@ -7,6 +7,8 @@ version; format loosely follows
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-10-19
+
 ### Added
 
 - Request mixed identity/log deterministic state coordinates with
@@ -45,6 +47,9 @@ version; format loosely follows
   its eager branch evaluation (#312).
 
 ### Documentation
+
+- Render the complete kernel-product and scaling-gauge example includes, using
+  attributed Python fences so formatting preserves the include directives.
 
 - Align package summaries with spatial, nonlocal and reaction support, and state
   the alpha development stage separately from public release availability.

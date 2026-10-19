@@ -19,8 +19,8 @@ roles explicit, rather than relying on equal lengths to conceal a transpose.
 The complete executable example includes both products and a per-coordinate
 choice of linear or quadratic loss:
 
-```python
---8 < --"examples/named_kernel_products.py"
+```{.python}
+--8<-- "examples/named_kernel_products.py"
 ```
 
 Run `uv run python examples/named_kernel_products.py`. The example compares
