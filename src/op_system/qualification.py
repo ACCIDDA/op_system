@@ -553,6 +553,25 @@ def qualify_rhs(  # ruff: ignore[too-many-arguments]
     Raises:
         ValueError: If fixtures/evaluators are empty, fixture names/time are
             invalid, or an invariant lacks valid conditions/tolerances.
+
+    Examples:
+        >>> import numpy as np
+        >>> from op_system import compile_spec
+        >>> compiled = compile_spec({
+        ...     "kind": "expr",
+        ...     "state": ["x"],
+        ...     "equations": {"x": "-rate*x"},
+        ... })
+        >>> fixture = QualificationFixture(
+        ...     "decay", {"x": np.array(4.0)}, {"rate": 0.5}
+        ... )
+        >>> def reference(time, state, params):
+        ...     return {"x": -params["rate"] * state["x"]}
+        >>> report = qualify_rhs(compiled, [fixture], reference)
+        >>> report.ok
+        True
+        >>> len(report.fixtures)
+        2
     """
     controls = config or QualificationConfig()
     if not fixtures or not evaluators:

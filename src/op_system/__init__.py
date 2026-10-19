@@ -139,6 +139,18 @@ def compile_spec(  # ruff: ignore[non-empty-init-module]
 
     Returns:
         CompiledRhs: Runnable RHS callable container.
+
+    Examples:
+        >>> import numpy as np
+        >>> compiled = compile_spec({
+        ...     "kind": "expr",
+        ...     "state": ["x"],
+        ...     "equations": {"x": "-rate*x"},
+        ... })
+        >>> compiled.template_shapes
+        {'x': ()}
+        >>> compiled.eval_fn(0.0, np.array([4.0]), rate=0.5).tolist()
+        [-2.0]
     """
     if xp is not None or backend != DEFAULT_ARRAY_BACKEND:
         warnings.warn(

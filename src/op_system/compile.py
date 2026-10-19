@@ -323,6 +323,26 @@ class CompiledReaction:
     is the source index plus its step (see ``offsets``). The destination
     cell is then built from ``to_axes`` (copied), ``pinned`` (fixed), and
     ``offsets`` (shifted), which together cover ``full_axes``.
+
+    Examples:
+        >>> import numpy as np
+        >>> from op_system import compile_spec
+        >>> compiled = compile_spec({
+        ...     "kind": "transitions",
+        ...     "state": ["S", "I"],
+        ...     "transitions": [
+        ...         {"name": "infect", "from": "S", "to": "I", "rate": "k"},
+        ...     ],
+        ... })
+        >>> reaction = compiled.reactions[0]
+        >>> float(
+        ...     reaction.propensity_fn(
+        ...         0.0, {"S": np.array(10.0), "I": np.array(0.0)}, k=0.2
+        ...     )
+        ... )
+        2.0
+        >>> reaction.time_varying_params, reaction.uses_time
+        ((), False)
     """
 
     name: str

@@ -33,6 +33,9 @@ compares handwritten and generated NumPy/JAX/Torch evaluation, separating
 preprocessing, backend compilation, and warm costs. Run `just benchmark` for
 opt-in timings and machine-readable results.
 
+The [capability guide](docs/guides/capabilities.md) maps current public APIs,
+reaction independence/resolved-forcing contracts, runnable examples and CI checks.
+
 ## Why op_system?
 
 Modelers often combine compartment hazards, templated populations, and rich
@@ -588,6 +591,6 @@ axis plan, and code-style guide.
 |---|---|
 | `src/op_system/` | Library source (specs, IR, normalize, vectorize, compile). |
 | `flepimop2-op_system/` | Thin adapter package exposing `op_system` to flepimop2. |
-| `tests/op_system/` | Pytest suite (~430 tests). |
+| `tests/op_system/` | Compiler, provider, documentation and qualification tests. |
 | `docs/` | mkdocs sources; built site published to GitHub Pages. |
 | `scripts/` | Release validation and API-reference generation helpers. |

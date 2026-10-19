@@ -124,3 +124,12 @@ See [citation and archiving](docs/development/citation-and-archiving.md) for
 version-specific citations, the current identifier audit, and the software-paper
 archive plan. Add a preferred paper citation only once its bibliographic record
 exists and has been verified by the maintainers.
+
+## Executable documentation
+
+Keep capability claims, API docstrings and complete examples in sync. Add a
+small deterministic `Examples:` doctest for a changed public workflow where
+useful; assert independently known equations, shapes or invariants. Larger and
+optional workflows belong in dedicated tests that require their dependencies.
+Run `just doctest` during iteration and the full checks above before a PR.
+See [capabilities and example checks](docs/guides/capabilities.md).

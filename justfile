@@ -243,3 +243,10 @@ clean:
 	rm -f flepimop2-op_system/uv.lock
 	rm -rf flepimop2-op_system/.venv
 	rm -rf flepimop2-op_system/.*_cache
+
+# Fast public docstrings and checked documentation, without provider setup.
+doctest:
+	uv run pytest --doctest-modules src/op_system tests/op_system/test_documentation.py tests/op_system/test_model_guide.py
+
+example-reactions:
+	uv run python examples/independent_reactions.py

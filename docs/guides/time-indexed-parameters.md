@@ -78,8 +78,9 @@ publish an empty breakpoint tuple.
 An engine can pass the published forcing boundaries to its breakpoint-aware
 stochastic solver independently of the observation grid. In `op_engine`,
 pure stochastic direct SSA, fixed tau-leaping, and adaptive tau-leaping accept
-`forcing_breakpoints`; provider consumers currently supply that configuration
-explicitly. The interpolation setting changes table evaluation only. A rate
+`forcing_breakpoints`. The `flepimop2-op_engine` 0.7.0 provider automatically
+merges the producer schedule with explicitly supplied forcing boundaries. Other
+consumers must wire these metadata into their solver configuration. The interpolation setting changes table evaluation only. A rate
 that also uses `t` directly can still vary between table coordinates. Exact
 breakpoint SSA and adaptive exact fallback require all external time dependence
 to be constant between declared changes while the state is unchanged.

@@ -44,3 +44,6 @@ production workflow.
 The [contributor guide](development/contributing.md) covers setup, focused PRs,
 required checks, and support. [Citation and archiving](development/citation-and-archiving.md)
 explains attribution, release identifiers, and the software-paper archive plan.
+
+See [capabilities and executable examples](guides/capabilities.md) for current interfaces,
+optional dependencies, limitations and the checks that run in CI.
