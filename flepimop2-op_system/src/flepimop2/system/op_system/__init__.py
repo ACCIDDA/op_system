@@ -77,6 +77,7 @@ if TYPE_CHECKING:
     from flepimop2.typing import Array
 
     from op_system._operators import OperatorDescriptor
+    from op_system.compile import ReactionPropensityFn
 
 
 class _AxesMeta(NamedTuple):
@@ -299,23 +300,21 @@ class OpSystemSystem(SystemABC, module="flepimop2.system.op_system"):  # ruff: i
             ``propensity_fn`` differs.
         """
 
+        def _merge_callback(fn: ReactionPropensityFn) -> ReactionPropensityFn:
+            def merged(t: object, y: dict[str, Any], **params: object) -> object:
+                return fn(t, y, **OpSystemSystem._merged_params(mixing_kernels, params))
+
+            return merged
+
         def _wrap(reaction: CompiledReaction) -> CompiledReaction:
-            propensity_fn = reaction.propensity_fn
-
-            # Parameter names and types mirror ``ReactionPropensityFn``
-            # exactly: it is a Protocol, so a positional-or-keyword
-            # parameter renamed here (``time``/``state_dict``) or narrowed
-            # (``np.float64`` is not a supertype of ``object``) no longer
-            # satisfies it.
-            def _propensity(
-                t: object,
-                y: dict[str, Any],
-                **params: object,
-            ) -> object:
-                merged = OpSystemSystem._merged_params(mixing_kernels, params)
-                return propensity_fn(t, y, **merged)
-
-            return dataclasses.replace(reaction, propensity_fn=_propensity)
+            resolved = reaction.resolved_propensity_fn
+            return dataclasses.replace(
+                reaction,
+                propensity_fn=_merge_callback(reaction.propensity_fn),
+                resolved_propensity_fn=(
+                    _merge_callback(resolved) if resolved is not None else None
+                ),
+            )
 
         return tuple(_wrap(r) for r in compiled.reactions)
 

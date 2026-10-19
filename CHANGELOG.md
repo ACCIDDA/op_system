@@ -7,6 +7,16 @@ version; format loosely follows
 
 ## [Unreleased]
 
+### Added
+
+- Reactions expose `resolved_propensity_fn` for consumers that have explicitly
+  replaced time tables with current-time slices, their consumed table axes,
+  explicit-time dependence, and per-reaction verified `independent_axes`.
+  Certificates require declared `factorize_axes` and preserve source/target
+  coordinates and propensity locality before deterministic cancellation.
+  The provider merges mixing kernels into both callbacks. Ordinary callbacks
+  retain their scalar-time interpolation contract (op_engine #241).
+
 ### Fixed
 
 - Reaction callbacks reject undeclared state dimensions with a reaction/state
