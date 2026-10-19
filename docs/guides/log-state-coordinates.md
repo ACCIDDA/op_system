@@ -33,10 +33,10 @@ np.testing.assert_allclose(rhs(0, z0), [-2.0, 2.0])
 np.testing.assert_allclose(view.observables["total"].eval_fn(0, z0), 1.0)
 ```
 
-Pass `rhs` and `z0` to a deterministic solver's ordinary RHS interface. For OP
-Engine use a deterministic core solver directly; the flepimop2 providers do not
-automatically select the coordinate view from metadata. Decode its result
-before reporting physical trajectories or applying output-state diagnostics.
+The flat callback takes `(n_state,)` arrays. Adapt that layout to the solver's
+state layout explicitly. The flepimop2 providers do not automatically select the
+coordinate view from metadata. Decode results before reporting physical
+trajectories or applying output-state diagnostics.
 For an `(output_time, state, ...)` array use
 `view.decode_native(trajectory, state_axis=1)` and inspect its `valid` flag.
 Initial-state expressions and provider initialization remain in natural units;
@@ -44,6 +44,37 @@ encode the evaluated initial state explicitly. The view exposes shaped
 `pytree_eval_fn` and independent `block_pytree_eval_fn` when the source model
 supports them. Its PyTree encoders accept complete state dictionaries, including
 buffers with an independent block axis already stripped.
+
+## OP Engine core example
+
+OP Engine's `ModelCore` retains a subgroup axis, including for this single-group
+example. With OP System 0.9.0 and OP Engine 0.8.0, the following adapter connects
+the flat callback above to its deterministic `CoreSolver` interface:
+
+```python
+from op_engine import CoreSolver, ModelCore
+
+core = ModelCore(n_states=2, n_subgroups=1, time_grid=np.linspace(0.0, 1.0, 21))
+core.set_initial_state(z0[:, None])
+
+
+def engine_rhs(time, state):
+    return rhs(time, state[:, 0])[:, None]
+
+
+CoreSolver(core).run(engine_rhs)
+decoded = view.decode_native(core.state_array, state_axis=1)
+assert bool(decoded.valid)
+assert decoded.state.shape == (21, 2, 1)
+np.testing.assert_allclose(decoded.state[-1, 0, 0], np.exp(-2.0))
+```
+
+The callback removes the single subgroup axis before evaluating the compiled
+RHS and restores it on the derivative. This is an adapter for the example's layout;
+do not discard axes from a different model without matching its compiled
+state order and template shapes. The known exponential remaining-state value
+checks the coordinate/solver connection, not the accuracy of the collected
+state or its numerical total.
 
 ## Equation and domain
 
