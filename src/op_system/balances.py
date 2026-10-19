@@ -298,6 +298,21 @@ def reaction_balances(compiled: CompiledRhs) -> ReactionBalanceReport:
 
     Raises:
         TypeError: If ``compiled`` is not a CompiledRhs container.
+
+    Examples:
+        >>> from op_system import compile_spec
+        >>> compiled = compile_spec({
+        ...     "kind": "transitions",
+        ...     "state": ["S", "I"],
+        ...     "transitions": [
+        ...         {"name": "move", "from": "S", "to": "I", "rate": "k"},
+        ...     ],
+        ... })
+        >>> report = reaction_balances(compiled)
+        >>> report.fully_covered, len(report.laws)
+        (True, 1)
+        >>> report.laws[0].coefficients, report.laws[0].closed
+        ((1, 1), True)
     """
     if not isinstance(compiled, CompiledRhs):
         msg = "compiled must be a CompiledRhs"

@@ -1,0 +1,62 @@
+# Capabilities and executable examples
+
+`op_system` compiles model definitions. An engine advances state and a provider
+adapts a framework's lifecycle. The MIT core does not import flepimop2; the
+separate GPL `flepimop2-op_system` distribution shares its release version.
+
+## Choose a public interface
+
+| Task | Implemented interface | Example and boundary |
+| --- | --- | --- |
+| Check or compile a specification | `validate_spec`, `normalize_rhs`, `compile_spec`, `compile_rhs` | [Getting started](getting-started.md): expression and transition SEIR; validation is structural, not proof of scientific correctness. |
+| Evaluate flat or structured state | `CompiledRhs.eval_fn`, `pytree_eval_fn` | [State representations](state-representations.md); use declared template shapes and state order. |
+| Evaluate independent blocks | `factorize_axes`, `block_pytree_eval_fn` | [Independent batches](batched-models.md); reductions or mixing across a proposed block axis invalidate independence. |
+| Export stochastic channels | `CompiledRhs.reactions`, `reaction_gaps`, `CompiledReaction` | Named transitions, reactants/dependencies and declared state shapes; a stochastic consumer must reject omitted dynamics. |
+| Resolve forcing once | `resolved_propensity_fn`, `time_varying_params`, `uses_time`, `independent_axes` | [Time tables](time-indexed-parameters.md) and [batches](batched-models.md); the consumer supplies correctly sliced parameters. |
+| Compute named latent quantities | `CompiledRhs.observables`, `CompiledObservable` | [Latent observables](latent-observables.md): coordinates, reductions and physical measures; observation noise belongs downstream. |
+| Inspect conditional conservation | `reaction_balances` | [Reaction balances](reaction-balances.md); respect reported gaps, parameter/sign assumptions and representation. |
+| Check independently specified equations | `qualify_rhs`, `QualificationFixture`, `QualificationConfig` | [Numerical qualification](numerical-qualification.md); parity and invariant evidence is limited to the supplied fixtures. |
+| Supply spatial/operator metadata | `OperatorDescriptor`, axis measures, kernels | [Operators](operators.md); discretization and solving belong to a numerical engine. |
+
+NumPy, JAX and CPU Torch have a required [qualification matrix](backend-qualification.md).
+Array namespace selection happens at evaluation time. GPU execution and other
+Array API implementations need separate qualification for the intended model.
+`convolve_history` has a provider hook; `history` and `delay` remain reserved,
+unsupported operators. Metadata does not certify positivity or a physical model.
+
+## Run the combined compiler example
+
+From a source checkout:
+
+```bash
+uv sync --dev
+just example-reactions
+just doctest
+```
+
+[`examples/independent_reactions.py`](https://github.com/ACCIDDA/op_system/blob/main/examples/independent_reactions.py)
+validates a two-replicate transfer model, compiles a held rate table and evaluates
+a named population observable. The independently known derivatives are
+`[0, -10, 0, 10]` before the forcing change and `[-2, -2, 2, 2]` at it; each
+replicate keeps its own population, 10 or 20. This evaluates the compiler;
+[op_engine](https://github.com/ACCIDDA/op_engine) provides independent-clock SSA.
+
+A scalar template has shape `()`. To evaluate replicated reactions, declare a
+replicate axis in the specification. A leading dimension on scalar state does
+not create one. Held tables are right-continuous; exact frozen-rate SSA also
+requires no continuous time dependence between changes.
+
+## What runs automatically
+
+`just doctest` runs public API examples and the actual README/SEIR guide code,
+including the standalone example. `just ci` includes those tests plus the
+broader core/provider suite, strict typing, lint and documentation checks.
+Public docstrings cover compilation, reaction shape metadata, balances and
+independent-equation qualification. They use small deterministic results;
+backend differentiation and broader conformance remain in dedicated tests.
+
+When changing an API or example, update its guide and docstring together. Keep
+complete workflows executable, assert an independent equation or invariant,
+and run the real documentation text rather than a copied test-only version.
+Run `just qualify` and `just build-all` before a PR as described in
+[Contributing](../development/contributing.md).
