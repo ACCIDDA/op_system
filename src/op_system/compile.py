@@ -2142,7 +2142,7 @@ def _build_reaction_artifacts(  # ruff: ignore[complex-structure, too-many-local
         # rates in the first place.
         # A routed target coordinate is a trailing channel dimension.
         route_labels = tuple(routed_axis_label(ax, r.from_axes) for ax in r.routed_axes)
-        code = vec._compile_ir_expr(  # ruff: ignore[private-member-access]
+        expression = vec._compile_ir_expr(  # ruff: ignore[private-member-access]
             r.propensity_ir_reduce,
             target_axes=r.from_axes + route_labels,
             context=context,
@@ -2153,10 +2153,13 @@ def _build_reaction_artifacts(  # ruff: ignore[complex-structure, too-many-local
                 if label != ax
             },
         )
-        if code is None:
+        if expression is None:
             # Opportunistic: omit, don't fail the whole compile.
             gaps.append(reaction_gap_for(r, "compile_failed"))
             continue
+        # Reaction introspection and callback assembly retain the code-object
+        # contract; cached vector-expression functions are used by RHS plans.
+        code = expression.code
 
         try:
             pinned = tuple(

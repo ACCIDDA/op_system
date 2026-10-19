@@ -50,7 +50,7 @@ from op_system._ir import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from collections.abc import Callable, Mapping
 
 
 __all__ = [
@@ -867,6 +867,66 @@ def _resolve_continuous_range_filter(  # ruff: ignore[complex-structure]
     return indices, tuple(sub_weights)
 
 
+def _product_factors(expr: Expr) -> list[Expr]:
+    """Flatten multiplication without changing sums or nonlinear factors.
+
+    Returns:
+        Multiplicative factors in their original order.
+    """
+    if isinstance(expr, Apply) and expr.op == "*":
+        return [factor for child in expr.args for factor in _product_factors(child)]
+    return [expr]
+
+
+def _try_matvec_product(
+    body: Expr,
+    *,
+    outer: str,
+    bound: str,
+    lower: Callable[[Expr, tuple[str, ...]], ast.expr],
+) -> ast.expr | None:
+    """Recognize a two-axis matrix times a one-axis product under a sum.
+
+    Lowering each factor against its own named axes avoids materializing the
+    broadcast matrix-vector product. Other layouts keep the general reduction.
+
+    Returns:
+        A namespace-native matrix-vector call, or ``None`` for other products.
+    """
+    factors = _product_factors(body)
+    for index, factor in enumerate(factors):
+        if not isinstance(factor, Subscript) or len(factor.indices) != 2:
+            continue
+        if any(item.coord is not None for item in factor.indices):
+            continue
+        if {item.axis for item in factor.indices} != {outer, bound}:
+            continue
+        others = factors[:index] + factors[index + 1 :]
+        # A scalar-only remainder has no vector dimension. Keep its sum on the
+        # general path rather than relying on accidental scalar broadcasting.
+        if not any(
+            isinstance(node, Subscript)
+            and len(node.indices) == 1
+            and node.indices[0].axis == bound
+            and node.indices[0].coord is None
+            for term in others
+            for node in walk(term)
+        ):
+            continue
+        vector = others[0] if len(others) == 1 else Apply("*", tuple(others))
+        try:
+            matrix_ast = lower(factor, (outer, bound))
+            vector_ast = lower(vector, (bound,))
+        except UnsupportedIRLoweringError:
+            continue
+        return ast.Call(
+            func=ast.Attribute(value=_name("np"), attr="matmul", ctx=ast.Load()),
+            args=[matrix_ast, vector_ast],
+            keywords=[],
+        )
+    return None
+
+
 def _lower_reduce(  # ruff: ignore[complex-structure, too-many-branches, too-many-arguments, too-many-locals, too-many-statements]
     expr: Reduce,
     *,
@@ -993,6 +1053,37 @@ def _lower_reduce(  # ruff: ignore[complex-structure, too-many-branches, too-man
     child_axis_alias.update({
         label: real_axis for real_axis, label in axis_relabel.items()
     })
+
+    def lower_factor(factor: Expr, axes: tuple[str, ...]) -> ast.expr:
+        return lower_to_vector_ast(
+            factor,
+            target_axes=axes,
+            buffer_axes=buffer_axes,
+            axis_names=body_axis_names,
+            reducible_axes=reducible_axes,
+            axis_weights=axis_weights,
+            axis_coords=axis_coords,
+            axis_types=axis_types,
+            shaped_param_axes=shaped_param_axes,
+            axis_alias=child_axis_alias,
+            history_signal_id_map=history_signal_id_map,
+        )
+
+    if (
+        len(target_axes) == len(bound_labels) == 1
+        and target_axes[0] != bound_labels[0]
+        and not axis_relabel
+        and not weighted_labels
+        and not filter_map
+    ):
+        contraction = _try_matvec_product(
+            rebound_body,
+            outer=target_axes[0],
+            bound=bound_labels[0],
+            lower=lower_factor,
+        )
+        if contraction is not None:
+            return contraction
     body_ast = lower_to_vector_ast(
         rebound_body,
         target_axes=extended_target,
@@ -1340,14 +1431,13 @@ def _lower_apply(  # ruff: ignore[too-many-arguments, too-many-return-statements
             history_signal_id_map=history_signal_id_map,
         )
 
-    if expr.op == "neg" and len(expr.args) == 1:
-        return ast.UnaryOp(op=ast.USub(), operand=lower(expr.args[0]))
+    if expr.op in {"neg", "pos"} and len(expr.args) == 1:
+        operator = ast.USub() if expr.op == "neg" else ast.UAdd()
+        return ast.UnaryOp(op=operator, operand=lower(expr.args[0]))
     if expr.op == "sum_state" and not expr.args:
         return ast.Call(
             func=ast.Name(id="sum_state", ctx=ast.Load()), args=[], keywords=[]
         )
-    if expr.op == "pos" and len(expr.args) == 1:
-        return ast.UnaryOp(op=ast.UAdd(), operand=lower(expr.args[0]))
 
     if expr.op in _BINOP and len(expr.args) >= 2:
         # Fold left-associatively; expand_reduce_pointwise may produce N-ary
@@ -1371,6 +1461,12 @@ def _lower_apply(  # ruff: ignore[too-many-arguments, too-many-return-statements
             test=lower(expr.args[0]),
             body=lower(expr.args[1]),
             orelse=lower(expr.args[2]),
+        )
+    if expr.op == "np.where" and len(expr.args) == 3:
+        return ast.Call(
+            func=ast.Attribute(value=_name("np"), attr="where", ctx=ast.Load()),
+            args=[lower(arg) for arg in expr.args],
+            keywords=[],
         )
 
     msg = (

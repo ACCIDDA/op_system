@@ -7,6 +7,21 @@ version; format loosely follows
 
 ## [Unreleased]
 
+### Added
+
+- Lower single-axis unweighted, unfiltered rectangular kernel products to
+  native matrix-vector operations, including vector products and named-axis
+  transposes. Add a two-axis example, independent NumPy/JAX/CPU Torch checks,
+  a generated figure/table and an optional size-sweep benchmark (#312).
+
+### Changed
+
+- Cache expression functions for vectorized flat/PyTree evaluation, binding
+  fresh arguments without runtime `eval` per alias or equation. Preserve the
+  scalar fallback and expose the original generated code to internal plan
+  inspection tests. Lower elementwise `np.where` through typed IR and document
+  its eager branch evaluation (#312).
+
 ### Documentation
 
 - Align package summaries with spatial, nonlocal and reaction support, and state

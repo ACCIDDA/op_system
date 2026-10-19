@@ -26,10 +26,10 @@ import ast
 import math
 import os
 import sys
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from itertools import combinations as _comb
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, NamedTuple, cast
 
 from op_system._array import array_namespace
 from op_system._ir import (
@@ -117,6 +117,64 @@ def last_vector_plan_bail_reason() -> str | None:
 # ---------------------------------------------------------------------------
 
 
+class _CompiledExpression(NamedTuple):
+    """Validated generated code and its reusable environment-bound function."""
+
+    code: CodeType
+    function: Callable[..., object]
+    names: tuple[str, ...]
+
+    def __call__(self, env: Mapping[str, object]) -> object:
+        """Evaluate with fresh values, retaining missing-name diagnostics.
+
+        Returns:
+            The generated expression's result.
+
+        Raises:
+            NameError: If a required symbol is missing from the environment.
+        """
+        try:
+            arguments = [env[name] for name in self.names]
+        except KeyError as exc:
+            msg = f"name {exc.args[0]!r} is not defined"
+            raise NameError(msg) from exc
+        return self.function(*arguments)
+
+
+def _compile_vector_expr(tree: ast.Expression, *, filename: str) -> _CompiledExpression:
+    """Compile once; runtime calls bind explicit arguments without eval.
+
+    Retain the original expression code for plan inspection. Parameters remain
+    per-call values rather than mutable function globals, so independent calls
+    cannot overwrite each other's bindings.
+
+    Returns:
+        Original code, a reusable function and its required environment names.
+    """
+    code = compile(tree, filename=filename, mode="eval")
+    names = tuple(
+        sorted({node.id for node in ast.walk(tree) if isinstance(node, ast.Name)})
+    )
+    function_tree = ast.Expression(
+        body=ast.Lambda(
+            args=ast.arguments(
+                posonlyargs=[],
+                args=[ast.arg(arg=name) for name in names],
+                kwonlyargs=[],
+                kw_defaults=[],
+                defaults=[],
+            ),
+            body=tree.body,
+        )
+    )
+    ast.fix_missing_locations(function_tree)
+    function = eval(  # ruff: ignore[suspicious-eval-usage]
+        compile(function_tree, filename=filename, mode="eval"),
+        {"__builtins__": _SAFE_BUILTINS},
+    )
+    return _CompiledExpression(code, function, names)
+
+
 @dataclass(frozen=True, slots=True)
 class _BufferTemplate:
     """Records a templated buffer (state or alias) for the rewriter."""
@@ -150,7 +208,7 @@ class _EqGroup:
     """
 
     base: str
-    codes: tuple[CodeType, ...]
+    codes: tuple[_CompiledExpression, ...]
     vec_axes: tuple[str, ...]
     vec_shape: tuple[int, ...]
     unroll_axes: tuple[str, ...]
@@ -166,7 +224,7 @@ class _VectorPlan:
     state_templates: tuple[_BufferTemplate, ...]
     alias_templates: tuple[_BufferTemplate, ...]
     param_templates: tuple[_BufferTemplate, ...]
-    alias_codes: tuple[tuple[str, CodeType, tuple[int, ...]], ...]
+    alias_codes: tuple[tuple[str, _CompiledExpression, tuple[int, ...]], ...]
     eq_groups: tuple[_EqGroup, ...]
     n_state: int
     # Shaped params declared by the normalizer (e.g. user-registered
@@ -178,7 +236,7 @@ class _VectorPlan:
     # Plan-level CSE temporaries: computed once after alias buffers are
     # assembled, before equation evaluation. Each entry is ``(name, code)``
     # where ``code`` evaluates to an array shaped to the common template axes.
-    cse_codes: tuple[tuple[str, CodeType], ...] = ()
+    cse_codes: tuple[tuple[str, _CompiledExpression], ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -225,14 +283,14 @@ def _compile_ir_expr(
     context: _LoweringContext,
     filename: str,
     axis_alias: Mapping[str, str] | None = None,
-) -> CodeType | None:
-    """Lower IR to AST and compile it into an eval-ready code object.
+) -> _CompiledExpression | None:
+    """Lower IR to AST and compile a reusable expression function.
 
     ``axis_alias`` maps synthetic target labels (such as a routed target
     ``imm#to``) to their real axes, as for same-axis-twice reductions.
 
     Returns:
-        Code object on success, otherwise ``None`` when lowering/compile fails.
+        Compiled function and inspection code on success, otherwise ``None``.
     """
     try:
         body = lower_to_vector_ast(
@@ -253,7 +311,7 @@ def _compile_ir_expr(
     tree = ast.Expression(body=body)
     ast.fix_missing_locations(tree)
     try:
-        return compile(tree, filename=filename, mode="eval")
+        return _compile_vector_expr(tree, filename=filename)
     except (ValueError, TypeError, SyntaxError):
         return None
 
@@ -263,13 +321,13 @@ def _compile_cse_bindings(
     bindings: tuple[tuple[str, Expr], ...],
     common_axes: tuple[str, ...],
     context: _LoweringContext,
-) -> list[tuple[str, CodeType]] | None:
+) -> list[tuple[str, _CompiledExpression]] | None:
     """Compile template-level CSE bindings.
 
     Returns:
         List of ``(name, code)`` CSE bindings, or ``None`` on failure.
     """
-    cse_codes_list: list[tuple[str, CodeType]] = []
+    cse_codes_list: list[tuple[str, _CompiledExpression]] = []
     for name, binding_ir in bindings:
         code = _compile_ir_expr(
             binding_ir,
@@ -605,7 +663,7 @@ def _try_cse_eq_plan(  # ruff: ignore[complex-structure, too-many-return-stateme
     axis_coords: Mapping[str, tuple[str, ...]] | None = None,
     axis_types: Mapping[str, str] | None = None,
     shaped_param_axes: Mapping[str, tuple[str, ...]] | None = None,
-) -> tuple[tuple[tuple[str, CodeType], ...], list[_EqGroup]] | None:
+) -> tuple[tuple[tuple[str, _CompiledExpression], ...], list[_EqGroup]] | None:
     """Build equation groups via template-level CSE across all state templates.
 
     Lifts the representative (first-cell) IR for each state template into
@@ -727,7 +785,7 @@ def _vectorize_template_equations(  # ruff: ignore[complex-structure, too-many-b
     shaped_param_axes: Mapping[str, tuple[str, ...]] | None = None,
 ) -> (
     tuple[
-        tuple[CodeType, ...],
+        tuple[_CompiledExpression, ...],
         tuple[str, ...],  # vec_axes
         tuple[int, ...],  # vec_shape
         tuple[str, ...],  # unroll_axes
@@ -791,7 +849,7 @@ def _vectorize_template_equations(  # ruff: ignore[complex-structure, too-many-b
         vec_size = math.prod(vec_shape) if vec_shape else 1
 
         # Iterate unroll bins in row-major over unroll_axes.
-        codes: list[CodeType] = []
+        codes: list[_CompiledExpression] = []
         ok = True
         for u in range(unroll_size):
             # Decode u into per-unroll-axis coord indices.
@@ -862,7 +920,7 @@ def _vectorize_template_equations(  # ruff: ignore[complex-structure, too-many-b
                     break
             try:
                 codes.append(
-                    compile(first_tree, filename="<op_system_vec>", mode="eval")
+                    _compile_vector_expr(first_tree, filename="<op_system_vec>")
                 )
             except (ValueError, TypeError, SyntaxError):
                 ok = False
@@ -998,7 +1056,7 @@ def _build_vector_plan_inner(  # ruff: ignore[complex-structure, too-many-return
             shaped_param_axes[name] = ax_t
 
     # Vectorize aliases (in declaration order — best-effort dependency order).
-    alias_codes: list[tuple[str, CodeType, tuple[int, ...]]] = []
+    alias_codes: list[tuple[str, _CompiledExpression, tuple[int, ...]]] = []
 
     def _build_alias_tree(buf: _BufferTemplate) -> ast.Expression | None:
         """Rewrite an alias buffer into a single AST or ``None`` on mismatch.
@@ -1059,7 +1117,7 @@ def _build_vector_plan_inner(  # ruff: ignore[complex-structure, too-many-return
                     f"alias {buf.base!r}: first/last cell trees differ after rewriting"
                 )
                 return None
-            code = compile(tree, filename="<op_system_vec>", mode="eval")
+            code = _compile_vector_expr(tree, filename="<op_system_vec>")
         except (ValueError, RuntimeError, TypeError, SyntaxError) as exc:
             _bail(
                 f"alias {buf.base!r}: rewrite/compile failed:"
@@ -1070,7 +1128,7 @@ def _build_vector_plan_inner(  # ruff: ignore[complex-structure, too-many-return
 
     # Try template-level IR CSE: finds shared sub-expressions across all
     # state templates and compiles them once as plan-level temporaries.
-    cse_codes: tuple[tuple[str, CodeType], ...] = ()
+    cse_codes: tuple[tuple[str, _CompiledExpression], ...] = ()
     cse_result = _try_cse_eq_plan(
         state_buffers=state_buffers,
         rhs=rhs,
@@ -1220,9 +1278,7 @@ def make_vectorized_eval_fn(plan: _VectorPlan) -> EvalFn:  # ruff: ignore[comple
         # Eval alias buffers in declaration order.
         for base, code, shape in alias_codes:
             try:
-                val = eval(  # ruff: ignore[suspicious-eval-usage]
-                    code, {"__builtins__": _SAFE_BUILTINS}, env
-                )
+                val = code(env)
             except (NameError, ValueError, TypeError, ArithmeticError) as exc:
                 msg = f"alias {base!r} evaluation failed: {exc!r}"
                 raise ValueError(msg) from exc
@@ -1242,9 +1298,7 @@ def make_vectorized_eval_fn(plan: _VectorPlan) -> EvalFn:  # ruff: ignore[comple
         # expressions referencing alias buffers (e.g. I_total_buf) resolve.
         for name, code in cse_codes:
             try:
-                val = eval(  # ruff: ignore[suspicious-eval-usage]
-                    code, {"__builtins__": _SAFE_BUILTINS}, env
-                )
+                val = code(env)
             except (NameError, ValueError, TypeError, ArithmeticError) as exc:
                 msg = f"CSE temp {name!r} evaluation failed: {exc!r}"
                 raise ValueError(msg) from exc
@@ -1256,9 +1310,7 @@ def make_vectorized_eval_fn(plan: _VectorPlan) -> EvalFn:  # ruff: ignore[comple
             bin_results: list[object] = []
             for code in grp.codes:
                 try:
-                    val = eval(  # ruff: ignore[suspicious-eval-usage]
-                        code, {"__builtins__": _SAFE_BUILTINS}, env
-                    )
+                    val = code(env)
                 except (NameError, ValueError, TypeError, ArithmeticError) as exc:
                     msg = f"equation {grp.base!r} evaluation failed: {exc!r}"
                     raise ValueError(msg) from exc
@@ -1357,9 +1409,7 @@ def make_pytree_eval_fn(plan: _VectorPlan) -> PytreeEvalFn:  # ruff: ignore[comp
         # Eval alias buffers (identical to flat path).
         for base, code, shape in alias_codes:
             try:
-                val = eval(  # ruff: ignore[suspicious-eval-usage]
-                    code, {"__builtins__": _SAFE_BUILTINS}, env
-                )
+                val = code(env)
             except (NameError, ValueError, TypeError, ArithmeticError) as exc:
                 msg = f"alias {base!r} evaluation failed: {exc!r}"
                 raise ValueError(msg) from exc
@@ -1377,9 +1427,7 @@ def make_pytree_eval_fn(plan: _VectorPlan) -> PytreeEvalFn:  # ruff: ignore[comp
         # Eval CSE temporaries (identical to flat path).
         for name, code in cse_codes:
             try:
-                val = eval(  # ruff: ignore[suspicious-eval-usage]
-                    code, {"__builtins__": _SAFE_BUILTINS}, env
-                )
+                val = code(env)
             except (NameError, ValueError, TypeError, ArithmeticError) as exc:
                 msg = f"CSE temp {name!r} evaluation failed: {exc!r}"
                 raise ValueError(msg) from exc
@@ -1391,9 +1439,7 @@ def make_pytree_eval_fn(plan: _VectorPlan) -> PytreeEvalFn:  # ruff: ignore[comp
             bin_results: list[object] = []
             for code in grp.codes:
                 try:
-                    val = eval(  # ruff: ignore[suspicious-eval-usage]
-                        code, {"__builtins__": _SAFE_BUILTINS}, env
-                    )
+                    val = code(env)
                 except (NameError, ValueError, TypeError, ArithmeticError) as exc:
                     msg = f"equation {grp.base!r} evaluation failed: {exc!r}"
                     raise ValueError(msg) from exc

@@ -60,6 +60,7 @@ nav:
       - Conditional Reaction Balances: guides/reaction-balances.md
       - Latent Observables: guides/latent-observables.md
       - Expression Selectors: guides/expression-selectors.md
+      - Named Kernel Products: guides/named-kernel-products.md
       - Global State Totals: guides/global-state-totals.md
       - Operator Metadata: guides/operators.md
       - Time-indexed Parameters: guides/time-indexed-parameters.md
