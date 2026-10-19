@@ -48,6 +48,7 @@ def main() -> int:
                 "tests/op_system/test_scientific_metadata.py",
                 "tests/op_system/test_balances.py",
                 "tests/op_system/test_observables.py",
+                "tests/op_system/test_reaction_callbacks.py",
                 "-k",
                 args.backend,
                 "-q",

@@ -1,5 +1,11 @@
 # Independent batches and normalization cost
 
+Reaction callbacks enforce the declared `template_shapes`: a scalar state
+expects shape `()`, and an undeclared leading batch dimension raises an error
+with the reaction, state name, expected shape and received shape. Declare a
+categorical replicate axis for batched reactions. Passing arrays to a scalar
+specification does not implicitly add an independent replicate dimension.
+
 A categorical axis can index independent parameter draws as well as model
 groups. Normalization expands the declared state cells and resolves their
 equations and parameter coordinates; it occurs before numerical evaluation or
