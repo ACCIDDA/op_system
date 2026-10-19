@@ -16,8 +16,8 @@ separate GPL `flepimop2-op_system` distribution shares its release version.
 A PDE field represented on a numerical grid becomes a finite array. That array
 representation retains spatial/trait coordinates, measures, kernels and operator
 semantics; a right-hand-side callable is one part of the compiled contract.
-The small SEIR and transfer examples below exercise particular parts of this
-surface. They are examples of model authoring, rather than a limit on model class.
+The SEIR and transfer examples below introduce model authoring. The operator
+guide covers spatial and nonlocal terms.
 
 ## Choose a public interface
 
