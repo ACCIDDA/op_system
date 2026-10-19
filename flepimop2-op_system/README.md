@@ -4,6 +4,18 @@
 
 It packages the `flepimop2.system.op_system` provider so `flepimop2` can load and execute RHS specifications compiled by the core `op_system` package.
 
+## Read a compiler result
+
+The [illustrated core example](https://accidda.github.io/op_system/latest/guides/capabilities/#read-the-compiled-output)
+shows held forcing, independent replicate shapes and a generated drift/population
+table. It evaluates a fixed state; an engine owns time integration.
+
+| Concern | System provider supplies | Numerical consumer owns |
+| --- | --- | --- |
+| State layout | State names, template shapes and axis metadata | Initial-state assembly and solver layout |
+| Dynamics | Bound RHS and supported reaction/operator metadata | Integration method and numerical accuracy |
+| Time tables | Interpolation policy and forcing breakpoints | Step/event boundaries and correctly resolved values |
+
 Bound system steppers accept and return Flepimop2's namespace-neutral `Array`
 protocol. The provider performs no state conversion: NumPy, JAX, and other
 supported array namespaces are selected by the state supplied by the numerical

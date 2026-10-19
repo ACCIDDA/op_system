@@ -222,8 +222,12 @@ api-reference:
 
 # Build the documentation using `mkdocs`
 [group('docs')]
-docs: api-reference
+docs: api-reference figures-check
 	{{run}} mkdocs build --verbose --strict
+
+# Verify generated vignette inputs and export identity; no plotting dependency.
+figures-check:
+	{{run}} python examples/illustrate_reactions.py --check
 
 # Serve the documentation locally using `mkdocs`
 [group('docs')]
