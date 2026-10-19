@@ -41,6 +41,32 @@ a named population observable. The independently known derivatives are
 replicate keeps its own population, 10 or 20. This evaluates the compiler;
 [op_engine](https://github.com/ACCIDDA/op_engine) provides independent-clock SSA.
 
+### Read the compiled output
+
+![Transfer propensities at the same fixed state before and at a held forcing change, for two independent replicates.](../assets/compiled-transfer/figure.svg)
+
+--8<-- "docs/assets/compiled-transfer/summary.txt"
+
+The state stays fixed at `S = [10, 20]`, `I = [0, 0]` in both evaluations.
+The bars compare compiled propensities at two times. At `t = 1`, the
+right-continuous table selects its new row. Each transfer has opposite drift
+contributions to S and I, preserving its own population. No integration is
+performed in this compiler example.
+
+[Download the vector PDF](../assets/compiled-transfer/figure.pdf).
+Regenerate the figure and table from the actual checked example:
+
+```bash
+uv run --with matplotlib==3.11.2 python examples/illustrate_reactions.py
+just figures-check
+```
+
+Matplotlib is needed only for regeneration. The check reruns the compiler
+fixture, compares the table and full plotted data, and verifies source/export
+fingerprints. The docs build runs that check and includes the generated table
+directly. The [plotted data](../assets/compiled-transfer/data.json) records the
+numerical inputs.
+
 A scalar template has shape `()`. To evaluate replicated reactions, declare a
 replicate axis in the specification. A leading dimension on scalar state does
 not create one. Held tables are right-continuous; exact frozen-rate SSA also

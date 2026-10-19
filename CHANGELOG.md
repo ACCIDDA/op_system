@@ -9,6 +9,9 @@ version; format loosely follows
 
 ### Documentation
 
+- Illustrate the executable transfer-model vignette with a numerical figure,
+  generated drift/population table and retained plotting inputs. Check source,
+  data and export identities in the docs build; keep plotting optional.
 - Audit current capabilities against public APIs; correct scope and limitations,
   add executable workflow examples and public API doctests, and document their
   CI and optional-dependency checks. No runtime API or dependency changes.
