@@ -1,5 +1,11 @@
 # Writing a compartmental model
 
+This SEIR example introduces the syntax through one deterministic compartmental
+model. The same specification layer also describes spatial/trait fields,
+nonlocal kernel interactions and stochastic channels. See the
+[model-class map](capabilities.md#model-classes-and-numerical-representations) and
+[operator contracts](operators.md) for the corresponding interfaces and boundaries.
+
 Install the core compiler and a YAML reader:
 
 ```shell

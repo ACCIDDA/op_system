@@ -4,6 +4,21 @@
 adapts a framework's lifecycle. The MIT core does not import flepimop2; the
 separate GPL `flepimop2-op_system` distribution shares its release version.
 
+## Model classes and numerical representations
+
+| Model class | Specification/compiled contract | Numerical consumer owns |
+| --- | --- | --- |
+| Spatial or trait-structured PDEs | Continuous axes, shaped fields and [transport/diffusion operator metadata](operators.md) | Geometry, boundary treatment, discretization and integration |
+| Nonlocal / integro-differential dynamics | Kernel reductions and conservative [jump-integral contracts](operators.md#jump-integrals) | Kernel values, quadrature/discretization and operator staging |
+| ODEs and compartmental flows | Expression equations or named transitions and flat/PyTree evaluators | Time integration and accuracy policy |
+| Stochastic reaction networks | Named reaction channels, propensities, dependencies and reported gaps | Event/leap method, complete dynamics coverage and random streams |
+
+A PDE field represented on a numerical grid becomes a finite array. That array
+representation retains spatial/trait coordinates, measures, kernels and operator
+semantics; a right-hand-side callable is one part of the compiled contract.
+The small SEIR and transfer examples below exercise particular parts of this
+surface. They are examples of model authoring, rather than a limit on model class.
+
 ## Choose a public interface
 
 | Task | Implemented interface | Example and boundary |

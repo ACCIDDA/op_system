@@ -9,6 +9,10 @@ version; format loosely follows
 
 ### Documentation
 
+- Clarify the scope across PDE/structured fields, nonlocal operators, ODEs and
+  stochastic reaction contracts. Map model classes to numerical consumers and
+  label the compartmental examples as individual cases.
+
 - Illustrate the executable transfer-model vignette with a numerical figure,
   generated drift/population table and retained plotting inputs. Check source,
   data and export identities in the docs build; keep plotting optional.

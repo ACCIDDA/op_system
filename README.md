@@ -1,9 +1,12 @@
 # op_system
 
-Domain-agnostic specification and compilation of right-hand sides (RHS) for
-ODE, PDE, and multi-physics / multi-scale compartmental systems.  `op_system`
-takes a YAML/JSON-friendly spec, validates and normalizes it, then compiles
-it into a fast, **array-API-polymorphic** callable whose namespace is selected
+Domain-agnostic specification and compilation for structured dynamical systems:
+spatial and trait-structured PDEs, nonlocal integral/mixing terms, compartmental
+flows, ODEs, and stochastic reaction networks. `op_system` validates and
+normalizes a YAML/JSON-friendly specification, compiles shaped-state
+right-hand-side evaluators, and publishes operator and reaction contracts.
+Numerical consumers supply spatial discretization and time/event integration.
+The evaluators are **array-API-polymorphic**: their namespace is selected
 from the inputs at call time. NumPy, JAX (concrete and traced), and raw PyTorch
 tensors are covered by the test suite. Other Array-API implementations may
 work through `array-api-compat`, but should be qualified before production use.
@@ -42,6 +45,9 @@ Modelers often combine compartment hazards, templated populations, and rich
 metadata (axes, kernels, operators) that must be validated and preserved for
 downstream solvers.  `op_system` provides:
 
+- **Fields and nonlocal operators** — categorical and continuous coordinates,
+  kernel reductions, and typed transport, diffusion and jump-integral metadata
+  for numerical consumers.
 - **Two equivalent surfaces** — `expr` (explicit equations) and `transitions`
   (hazard / flow style) — that share the same axis, alias, template, and
   reducer machinery.

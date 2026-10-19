@@ -8,7 +8,7 @@ An axis ``a`` is *block-diagonal* (or *factorizable*) when each cell along
 ``a`` evolves independently — ``dy[..., i, ...]/dt`` depends only on
 ``y[..., i, ...]`` (and on parameters that are either broadcast across ``a``
 or are per-cell along ``a``).  This enables the engine to vmap a single-block
-ODE solve over the axis rather than solving one monolithic system.
+time integration over the axis rather than solving one monolithic system.
 
 Public API
 ----------
@@ -39,7 +39,7 @@ class BlockAxisInfo:
     :class:`~op_system.compile.CompiledRhs` for each axis declared in
     ``spec["factorize_axes"]`` that passes the IR separability check in
     :func:`analyze_block_axes`.  Engines (e.g. the diffrax plugin) consume
-    this to partition ODE solves with ``jax.vmap`` over the block axis.
+    this to partition independent solves with ``jax.vmap`` over the block axis.
 
     Attributes:
         name: Axis name string (e.g. ``"loc"``).

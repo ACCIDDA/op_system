@@ -1,8 +1,10 @@
 # `op_system`
 
-`op_system` validates YAML/JSON-friendly model specifications and compiles them
-into vectorized right-hand-side callables for ODE, PDE, and compartmental
-systems. It is domain-agnostic: [`flepimop2`](https://github.com/ACCIDDA/flepimop2)
+`op_system` validates YAML/JSON-friendly specifications for spatial and
+trait-structured PDEs, nonlocal integral/mixing dynamics, compartmental flows,
+ODEs and stochastic reaction networks. It compiles shaped-state evaluators
+and publishes operator, reaction and observable contracts. Numerical consumers
+supply discretization and time/event integration. It is domain-agnostic: [`flepimop2`](https://github.com/ACCIDDA/flepimop2)
 is an important consumer, not the package's only intended use.
 
 The test suite covers NumPy, concrete and traced JAX arrays, and raw PyTorch
