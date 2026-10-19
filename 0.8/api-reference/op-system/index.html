@@ -3704,7 +3704,7 @@ this protocol. No compile-time backend selector is needed.</p>
 :class:<code>~op_system.compile.CompiledRhs</code> for each axis declared in
 <code>spec["factorize_axes"]</code> that passes the IR separability check in
 :func:<code>analyze_block_axes</code>.  Engines (e.g. the diffrax plugin) consume
-this to partition ODE solves with <code>jax.vmap</code> over the block axis.</p>
+this to partition independent solves with <code>jax.vmap</code> over the block axis.</p>
 
 
 <p><span class="doc-section-title">Attributes:</span></p>

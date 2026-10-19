@@ -327,6 +327,17 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#model-classes-and-numerical-representations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Model classes and numerical representations
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#choose-a-public-interface" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1357,6 +1368,17 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#model-classes-and-numerical-representations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Model classes and numerical representations
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#choose-a-public-interface" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1427,6 +1449,43 @@
 <p><code>op_system</code> compiles model definitions. An engine advances state and a provider
 adapts a framework's lifecycle. The MIT core does not import flepimop2; the
 separate GPL <code>flepimop2-op_system</code> distribution shares its release version.</p>
+<h2 id="model-classes-and-numerical-representations">Model classes and numerical representations<a class="headerlink" href="#model-classes-and-numerical-representations" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Model class</th>
+<th>Specification/compiled contract</th>
+<th>Numerical consumer owns</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Spatial or trait-structured PDEs</td>
+<td>Continuous axes, shaped fields and <a href="../operators/">transport/diffusion operator metadata</a></td>
+<td>Geometry, boundary treatment, discretization and integration</td>
+</tr>
+<tr>
+<td>Nonlocal / integro-differential dynamics</td>
+<td>Kernel reductions and conservative <a href="../operators/#jump-integrals">jump-integral contracts</a></td>
+<td>Kernel values, quadrature/discretization and operator staging</td>
+</tr>
+<tr>
+<td>ODEs and compartmental flows</td>
+<td>Expression equations or named transitions and flat/PyTree evaluators</td>
+<td>Time integration and accuracy policy</td>
+</tr>
+<tr>
+<td>Stochastic reaction networks</td>
+<td>Named reaction channels, propensities, dependencies and reported gaps</td>
+<td>Event/leap method, complete dynamics coverage and random streams</td>
+</tr>
+</tbody>
+</table>
+<p>A PDE field represented on a numerical grid becomes a finite array. That array
+representation retains spatial/trait coordinates, measures, kernels and operator
+semantics; a right-hand-side callable is one part of the compiled contract.
+The small SEIR and transfer examples below exercise particular parts of this
+surface. They are examples of model authoring, rather than a limit on model class.</p>
 <h2 id="choose-a-public-interface">Choose a public interface<a class="headerlink" href="#choose-a-public-interface" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
