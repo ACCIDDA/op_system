@@ -9,6 +9,9 @@ version; format loosely follows
 
 ### Documentation
 
+- Simplify introductions and feature descriptions, removing promotional phrasing
+  and separating supported interfaces from numerical and scientific claims.
+
 - Clarify the scope across PDE/structured fields, nonlocal operators, ODEs and
   stochastic reaction contracts. Map model classes to numerical consumers and
   label the compartmental examples as individual cases.

@@ -3,7 +3,7 @@
 `flepimop2-op_system` provides the `flepimop2` system adapter for `op_system`.
 
 It packages the `flepimop2.system.op_system` provider so `flepimop2` can load
-compiled structured models: spatial/trait fields, nonlocal interactions,
+compiled models with spatial or trait-structured fields, nonlocal interactions,
 compartmental dynamics and reaction channels. The provider carries coordinate
 and operator metadata to an engine; that numerical consumer owns discretization,
 operator staging and time/event integration.

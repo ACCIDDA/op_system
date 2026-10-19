@@ -1,8 +1,8 @@
 # op_system
 
-Domain-agnostic specification and compilation for structured dynamical systems:
-spatial and trait-structured PDEs, nonlocal integral/mixing terms, compartmental
-flows, ODEs, and stochastic reaction networks. `op_system` validates and
+`op_system` specifies and compiles structured dynamical systems, including
+spatial and trait-structured PDEs, nonlocal integrals and mixing, compartmental
+flows, ODEs, and stochastic reaction networks. It validates and
 normalizes a YAML/JSON-friendly specification, compiles shaped-state
 right-hand-side evaluators, and publishes operator and reaction contracts.
 Numerical consumers supply spatial discretization and time/event integration.
@@ -20,8 +20,7 @@ Use [CITATION.cff](CITATION.cff) for software attribution and the
 [citation/archive guide](docs/development/citation-and-archiving.md) for exact
 release identifiers and the software-paper archive plan.
 
-Required NumPy, JAX, and CPU Torch compiler qualification and its precise
-capability matrix are documented in the
+Required NumPy, JAX, and CPU Torch compiler checks and the tested operations are documented in the
 [backend guide](docs/guides/backend-qualification.md). Run `just qualify`
 alongside the baseline compiler/provider checks when preparing a contribution.
 
@@ -39,36 +38,36 @@ opt-in timings and machine-readable results.
 The [capability guide](docs/guides/capabilities.md) maps current public APIs,
 reaction independence/resolved-forcing contracts, runnable examples and CI checks.
 
-## Why op_system?
+## Model definitions and evaluators
 
-Modelers often combine compartment hazards, templated populations, and rich
-metadata (axes, kernels, operators) that must be validated and preserved for
-downstream solvers.  `op_system` provides:
+Model definitions include equations or transition hazards, state templates,
+axes, kernels, and operators. The compiler checks and preserves these definitions
+for numerical consumers.
 
-- **Fields and nonlocal operators** — categorical and continuous coordinates,
+- **Fields and nonlocal operators.** Categorical and continuous coordinates,
   kernel reductions, and typed transport, diffusion and jump-integral metadata
   for numerical consumers.
-- **Two equivalent surfaces** — `expr` (explicit equations) and `transitions`
-  (hazard / flow style) — that share the same axis, alias, template, and
+- **Equation and transition specifications.** `expr` uses explicit equations and `transitions`
+  uses hazards or flows. They share axis, alias, template, and
   reducer machinery.
-- **Validated, restricted expression parsing** with a small allowlist of
-  NumPy ops and helpers; no arbitrary code execution.
+- **Restricted expression parsing.** A documented allowlist of array operations
+  and helpers rejects unsupported syntax.
 - **A typed intermediate representation (IR)** that handles template
   expansion, alias inlining, and `apply_along`/`sum_over` reductions
   symbolically before code generation.
 - **Vectorized compilation** that operates on shaped state buffers (one
   tensor expression per template) rather than per-cell scalar code, with
   template-level common-subexpression elimination.
-- **Backend polymorphism at call time** — `array-api-compat` selects the
+- **Backend selection at call time.** `array-api-compat` selects the
   namespace from each input, so the same compiled artifact serves NumPy,
   JAX `jit`/`vmap`/`grad`, and raw PyTorch tensors with autograd.
-- **First-class PyTree interface** (`pytree_eval_fn`) for engines that want
+- **PyTree evaluation** (`pytree_eval_fn`) for engines that want
   to keep state as a dict of shaped arrays rather than a flat vector.
 - **Block-axis vmap support** (`block_pytree_eval_fn`) for hierarchical
-  models — declare `factorize_axes` and the engine can vmap a stripped
+  models. Declare `factorize_axes` and the engine can vmap a stripped
   per-block RHS over a block axis instead of evaluating a monolithic flat
   state.
-- **Picklable `CompiledRhs`** — round-trips through `pickle.dumps`/`loads`
+- **Picklable `CompiledRhs`.** Round-trips through `pickle.dumps`/`loads`
   by retaining the source spec and recompiling on load.
 
 ## Installation
@@ -180,7 +179,7 @@ for a numerical integrator, and **provider** for a framework adapter. See the
 and compatibility.
 
 `compile_spec` accepts legacy `backend=` / `xp=` keyword arguments but they
-are deprecated and ignored — the compiled callable infers its array
+are deprecated and ignored. The compiled callable infers its array
 namespace from the input `y` on every call.
 
 Reference a templated state with its axes, such as `I[age]`. A bare `I` for a
@@ -198,10 +197,10 @@ from op_system import compile_spec
 compiled = compile_spec(spec)
 y0 = jnp.asarray([999.0, 1.0, 0.0])
 
-# Native JAX call — eval_fn returns a jnp array.
+# Native JAX call returning a jnp array.
 dydt = compiled.eval_fn(0.0, y0, beta=0.3, gamma=0.1)
 
-# Works inside jit / vmap / grad without recompilation.
+# Compile the JAX evaluator for this input shape.
 solve = jax.jit(lambda y: compiled.eval_fn(0.0, y, beta=0.3, gamma=0.1))
 ```
 
@@ -216,10 +215,9 @@ constraint boundary.
 
 ## YAML examples
 
-The full guide of YAML patterns — including templates, axis asymmetry,
-chains, continuous axes with kernels, and block-axis hierarchical models —
-lives at <https://accidda.github.io/op_system/guides/getting-started/>.
-A few highlights:
+The [YAML guide](https://accidda.github.io/op_system/guides/getting-started/)
+covers templates, axis asymmetry, chains, continuous axes with kernels,
+and hierarchical block models. Selected patterns follow.
 
 ### Baseline SIR (two pathways)
 
@@ -574,8 +572,8 @@ out = compiled.history_eval_fn(
 print(out["x"])  # [0. 0.]
 ```
 
-Anything else — non-`np` attribute access, imports, lambdas, comprehensions,
-other AST nodes — raises `ValueError` / `TypeError` /
+Unsupported syntax, including non-`np` attribute access, imports, lambdas,
+and comprehensions, raises `ValueError` / `TypeError` /
 `UnsupportedFeatureError` at normalize time.
 
 ## Development
