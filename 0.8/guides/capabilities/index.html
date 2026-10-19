@@ -346,6 +346,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Run the combined compiler example">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#read-the-compiled-output" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Read the compiled output
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -1359,6 +1376,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Run the combined compiler example">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#read-the-compiled-output" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Read the compiled output
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -1467,6 +1501,64 @@ a named population observable. The independently known derivatives are
 <code>[0, -10, 0, 10]</code> before the forcing change and <code>[-2, -2, 2, 2]</code> at it; each
 replicate keeps its own population, 10 or 20. This evaluates the compiler;
 <a href="https://github.com/ACCIDDA/op_engine">op_engine</a> provides independent-clock SSA.</p>
+<h3 id="read-the-compiled-output">Read the compiled output<a class="headerlink" href="#read-the-compiled-output" title="Permanent link">&para;</a></h3>
+<p><img alt="Transfer propensities at the same fixed state before and at a held forcing change, for two independent replicates." src="../../assets/compiled-transfer/figure.svg" /></p>
+<table>
+<thead>
+<tr>
+<th>Evaluation</th>
+<th>Replicate</th>
+<th style="text-align: right;">dS/dt</th>
+<th style="text-align: right;">dI/dt</th>
+<th style="text-align: right;">Population</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>t = 0.5</td>
+<td>a</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">10</td>
+</tr>
+<tr>
+<td>t = 0.5</td>
+<td>b</td>
+<td style="text-align: right;">-10</td>
+<td style="text-align: right;">10</td>
+<td style="text-align: right;">20</td>
+</tr>
+<tr>
+<td>t = 1</td>
+<td>a</td>
+<td style="text-align: right;">-2</td>
+<td style="text-align: right;">2</td>
+<td style="text-align: right;">10</td>
+</tr>
+<tr>
+<td>t = 1</td>
+<td>b</td>
+<td style="text-align: right;">-2</td>
+<td style="text-align: right;">2</td>
+<td style="text-align: right;">20</td>
+</tr>
+</tbody>
+</table>
+<p>The state stays fixed at <code>S = [10, 20]</code>, <code>I = [0, 0]</code> in both evaluations.
+The bars compare compiled propensities at two times. At <code>t = 1</code>, the
+right-continuous table selects its new row. Each transfer has opposite drift
+contributions to S and I, preserving its own population. No integration is
+performed in this compiler example.</p>
+<p><a href="../../assets/compiled-transfer/figure.pdf">Download the vector PDF</a>.
+Regenerate the figure and table from the actual checked example:</p>
+<pre><code class="language-bash">uv run --with matplotlib==3.11.2 python examples/illustrate_reactions.py
+just figures-check
+</code></pre>
+<p>Matplotlib is needed only for regeneration. The check reruns the compiler
+fixture, compares the table and full plotted data, and verifies source/export
+fingerprints. The docs build runs that check and includes the generated table
+directly. The <a href="../../assets/compiled-transfer/data.json">plotted data</a> records the
+numerical inputs.</p>
 <p>A scalar template has shape <code>()</code>. To evaluate replicated reactions, declare a
 replicate axis in the specification. A leading dimension on scalar state does
 not create one. Held tables are right-continuous; exact frozen-rate SSA also
