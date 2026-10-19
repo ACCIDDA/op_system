@@ -759,6 +759,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../../guides/log-state-coordinates/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Log State Coordinates
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../guides/global-state-totals/" class="md-nav__link">
         
   
@@ -1159,6 +1187,34 @@
     
   
     Compile
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../coordinates/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Coordinates
   
 
     
@@ -3792,6 +3848,18 @@ None means undeclared; an empty tuple explicitly needs none.</p>
               </div>
             </td>
           </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="op_system.specs.StateDeclaration.scale">scale</span></code></td>
+            <td>
+                  <code><span title="typing.Literal">Literal</span>[&#39;identity&#39;, &#39;log&#39;]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Requested identity/log coordinate for an explicit coordinate_view.
+Primary compiled equations and reactions retain natural coordinates.</p>
+              </div>
+            </td>
+          </tr>
       </tbody>
     </table>
 
@@ -3913,10 +3981,7 @@ None means undeclared; an empty tuple explicitly needs none.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/op_system/_scientific_meta.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">109</span>
-<span class="normal">110</span>
-<span class="normal">111</span>
-<span class="normal">112</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">112</span>
 <span class="normal">113</span>
 <span class="normal">114</span>
 <span class="normal">115</span>
@@ -3968,7 +4033,15 @@ None means undeclared; an empty tuple explicitly needs none.</p>
 <span class="normal">161</span>
 <span class="normal">162</span>
 <span class="normal">163</span>
-<span class="normal">164</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="nd">@classmethod</span>
+<span class="normal">164</span>
+<span class="normal">165</span>
+<span class="normal">166</span>
+<span class="normal">167</span>
+<span class="normal">168</span>
+<span class="normal">169</span>
+<span class="normal">170</span>
+<span class="normal">171</span>
+<span class="normal">172</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="nd">@classmethod</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">from_mapping</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="nb">object</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">StateDeclaration</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Validate a state annotation without changing its equations.</span>
 
@@ -3986,10 +4059,14 @@ None means undeclared; an empty tuple explicitly needs none.</p>
         <span class="s2">"units"</span><span class="p">,</span>
         <span class="s2">"description"</span><span class="p">,</span>
         <span class="s2">"measure_axes"</span><span class="p">,</span>
+        <span class="s2">"scale"</span><span class="p">,</span>
     <span class="p">}:</span>
         <span class="k">raise</span> <span class="n">InvalidRhsSpecError</span><span class="p">(</span>
             <span class="n">detail</span><span class="o">=</span><span class="s2">"state metadata contains unknown fields or is not a mapping"</span>
         <span class="p">)</span>
+    <span class="n">scale</span> <span class="o">=</span> <span class="n">value</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"scale"</span><span class="p">,</span> <span class="s2">"identity"</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">scale</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="ow">or</span> <span class="n">scale</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">{</span><span class="s2">"identity"</span><span class="p">,</span> <span class="s2">"log"</span><span class="p">}:</span>
+        <span class="k">raise</span> <span class="n">InvalidRhsSpecError</span><span class="p">(</span><span class="n">detail</span><span class="o">=</span><span class="s2">"state scale must be identity or log"</span><span class="p">)</span>
     <span class="n">representation</span> <span class="o">=</span> <span class="n">value</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"representation"</span><span class="p">)</span>
     <span class="k">if</span> <span class="s2">"representation"</span> <span class="ow">in</span> <span class="n">value</span> <span class="ow">and</span> <span class="p">(</span>
         <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">representation</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span>
@@ -4023,6 +4100,7 @@ None means undeclared; an empty tuple explicitly needs none.</p>
         <span class="n">_optional_text</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="s2">"units"</span><span class="p">),</span>
         <span class="n">_optional_text</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="s2">"description"</span><span class="p">),</span>
         <span class="n">measure_axes</span><span class="p">,</span>
+        <span class="n">cast</span><span class="p">(</span><span class="s1">'Literal["identity", "log"]'</span><span class="p">,</span> <span class="n">scale</span><span class="p">),</span>
     <span class="p">)</span>
 </code></pre></div></td></tr></table></div>
             </details>

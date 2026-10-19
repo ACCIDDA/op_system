@@ -867,6 +867,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../log-state-coordinates/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Log State Coordinates
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../global-state-totals/" class="md-nav__link">
         
   
@@ -1285,6 +1313,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../../api-reference/coordinates/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Coordinates
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../api-reference/gauges/" class="md-nav__link">
         
   
@@ -1609,6 +1665,16 @@ guide covers spatial and nonlocal terms.</p>
 <td>Compute named latent quantities</td>
 <td><code>CompiledRhs.observables</code>, <code>CompiledObservable</code></td>
 <td><a href="../latent-observables/">Latent observables</a>: coordinates, reductions and physical measures; observation noise belongs downstream.</td>
+</tr>
+<tr>
+<td>Integrate selected positive states in log coordinates</td>
+<td><code>CompiledRhs.coordinate_view()</code>, <code>StateCoordinateView</code></td>
+<td><a href="../log-state-coordinates/">Log state coordinates</a>; deterministic expressions and transitions with explicit encoding/decoding and domain flags.</td>
+</tr>
+<tr>
+<td>Inspect and fix shared scaling freedoms</td>
+<td><code>CompiledRhs.gauges</code>, <code>gauge_fix</code></td>
+<td><a href="../scaling-gauges/">Scaling gauges</a>; finite covariance probes and conservative homogeneity detection are not structural identifiability proofs.</td>
 </tr>
 <tr>
 <td>Inspect conditional conservation</td>
