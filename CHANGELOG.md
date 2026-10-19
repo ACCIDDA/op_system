@@ -7,6 +7,16 @@ version; format loosely follows
 
 ## [Unreleased]
 
+### Fixed
+
+- Reaction callbacks reject undeclared state dimensions with a reaction/state
+  shape diagnostic rather than expression-dependent broadcasting or a misleading
+  missing-name error. Explicit replicate axes remain supported (#306).
+- Each reaction binds only the shaped and time-varying parameters referenced by
+  its lowered, alias-expanded expression. Unrelated reactions no longer
+  interpolate time tables; interpolation policies and endpoint semantics are
+  unchanged, and no mutable parameter cache is introduced (#305).
+
 ### Added
 
 - `initial_state` accepts a literal finite number (`"C[loc,age]": 0.0`) as a

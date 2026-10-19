@@ -1482,13 +1482,8 @@ def _wrap_propensity_fn_for_time_varying(
     via a failing call before this fix: ``ValueError: cannot reshape
     array of size N into shape (...)``.
 
-    Same signature/behavior contract as :func:`_wrap_eval_fn_for_time_varying`,
-    just wrapping a :class:`ReactionPropensityFn` (``(t, y, **params) ->
-    array``) instead of an :class:`EvalFn` -- every registered
-    time-varying param present in a given call's ``params`` gets
-    interpolated down to its current-``t`` slice before delegating; a
-    reaction whose own compiled code doesn't reference a given name simply
-    never uses the (harmlessly) interpolated value.
+    The supplied plan contains only parameters referenced by this reaction's
+    lowered, alias-expanded code. Unrelated tables are never interpolated.
 
     Returns:
         ``propensity_fn`` unchanged when no time-varying parameters are
@@ -1829,12 +1824,44 @@ def _build_primary_eval_artifacts(
     return vec, plan, eval_fn, pytree_eval_fn, template_shapes
 
 
-def _make_propensity_fn(
+def _validate_propensity_shapes(
+    state: StateDict,
+    shapes: tuple[tuple[str, tuple[int, ...]], ...],
+    reaction_name: str,
+) -> None:
+    """Validate static shapes without inspecting values or transferring arrays.
+
+    Raises:
+        ValueError: A supplied state has undeclared dimensions.
+    """
+    for base, expected in shapes:
+        if base in state:
+            received = tuple(getattr(state[base], "shape", ()))
+            if received != expected:
+                msg = (
+                    f"Reaction {reaction_name!r} state {base!r} expected shape "
+                    f"{expected}, received {received}. Declare a batch axis "
+                    "in the specification for independent replicates."
+                )
+                raise ValueError(msg)
+
+
+def _reaction_buffer_plan(
+    code: CodeType,
+    recipes: tuple[tuple[str, tuple[str, ...], tuple[int, ...]], ...],
+) -> tuple[tuple[str, tuple[str, ...], tuple[int, ...]], ...]:
+    """Return only buffer recipes read by the alias-expanded compiled expression."""
+    return tuple(recipe for recipe in recipes if f"{recipe[0]}_buf" in code.co_names)
+
+
+def _make_propensity_fn(  # ruff: ignore[too-many-arguments]
     code: CodeType,
     *,
     param_recipes: tuple[tuple[str, tuple[str, ...], tuple[int, ...]], ...],
     extra_param_buffers: tuple[tuple[str, tuple[str, ...], tuple[int, ...]], ...],
     state_bases: tuple[str, ...],
+    state_shapes: tuple[tuple[str, tuple[int, ...]], ...],
+    reaction_name: str,
     broadcast_shape: tuple[int, ...] | None = None,
 ) -> ReactionPropensityFn:
     """Wrap a compiled propensity code object as a callable.
@@ -1850,6 +1877,8 @@ def _make_propensity_fn(
         extra_param_buffers: Extra shaped-parameter buffer recipes.
         state_bases: Every state base name in the spec (used only to find
             an array to detect numpy vs. jax from -- see ``xp`` below).
+        state_shapes: Declared shapes, without undeclared batch dimensions.
+        reaction_name: Reaction label used in shape diagnostics.
         broadcast_shape: For a SOURCE-ONLY reaction only (``from_base is
             None``), the resolved ``(len(coord) for axis in from_axes)``
             shape to force the result to. A normal (depleting) reaction's
@@ -1874,6 +1903,7 @@ def _make_propensity_fn(
     """
 
     def propensity_fn(t: object, y: StateDict, **params: object) -> object:
+        _validate_propensity_shapes(y, state_shapes, reaction_name)
         first_val = y[state_bases[0]] if state_bases else next(iter(params.values()))
         xp = array_namespace(first_val)
         env: dict[str, object] = {"np": xp, "t": xp.asarray(t)}
@@ -2104,9 +2134,15 @@ def _build_reaction_artifacts(  # ruff: ignore[complex-structure, too-many-local
                     _wrap_propensity_fn_for_synth_consts(
                         _make_propensity_fn(
                             code,
-                            param_recipes=param_recipes,
-                            extra_param_buffers=extra_param_buffers,
+                            param_recipes=_reaction_buffer_plan(code, param_recipes),
+                            extra_param_buffers=_reaction_buffer_plan(
+                                code, extra_param_buffers
+                            ),
                             state_bases=state_bases,
+                            state_shapes=tuple(
+                                (tpl.base, tpl.shape) for tpl in rhs.state_templates
+                            ),
+                            reaction_name=r.name,
                             broadcast_shape=(
                                 tuple(
                                     len(axis_coords[axis])
@@ -2118,7 +2154,12 @@ def _build_reaction_artifacts(  # ruff: ignore[complex-structure, too-many-local
                         ),
                         synth_consts,
                     ),
-                    time_varying_params=time_varying_params,
+                    time_varying_params=tuple(
+                        entry
+                        for entry in time_varying_params
+                        if entry[0] in code.co_names
+                        or f"{entry[0]}_buf" in code.co_names
+                    ),
                     time_axis_name=time_axis_name,
                     axes_meta=tuple(axes_meta),
                     interpolation=str(rhs.meta.get("time_interpolation", "linear")),
