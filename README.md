@@ -1,5 +1,10 @@
 # op_system
 
+Public alpha software. The compiler has released packages, executable examples
+and backend qualification tests; its specification and interfaces are still
+evolving. The alpha classifier describes software maturity, separately from
+the scientific assessment of a particular model.
+
 `op_system` specifies and compiles structured dynamical systems, including
 spatial and trait-structured PDEs, nonlocal integrals and mixing, compartmental
 flows, ODEs, and stochastic reaction networks. It validates and

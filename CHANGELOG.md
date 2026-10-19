@@ -9,6 +9,9 @@ version; format loosely follows
 
 ### Documentation
 
+- Align package summaries with spatial, nonlocal and reaction support, and state
+  the alpha development stage separately from public release availability.
+
 - Simplify introductions and feature descriptions, removing promotional phrasing
   and separating supported interfaces from numerical and scientific claims.
 
