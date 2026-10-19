@@ -1292,7 +1292,7 @@ def make_pytree_eval_fn(plan: _VectorPlan) -> PytreeEvalFn:  # ruff: ignore[comp
     Like :func:`make_vectorized_eval_fn` but the state is passed and returned
     as a ``StateDict`` — a mapping from each state-template base name to an
     N-D shaped array with that template's natural shape.  This avoids the
-    flatten/unflatten step at the ODE solver boundary and exposes the full
+    flatten/unflatten step at the numerical solver boundary and exposes the full
     tensor structure to JAX/XLA, enabling engines to exploit block-diagonal
     structure via ``jax.vmap`` over factorizable axes.
 
