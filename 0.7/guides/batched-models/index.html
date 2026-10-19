@@ -1259,6 +1259,18 @@ expects shape <code>()</code>, and an undeclared leading batch dimension raises 
 with the reaction, state name, expected shape and received shape. Declare a
 categorical replicate axis for batched reactions. Passing arrays to a scalar
 specification does not implicitly add an independent replicate dimension.</p>
+<p>For independent-clock stochastic engines, each reaction publishes
+<code>independent_axes</code>: declared factorize axes checked against that reaction's own
+propensity and coordinate mapping, before deterministic cancellation. An engine
+must also verify that all evolving state templates carry its chosen replicate
+axis and that no dynamics are omitted by reaction gaps or operators.</p>
+<p><code>resolved_propensity_fn</code> accepts current-time parameter slices in place of full
+time tables. Its <code>time_varying_params</code> lists consumed table names and full axes,
+so a consumer can select a different <code>previous</code>-table row for every replicate.
+This callback performs no interpolation or cache lookup. The ordinary
+<code>propensity_fn</code> still accepts full tables and scalar time. <code>uses_time</code> identifies
+explicit continuous-time dependence; declared table knots alone do not make such
+a propensity suitable for frozen-rate exact SSA.</p>
 <p>A categorical axis can index independent parameter draws as well as model
 groups. Normalization expands the declared state cells and resolves their
 equations and parameter coordinates; it occurs before numerical evaluation or
