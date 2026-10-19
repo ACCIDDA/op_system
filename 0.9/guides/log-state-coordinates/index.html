@@ -821,6 +821,17 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#op-engine-core-example" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        OP Engine core example
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#equation-and-domain" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1471,6 +1482,17 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#op-engine-core-example" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        OP Engine core example
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#equation-and-domain" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1538,10 +1560,10 @@ rhs = view.bind({&quot;rate&quot;: 2.0})
 np.testing.assert_allclose(rhs(0, z0), [-2.0, 2.0])
 np.testing.assert_allclose(view.observables[&quot;total&quot;].eval_fn(0, z0), 1.0)
 </code></pre>
-<p>Pass <code>rhs</code> and <code>z0</code> to a deterministic solver's ordinary RHS interface. For OP
-Engine use a deterministic core solver directly; the flepimop2 providers do not
-automatically select the coordinate view from metadata. Decode its result
-before reporting physical trajectories or applying output-state diagnostics.
+<p>The flat callback takes <code>(n_state,)</code> arrays. Adapt that layout to the solver's
+state layout explicitly. The flepimop2 providers do not automatically select the
+coordinate view from metadata. Decode results before reporting physical
+trajectories or applying output-state diagnostics.
 For an <code>(output_time, state, ...)</code> array use
 <code>view.decode_native(trajectory, state_axis=1)</code> and inspect its <code>valid</code> flag.
 Initial-state expressions and provider initialization remain in natural units;
@@ -1549,6 +1571,32 @@ encode the evaluated initial state explicitly. The view exposes shaped
 <code>pytree_eval_fn</code> and independent <code>block_pytree_eval_fn</code> when the source model
 supports them. Its PyTree encoders accept complete state dictionaries, including
 buffers with an independent block axis already stripped.</p>
+<h2 id="op-engine-core-example">OP Engine core example<a class="headerlink" href="#op-engine-core-example" title="Permanent link">&para;</a></h2>
+<p>OP Engine's <code>ModelCore</code> retains a subgroup axis, including for this single-group
+example. With OP System 0.9.0 and OP Engine 0.8.0, the following adapter connects
+the flat callback above to its deterministic <code>CoreSolver</code> interface:</p>
+<pre><code class="language-python">from op_engine import CoreSolver, ModelCore
+
+core = ModelCore(n_states=2, n_subgroups=1, time_grid=np.linspace(0.0, 1.0, 21))
+core.set_initial_state(z0[:, None])
+
+
+def engine_rhs(time, state):
+    return rhs(time, state[:, 0])[:, None]
+
+
+CoreSolver(core).run(engine_rhs)
+decoded = view.decode_native(core.state_array, state_axis=1)
+assert bool(decoded.valid)
+assert decoded.state.shape == (21, 2, 1)
+np.testing.assert_allclose(decoded.state[-1, 0, 0], np.exp(-2.0))
+</code></pre>
+<p>The callback removes the single subgroup axis before evaluating the compiled
+RHS and restores it on the derivative. This is an adapter for the example's layout;
+do not discard axes from a different model without matching its compiled
+state order and template shapes. The known exponential remaining-state value
+checks the coordinate/solver connection, not the accuracy of the collected
+state or its numerical total.</p>
 <h2 id="equation-and-domain">Equation and domain<a class="headerlink" href="#equation-and-domain" title="Permanent link">&para;</a></h2>
 <p>For a selected component, the view compiles <code>F_i(x)/x_i</code> and evaluates it at
 <code>x = exp(z)</code>. It cancels syntactically exact multiplicative factors before
