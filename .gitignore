@@ -170,3 +170,9 @@ __marimo__/
 
 # Optional example output directory convention
 examples/output/
+
+# Versioned documentation vignettes retain their checked vector exports.
+!docs/assets/compiled-transfer/figure.svg
+!docs/assets/compiled-transfer/figure.pdf
+!docs/assets/named-kernels/figure.svg
+!docs/assets/named-kernels/figure.pdf

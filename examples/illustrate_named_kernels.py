@@ -57,6 +57,10 @@ def _render(output: Path, kernel: np.ndarray, drift: np.ndarray) -> None:
     )
     axes[1].spines[["top", "right"]].set_visible(False)
     figure.savefig(output / "figure.svg", metadata={"Date": None})
+    svg = output / "figure.svg"
+    svg.write_text(
+        "\n".join(line.rstrip() for line in svg.read_text().splitlines()) + "\n"
+    )
     figure.savefig(
         output / "figure.pdf", metadata={"CreationDate": None, "ModDate": None}
     )
