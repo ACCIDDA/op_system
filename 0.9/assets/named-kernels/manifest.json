@@ -1,0 +1,17 @@
+{
+  "source_sha256": "0b660d1c9e19e7469367471c2fd9acdafa60a0d7bbf7a40f0097790f84f48de5",
+  "data_sha256": "b5f9c1c92abdcf3170dede7ae53b38a4500785f38866b661a79966c577812195",
+  "sources": [
+    "illustrate_named_kernels.py",
+    "named_kernel_products.py"
+  ],
+  "rendered_with": {
+    "numpy": "2.5.4",
+    "matplotlib": "3.11.2"
+  },
+  "exports": {
+    "figure.svg": "5d1593937dc1a4576e008dce157d768691cea5a50d683035ad9739c7f86741a3",
+    "figure.pdf": "f077df8fb44b1dc3218f08185f8e231caceb92c52ea528d182954ac6d03026e4",
+    "data.json": "b5f9c1c92abdcf3170dede7ae53b38a4500785f38866b661a79966c577812195"
+  }
+}

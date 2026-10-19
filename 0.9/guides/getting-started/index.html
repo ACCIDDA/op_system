@@ -1,0 +1,1909 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+        <link rel="canonical" href="https://accidda.github.io/op_system/0.9/guides/getting-started/">
+      
+      
+        <link rel="prev" href="../../development/citation-and-archiving/">
+      
+      
+        <link rel="next" href="../parameter-declarations/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>Getting Started - op_system Documentation</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.ec1eaa64.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    <body dir="ltr">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#writing-a-compartmental-model" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+          <aside class="md-banner md-banner--warning">
+            <div class="md-banner__inner md-grid md-typeset">
+              
+  You're not viewing the latest version.
+  <a href="../../..">
+    <strong>Click here to go to latest.</strong>
+  </a>
+
+            </div>
+            <script>var el=document.querySelector("[data-md-component=outdated]"),base=new URL("../.."),outdated=__md_get("__outdated",sessionStorage,base);!0===outdated&&el&&(el.hidden=!1)</script>
+          </aside>
+        
+      </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="op_system Documentation" class="md-header__button md-logo" aria-label="op_system Documentation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            op_system Documentation
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Getting Started
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/ACCIDDA/op_system" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    ACCIDDA/op_system
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="op_system Documentation" class="md-nav__button md-logo" aria-label="op_system Documentation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    op_system Documentation
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/ACCIDDA/op_system" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    ACCIDDA/op_system
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../capabilities/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Capabilities and example checks
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Development
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Development
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../development/contributing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Contributing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../development/coverage-audit/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Coverage Audit
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../development/code-style/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Code Style
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../development/creating-a-release/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Creating A Release
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../development/citation-and-archiving/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Citation and Archiving
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Guides
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting Started
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting Started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#a-complete-age-structured-seir-model" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A complete age-structured SEIR model
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#evaluate-the-example" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Evaluate the example
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#equations-and-expression-syntax" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Equations and expression syntax
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#axes-and-mixing-choices" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Axes and mixing choices
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#operators-and-splitting" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Operators and splitting
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cross-axis-constraints-current-boundary" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cross-axis constraints: current boundary
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../parameter-declarations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Parameter Declarations
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../state-representations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    State Representations
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reaction-balances/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Conditional Reaction Balances
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../latent-observables/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Latent Observables
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../expression-selectors/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Expression Selectors
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../named-kernel-products/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Named Kernel Products
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../scaling-gauges/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scaling Gauges
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../log-state-coordinates/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Log State Coordinates
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../global-state-totals/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Global State Totals
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../operators/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Operator Metadata
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../time-indexed-parameters/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Time-indexed Parameters
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../renewal-births/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Renewal Births
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../aging-chains/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Aging Chains
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../batched-models/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Independent Batches
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../array-namespaces/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Array Namespaces
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../backend-qualification/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Backend Qualification
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../numerical-qualification/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Numerical Qualification
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../hierarchical-benchmarks/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Hierarchical Benchmarks
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    API Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api-reference/op-system/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    OP System
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api-reference/balances/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Balances
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api-reference/compile/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Compile
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api-reference/coordinates/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Coordinates
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api-reference/gauges/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Gauges
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api-reference/observables/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Observables
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api-reference/qualification/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Qualification
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api-reference/specs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Specs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api-reference/validate/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Validate
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#a-complete-age-structured-seir-model" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A complete age-structured SEIR model
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#evaluate-the-example" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Evaluate the example
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#equations-and-expression-syntax" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Equations and expression syntax
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#axes-and-mixing-choices" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Axes and mixing choices
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#operators-and-splitting" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Operators and splitting
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cross-axis-constraints-current-boundary" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cross-axis constraints: current boundary
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+
+<h1 id="writing-a-compartmental-model">Writing a compartmental model<a class="headerlink" href="#writing-a-compartmental-model" title="Permanent link">&para;</a></h1>
+<p>This SEIR example introduces the syntax through one deterministic compartmental
+model. The same specification layer also describes spatial/trait fields,
+nonlocal kernel interactions and stochastic channels. See the
+<a href="../capabilities/#model-classes-and-numerical-representations">model-class map</a> and
+<a href="../operators/">operator contracts</a> for the corresponding interfaces and boundaries.</p>
+<p>Install the core compiler and a YAML reader:</p>
+<pre><code class="language-shell">python -m pip install op-system PyYAML
+</code></pre>
+<p>The compiler accepts a Python mapping. YAML/JSON loading is a caller concern;
+<code>compile_spec(spec)</code> validates, normalizes, and compiles it. <code>normalize_rhs(spec)</code>
+returns a normalized model without compilation, and <code>validate_spec(spec)</code>
+returns a structural report. There is no public <code>load_spec</code> file loader.</p>
+<p>Optional <a href="../parameter-declarations/">parameter declarations</a> attach support,
+units, descriptions and fixed/free status to inferred RHS parameters for
+downstream consumers, without changing numerical evaluation.</p>
+<h2 id="a-complete-age-structured-seir-model">A complete age-structured SEIR model<a class="headerlink" href="#a-complete-age-structured-seir-model" title="Permanent link">&para;</a></h2>
+<p>Save the following as <code>examples/age-seir.yaml</code> (create the <code>examples</code> directory
+first), or use the <a href="https://github.com/ACCIDDA/op_system/blob/main/examples/age-seir.yaml">checked example</a>.
+The groups are categorical population bins, so mixing uses an unweighted sum.
+Rates are per unit time. This synthetic example demonstrates authoring and
+balance checks; choose and independently qualify your scientific equations.</p>
+<!-- seir-spec -->
+
+<pre><code class="language-yaml"># Shared rate beta; susceptibility varies by target age group.
+kind: transitions
+axes:
+  - name: age
+    type: categorical
+    coords: [young, old]
+state: [&quot;S[age]&quot;, &quot;E[age]&quot;, &quot;I[age]&quot;, &quot;R[age]&quot;]
+aliases:
+  &quot;N[age]&quot;: &quot;S[age] + E[age] + I[age] + R[age]&quot;
+  &quot;foi[age]&quot;: &quot;beta * susceptibility[age] * apply_along(C[age:s,age] * I[age:s] / N[age:s], age=s, kernel=sum)&quot;
+transitions:
+  - name: infection
+    from: &quot;S[age]&quot;
+    to: &quot;E[age]&quot;
+    rate: &quot;foi[age]&quot;
+  - name: progression
+    from: &quot;E[age]&quot;
+    to: &quot;I[age]&quot;
+    rate: &quot;kappa&quot;
+  - name: recovery
+    from: &quot;I[age]&quot;
+    to: &quot;R[age]&quot;
+    rate: &quot;gamma&quot;
+# Optional provider seed metadata; runtime values are supplied separately.
+initial_state:
+  &quot;S[age]&quot;: {shaped: S0, axes: [age]}
+  &quot;E[age]&quot;: {shaped: E0, axes: [age]}
+  &quot;I[age]&quot;: {shaped: I0, axes: [age]}
+  &quot;R[age]&quot;: {shaped: R0, axes: [age]}
+</code></pre>
+<p><code>state</code> order fixes the flat layout: all young/old S cells, then E, I, and R.
+Each bracketed state carries only its listed axes. Bare states are scalar;
+there is no automatic inheritance of every declared axis. Quote selectors in
+YAML flow lists, because their brackets and commas are part of the string.</p>
+<p>An alias is an expression, not another compartment. <code>N[age]</code> is the current
+population in that age bin. <code>C[source_age, target_age]</code> has source rows and target
+columns: <code>C[age:s,age]</code> binds the first index to source <code>s</code>, keeps the second at
+the current target age, and sums the source prevalence <code>I/N</code>. Use an asymmetric
+matrix while checking orientation; a symmetric matrix can hide a transpose.</p>
+<p>A transition with <code>from</code> uses a <strong>per-capita hazard</strong>: the infection flow is
+<code>foi[age] * S[age]</code>, not just <code>foi[age]</code>. Do not multiply by the source a second
+time in its rate. <code>from</code> omitted/null creates an absolute source inflow.
+<code>to</code> must name a declared state: omitted/null sink destinations are currently
+unsupported and fail validation. Use an expression equation for an open loss,
+or track the loss in an explicit compartment. The latter retains the lost
+amount in the declared state total and exports a closed transfer reaction.
+A closed transition subtracts and adds the same flow, preserving population.</p>
+<p>These standalone alternatives both give <code>x' = -k*x</code>; the explicit loss
+compartment additionally gives <code>loss' = k*x</code>:</p>
+<!-- loss-alternatives -->
+
+<pre><code class="language-python">import numpy as np
+from op_system import compile_spec
+
+open_loss = compile_spec({
+    &quot;kind&quot;: &quot;expr&quot;,
+    &quot;state&quot;: [&quot;x&quot;],
+    &quot;equations&quot;: {&quot;x&quot;: &quot;-k*x&quot;},
+})
+tracked_loss = compile_spec({
+    &quot;kind&quot;: &quot;transitions&quot;,
+    &quot;state&quot;: [&quot;x&quot;, &quot;loss&quot;],
+    &quot;transitions&quot;: [{&quot;name&quot;: &quot;loss&quot;, &quot;from&quot;: &quot;x&quot;, &quot;to&quot;: &quot;loss&quot;, &quot;rate&quot;: &quot;k&quot;}],
+})
+open_derivative = open_loss.eval_fn(0.0, np.asarray([3.0]), k=2.0)  # [-6]
+tracked_derivative = tracked_loss.eval_fn(0.0, np.asarray([3.0, 0.0]), k=2.0)  # [-6, 6]
+</code></pre>
+<p>Expression equations do not currently export executable jump reactions; choose
+the representation required by the consuming deterministic/stochastic engine.</p>
+<p><code>initial_state</code> records provider seed parameter names and constants. It does not
+allocate or initialize core arrays. A consuming framework resolves <code>S0</code>, <code>E0</code>, <code>I0</code>,
+and <code>R0</code>; core callers supply the state themselves as below. The shaped form
+states the parameter's axis order explicitly. A scalar mapping such as <code>S: S0</code> or
+a per-cell template such as <code>"S[age]": "S0[age]"</code> is also supported.</p>
+<p>A state that starts at a known constant (typically <code>0</code> for a cumulative counter
+fed by a source-only transition) needs no seed parameter: give the key a numeric
+literal, for example <code>"C[age]": 0.0</code> or <code>D: 0</code>. The literal is broadcast to every
+cell the key selects (a pinned coordinate such as <code>"C[age=young]": 0.0</code> selects
+one), is stored as a <code>float</code> in <code>compiled.meta["initial_state"]</code>, and requests no
+provider parameter. It must be a finite real number; booleans, <code>nan</code>, and <code>inf</code>
+are rejected. There is no <code>{fixed: ...}</code>/<code>{value: ...}</code> mapping spelling, and a
+quoted <code>"0.0"</code> is still a parameter name. States omitted from <code>initial_state</code>
+are left to the consuming framework (the op_engine provider uses zero, but a
+literal records the intent explicitly).</p>
+<h2 id="evaluate-the-example">Evaluate the example<a class="headerlink" href="#evaluate-the-example" title="Permanent link">&para;</a></h2>
+<p>Run from the directory containing <code>examples/age-seir.yaml</code>. The scalar parameters
+<code>beta</code>, <code>kappa</code>, and <code>gamma</code> are shared, <code>susceptibility</code> varies over the target
+age axis, and <code>C</code> is shared as a two-axis matrix. Arrays use float64 throughout.
+<code>compiled.param_names</code> lists inputs; <code>validate_spec(spec).parameters</code> reports
+scalar and shaped parameter axes;
+<code>compiled.template_shapes</code> describes the structured layout.</p>
+<!-- seir-evaluation -->
+
+<pre><code class="language-python">from pathlib import Path
+
+import numpy as np
+import yaml
+
+from op_system import compile_spec
+
+spec = yaml.safe_load(Path(&quot;examples/age-seir.yaml&quot;).read_text())
+compiled = compile_spec(spec)
+state = {
+    &quot;S&quot;: np.asarray([900.0, 600.0]),
+    &quot;E&quot;: np.asarray([20.0, 10.0]),
+    &quot;I&quot;: np.asarray([30.0, 40.0]),
+    &quot;R&quot;: np.asarray([50.0, 50.0]),
+}
+params = {
+    &quot;beta&quot;: 0.3,
+    &quot;kappa&quot;: 0.2,
+    &quot;gamma&quot;: 0.1,
+    &quot;susceptibility&quot;: np.asarray([1.0, 0.7]),
+    &quot;C&quot;: np.asarray([[4.0, 1.0], [2.0, 3.0]]),
+}
+flat = np.concatenate([state[name] for name in (&quot;S&quot;, &quot;E&quot;, &quot;I&quot;, &quot;R&quot;)])
+flat_rhs = compiled.eval_fn(0.0, flat, **params)
+assert compiled.pytree_eval_fn is not None
+rhs = compiled.pytree_eval_fn(0.0, state, **params)
+np.testing.assert_allclose(
+    flat_rhs, np.concatenate([rhs[name] for name in (&quot;S&quot;, &quot;E&quot;, &quot;I&quot;, &quot;R&quot;)])
+)
+np.testing.assert_allclose(sum(rhs.values()), np.zeros(2), atol=1e-12)
+print(np.round(np.stack(list(rhs.values())), 3))
+</code></pre>
+<p>Expected rows are S, E, I, R, with columns young, old:</p>
+<pre><code class="language-text">[[-63.257 -25.38 ]
+ [ 59.257  23.38 ]
+ [  1.     -2.   ]
+ [  3.      4.   ]]
+</code></pre>
+<p>This evaluates a derivative. Use a numerical engine to integrate it in time.
+For scientific checks beyond structural validation, use
+<a href="../numerical-qualification/"><code>qualify_rhs</code></a> with independently written equations
+and fixtures. The guide's CI test executes these exact YAML/Python fences and
+checks cell flows and per-age conservation against an independent loop oracle.</p>
+<h2 id="equations-and-expression-syntax">Equations and expression syntax<a class="headerlink" href="#equations-and-expression-syntax" title="Permanent link">&para;</a></h2>
+<p>Use <code>kind: expr</code> with one equation for each declared state to write derivatives
+directly. The following equations are equivalent to the transitions above when
+the same axes, aliases, and state are retained and <code>transitions</code> is removed:</p>
+<!-- seir-equations -->
+
+<pre><code class="language-yaml">kind: expr
+equations:
+  &quot;S[age]&quot;: &quot;-foi[age] * S[age]&quot;
+  &quot;E[age]&quot;: &quot;foi[age] * S[age] - kappa * E[age]&quot;
+  &quot;I[age]&quot;: &quot;kappa * E[age] - gamma * I[age]&quot;
+  &quot;R[age]&quot;: &quot;gamma * I[age]&quot;
+</code></pre>
+<p>Expressions support allowlisted arithmetic, named state/parameter references,
+aliases, and documented helper calls. They are not arbitrary Python programs:
+imports, attribute traversal, and arbitrary function calls are rejected.
+Reference a templated state as <code>I[age]</code>; a bare <code>I</code> is invalid unless a scalar
+state <code>I</code> is declared. Expression bindings use <code>age:s</code> inside brackets and
+<code>age=s</code> in reducer arguments. Endpoint pinning uses <code>"S[age=young]"</code> in transition
+selectors. See <a href="../expression-selectors/">expression selectors</a>,
+<a href="../global-state-totals/">global totals</a>, and <a href="../aging-chains/">aging chains</a>.</p>
+<h2 id="axes-and-mixing-choices">Axes and mixing choices<a class="headerlink" href="#axes-and-mixing-choices" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Axis type</th>
+<th>Coordinates and reduction</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Categorical (default)</td>
+<td>Unique nonempty labels; <code>sum_over</code> / <code>apply_along(..., kernel=sum)</code> use unweighted sums</td>
+</tr>
+<tr>
+<td>Ordinal</td>
+<td>Unique labels in declared order; reductions use sums while directional operators use the order</td>
+</tr>
+<tr>
+<td>Continuous</td>
+<td>Strictly increasing numeric coordinates; <code>integrate_over</code> / default <code>apply_along</code> use trapezoidal weights, requiring at least two points except the special constant time-table axis</td>
+</tr>
+</tbody>
+</table>
+<p>Nonuniform continuous grids carry quadrature weights; interpreting population
+counts as density values changes units. <code>sum_state()</code> totals declared cells
+without quadrature. For example, <code>sum_over(I[age:a], age=a)</code> sums discrete age
+bins, while <code>integrate_over(u[x:i], x=i)</code> integrates a field over continuous <code>x</code>.
+Time is a separate forcing axis; see <a href="../time-indexed-parameters/">time-indexed parameters</a>.</p>
+<p>Add spatial/risk axes explicitly to states and use local parameters such as
+<code>beta[loc]</code>. An independent <code>loc</code> can be declared in <code>factorize_axes: [loc]</code> only
+when no RHS, alias, or operator couples locations. The compiler rejects invalid
+factorization; see <a href="../batched-models/">independent batches</a>. Full and block
+layouts are separate choices from the runtime <a href="../array-namespaces/">array namespace</a>.</p>
+<p>Core callers supply matrix <code>C</code> as a parameter. Provider users can alternatively
+declare <code>kernels</code> with an explicit <code>value</code> matrix or a supported analytic form
+and declared numeric axes; the provider constructs and injects those values.
+Core compilation preserves these declarations as metadata and does not itself
+materialize analytic kernels. See the
+<a href="https://github.com/ACCIDDA/op_system/blob/main/flepimop2-op_system/README.md">provider README</a>
+and <a href="../../development/coverage-audit/">coverage audit</a> for generation contracts.</p>
+<h2 id="operators-and-splitting">Operators and splitting<a class="headerlink" href="#operators-and-splitting" title="Permanent link">&para;</a></h2>
+<p>An <code>operators</code> block describes processes for a consuming numerical engine,
+separately from equations/transitions. For example, an ordinal immune-state axis
+can declare advection with a rate parameter and direction, while a continuous
+trait can declare conservative jumps. Compilation exposes typed descriptors in
+<code>compiled.operators</code>; <code>eval_fn</code> alone does not advance or apply these metadata
+operators. The engine must resolve coefficients, discretization, boundaries,
+and splitting stages. Follow the <a href="../operators/">operator guide</a> for supported
+schemas and conservative reference functions; do not count a process twice by
+also including it in the RHS.</p>
+<h2 id="cross-axis-constraints-current-boundary">Cross-axis constraints: current boundary<a class="headerlink" href="#cross-axis-constraints-current-boundary" title="Permanent link">&para;</a></h2>
+<p><code>constraints</code> is currently a reserved metadata block. Public normalization
+preserves it verbatim; the private constraint parser's validation does not
+provide public masking. State expansion and reductions still cover the full
+Cartesian product. Filtering and constraint-aware reductions are tracked in
+<a href="https://github.com/ACCIDDA/op_system/issues/37">#37</a> and
+<a href="https://github.com/ACCIDDA/op_system/issues/38">#38</a>.</p>
+<p>The planned schema uses at least two axes and either <code>allow</code> or <code>exclude</code>:</p>
+<pre><code class="language-yaml"># Planned masking metadata; this does not remove current compartments.
+constraints:
+  - axes: [age, vax]
+    allow:
+      - {age: young, vax: [none]}
+      - {age: old}
+</code></pre>
+<p>An allow rule would retain its matching combinations; an omitted axis in a
+rule would match all its coordinates. An exclude rule would remove matches.
+Until filtering is implemented, represent asymmetric populations explicitly,
+for example <code>state: ["S_young", "S_old[vax]"]</code>, with equations/transitions for
+those states and independently checked totals. Do not rely on this reserved
+block to prevent invalid flows or omit state cells. Broader constraint examples
+remain tracked in <a href="https://github.com/ACCIDDA/op_system/issues/39">#39</a>.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": [], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"provider": "mike"}}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+    
+  </body>
+</html>
