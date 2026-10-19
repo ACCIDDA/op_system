@@ -29,6 +29,8 @@ guide covers spatial and nonlocal terms.
 | Export stochastic channels | `CompiledRhs.reactions`, `reaction_gaps`, `CompiledReaction` | Named transitions, reactants/dependencies and declared state shapes; a stochastic consumer must reject omitted dynamics. |
 | Resolve forcing once | `resolved_propensity_fn`, `time_varying_params`, `uses_time`, `independent_axes` | [Time tables](time-indexed-parameters.md) and [batches](batched-models.md); the consumer supplies correctly sliced parameters. |
 | Compute named latent quantities | `CompiledRhs.observables`, `CompiledObservable` | [Latent observables](latent-observables.md): coordinates, reductions and physical measures; observation noise belongs downstream. |
+| Integrate selected positive states in log coordinates | `CompiledRhs.coordinate_view()`, `StateCoordinateView` | [Log state coordinates](log-state-coordinates.md); deterministic expressions and transitions with explicit encoding/decoding and domain flags. |
+| Inspect and fix shared scaling freedoms | `CompiledRhs.gauges`, `gauge_fix` | [Scaling gauges](scaling-gauges.md); finite covariance probes and conservative homogeneity detection are not structural identifiability proofs. |
 | Inspect conditional conservation | `reaction_balances` | [Reaction balances](reaction-balances.md); respect reported gaps, parameter/sign assumptions and representation. |
 | Check independently specified equations | `qualify_rhs`, `QualificationFixture`, `QualificationConfig` | [Numerical qualification](numerical-qualification.md); parity and invariant evidence is limited to the supplied fixtures. |
 | Supply spatial/operator metadata | `OperatorDescriptor`, axis measures, kernels | [Operators](operators.md); discretization and solving belong to a numerical engine. |

@@ -99,12 +99,15 @@ class StateDeclaration(NamedTuple):
         description: Human-readable annotation.
         measure_axes: Axes whose measures are required for an intensive integral.
             None means undeclared; an empty tuple explicitly needs none.
+        scale: Requested identity/log coordinate for an explicit coordinate_view.
+            Primary compiled equations and reactions retain natural coordinates.
     """
 
     representation: _Representation | None = None
     units: str | None = None
     description: str | None = None
     measure_axes: tuple[str, ...] | None = None
+    scale: Literal["identity", "log"] = "identity"
 
     @classmethod
     def from_mapping(cls, value: object) -> StateDeclaration:
@@ -124,10 +127,14 @@ class StateDeclaration(NamedTuple):
             "units",
             "description",
             "measure_axes",
+            "scale",
         }:
             raise InvalidRhsSpecError(
                 detail="state metadata contains unknown fields or is not a mapping"
             )
+        scale = value.get("scale", "identity")
+        if not isinstance(scale, str) or scale not in {"identity", "log"}:
+            raise InvalidRhsSpecError(detail="state scale must be identity or log")
         representation = value.get("representation")
         if "representation" in value and (
             not isinstance(representation, str)
@@ -161,6 +168,7 @@ class StateDeclaration(NamedTuple):
             _optional_text(value, "units"),
             _optional_text(value, "description"),
             measure_axes,
+            cast('Literal["identity", "log"]', scale),
         )
 
 

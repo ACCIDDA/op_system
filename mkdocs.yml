@@ -62,6 +62,7 @@ nav:
       - Expression Selectors: guides/expression-selectors.md
       - Named Kernel Products: guides/named-kernel-products.md
       - Scaling Gauges: guides/scaling-gauges.md
+      - Log State Coordinates: guides/log-state-coordinates.md
       - Global State Totals: guides/global-state-totals.md
       - Operator Metadata: guides/operators.md
       - Time-indexed Parameters: guides/time-indexed-parameters.md
@@ -76,6 +77,7 @@ nav:
       - OP System: api-reference/op-system.md
       - Balances: api-reference/balances.md
       - Compile: api-reference/compile.md
+      - Coordinates: api-reference/coordinates.md
       - Gauges: api-reference/gauges.md
       - Observables: api-reference/observables.md
       - Qualification: api-reference/qualification.md

@@ -52,6 +52,7 @@ def main() -> int:
                 "tests/op_system/test_replicate_contract.py",
                 "tests/op_system/test_named_kernel_products.py",
                 "tests/op_system/test_gauges.py",
+                "tests/op_system/test_state_coordinates.py",
                 "-k",
                 args.backend,
                 "-q",

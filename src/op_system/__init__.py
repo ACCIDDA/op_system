@@ -67,6 +67,7 @@ from .compile import (
     StateDict,
     compile_rhs,
 )
+from .coordinates import CoordinateResult, StateCoordinateView
 from .gauges import (
     GaugeCoordinates,
     GaugeFixMap,
@@ -204,6 +205,7 @@ __all__ = [
     "CompiledReactant",
     "CompiledReaction",
     "CompiledRhs",
+    "CoordinateResult",
     "EvalFn",
     "ExprRhs",
     "ExpressionString",
@@ -233,6 +235,7 @@ __all__ = [
     "ReactionPropensityFn",
     "ScalingGauge",
     "ShapeGroup",
+    "StateCoordinateView",
     "StateDeclaration",
     "StateDict",
     "StateString",
