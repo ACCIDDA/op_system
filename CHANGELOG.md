@@ -9,6 +9,17 @@ version; format loosely follows
 
 ### Added
 
+- Declare shared positive scaling gauges; report seeded finite covariance/output
+  checks, optional rational homogeneity detection, ranks and parameter invariant
+  monomials. Scalar anchor maps bind parameters across evaluators, record native
+  domain flags and retained group coordinates, and survive pickling. CLI summaries
+  distinguish the reported action from structural identifiability. Preset initial
+  states and unsupported operator/history/table contracts are rejected during
+  fixing/analysis as documented; gauge-fixed stochastic exports fail closed
+  until a jump-process scaling contract exists (#313).
+
+### Added
+
 - Lower single-axis unweighted, unfiltered rectangular kernel products to
   native matrix-vector operations, including vector products and named-axis
   transposes. Add a two-axis example, independent NumPy/JAX/CPU Torch checks,

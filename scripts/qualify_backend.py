@@ -51,6 +51,7 @@ def main() -> int:
                 "tests/op_system/test_reaction_callbacks.py",
                 "tests/op_system/test_replicate_contract.py",
                 "tests/op_system/test_named_kernel_products.py",
+                "tests/op_system/test_gauges.py",
                 "-k",
                 args.backend,
                 "-q",

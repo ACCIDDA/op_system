@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import warnings
 from importlib.metadata import version
-from typing import Final, Literal
+from typing import TYPE_CHECKING, Final, Literal
 
 from op_system._array import array_namespace
 from op_system._axis_kernel import (
@@ -67,6 +67,14 @@ from .compile import (
     StateDict,
     compile_rhs,
 )
+from .gauges import (
+    GaugeCoordinates,
+    GaugeFixMap,
+    GaugeInfo,
+    GaugeVerification,
+    InvariantCoordinate,
+    ScalingGauge,
+)
 from .observables import CompiledObservable, ObservableEvalFn, ObservablePytreeEvalFn
 from .qualification import (
     InvariantCheck,
@@ -92,6 +100,9 @@ from .specs import (
     normalize_transitions_rhs,
 )
 
+if TYPE_CHECKING:
+    from collections.abc import Mapping
+
 # -----------------------------------------------------------------------------
 # Versioning & capability metadata
 # -----------------------------------------------------------------------------
@@ -114,6 +125,8 @@ def compile_spec(  # ruff: ignore[non-empty-init-module]
     *,
     xp: object | None = None,
     backend: Literal["numpy", "jax"] = DEFAULT_ARRAY_BACKEND,
+    detect_gauges: bool = False,
+    gauge_fix: Mapping[str, float] | None = None,
 ) -> CompiledRhs:
     """
     Validate, normalize, and compile a RHS specification in one call.
@@ -130,6 +143,8 @@ def compile_spec(  # ruff: ignore[non-empty-init-module]
 
     Args:
         spec: Raw RHS specification mapping (YAML/JSON friendly).
+        detect_gauges: Opt in to conservative structural scaling detection.
+        gauge_fix: Positive scalar anchors for the reported scaling action.
         xp: **Deprecated.** Formerly the compile-time array namespace.
             Now ignored — see ``compile_rhs`` for details.
             Will be removed in a future release.
@@ -164,7 +179,7 @@ def compile_spec(  # ruff: ignore[non-empty-init-module]
         )
 
     rhs = normalize_rhs(spec)
-    return compile_rhs(rhs)
+    return compile_rhs(rhs, detect_gauges=detect_gauges, gauge_fix=gauge_fix)
 
 
 # -----------------------------------------------------------------------------
@@ -192,8 +207,13 @@ __all__ = [
     "EvalFn",
     "ExprRhs",
     "ExpressionString",
+    "GaugeCoordinates",
+    "GaugeFixMap",
+    "GaugeInfo",
+    "GaugeVerification",
     "IdentifierString",
     "InvariantCheck",
+    "InvariantCoordinate",
     "NormalizedRhs",
     "ObservableDefinition",
     "ObservableEvalFn",
@@ -211,6 +231,7 @@ __all__ = [
     "ReactionBalanceSource",
     "ReactionGap",
     "ReactionPropensityFn",
+    "ScalingGauge",
     "ShapeGroup",
     "StateDeclaration",
     "StateDict",

@@ -38,6 +38,7 @@ if TYPE_CHECKING:
 
 from op_system._axes import _normalize_axes, _normalize_bracket_key
 from op_system._errors import InvalidRhsSpecError, UnsupportedFeatureError
+from op_system._gauge_declarations import _normalize_gauges
 from op_system._helpers import (
     _ensure_mapping,
     _ensure_str_dict,
@@ -240,6 +241,13 @@ def _finish_observables(rhs: _RhsT, spec: Mapping[str, Any]) -> _RhsT:
     )
     if observables:
         metadata["op_system_observables_ir"] = observables
+    gauges = _normalize_gauges(
+        spec.get("gauges"),
+        states={t.base for t in rhs.state_templates},
+        parameters=known_names - set(metadata.get("op_system_synth_constants", {})),
+    )
+    if gauges:
+        metadata["op_system_gauge_declarations"] = gauges
     return replace(rhs, meta=metadata)
 
 

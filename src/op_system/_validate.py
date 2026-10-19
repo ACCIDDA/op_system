@@ -20,6 +20,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 from op_system._errors import UnsupportedFeatureError
+from op_system._gauge_analysis import _gauge_summary
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -51,6 +52,8 @@ class ValidationReport:
         parameters: Parameters the spec consumes, mapped to their declared
             axes (empty tuple for scalars); operator parameters use
             ``kernel.param_axes`` when declared.
+        gauges: Optional reported scaling counts and finite-probe scope.
+            Does not establish identifiable dimensions.
         shape_groups: When vectorization fails, the templates whose cells
             have more than one expression shape, with each distinct shape's
             count and an example cell. Empty otherwise, because comparing
@@ -62,6 +65,8 @@ class ValidationReport:
     cost: dict[str, int] = field(default_factory=dict)
     parameters: dict[str, tuple[str, ...]] = field(default_factory=dict)
     shape_groups: dict[str, list[ShapeGroup]] = field(default_factory=dict)
+
+    gauges: dict[str, object] | None = None
 
     @property
     def ok(self) -> bool:
@@ -176,11 +181,18 @@ def _parameters(rhs: NormalizedRhs) -> dict[str, tuple[str, ...]]:
     return {k: v for k, v in parameters.items() if not k.startswith("__op_system_")}
 
 
-def validate_spec(spec: Mapping[str, Any]) -> ValidationReport:
+def validate_spec(
+    spec: Mapping[str, Any],
+    *,
+    detect_gauges: bool = False,
+    gauge_fix: Mapping[str, float] | None = None,
+) -> ValidationReport:
     """Validate an op_system specification without raising.
 
     Args:
         spec: A raw RHS specification mapping.
+        detect_gauges: Opt in to conservative structural scaling detection.
+        gauge_fix: Optional positive scalar anchors for the reported action.
 
     Returns:
         A report with per-stage status, error messages, compile-cost drivers,
@@ -203,7 +215,7 @@ def validate_spec(spec: Mapping[str, Any]) -> ValidationReport:
         "parameters": _parameters(rhs),
     }
     try:
-        compile_rhs(rhs)
+        compiled = compile_rhs(rhs, detect_gauges=detect_gauges, gauge_fix=gauge_fix)
     except UnsupportedFeatureError as exc:
         vectorize = "vectorized eval path" in str(exc)
         stages["compile"] = "passed" if vectorize else "failed"
@@ -216,4 +228,8 @@ def validate_spec(spec: Mapping[str, Any]) -> ValidationReport:
         return ValidationReport(stages=stages, errors=[str(exc)], **report_kwargs)
     stages["compile"] = "passed"
     stages["vectorize"] = "passed"
+    report_kwargs["gauges"] = _gauge_summary(compiled)
+    if compiled.gauge_fix is not None:
+        for name, _ in compiled.gauge_fix.fixed_values:
+            report_kwargs["parameters"].pop(name, None)
     return ValidationReport(stages=stages, **report_kwargs)

@@ -54,6 +54,12 @@ def _describe(label: str, report: ValidationReport) -> list[str]:
         "     cost: "
         + ", ".join(f"{key}={value}" for key, value in report.cost.items())
     )
+    if report.gauges is not None:
+        lines.append(
+            f"     scaling: rank={report.gauges['rank']}, "
+            f"free={report.gauges['free_reported_scaling_directions']}; "
+            "identifiability not assessed"
+        )
     lines.extend(f"     error: {error}" for error in report.errors)
     for template, groups in report.shape_groups.items():
         lines.append(f"     template {template!r} has {len(groups)} expression shapes:")
@@ -65,6 +71,27 @@ def _describe(label: str, report: ValidationReport) -> list[str]:
     return lines
 
 
+def _anchor_argument(value: str) -> tuple[str, float]:
+    """Parse one CLI anchor with an argparse-compatible error.
+
+    Returns:
+        Parameter name and floating scalar target.
+
+    Raises:
+        argparse.ArgumentTypeError: If NAME=VALUE is malformed.
+    """
+    name, separator, raw = value.partition("=")
+    if not name or not separator:
+        msg = "Use NAME=VALUE for a scalar anchor"
+        raise argparse.ArgumentTypeError(msg)
+    try:
+        number = float(raw)
+    except ValueError as exc:
+        msg = "Anchor VALUE must be a number"
+        raise argparse.ArgumentTypeError(msg) from exc
+    return name, number
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """Validate every op_system spec in the given files.
 
@@ -74,9 +101,34 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("paths", nargs="+", type=Path)
     parser.add_argument("--json", action="store_true")
+    parser.add_argument(
+        "--detect-gauges",
+        action="store_true",
+        help="Detect supported shared positive scaling actions",
+    )
+    parser.add_argument(
+        "--gauge-fix",
+        action="append",
+        type=_anchor_argument,
+        default=[],
+        metavar="NAME=VALUE",
+        help="Pin an independent scalar scaling anchor; repeat for each generator",
+    )
     args = parser.parse_args(argv)
+    anchors: dict[str, float] = {}
+    for name, value in args.gauge_fix:
+        if name in anchors:
+            parser.error("--gauge-fix needs unique scalar anchors")
+        anchors[name] = value
     results = [
-        (label, validate_spec(spec))
+        (
+            label,
+            validate_spec(
+                spec,
+                detect_gauges=args.detect_gauges,
+                gauge_fix=anchors if args.gauge_fix else None,
+            ),
+        )
         for path in args.paths
         for label, spec in specs_from_file(path)
     ]
