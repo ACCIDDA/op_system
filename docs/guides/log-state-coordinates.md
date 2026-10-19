@@ -1,8 +1,8 @@
 # Log state coordinates
 
-This feature is available from the development source checkout and is not part
-of OP System 0.8.0. It applies to deterministic expression and transition RHS
-evaluation, including supported named fields and nonlocal expression reductions.
+Available in OP System 0.9.0. This feature applies to deterministic expression
+and transition RHS evaluation, including supported named fields and nonlocal
+expression reductions.
 
 Declare `state_metadata: {x: {scale: log}}` to request `z = log(x)` for every
 expanded component of state base `x`. Other states use identity coordinates.

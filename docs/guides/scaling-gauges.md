@@ -1,6 +1,7 @@
 # Scaling gauges
 
-This feature is unreleased; examples require a source checkout.
+Available in OP System 0.9.0. The complete example file is included in the
+source checkout.
 
 A positive scaling action can change state/parameter units while leaving the
 model's observed outputs unchanged. Declare it next to the equations, verify
@@ -8,8 +9,8 @@ it at compilation, and optionally bind scalar parameters to select one
 representative. This analysis concerns deterministic equations and outputs;
 it does not establish structural identifiability.
 
-```python
---8 < --"examples/scaling_gauges.py"
+```{.python}
+--8<-- "examples/scaling_gauges.py"
 ```
 
 For this example, replacing `x` and `K` by `s*x` and `s*K`, with `s > 0`,
