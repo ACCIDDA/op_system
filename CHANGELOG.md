@@ -7,6 +7,12 @@ version; format loosely follows
 
 ## [Unreleased]
 
+### Documentation
+
+- Show an executable flat-state/subgroup-axis adapter connecting the log-state
+  view to OP Engine's deterministic core interface. Keep callback layout and
+  decoded output-axis requirements explicit; runtime APIs are unchanged (#314).
+
 ## [0.9.0] - 2026-10-19
 
 ### Added
