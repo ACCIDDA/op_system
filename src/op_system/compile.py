@@ -40,7 +40,11 @@ import numpy as np
 from numpy.typing import NDArray
 
 from op_system._array import array_namespace
-from op_system._block_axes import BlockAxisInfo, analyze_block_axes
+from op_system._block_axes import (
+    BlockAxisInfo,
+    _check_expr_separable,
+    analyze_block_axes,
+)
 from op_system._errors import InvalidExpressionError, UnsupportedFeatureError
 from op_system._ir import (
     Expr,
@@ -66,7 +70,7 @@ if TYPE_CHECKING:
     from types import CodeType
 
     from op_system._parameter_meta import ParameterDeclaration
-    from op_system._reactions import ReactionReactantIR
+    from op_system._reactions import ReactionArtifactIR, ReactionReactantIR
     from op_system._scientific_meta import AxisDeclaration, StateDeclaration
 
     from .specs import NormalizedRhs
@@ -408,6 +412,17 @@ class CompiledReaction:
     #: reactions, so a consumer that only understands reactants refuses
     #: adaptive tau-leaping rather than misreading them.
     dependencies_complete: bool = False
+    #: Callback for engines that already resolved time tables. It retains the
+    #: declared state/parameter shapes and synthesized constants; table grids
+    #: must be replaced with their current-time slices before calling it.
+    resolved_propensity_fn: ReactionPropensityFn | None = None
+    #: Time-table names and their full axis order, limited to this reaction.
+    time_varying_params: tuple[tuple[str, tuple[str, ...]], ...] = ()
+    #: Declared factorize axes verified on this reaction's own propensity and
+    #: source/destination mapping, independently of deterministic cancellations.
+    independent_axes: tuple[str, ...] = ()
+    #: True if the alias-expanded propensity explicitly reads continuous time.
+    uses_time: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -1965,7 +1980,39 @@ class _ReactionArtifacts(NamedTuple):
     gaps: tuple[ReactionGap, ...]
 
 
-def _build_reaction_artifacts(  # ruff: ignore[complex-structure, too-many-locals]
+def _reaction_independent_axes(
+    reaction: ReactionArtifactIR, candidates: tuple[str, ...]
+) -> tuple[str, ...]:
+    """Prove each declared batch axis for a single reaction before cancellation.
+
+    Returns:
+        Axes preserving local state reads and source/destination coordinates.
+    """
+    result = []
+    for axis in candidates:
+        if (
+            axis not in reaction.from_axes
+            or axis not in reaction.to_axes
+            or axis
+            in {
+                *reaction.routed_axes,
+                *dict(reaction.offsets),
+                *dict(reaction.pinned),
+                *dict(reaction.from_pinned),
+            }
+        ):
+            continue
+        try:
+            _check_expr_separable(
+                reaction.propensity_ir_reduce, axis, label=reaction.name
+            )
+        except UnsupportedFeatureError:
+            continue
+        result.append(axis)
+    return tuple(result)
+
+
+def _build_reaction_artifacts(  # ruff: ignore[complex-structure, too-many-locals, too-many-statements]
     *,
     rhs: NormalizedRhs,
     plan: Any,  # ruff: ignore[any-type]
@@ -2107,6 +2154,26 @@ def _build_reaction_artifacts(  # ruff: ignore[complex-structure, too-many-local
             gaps.append(reaction_gap_for(r, "compile_failed"))
             continue
 
+        resolved_fn = _wrap_propensity_fn_for_synth_consts(
+            _make_propensity_fn(
+                code,
+                param_recipes=_reaction_buffer_plan(code, param_recipes),
+                extra_param_buffers=_reaction_buffer_plan(code, extra_param_buffers),
+                state_bases=state_bases,
+                state_shapes=tuple(
+                    (tpl.base, tpl.shape) for tpl in rhs.state_templates
+                ),
+                reaction_name=r.name,
+                broadcast_shape=(
+                    tuple(
+                        len(axis_coords[axis]) for axis in r.from_axes + r.routed_axes
+                    )
+                    if r.from_base is None or r.routed_axes
+                    else None
+                ),
+            ),
+            synth_consts,
+        )
         out.append(
             CompiledReaction(
                 name=r.name,
@@ -2130,30 +2197,18 @@ def _build_reaction_artifacts(  # ruff: ignore[complex-structure, too-many-local
                 dependencies=dependencies,
                 propensity_order=r.propensity_order,
                 dependencies_complete=r.dependencies_complete,
+                resolved_propensity_fn=resolved_fn,
+                time_varying_params=tuple(
+                    entry
+                    for entry in time_varying_params
+                    if entry[0] in code.co_names or f"{entry[0]}_buf" in code.co_names
+                ),
+                independent_axes=_reaction_independent_axes(
+                    r, tuple(rhs.meta.get("factorize_axes") or ())
+                ),
+                uses_time="t" in code.co_names,
                 propensity_fn=_wrap_propensity_fn_for_time_varying(
-                    _wrap_propensity_fn_for_synth_consts(
-                        _make_propensity_fn(
-                            code,
-                            param_recipes=_reaction_buffer_plan(code, param_recipes),
-                            extra_param_buffers=_reaction_buffer_plan(
-                                code, extra_param_buffers
-                            ),
-                            state_bases=state_bases,
-                            state_shapes=tuple(
-                                (tpl.base, tpl.shape) for tpl in rhs.state_templates
-                            ),
-                            reaction_name=r.name,
-                            broadcast_shape=(
-                                tuple(
-                                    len(axis_coords[axis])
-                                    for axis in r.from_axes + r.routed_axes
-                                )
-                                if r.from_base is None or r.routed_axes
-                                else None
-                            ),
-                        ),
-                        synth_consts,
-                    ),
+                    resolved_fn,
                     time_varying_params=tuple(
                         entry
                         for entry in time_varying_params
