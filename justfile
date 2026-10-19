@@ -228,6 +228,7 @@ docs: api-reference figures-check
 # Verify generated vignette inputs and export identity; no plotting dependency.
 figures-check:
 	{{run}} python examples/illustrate_reactions.py --check
+	{{run}} python examples/illustrate_named_kernels.py --check
 
 # Serve the documentation locally using `mkdocs`
 [group('docs')]

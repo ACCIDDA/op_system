@@ -17,10 +17,9 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 if TYPE_CHECKING:
-    from types import CodeType
-
     import pytest
 
+    from op_system._vectorize import _CompiledExpression
     from op_system.specs import NormalizedRhs
 
 from op_system._ir import Subscript, Sym, walk
@@ -120,11 +119,11 @@ def test_sum_pattern_recognized_for_alias_over_full_template() -> None:
     assert "I_total" in alias_codes
     code = alias_codes["I_total"]
     # After collapse, the only buffer name referenced is ``I_buf``.
-    assert "I_buf" in code.co_names
+    assert "I_buf" in code.code.co_names
     # Bytecode should be very small after collapse (compared to the dozens
     # of indexed loads the un-collapsed version would emit).
-    assert len(code.co_code) < 50, (
-        f"alias bytecode unexpectedly large: {len(code.co_code)}"
+    assert len(code.code.co_code) < 50, (
+        f"alias bytecode unexpectedly large: {len(code.code.co_code)}"
     )
 
 
@@ -137,7 +136,7 @@ def test_vectorizer_uses_aliases_ir_for_alias_code() -> None:
     assert plan is not None
     alias_codes = {base: code for base, code, _shape in plan.alias_codes}
     assert "I_total" in alias_codes
-    assert "I_buf" in alias_codes["I_total"].co_names
+    assert "I_buf" in alias_codes["I_total"].code.co_names
 
 
 def test_vectorizer_uses_equations_ir_for_alias_free_equations() -> None:
@@ -479,22 +478,22 @@ def test_weighted_apply_along_collapses_to_fused_reduction() -> None:
     alias_codes = {base: code for base, code, _shape in plan.alias_codes}
     assert "S_total" in alias_codes
     code = alias_codes["S_total"]
-    assert "S_buf" in code.co_names
+    assert "S_buf" in code.code.co_names
     # Structural assertions: post-collapse the alias must reference its
     # buffer at most once and reference native weight construction and ``sum`` (a
     # single fused multiply-reduce). The un-collapsed form would reference
     # ``S_buf`` once per cell and never construct a weight vector or call ``sum``.
     s_buf_loads = sum(
         1
-        for instr in dis.get_instructions(code)
+        for instr in dis.get_instructions(code.code)
         if instr.opname.startswith("LOAD_") and instr.argval == "S_buf"
     )
     assert s_buf_loads == 1, (
         f"expected a single fused S_buf load after collapse, got {s_buf_loads}"
     )
     # Runtime construction binds the floating state precision and device.
-    assert "_op_system_weights" in code.co_names
-    assert "sum" in code.co_names
+    assert "_op_system_weights" in code.code.co_names
+    assert "sum" in code.code.co_names
 
     # The collapser must emit at least one numeric weight constant. Python
     # may fold a list of numeric literals into a tuple constant, so search
@@ -506,7 +505,7 @@ def test_weighted_apply_along_collapses_to_fused_reduction() -> None:
             return any(_has_float(x) for x in obj)
         return False
 
-    assert any(_has_float(c) for c in code.co_consts)
+    assert any(_has_float(c) for c in code.code.co_consts)
 
 
 def test_weighted_apply_along_eval_matches_scalar() -> None:
@@ -580,24 +579,24 @@ def test_uniform_weight_chain_collapses_without_inlined_array() -> None:
     code = alias_codes["S_scaled"]
     s_buf_loads = sum(
         1
-        for instr in dis.get_instructions(code)
+        for instr in dis.get_instructions(code.code)
         if instr.opname.startswith("LOAD_") and instr.argval == "S_buf"
     )
     assert s_buf_loads == 1, (
         f"expected a single fused S_buf load after collapse, got {s_buf_loads}"
     )
-    assert "sum" in code.co_names, (
+    assert "sum" in code.code.co_names, (
         "uniform-weight chain should collapse to a single np.sum call"
     )
-    assert "asarray" not in code.co_names, (
+    assert "asarray" not in code.code.co_names, (
         "uniform-weight chain must NOT emit an inlined np.asarray weight "
         "array (regression of op_system#103); expected c * np.sum(buf) form"
     )
     # The constant factor 0.25 must survive somewhere in co_consts.
     assert any(
         isinstance(c, float) and c == 0.25  # ruff: ignore[float-equality-comparison]
-        for c in code.co_consts
-    ), f"expected 0.25 constant in co_consts, got {code.co_consts}"
+        for c in code.code.co_consts
+    ), f"expected 0.25 constant in co_consts, got {code.code.co_consts}"
 
 
 def test_uniform_weight_chain_eval_matches_scalar() -> None:
@@ -670,7 +669,7 @@ def test_long_add_chain_does_not_raise_recursionerror() -> None:
     # Must still collapse to the fused np.sum(buf) form, not unroll 2500 loads.
     s_buf_loads = sum(
         1
-        for instr in dis.get_instructions(code)
+        for instr in dis.get_instructions(code.code)
         if instr.opname.startswith("LOAD_") and instr.argval == "S_buf"
     )
     assert s_buf_loads == 1, (
@@ -698,7 +697,7 @@ def test_ir_fast_path_emits_no_per_cell_names_on_clean_templated_spec() -> None:
     assert plan is not None
     for grp in plan.eq_groups:
         for code in grp.codes:
-            for name in code.co_names:
+            for name in code.code.co_names:
                 assert "__" not in name, (
                     f"per-cell name {name!r} leaked into vectorized "
                     f"code for template {grp.base!r}"
@@ -730,7 +729,7 @@ def test_template_level_cse_extracts_shared_subexpressions() -> None:
     )
     # CSE binding codes must reference only buffer/param names, not per-cell names.
     for name, code in plan.cse_codes:
-        for cn in code.co_names:
+        for cn in code.code.co_names:
             assert "__" not in cn, (
                 f"per-cell name {cn!r} leaked into CSE binding {name!r}"
             )
@@ -777,13 +776,13 @@ def test_reduce_ir_fast_path_emits_np_sum_for_apply_along() -> None:
     assert plan is not None
 
     # Collect all code objects: CSE bindings + equation codes.
-    all_codes: list[CodeType] = [c for _, c in plan.cse_codes]
+    all_codes: list[_CompiledExpression] = [c for _, c in plan.cse_codes]
     for grp in plan.eq_groups:
         all_codes.extend(grp.codes)
 
     all_names: set[str] = set()
     for code in all_codes:
-        all_names.update(code.co_names)
+        all_names.update(code.code.co_names)
 
     # No per-cell name leakage from string expansion in any code.
     assert not any("__" in n for n in all_names), (
@@ -802,7 +801,7 @@ def test_reduce_ir_fast_path_emits_np_sum_for_apply_along() -> None:
     for code in all_codes:
         loads = sum(
             1
-            for instr in dis.get_instructions(code)
+            for instr in dis.get_instructions(code.code)
             if instr.opname.startswith("LOAD_") and instr.argval == "I_buf"
         )
         assert loads <= 1, (
@@ -864,7 +863,7 @@ def test_same_axis_twice_apply_along_ir_fast_path() -> None:
     assert plan is not None
     s_group = next(g for g in plan.eq_groups if g.base == "S")
     code = s_group.codes[0]
-    names = set(code.co_names)
+    names = set(code.code.co_names)
     assert not any("__" in n for n in names), (
         f"per-cell names leaked into reduce-lowered code: "
         f"{sorted(n for n in names if '__' in n)}"
@@ -930,7 +929,7 @@ def test_same_axis_twice_bare_label_ir_fast_path() -> None:
     )
     s_group = next(g for g in plan.eq_groups if g.base == "S")
     code = s_group.codes[0]
-    names = set(code.co_names)
+    names = set(code.code.co_names)
     assert not any("__" in n for n in names), (
         f"per-cell names leaked into reduce-lowered code: "
         f"{sorted(n for n in names if '__' in n)}"
@@ -1022,12 +1021,12 @@ def test_low_rank_bare_label_ir_fast_path() -> None:
         f"vectorizer fell back to scalar path; bail reason: "
         f"{last_vector_plan_bail_reason()}"
     )
-    all_codes: list[CodeType] = [c for _, c in plan.cse_codes]
+    all_codes: list[_CompiledExpression] = [c for _, c in plan.cse_codes]
     for grp in plan.eq_groups:
         all_codes.extend(grp.codes)
     all_names: set[str] = set()
     for code in all_codes:
-        all_names.update(code.co_names)
+        all_names.update(code.code.co_names)
     assert not any("__" in n for n in all_names), (
         f"per-cell names leaked into vectorized code: "
         f"{sorted(n for n in all_names if '__' in n)}"
