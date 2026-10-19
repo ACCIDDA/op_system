@@ -7,6 +7,8 @@ version; format loosely follows
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-10-19
+
 ### Added
 
 - Reactions expose `resolved_propensity_fn` for consumers that have explicitly
@@ -17,17 +19,6 @@ version; format loosely follows
   The provider merges mixing kernels into both callbacks. Ordinary callbacks
   retain their scalar-time interpolation contract (op_engine #241).
 
-### Fixed
-
-- Reaction callbacks reject undeclared state dimensions with a reaction/state
-  shape diagnostic rather than expression-dependent broadcasting or a misleading
-  missing-name error. Explicit replicate axes remain supported (#306).
-- Each reaction binds only the shaped and time-varying parameters referenced by
-  its lowered, alias-expanded expression. Unrelated reactions no longer
-  interpolate time tables; interpolation policies and endpoint semantics are
-  unchanged, and no mutable parameter cache is introduced (#305).
-
-### Added
 
 - `initial_state` accepts a literal finite number (`"C[loc,age]": 0.0`) as a
   constant initial value broadcast over the selected cells, so cumulative
@@ -122,6 +113,15 @@ version; format loosely follows
   capability guide; optional runtime extras remain optional (#263).
 
 ### Fixed
+
+- Reaction callbacks reject undeclared state dimensions with a reaction/state
+  shape diagnostic rather than expression-dependent broadcasting or a misleading
+  missing-name error. Explicit replicate axes remain supported (#306).
+- Each reaction binds only the shaped and time-varying parameters referenced by
+  its lowered, alias-expanded expression. Unrelated reactions no longer
+  interpolate time tables; interpolation policies and endpoint semantics are
+  unchanged, and no mutable parameter cache is introduced (#305).
+
 
 - The authoring guide now states that omitted/null transition destinations are
   unsupported. Executed examples qualify open-loss expression equations and
