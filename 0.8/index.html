@@ -1414,8 +1414,8 @@
 trait-structured PDEs, nonlocal integral/mixing dynamics, compartmental flows,
 ODEs and stochastic reaction networks. It compiles shaped-state evaluators
 and publishes operator, reaction and observable contracts. Numerical consumers
-supply discretization and time/event integration. It is domain-agnostic: <a href="https://github.com/ACCIDDA/flepimop2"><code>flepimop2</code></a>
-is an important consumer, not the package's only intended use.</p>
+supply discretization and time/event integration. The core can be used directly
+or through a separate <a href="https://github.com/ACCIDDA/flepimop2"><code>flepimop2</code></a> provider.</p>
 <p>The test suite covers NumPy, concrete and traced JAX arrays, and raw PyTorch
 tensors. Other Array API implementations may work through
 <code>array-api-compat</code>, but should be qualified before production use.</p>
