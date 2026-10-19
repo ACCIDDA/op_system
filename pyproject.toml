@@ -1,7 +1,7 @@
 [project]
 name = "op_system"
 version = "0.8.0"
-description = "Config-based RHS specification + compilation utilities for ODE/PDE systems"
+description = "Compile spatial, nonlocal and reaction model specifications into array evaluators and numerical metadata"
 readme = "README.md"
 requires-python = ">=3.11,<3.14"
 license = { file = "LICENSE" }
