@@ -303,6 +303,9 @@ class ReactionGap:
               inlining.
             - ``compile_failed``: the propensity could not be lowered or
               its coordinates could not be resolved.
+            - ``gauge_fix_requires_jump_contract``: equation/output covariance
+              does not verify a jump process's distribution. Gauge-fixed models
+              omit reaction exports until a separate jump contract is supplied.
             - ``expr_spec``: an ``expr`` spec, whose equations are not
               decomposed into transitions.
     """

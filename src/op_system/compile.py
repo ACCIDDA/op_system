@@ -23,7 +23,7 @@ import ast
 import importlib
 import warnings
 from collections.abc import Mapping as _MappingABC
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from types import MappingProxyType
 from typing import (
     TYPE_CHECKING,
@@ -46,6 +46,8 @@ from op_system._block_axes import (
     analyze_block_axes,
 )
 from op_system._errors import InvalidExpressionError, UnsupportedFeatureError
+from op_system._gauge_analysis import _analyze_gauges
+from op_system._gauge_fix import _fix_gauge
 from op_system._ir import (
     Expr,
     HistoryOp,
@@ -72,6 +74,7 @@ if TYPE_CHECKING:
     from op_system._parameter_meta import ParameterDeclaration
     from op_system._reactions import ReactionArtifactIR, ReactionReactantIR
     from op_system._scientific_meta import AxisDeclaration, StateDeclaration
+    from op_system.gauges import GaugeFixMap, GaugeInfo
 
     from .specs import NormalizedRhs
 
@@ -578,6 +581,9 @@ class CompiledRhs:
         repr=False,
     )
 
+    gauges: GaugeInfo | None = field(default=None, compare=False, hash=False)
+    gauge_fix: GaugeFixMap | None = field(default=None, compare=False, hash=False)
+
     def bind(
         self, params: Mapping[str, object]
     ) -> Callable[[object, object], Float64Array]:
@@ -629,6 +635,8 @@ class CompiledRhs:
         object.__setattr__(self, "state_meta", rebuilt.state_meta)
         object.__setattr__(self, "axis_meta", rebuilt.axis_meta)
         object.__setattr__(self, "observables", rebuilt.observables)
+        object.__setattr__(self, "gauges", rebuilt.gauges)
+        object.__setattr__(self, "gauge_fix", rebuilt.gauge_fix)
         object.__setattr__(self, "eval_fn", rebuilt.eval_fn)
         object.__setattr__(self, "meta", rebuilt.meta)
         object.__setattr__(self, "operators", rebuilt.operators)
@@ -2452,7 +2460,13 @@ def _build_block_pytree_artifacts(
     return block_pytree_eval_fn, block_template_shapes
 
 
-def compile_rhs(rhs: NormalizedRhs, *, xp: object | None = None) -> CompiledRhs:
+def compile_rhs(  # ruff: ignore[too-many-locals]
+    rhs: NormalizedRhs,
+    *,
+    xp: object | None = None,
+    detect_gauges: bool = False,
+    gauge_fix: Mapping[str, float] | None = None,
+) -> CompiledRhs:
     """Compile a normalized RHS into a runnable evaluation function.
 
     Always uses the vectorized eval path that operates on shaped buffers
@@ -2471,6 +2485,8 @@ def compile_rhs(rhs: NormalizedRhs, *, xp: object | None = None) -> CompiledRhs:
 
     Args:
         rhs: Normalized RHS produced by `op_system.specs.normalize_rhs`.
+        detect_gauges: Opt in to conservative structural scaling detection.
+        gauge_fix: Positive scalar anchors for the reported scaling action.
         xp: **Deprecated.** Formerly the compile-time array namespace.
             Now ignored — the namespace is resolved per call
             from the input ``y``. Will be removed in a future release.
@@ -2556,7 +2572,7 @@ def compile_rhs(rhs: NormalizedRhs, *, xp: object | None = None) -> CompiledRhs:
     )
 
     reaction_artifacts = _build_reaction_artifacts(rhs=rhs, plan=plan, vec=vec)
-    return CompiledRhs(
+    compiled = CompiledRhs(
         state_names=rhs.state_names,
         param_names=tuple(rhs.param_names),
         eval_fn=eval_fn,
@@ -2599,3 +2615,45 @@ def compile_rhs(rhs: NormalizedRhs, *, xp: object | None = None) -> CompiledRhs:
         reaction_gaps=reaction_artifacts.gaps,
         _rhs=rhs,
     )
+
+    return _gauge_options(compiled, detect=detect_gauges, anchors=gauge_fix)
+
+
+def _gauge_options(
+    compiled: CompiledRhs,
+    *,
+    detect: bool,
+    anchors: Mapping[str, float] | None,
+) -> CompiledRhs:
+    """Restore or apply optional gauge compilation settings.
+
+    Returns:
+        Model with explicitly requested analysis/anchors, otherwise unchanged.
+
+    Raises:
+        TypeError: If options have invalid types.
+    """
+    if not isinstance(detect, bool) or (
+        anchors is not None and not isinstance(anchors, _MappingABC)
+    ):
+        msg = "detect_gauges must be boolean and gauge_fix a parameter mapping"
+        raise TypeError(msg)
+    rhs = compiled._rhs  # ruff: ignore[private-member-access]
+    assert rhs is not None  # ruff: ignore[assert]
+    detect = detect or bool(rhs.meta.get("op_system_detect_gauges", False))
+    if anchors is None:
+        anchors = rhs.meta.get("op_system_gauge_fix")
+    if (
+        not detect
+        and anchors is None
+        and not rhs.meta.get("op_system_gauge_declarations")
+    ):
+        return compiled
+    metadata = dict(rhs.meta)
+    metadata["op_system_detect_gauges"] = detect
+    if anchors is not None:
+        metadata["op_system_gauge_fix"] = dict(anchors)
+    compiled = replace(compiled, _rhs=replace(rhs, meta=metadata), meta=metadata)
+    info = _analyze_gauges(compiled, detect=detect)
+    compiled = replace(compiled, gauges=info)
+    return _fix_gauge(compiled, info, anchors) if anchors is not None else compiled
