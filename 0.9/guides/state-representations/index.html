@@ -1563,12 +1563,10 @@ unweighted_density_total = xp.sum(density)  # 5: a different quantity.
 required backend qualification executes their numerical expectations.
 Metadata supplies no new expression helper: <a href="../global-state-totals/"><code>sum_state()</code></a>
 remains unweighted, and existing integration helpers retain their point weights.
-Named physical observations and mesh-transfer consumers are separate work in
-<a href="https://github.com/ACCIDDA/op_system/issues/294">op_system #294</a>,
-<a href="https://github.com/ACCIDDA/op_engine/issues/225">op_engine #225</a> and
-<a href="https://github.com/ACCIDDA/op_engine/issues/226">op_engine #226</a>.
-Those consumers must check representation, measure coverage, unit assumptions
-and actual discretization accuracy before claiming an integral or conservation.</p>
+<a href="../latent-observables/">Named latent observables</a> can describe measured quantities.
+Numerical consumers must check representation, measure coverage, unit assumptions
+and actual discretization accuracy before interpreting an observable as a physical
+integral or conserved quantity. This metadata does not implement mesh transfer.</p>
 <p>Existing specs need no migration. When annotating a state, review whether its
 values are extensive or intensive and supply the measure explicitly. This
 interface does not convert representations, constrain signs or counters, or

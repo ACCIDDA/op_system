@@ -1609,7 +1609,7 @@ nonuniform-grid values, JAX float64 JIT/vmap and state/parameter/time derivative
 and Torch float64/float32 autograd. Static measure/coordinate metadata is outside
 that derivative contract. Broader RHS qualification does not automatically
 qualify additional observable operations or devices.</p>
-<p>GPU qualification remains tracked separately in #182. The matrix describes
+<p>GPU execution is outside the qualified CPU matrix. The matrix describes
 the tested workload and paths, not every combination of compiler operators,
 backend versions, devices, or automatic differentiation transforms.</p>
 <h2 id="independent-equations-and-structural-checks">Independent equations and structural checks<a class="headerlink" href="#independent-equations-and-structural-checks" title="Permanent link">&para;</a></h2>

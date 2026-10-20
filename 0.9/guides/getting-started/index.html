@@ -1832,9 +1832,7 @@ also including it in the RHS.</p>
 <p><code>constraints</code> is currently a reserved metadata block. Public normalization
 preserves it verbatim; the private constraint parser's validation does not
 provide public masking. State expansion and reductions still cover the full
-Cartesian product. Filtering and constraint-aware reductions are tracked in
-<a href="https://github.com/ACCIDDA/op_system/issues/37">#37</a> and
-<a href="https://github.com/ACCIDDA/op_system/issues/38">#38</a>.</p>
+Cartesian product. Filtering and constraint-aware reductions are not implemented.</p>
 <p>The planned schema uses at least two axes and either <code>allow</code> or <code>exclude</code>:</p>
 <pre><code class="language-yaml"># Planned masking metadata; this does not remove current compartments.
 constraints:
@@ -1848,8 +1846,7 @@ rule would match all its coordinates. An exclude rule would remove matches.
 Until filtering is implemented, represent asymmetric populations explicitly,
 for example <code>state: ["S_young", "S_old[vax]"]</code>, with equations/transitions for
 those states and independently checked totals. Do not rely on this reserved
-block to prevent invalid flows or omit state cells. Broader constraint examples
-remain tracked in <a href="https://github.com/ACCIDDA/op_system/issues/39">#39</a>.</p>
+block to prevent invalid flows or omit state cells.</p>
 
 
 
