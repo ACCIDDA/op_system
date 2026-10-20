@@ -96,7 +96,6 @@ completeness is a separate contract: it constrains some stochastic methods,
 while this analysis uses the represented net unit-transfer columns.
 
 Weighted spatial balances, boundary/operator fluxes and more general
-stoichiometric derivations remain extensions of
-[issue #295](https://github.com/ACCIDDA/op_system/issues/295).
+stoichiometric derivations are not implemented by this analysis.
 The analysis leaves normalized/compiled storage and numerical evaluation
 unchanged, and adds no engine, framework or statistical dependency.

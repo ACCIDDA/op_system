@@ -9,6 +9,9 @@ version; format loosely follows
 
 ### Documentation
 
+- Replace issue and pull-request breadcrumbs in guides and API docstrings with
+  current behavior, named interfaces and explicit limitations.
+
 - Show an executable flat-state/subgroup-axis adapter connecting the log-state
   view to OP Engine's deterministic core interface. Keep callback layout and
   decoded output-axis requirements explicit; runtime APIs are unchanged (#314).

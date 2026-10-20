@@ -38,7 +38,7 @@ and Torch float64/float32 autograd. Static measure/coordinate metadata is outsid
 that derivative contract. Broader RHS qualification does not automatically
 qualify additional observable operations or devices.
 
-GPU qualification remains tracked separately in #182. The matrix describes
+GPU execution is outside the qualified CPU matrix. The matrix describes
 the tested workload and paths, not every combination of compiler operators,
 backend versions, devices, or automatic differentiation transforms.
 

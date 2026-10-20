@@ -96,7 +96,7 @@ class Reduce:
 
 @dataclass(frozen=True, slots=True)
 class HistoryOp:
-    """History-aware helper placeholder (issue #173 scaffolding).
+    """History-aware helper placeholder for unsupported history expressions.
 
     ``kind`` is one of ``history`` / ``delay`` / ``convolve_history``.
     ``body`` holds the signal expression to query over history and
@@ -723,8 +723,8 @@ def unparse_ir(
         _memo: Optional identity-keyed cache of already-rendered
             subexpressions, used to amortize rendering of structurally
             shared IR across many top-level expressions (e.g. when many
-            cells of one template share the same synthesized IR object;
-            issue #145). When provided, the cache must not be reused
+            cells of one template share the same synthesized IR object). When provided,
+            the cache must not be reused
             across IR trees built with different ``parse_expr_to_ir``
             options.
 
@@ -1214,7 +1214,7 @@ def extract_common_subexpressions(
 ) -> tuple[tuple[tuple[str, Expr], ...], tuple[Expr, ...]]:
     """Extract repeated IR subtrees into deterministic symbol bindings.
 
-    This is a pure planning pass for the #112 IR migration. It does not
+    This is a pure intermediate-representation planning pass. It does not
     perform code generation; callers receive a list of temporary bindings and
     rewritten root expressions that reference those temporaries. Bindings are
     emitted in child-before-parent order so later bindings may depend on

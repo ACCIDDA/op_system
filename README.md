@@ -534,7 +534,7 @@ Expressions are parsed with `ast` and restricted to:
 `convolve_history(...)` is available via the history-provider runtime hook
 (`CompiledRhs.history_eval_fn` and `OpSystemSystem`'s
 `options["history_stepper_fn"]`). `history(...)` and `delay(...)` remain
-reserved for issue #173 and still raise a targeted unsupported-feature error
+unsupported and raise a targeted unsupported-feature error
 with `history_requirements=...` payloads.
 
 For adaptive ring-buffer engines, use `CompiledRhs.body_eval_fn` (or

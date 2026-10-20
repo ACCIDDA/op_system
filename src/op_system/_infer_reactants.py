@@ -1,14 +1,14 @@
 """Infer reaction reactants and state dependencies from a rate.
 
 ``reactants: auto`` derives a transition's reactants from its rate, after
-aliases are inlined, instead of requiring an explicit list (issue #255).
+aliases are inlined, instead of requiring an explicit list.
 When the rate is a single product of state references (``beta * I[age]``,
 ``k * S**2``, or a rate that reads no state) each state factor is a
 molecular reactant whose order is its integer power.
 
 Other rates are not molecular mass action. A frequency-dependent force of
 infection such as ``beta * S * sum(I) / N`` instead publishes the states its
-propensity reads and a bound on its elasticity (issue #256):
+propensity reads and a bound on its elasticity:
 
     E >= sum_i |d log a / d log x_i|
 

@@ -618,10 +618,8 @@ def _collect_template_refs(
     as a possible cross-reference even when its axis assignment would
     not actually resolve to that alias - this only disables the
     short-circuit (forcing the existing inline pass to run) and is
-    always safe. Issue #147 (followup): pre-#147, ``_inline_all`` walked
-    all O(n_cells) bodies via ``free_symbols`` even when no inlining was
-    needed, which OOM'd on continuum specs whose templated aliases
-    expand into thousands of cells.
+    always safe. Skipping unnecessary inlining avoids traversing all
+    O(n_cells) expanded bodies on large continuum specifications.
     """
     # Local import to avoid module-level cycles.
     from op_system._ir import Apply, Reduce, Subscript, Sym  # ruff: ignore[import-outside-top-level]
@@ -656,7 +654,7 @@ def _parse_alias_body(  # ruff: ignore[too-many-arguments]
     Splits the per-alias work out of :func:`_build_aliases_ir_from_raw` so
     that function stays under Ruff's local-variable budget. The template
     expansion logic (shared Reduce-expanded body + per-coord pin) is
-    documented inline below (issue #145).
+    documented inline below.
 
     Raises:
         InvalidRhsSpecError: If ``expr_str`` is empty or fails to parse.
@@ -868,7 +866,7 @@ def _lookup_cell_expr(
         cell_templates: Expanded cell name to the first template key in
             ``equations_map`` that expands to it. Built once per spec, so
             each lookup is constant time rather than a scan of every
-            template's variants (issue #267).
+            template's variants.
 
     Raises:
         InvalidRhsSpecError: If the cell has no equation or its body is not a
@@ -1045,7 +1043,7 @@ class _LazyCells(Sequence[Any]):
 
     Normalization used to expand every cell's reductions and render every
     cell's string eagerly, which dominates normalization time for large
-    axes (#88) even though the vectorized path reads only a few cells.
+    axes even though the vectorized path reads only a few cells.
     Items are memoized; equality, hashing, and pickling behave like the
     materialized tuple (pickling returns a plain tuple).
     """
@@ -1223,14 +1221,13 @@ def _derive_alias_strings(
         _unparse_memo: Optional identity-keyed cache shared across
             multiple ``unparse_ir`` calls so substructure repeated
             across alias bodies (e.g. coord-pinned copies of the same
-            template body) is rendered once (issue #145).
+            template body) is rendered once.
 
     Returns:
         Lazy mapping; each value is rendered on first ``__getitem__``.
-        Pre-#147 this eagerly materialized strings for every cell, but
-        on continuum hierarchical specs that meant building 5000+ multi-MB
-        strings for the vectorized eval-fn path that never reads them
-        (issue #147 followup). The vectorized eval-fn ignores the string
+        Eagerly materializing strings for every cell can allocate thousands
+        of large unused bodies on continuum hierarchical specifications.
+        The vectorized eval-fn ignores the string
         bodies; only the string-based fallback in ``_make_eval_fn`` pulls
         values, and it does so only for the cells it actually evaluates.
 

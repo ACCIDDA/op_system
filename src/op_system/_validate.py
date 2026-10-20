@@ -9,7 +9,7 @@ shapes (for example, only some coordinates receive a pinned transition)
 cannot be compiled on the vectorized path.
 
 The cost summary counts the drivers of compile time: expanded states and
-coordinate-pinned transitions (see #206).
+coordinate-pinned transitions.
 """
 
 from __future__ import annotations

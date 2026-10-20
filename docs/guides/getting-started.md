@@ -253,9 +253,7 @@ also including it in the RHS.
 `constraints` is currently a reserved metadata block. Public normalization
 preserves it verbatim; the private constraint parser's validation does not
 provide public masking. State expansion and reductions still cover the full
-Cartesian product. Filtering and constraint-aware reductions are tracked in
-[#37](https://github.com/ACCIDDA/op_system/issues/37) and
-[#38](https://github.com/ACCIDDA/op_system/issues/38).
+Cartesian product. Filtering and constraint-aware reductions are not implemented.
 
 The planned schema uses at least two axes and either `allow` or `exclude`:
 
@@ -273,5 +271,4 @@ rule would match all its coordinates. An exclude rule would remove matches.
 Until filtering is implemented, represent asymmetric populations explicitly,
 for example `state: ["S_young", "S_old[vax]"]`, with equations/transitions for
 those states and independently checked totals. Do not rely on this reserved
-block to prevent invalid flows or omit state cells. Broader constraint examples
-remain tracked in [#39](https://github.com/ACCIDDA/op_system/issues/39).
+block to prevent invalid flows or omit state cells.
