@@ -40,9 +40,8 @@ package-index artifacts without itself performing an archival deposit.
 
 ## Software-paper release archive plan
 
-The maintainer has selected the ACCIDDA Zenodo archive for this release;
-[#273](https://github.com/ACCIDDA/op_system/issues/273) tracks the deposit and
-verified DOI. Complete the JOSS readiness milestone before freezing the archive
+The maintainer has selected the ACCIDDA Zenodo archive for the software-paper
+release. The archival deposit and resolving DOI still need verification. Complete the JOSS readiness milestone before freezing the archive
 release.
 
 Before a paper release, the release maintainer must check existing archive

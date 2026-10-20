@@ -172,7 +172,7 @@ def _build_axis_positions(
 
     Normalization resolves one coordinate per cell; ``coords.index(coord)``
     scans the whole axis each time, which made it quadratic in the axis
-    size (issue #267). Build this once per pass and look positions up
+    size. Build this once per pass and look positions up
     instead. Axis coordinates are validated unique, so each coordinate has
     exactly one position.
 

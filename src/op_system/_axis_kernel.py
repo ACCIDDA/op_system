@@ -3,7 +3,7 @@
 An ``axis_kernel`` operator moves mass along one axis with a matrix-valued
 parameter instead of one coordinate-pinned transition per coordinate pair.
 Coordinate-pinned transitions make compile time grow with states times
-transitions, so dense routing on a fine axis is otherwise impractical (#206).
+transitions, so dense routing on a fine axis is otherwise impractical.
 
 Two forms are supported:
 

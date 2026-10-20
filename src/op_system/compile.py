@@ -1191,7 +1191,7 @@ def _reduce_ir_has_history(rhs: NormalizedRhs) -> bool:
 
     Normalization records ``op_system_may_have_history`` from a text check of
     the raw spec, which avoids walking every cell's IR for specs that use no
-    history helpers (#88). Without the flag, walk the compact reduce-form IR,
+    history helpers. Without the flag, walk the compact reduce-form IR,
     visiting subtrees shared across cells only once.
     """
     from op_system._ir import (  # ruff: ignore[import-outside-top-level]

@@ -14,7 +14,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-"""Sparse ``[axis, axis]`` tables for op_system routing transitions (#88).
+"""Sparse ``[axis, axis]`` tables for op_system routing transitions.
 
 A routing transition such as
 

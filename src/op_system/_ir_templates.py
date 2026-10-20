@@ -1,4 +1,4 @@
-"""IR-level template expansion (issue #112).
+"""IR-level template expansion.
 
 Mirrors the inline template-substitution semantics of
 :func:`op_system._templates._apply_template_substitutions` but operates on
@@ -158,7 +158,7 @@ def _free_axes_in(
     disjoint-check pruning still descend when ``assignment`` covers them.
     ``Reduce`` bindings shadow outer names and are subtracted from the body
     set. Memoized by ``id(node)`` so repeated calls with the same memo
-    visit each unique subtree at most once (issue #145).
+    visit each unique subtree at most once.
     """
     cached = memo.get(id(node))
     if cached is not None:
@@ -236,7 +236,7 @@ def expand_inline_templates(
         axis_positions: Optional ``_build_axis_positions(axis_lookup)``,
             used instead of ``axis_lookup`` when given. Callers that expand
             once per coordinate build it once and pass it, so each call
-            looks positions up rather than rebuilding them (issue #267).
+            looks positions up rather than rebuilding them.
         _free_axes_memo: Optional id-keyed cache of the per-subtree
             unbound-axis set. When supplied, the walk short-circuits at
             compound nodes whose free-axis set is disjoint from
@@ -251,7 +251,7 @@ def expand_inline_templates(
             references but differ on irrelevant axes return the same
             expanded object, eliminating redundant rebuilds of heavy
             subtrees when only a "thin" LHS axis (e.g. ``loc`` in
-            ``foi[age, loc]``) changes between cells (issue #147).
+            ``foi[age, loc]``) changes between cells.
             Caller-owned; pass an empty dict to enable.  Must NOT be
             shared across calls with a different root template.  Each
             entry stores the node it was computed for and is only reused
@@ -591,7 +591,7 @@ class _InlineMemo(dict[int, frozenset[str]]):  # ruff: ignore[subclass-builtin]
     supersedes it, and a later allocation can land on the same address and
     inherit the stale entry. The observable symptom is an alias reference
     silently left un-inlined -- nondeterministically, and for only some
-    cells of a template (issue #197).
+    cells of a template.
 
     Retaining those intermediates for as long as the memo lives keeps every
     memoized address unique, so a cached entry always describes the node it
@@ -624,7 +624,7 @@ class _InlineMemo(dict[int, frozenset[str]]):  # ruff: ignore[subclass-builtin]
         Hanging it on the memo gives it exactly that lifetime; it used to
         live in a module-level dict keyed by ``id(aliases)``, which never
         evicted and so pinned every alias mapping any compile had ever
-        seen (issue #200).
+        seen.
 
         Returns:
             A dict cache, empty on first use, shared by every call that
@@ -716,7 +716,7 @@ def inline_aliases(  # ruff: ignore[complex-structure, too-many-arguments]
             many inline calls that share the same alias bodies to avoid
             re-walking each body per equation. A memo shared this way must
             be an :class:`_InlineMemo`, not a plain ``dict`` -- see that
-            class for why (issue #197).
+            class for why.
         skip_cycle_check: If ``True``, bypass :func:`_detect_alias_cycle`.
             Callers that batch-inline many expressions against the same
             ``aliases`` mapping should validate once and set this flag on
@@ -731,7 +731,7 @@ def inline_aliases(  # ruff: ignore[complex-structure, too-many-arguments]
             ``equations_ir_pre_inline``) -- that is what keeps an
             ``id()`` key sound here, and a caller that ever passes a
             freshly-built root instead would silently get another
-            expression's result back (issue #200).
+            expression's result back.
 
     Returns:
         A new IR expression with all alias references resolved.

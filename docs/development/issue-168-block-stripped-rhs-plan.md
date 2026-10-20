@@ -1,4 +1,8 @@
-*issu# Issue #168 — Block-stripped `pytree_eval_fn` for `factorize_axes` vmap
+# Block-stripped `pytree_eval_fn` design record
+
+> Historical implementation plan. For current interfaces and supported layouts,
+> use the [getting-started guide](../guides/getting-started.md). Tracker references
+> below record the development context, not installation requirements.
 
 **Repo**: ACCIDDA/op_system
 **Branch convention**: `feat/168-<slug>`

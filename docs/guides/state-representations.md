@@ -126,12 +126,10 @@ These operations preserve NumPy/JAX/Torch namespace and floating dtype;
 required backend qualification executes their numerical expectations.
 Metadata supplies no new expression helper: [`sum_state()`](global-state-totals.md)
 remains unweighted, and existing integration helpers retain their point weights.
-Named physical observations and mesh-transfer consumers are separate work in
-[op_system #294](https://github.com/ACCIDDA/op_system/issues/294),
-[op_engine #225](https://github.com/ACCIDDA/op_engine/issues/225) and
-[op_engine #226](https://github.com/ACCIDDA/op_engine/issues/226).
-Those consumers must check representation, measure coverage, unit assumptions
-and actual discretization accuracy before claiming an integral or conservation.
+[Named latent observables](latent-observables.md) can describe measured quantities.
+Numerical consumers must check representation, measure coverage, unit assumptions
+and actual discretization accuracy before interpreting an observable as a physical
+integral or conserved quantity. This metadata does not implement mesh transfer.
 
 Existing specs need no migration. When annotating a state, review whether its
 values are extensive or intensive and supply the measure explicitly. This

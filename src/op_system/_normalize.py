@@ -379,7 +379,7 @@ def _may_have_history(spec: Mapping[str, Any]) -> bool:
 
     A conservative text check: a false positive only costs a full IR scan at
     compile time, and a history operator can't appear without one of these
-    helper calls in the source (#88).
+    helper calls in the source.
     """
     stack: list[object] = [spec]
     while stack:
@@ -753,7 +753,7 @@ def _enumerate_template_cell_names(
     set of cells matching a wildcard-only template is just the bucket for
     that base. Falls back to ``[base]`` when the template has no axis
     tokens at all (the lookup would then equal ``[base]`` anyway, but the
-    empty/no-axes case is rare and not on the hot path). Issue #145.
+    empty/no-axes case is rare and not on the hot path).
     """
     if template_tokens:
         cached = cells_by_base.get(base)
@@ -970,7 +970,7 @@ def _synthesize_template_uniform(  # ruff: ignore[too-many-arguments]
 
 @dataclass(frozen=True, slots=True)
 class _RoutingParts:
-    """Validated structure of one routing transition (#88)."""
+    """Validated structure of one routing transition."""
 
     axis: str
     source_alias: str | None

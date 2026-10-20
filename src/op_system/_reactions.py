@@ -7,7 +7,7 @@ The deterministic RHS path (``_normalize._build_transition_equations_ir``)
 deliberately discards per-transition identity: every transition's flow
 contribution is folded into a per-state accumulator and summed into one
 combined ``d(state)/dt`` expression, with heavy identity-based sharing and
-deduplication (documented against issue #145) that makes reconstructing
+deduplication that makes reconstructing
 per-transition structure from the summed equations impractical (a shared
 ``Expr`` object can legitimately serve many transitions/cells at once).
 
@@ -434,7 +434,7 @@ def _auto_reactants_ir(  # ruff: ignore[too-many-arguments]
     so a rate that reads its own source raises the source's order. Any
     other rate yields the consumed source as its only reactant, marked
     incomplete, plus every state the propensity reads and a bound on its
-    elasticity (issue #256).
+    elasticity.
 
     Returns:
         The inferred metadata, with the source first.
@@ -934,8 +934,8 @@ def _substitute_alias_refs(
     """Replace in-scope alias references with their bodies.
 
     A bracketed reference (``foi[age]``) is a ``Subscript``. An axis-less
-    alias is referenced by bare name, a ``Sym``, and has nothing to bind
-    (issue #254). A bare reference to a templated alias stays out of scope.
+    alias is referenced by bare name, a ``Sym``, and has nothing to bind. A bare
+    reference to a templated alias stays out of scope.
 
     ``templates`` bodies are expected to be already resolved (free of
     alias references themselves), so this performs a single pass.
@@ -980,7 +980,7 @@ def _inline_rate_aliases(
 
     An alias left in the rate (one on a reference cycle, a templated alias
     referenced by bare name, or an out-of-scope declaration) has no value
-    when the propensity is evaluated (issue #254).
+    when the propensity is evaluated.
 
     Returns:
         The rate with every alias inlined, or ``None`` when an alias
@@ -998,7 +998,7 @@ def _resolve_alias_templates(
 ) -> dict[str, _AliasTemplate]:
     """Inline alias-to-alias references so every body stands alone.
 
-    Resolves the whole chain (issue #193), not just one level: an alias
+    Resolves the whole chain, not just one level: an alias
     whose body references an alias that itself references a third is
     fully expanded. Bodies are resolved depth-first and memoized, so each
     is expanded once regardless of how many aliases reference it.
