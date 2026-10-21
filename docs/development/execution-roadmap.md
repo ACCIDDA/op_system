@@ -24,7 +24,7 @@ result, rather than silently appearing to use that accelerator.
 
 | Work | Scope and dependency |
 | --- | --- |
-| Structural model identity | Versioned canonical content serialization with ordered state/parameter/coordinate layouts, expressions, observables, constants and relevant compilation/view options. Separate structural identity from fitted values and runtime identity. Do not change object equality/hash behavior incidentally. |
+| Structural model identity | [Schema-1 canonical manifests and references](../guides/structural-identity.md) are implemented, including ordered layouts, typed IR, observables, constants and compilation options. Forward consumers must carry this separately from runtime/prior/design identity and compare independently expected provenance. |
 | Derivative exports | Reuse checked dependency structure. State and parameter derivatives and observable derivatives have distinct shapes and meanings. Unsupported IR operations fail explicitly; qualify small dense values/actions independently before general sparse or matrix-free claims. |
 | IR export | Versioned typed serialization and a bounded Julia emitter with explicit supported rational/expression semantics. Export remains separate from normal evaluation. |
 | Numba experiment | Optional NumPy-only lowering, chosen after representative baseline measurements; report compilation and amortized execution costs and preserve reference behavior. |

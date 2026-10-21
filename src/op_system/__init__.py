@@ -76,6 +76,7 @@ from .gauges import (
     InvariantCoordinate,
     ScalingGauge,
 )
+from .identity import StructuralModelIdentity, structural_model_json
 from .observables import CompiledObservable, ObservableEvalFn, ObservablePytreeEvalFn
 from .qualification import (
     InvariantCheck,
@@ -239,6 +240,7 @@ __all__ = [
     "StateDeclaration",
     "StateDict",
     "StateString",
+    "StructuralModelIdentity",
     "TransitionsRhs",
     "ValidationReport",
     "__version__",
@@ -254,6 +256,7 @@ __all__ = [
     "normalize_transitions_rhs",
     "qualify_rhs",
     "reaction_balances",
+    "structural_model_json",
     "validate_axis_kernel_matrix",
     "validate_jump_integral_kernel",
     "validate_spec",
