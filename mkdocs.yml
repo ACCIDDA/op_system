@@ -48,6 +48,7 @@ nav:
   - Home: index.md
   - Capabilities and example checks: guides/capabilities.md
   - Development:
+      - Execution Roadmap: development/execution-roadmap.md
       - Contributing: development/contributing.md
       - Coverage Audit: development/coverage-audit.md
       - Code Style: development/code-style.md
