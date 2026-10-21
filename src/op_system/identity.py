@@ -1,7 +1,7 @@
 """Versioned structural content identity for compiler artifacts.
 
-The active consumers are op_infer #78/#82. This manifest records compiler
-structure, not fitted values, solver settings, runtime versions or proof of
+Downstream forward and artifact provenance consume this manifest. It records
+compiler structure, not fitted values, solver settings, runtime versions or proof of
 numerical equivalence. It never changes Python object equality or hashing.
 """
 

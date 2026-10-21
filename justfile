@@ -255,3 +255,7 @@ doctest:
 
 example-reactions:
 	uv run python examples/independent_reactions.py
+
+# Optional real external-runtime expression check; no skipped or downloaded Julia.
+qualify-julia executable="julia":
+	uv run --no-sync python examples/portable_julia.py --julia {{quote(executable)}}

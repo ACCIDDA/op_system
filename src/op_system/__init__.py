@@ -78,6 +78,7 @@ from .gauges import (
 )
 from .identity import StructuralModelIdentity, structural_model_json
 from .observables import CompiledObservable, ObservableEvalFn, ObservablePytreeEvalFn
+from .portable import IRRecord, PortableIR, export_ir
 from .qualification import (
     InvariantCheck,
     QualificationConfig,
@@ -100,6 +101,14 @@ from .specs import (
     normalize_expr_rhs,
     normalize_rhs,
     normalize_transitions_rhs,
+)
+from .symbolic import (
+    DerivativeValues,
+    JuliaExport,
+    SymbolicDerivatives,
+    export_julia,
+    julia_rhs,
+    symbolic_derivatives,
 )
 
 if TYPE_CHECKING:
@@ -207,6 +216,7 @@ __all__ = [
     "CompiledReaction",
     "CompiledRhs",
     "CoordinateResult",
+    "DerivativeValues",
     "EvalFn",
     "ExprRhs",
     "ExpressionString",
@@ -214,9 +224,11 @@ __all__ = [
     "GaugeFixMap",
     "GaugeInfo",
     "GaugeVerification",
+    "IRRecord",
     "IdentifierString",
     "InvariantCheck",
     "InvariantCoordinate",
+    "JuliaExport",
     "NormalizedRhs",
     "ObservableDefinition",
     "ObservableEvalFn",
@@ -225,6 +237,7 @@ __all__ = [
     "OperatorDescriptor",
     "ParameterDeclaration",
     "ParameterSupport",
+    "PortableIR",
     "PytreeEvalFn",
     "QualificationConfig",
     "QualificationFixture",
@@ -241,6 +254,7 @@ __all__ = [
     "StateDict",
     "StateString",
     "StructuralModelIdentity",
+    "SymbolicDerivatives",
     "TransitionsRhs",
     "ValidationReport",
     "__version__",
@@ -249,6 +263,9 @@ __all__ = [
     "axis_kernel_redistribute",
     "compile_rhs",
     "compile_spec",
+    "export_ir",
+    "export_julia",
+    "julia_rhs",
     "jump_integral_generator",
     "jump_integral_rhs",
     "normalize_expr_rhs",
@@ -257,6 +274,7 @@ __all__ = [
     "qualify_rhs",
     "reaction_balances",
     "structural_model_json",
+    "symbolic_derivatives",
     "validate_axis_kernel_matrix",
     "validate_jump_integral_kernel",
     "validate_spec",

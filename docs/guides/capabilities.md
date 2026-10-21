@@ -24,6 +24,7 @@ guide covers spatial and nonlocal terms.
 | Task | Implemented interface | Example and boundary |
 | --- | --- | --- |
 | Check or compile a specification | `validate_spec`, `normalize_rhs`, `compile_spec`, `compile_rhs` | [Getting started](getting-started.md): expression and transition SEIR; validation is structural, not proof of scientific correctness. |
+| Export model IR and bounded derivatives | `export_ir`, `symbolic_derivatives`, `export_julia` | [Portable IR](portable-ir.md); typed data, native scalar derivative matrices and explicit Julia bindings. Tensor/operator compositions and external-tool rank conclusions are separately qualified. |
 | Evaluate flat or structured state | `CompiledRhs.eval_fn`, `pytree_eval_fn` | [State representations](state-representations.md); use declared template shapes and state order. |
 | Evaluate independent blocks | `factorize_axes`, `block_pytree_eval_fn` | [Independent batches](batched-models.md); reductions or mixing across a proposed block axis invalidate independence. |
 | Export stochastic channels | `CompiledRhs.reactions`, `reaction_gaps`, `CompiledReaction` | Named transitions, reactants/dependencies and declared state shapes; a stochastic consumer must reject omitted dynamics. |
