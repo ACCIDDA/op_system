@@ -7,6 +7,11 @@ version; format loosely follows
 
 ## [Unreleased]
 
+### Fixed
+
+- Keep generated scalar equation/derivative constants on the state's device and
+  retain differentiable native time bindings, including minimum supported Torch.
+
 ### Added
 
 - Export canonical typed IR envelopes with guarded readonly decoding and the

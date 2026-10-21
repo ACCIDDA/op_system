@@ -11,6 +11,25 @@ permissions:
   contents: 'read'
 
 jobs:
+  torch-minimum:
+    name: 'compiler minimum Torch (3.12)'
+    runs-on: 'ubuntu-latest'
+    steps:
+      - uses: 'actions/checkout@v6'
+        with:
+          persist-credentials: false
+      - uses: 'astral-sh/setup-uv@v7'
+        with:
+          python-version: '3.12'
+      - name: 'Install minimum native array contracts'
+        run: |
+          uv venv --python 3.12
+          uv pip install -e . pytest 'sybil[pytest]>=9.2' 'numpy==2.0.2' 'array-api-compat==1.12.0' 'pydantic==2.12.5'
+          uv pip install 'torch==2.6.0' --index-url https://download.pytorch.org/whl/cpu
+      - name: 'Require device placement and native derivative graphs'
+        run: |
+          uv run --no-sync python -c 'import torch; assert torch.__version__.split("+")[0] == "2.6.0"'
+          uv run --no-sync pytest tests/op_system/test_scalar_device.py tests/op_system/test_portable_symbolic.py -k torch -q
   provider-typing:
     name: 'provider-typing'
     runs-on: 'ubuntu-latest'
