@@ -619,6 +619,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../../guides/structural-identity/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Structural Model Identity
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../guides/state-representations/" class="md-nav__link">
         
   
@@ -2138,6 +2166,67 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#op_system.StructuralModelIdentity" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        StructuralModelIdentity
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="StructuralModelIdentity">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#op_system.StructuralModelIdentity.__post_init__" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        __post_init__
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#op_system.StructuralModelIdentity.from_compiled" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        from_compiled
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#op_system.StructuralModelIdentity.from_json" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        from_json
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#op_system.StructuralModelIdentity.to_json" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        to_json
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#op_system.TransitionsRhs" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2309,6 +2398,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#op_system.structural_model_json" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        structural_model_json
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#op_system.validate_axis_kernel_matrix" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2454,6 +2554,34 @@
     
   
     Gauges
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../identity/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Identity
   
 
     
@@ -3540,6 +3668,67 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#op_system.StructuralModelIdentity" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        StructuralModelIdentity
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="StructuralModelIdentity">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#op_system.StructuralModelIdentity.__post_init__" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        __post_init__
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#op_system.StructuralModelIdentity.from_compiled" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        from_compiled
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#op_system.StructuralModelIdentity.from_json" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        from_json
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#op_system.StructuralModelIdentity.to_json" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        to_json
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#op_system.TransitionsRhs" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3704,6 +3893,17 @@
     <span class="md-ellipsis">
       
         reaction_balances
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#op_system.structural_model_json" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        structural_model_json
       
     </span>
   </a>
@@ -10988,6 +11188,507 @@ followed immediately by bracketed dimensions like <code>"R[age,vax]"</code>.</p>
 
 
 
+<h3 id="op_system.StructuralModelIdentity" class="doc doc-heading">
+              <code class="highlight language-python"><span class="n">StructuralModelIdentity</span><span class="p">(</span><span class="n">schema_version</span><span class="p">,</span> <span class="n">digest</span><span class="p">)</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-dataclass"><code>dataclass</code></small>
+  </span>
+
+<a href="#op_system.StructuralModelIdentity" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+
+
+        <p>Validate a portable reference to a structural manifest.</p>
+
+
+<p><span class="doc-section-title">Attributes:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code><span title="op_system.StructuralModelIdentity.schema_version">schema_version</span></code></td>
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Canonical manifest and reference format, currently 1.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="op_system.StructuralModelIdentity.digest">digest</span></code></td>
+            <td>
+                  <code><span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>SHA-256 of the exact canonical manifest's UTF-8 bytes.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<p><span class="doc-section-title">Examples:</span></p>
+    <div class="highlight"><pre><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">op_system</span><span class="w"> </span><span class="kn">import</span> <span class="n">compile_spec</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">model</span> <span class="o">=</span> <span class="n">compile_spec</span><span class="p">({</span>
+<span class="gp">... </span>    <span class="s2">"kind"</span><span class="p">:</span> <span class="s2">"expr"</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="s2">"state"</span><span class="p">:</span> <span class="p">[</span><span class="s2">"x"</span><span class="p">],</span>
+<span class="gp">... </span>    <span class="s2">"equations"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"x"</span><span class="p">:</span> <span class="s2">"-k*x"</span><span class="p">},</span>
+<span class="gp">... </span><span class="p">})</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">identity</span> <span class="o">=</span> <span class="n">StructuralModelIdentity</span><span class="o">.</span><span class="n">from_compiled</span><span class="p">(</span><span class="n">model</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">StructuralModelIdentity</span><span class="o">.</span><span class="n">from_json</span><span class="p">(</span><span class="n">identity</span><span class="o">.</span><span class="n">to_json</span><span class="p">())</span> <span class="o">==</span> <span class="n">identity</span>
+<span class="go">True</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">identity</span><span class="o">.</span><span class="n">digest</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">"sha256:"</span><span class="p">)</span>
+<span class="go">True</span>
+</code></pre></div>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h4 id="op_system.StructuralModelIdentity.__post_init__" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">__post_init__</span><span class="p">()</span></code>
+
+<a href="#op_system.StructuralModelIdentity.__post_init__" class="headerlink" title="Permanent link">&para;</a></h4>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Refuse unknown formats and malformed content references.</p>
+
+
+<p><span class="doc-section-title">Raises:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="ValueError">ValueError</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Version or digest is missing, malformed or unsupported.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+            <details class="mkdocstrings-source">
+              <summary>Source code in <code>src/op_system/identity.py</code></summary>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">59</span>
+<span class="normal">60</span>
+<span class="normal">61</span>
+<span class="normal">62</span>
+<span class="normal">63</span>
+<span class="normal">64</span>
+<span class="normal">65</span>
+<span class="normal">66</span>
+<span class="normal">67</span>
+<span class="normal">68</span>
+<span class="normal">69</span>
+<span class="normal">70</span>
+<span class="normal">71</span>
+<span class="normal">72</span>
+<span class="normal">73</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">__post_init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Refuse unknown formats and malformed content references.</span>
+
+<span class="sd">    Raises:</span>
+<span class="sd">        ValueError: Version or digest is missing, malformed or unsupported.</span>
+<span class="sd">    """</span>
+    <span class="k">if</span> <span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">schema_version</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="nb">int</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">schema_version</span> <span class="o">!=</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="n">msg</span> <span class="o">=</span> <span class="s2">"Unsupported structural model identity schema version (expected 1)"</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+    <span class="k">if</span> <span class="p">(</span>
+        <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">digest</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span>
+        <span class="ow">or</span> <span class="n">re</span><span class="o">.</span><span class="n">fullmatch</span><span class="p">(</span><span class="sa">r</span><span class="s2">"sha256:[0-9a-f]</span><span class="si">{64}</span><span class="s2">"</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">digest</span><span class="p">)</span> <span class="ow">is</span> <span class="kc">None</span>
+    <span class="p">):</span>
+        <span class="n">msg</span> <span class="o">=</span> <span class="s2">"Structural model identity requires a lowercase SHA-256 digest"</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h4 id="op_system.StructuralModelIdentity.from_compiled" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">from_compiled</span><span class="p">(</span><span class="n">compiled</span><span class="p">)</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-classmethod"><code>classmethod</code></small>
+  </span>
+
+<a href="#op_system.StructuralModelIdentity.from_compiled" class="headerlink" title="Permanent link">&para;</a></h4>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Identify compiler structure without binding runtime parameters.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>compiled</code>
+            </td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="CompiledRhs(state_names, param_names, eval_fn, meta=(lambda: MappingProxyType({}))(), operators=tuple(), factorize_axes=tuple(), block_axes=tuple(), pytree_eval_fn=None, template_shapes=None, block_pytree_eval_fn=None, block_template_shapes=None, history_requirements=tuple(), history_eval_fn=None, body_eval_fn=None, block_history_eval_fn=None, block_body_eval_fn=None, reactions=tuple(), reaction_gaps=tuple(), _rhs=None, param_meta=(lambda: MappingProxyType({}))(), state_meta=(lambda: MappingProxyType({}))(), axis_meta=(lambda: MappingProxyType({}))(), observables=(lambda: MappingProxyType({}))(), gauges=None, gauge_fix=None)
+
+  
+      dataclass
+   (op_system.compile.CompiledRhs)" href="../compile/#op_system.compile.CompiledRhs">CompiledRhs</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>An unmodified artifact produced by the compiler.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="StructuralModelIdentity(schema_version, digest)
+
+  
+      dataclass
+   (op_system.identity.StructuralModelIdentity)" href="../identity/#op_system.identity.StructuralModelIdentity">StructuralModelIdentity</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Reference to :func:<code>structural_model_json</code>'s canonical bytes.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+            <details class="mkdocstrings-source">
+              <summary>Source code in <code>src/op_system/identity.py</code></summary>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">75</span>
+<span class="normal">76</span>
+<span class="normal">77</span>
+<span class="normal">78</span>
+<span class="normal">79</span>
+<span class="normal">80</span>
+<span class="normal">81</span>
+<span class="normal">82</span>
+<span class="normal">83</span>
+<span class="normal">84</span>
+<span class="normal">85</span>
+<span class="normal">86</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="nd">@classmethod</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">from_compiled</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">compiled</span><span class="p">:</span> <span class="n">CompiledRhs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">StructuralModelIdentity</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Identify compiler structure without binding runtime parameters.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        compiled: An unmodified artifact produced by the compiler.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        Reference to :func:`structural_model_json`'s canonical bytes.</span>
+<span class="sd">    """</span>
+    <span class="n">payload</span> <span class="o">=</span> <span class="n">structural_model_json</span><span class="p">(</span><span class="n">compiled</span><span class="p">)</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="s2">"utf-8"</span><span class="p">)</span>
+    <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="sa">f</span><span class="s2">"sha256:</span><span class="si">{</span><span class="n">hashlib</span><span class="o">.</span><span class="n">sha256</span><span class="p">(</span><span class="n">payload</span><span class="p">)</span><span class="o">.</span><span class="n">hexdigest</span><span class="p">()</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h4 id="op_system.StructuralModelIdentity.from_json" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">from_json</span><span class="p">(</span><span class="n">payload</span><span class="p">)</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-classmethod"><code>classmethod</code></small>
+  </span>
+
+<a href="#op_system.StructuralModelIdentity.from_json" class="headerlink" title="Permanent link">&para;</a></h4>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Read a reference without treating it as an independently expected identity.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>payload</code>
+            </td>
+            <td>
+                  <code><span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Exact two-field reference JSON.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="StructuralModelIdentity(schema_version, digest)
+
+  
+      dataclass
+   (op_system.identity.StructuralModelIdentity)" href="../identity/#op_system.identity.StructuralModelIdentity">StructuralModelIdentity</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Validated reference. Downstream guarded loaders must additionally</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="StructuralModelIdentity(schema_version, digest)
+
+  
+      dataclass
+   (op_system.identity.StructuralModelIdentity)" href="../identity/#op_system.identity.StructuralModelIdentity">StructuralModelIdentity</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>compare an independently supplied expected identity.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<p><span class="doc-section-title">Raises:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="ValueError">ValueError</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The reference is malformed or uses an unknown schema.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+            <details class="mkdocstrings-source">
+              <summary>Source code in <code>src/op_system/identity.py</code></summary>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"> 96</span>
+<span class="normal"> 97</span>
+<span class="normal"> 98</span>
+<span class="normal"> 99</span>
+<span class="normal">100</span>
+<span class="normal">101</span>
+<span class="normal">102</span>
+<span class="normal">103</span>
+<span class="normal">104</span>
+<span class="normal">105</span>
+<span class="normal">106</span>
+<span class="normal">107</span>
+<span class="normal">108</span>
+<span class="normal">109</span>
+<span class="normal">110</span>
+<span class="normal">111</span>
+<span class="normal">112</span>
+<span class="normal">113</span>
+<span class="normal">114</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="nd">@classmethod</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">from_json</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">payload</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">StructuralModelIdentity</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Read a reference without treating it as an independently expected identity.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        payload: Exact two-field reference JSON.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        Validated reference. Downstream guarded loaders must additionally</span>
+<span class="sd">        compare an independently supplied expected identity.</span>
+
+<span class="sd">    Raises:</span>
+<span class="sd">        ValueError: The reference is malformed or uses an unknown schema.</span>
+<span class="sd">    """</span>
+    <span class="n">value</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">payload</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="nb">dict</span><span class="p">)</span> <span class="ow">or</span> <span class="nb">set</span><span class="p">(</span><span class="n">value</span><span class="p">)</span> <span class="o">!=</span> <span class="p">{</span><span class="s2">"schema_version"</span><span class="p">,</span> <span class="s2">"digest"</span><span class="p">}:</span>
+        <span class="n">msg</span> <span class="o">=</span> <span class="s2">"Structural model identity requires schema_version and digest only"</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+    <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="n">value</span><span class="p">[</span><span class="s2">"schema_version"</span><span class="p">],</span> <span class="n">value</span><span class="p">[</span><span class="s2">"digest"</span><span class="p">])</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h4 id="op_system.StructuralModelIdentity.to_json" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">to_json</span><span class="p">()</span></code>
+
+<a href="#op_system.StructuralModelIdentity.to_json" class="headerlink" title="Permanent link">&para;</a></h4>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Serialize the small reference, excluding the model manifest.</p>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Versioned reference JSON; this does not serialize a runnable model.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+            <details class="mkdocstrings-source">
+              <summary>Source code in <code>src/op_system/identity.py</code></summary>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">88</span>
+<span class="normal">89</span>
+<span class="normal">90</span>
+<span class="normal">91</span>
+<span class="normal">92</span>
+<span class="normal">93</span>
+<span class="normal">94</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">to_json</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Serialize the small reference, excluding the model manifest.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        Versioned reference JSON; this does not serialize a runnable model.</span>
+<span class="sd">    """</span>
+    <span class="k">return</span> <span class="n">_json</span><span class="p">({</span><span class="s2">"schema_version"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">schema_version</span><span class="p">,</span> <span class="s2">"digest"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">digest</span><span class="p">})</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
 <h3 id="op_system.TransitionsRhs" class="doc doc-heading">
               <code class="highlight language-python"><span class="n">TransitionsRhs</span><span class="p">(</span><span class="n">state_names</span><span class="p">,</span> <span class="n">equations</span><span class="p">,</span> <span class="n">aliases</span><span class="p">,</span> <span class="n">param_names</span><span class="p">,</span> <span class="n">all_symbols</span><span class="p">,</span> <span class="n">meta</span><span class="p">,</span> <span class="n">state_templates</span><span class="o">=</span><span class="p">(),</span> <span class="n">shaped_params</span><span class="o">=</span><span class="p">(),</span> <span class="n">time_varying_params</span><span class="o">=</span><span class="p">(),</span> <span class="n">aliases_ir</span><span class="o">=</span><span class="nb">dict</span><span class="p">(),</span> <span class="n">equations_ir</span><span class="o">=</span><span class="p">(),</span> <span class="n">aliases_ir_reduce</span><span class="o">=</span><span class="nb">dict</span><span class="p">(),</span> <span class="n">equations_ir_reduce</span><span class="o">=</span><span class="p">(),</span> <span class="n">alias_templates</span><span class="o">=</span><span class="p">(),</span> <span class="n">reactions_ir</span><span class="o">=</span><span class="p">(),</span> <span class="n">reaction_gaps_ir</span><span class="o">=</span><span class="p">())</span></code>
 
@@ -12352,8 +13053,7 @@ removed in a future release.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/op_system/__init__.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">124</span>
-<span class="normal">125</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">125</span>
 <span class="normal">126</span>
 <span class="normal">127</span>
 <span class="normal">128</span>
@@ -12411,7 +13111,8 @@ removed in a future release.</p>
 <span class="normal">180</span>
 <span class="normal">181</span>
 <span class="normal">182</span>
-<span class="normal">183</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">compile_spec</span><span class="p">(</span>  <span class="c1"># ruff: ignore[non-empty-init-module]</span>
+<span class="normal">183</span>
+<span class="normal">184</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">compile_spec</span><span class="p">(</span>  <span class="c1"># ruff: ignore[non-empty-init-module]</span>
     <span class="n">spec</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">object</span><span class="p">],</span>
     <span class="o">*</span><span class="p">,</span>
     <span class="n">xp</span><span class="p">:</span> <span class="nb">object</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -15370,6 +16071,270 @@ omitted terms are never assigned zero flux. Propensities are not evaluated.</p>
         <span class="nb">tuple</span><span class="p">(</span><span class="n">compiled</span><span class="o">.</span><span class="n">axis_meta</span><span class="o">.</span><span class="n">items</span><span class="p">()),</span>
         <span class="n">_ASSUMPTIONS</span><span class="p">,</span>
     <span class="p">)</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="op_system.structural_model_json" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">structural_model_json</span><span class="p">(</span><span class="n">compiled</span><span class="p">)</span></code>
+
+<a href="#op_system.structural_model_json" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Serialize typed normalized IR and ordered compiler layouts as a canonical DAG.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>compiled</code>
+            </td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="CompiledRhs(state_names, param_names, eval_fn, meta=(lambda: MappingProxyType({}))(), operators=tuple(), factorize_axes=tuple(), block_axes=tuple(), pytree_eval_fn=None, template_shapes=None, block_pytree_eval_fn=None, block_template_shapes=None, history_requirements=tuple(), history_eval_fn=None, body_eval_fn=None, block_history_eval_fn=None, block_body_eval_fn=None, reactions=tuple(), reaction_gaps=tuple(), _rhs=None, param_meta=(lambda: MappingProxyType({}))(), state_meta=(lambda: MappingProxyType({}))(), axis_meta=(lambda: MappingProxyType({}))(), observables=(lambda: MappingProxyType({}))(), gauges=None, gauge_fix=None)
+
+  
+      dataclass
+   (op_system.compile.CompiledRhs)" href="../compile/#op_system.compile.CompiledRhs">CompiledRhs</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>An unmodified compiler-produced artifact with retained source IR.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Canonical schema-1 UTF-8/ASCII JSON text. Mapping keys are sorted;</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>state, parameter, axis, coordinate, operation and observable sequences</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>retain their semantic order. Scalars have explicit type tags and floats</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>use exact hexadecimal strings. Shared typed trees are content-interned.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The manifest includes normalized declarations/constants/operators and</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>gauge/coordinate options, but never bound runtime values or closures.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>This is an identity manifest, not the external executable IR export.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<p><span class="doc-section-title">Raises:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="ValueError">ValueError</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The artifact has no typed normalized source.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+            <details class="mkdocstrings-source">
+              <summary>Source code in <code>src/op_system/identity.py</code></summary>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">225</span>
+<span class="normal">226</span>
+<span class="normal">227</span>
+<span class="normal">228</span>
+<span class="normal">229</span>
+<span class="normal">230</span>
+<span class="normal">231</span>
+<span class="normal">232</span>
+<span class="normal">233</span>
+<span class="normal">234</span>
+<span class="normal">235</span>
+<span class="normal">236</span>
+<span class="normal">237</span>
+<span class="normal">238</span>
+<span class="normal">239</span>
+<span class="normal">240</span>
+<span class="normal">241</span>
+<span class="normal">242</span>
+<span class="normal">243</span>
+<span class="normal">244</span>
+<span class="normal">245</span>
+<span class="normal">246</span>
+<span class="normal">247</span>
+<span class="normal">248</span>
+<span class="normal">249</span>
+<span class="normal">250</span>
+<span class="normal">251</span>
+<span class="normal">252</span>
+<span class="normal">253</span>
+<span class="normal">254</span>
+<span class="normal">255</span>
+<span class="normal">256</span>
+<span class="normal">257</span>
+<span class="normal">258</span>
+<span class="normal">259</span>
+<span class="normal">260</span>
+<span class="normal">261</span>
+<span class="normal">262</span>
+<span class="normal">263</span>
+<span class="normal">264</span>
+<span class="normal">265</span>
+<span class="normal">266</span>
+<span class="normal">267</span>
+<span class="normal">268</span>
+<span class="normal">269</span>
+<span class="normal">270</span>
+<span class="normal">271</span>
+<span class="normal">272</span>
+<span class="normal">273</span>
+<span class="normal">274</span>
+<span class="normal">275</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">structural_model_json</span><span class="p">(</span><span class="n">compiled</span><span class="p">:</span> <span class="n">CompiledRhs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Serialize typed normalized IR and ordered compiler layouts as a canonical DAG.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        compiled: An unmodified compiler-produced artifact with retained source IR.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        Canonical schema-1 UTF-8/ASCII JSON text. Mapping keys are sorted;</span>
+<span class="sd">        state, parameter, axis, coordinate, operation and observable sequences</span>
+<span class="sd">        retain their semantic order. Scalars have explicit type tags and floats</span>
+<span class="sd">        use exact hexadecimal strings. Shared typed trees are content-interned.</span>
+<span class="sd">        The manifest includes normalized declarations/constants/operators and</span>
+<span class="sd">        gauge/coordinate options, but never bound runtime values or closures.</span>
+<span class="sd">        This is an identity manifest, not the external executable IR export.</span>
+
+<span class="sd">    Raises:</span>
+<span class="sd">        ValueError: The artifact has no typed normalized source.</span>
+<span class="sd">    """</span>
+    <span class="n">rhs</span> <span class="o">=</span> <span class="n">compiled</span><span class="o">.</span><span class="n">_rhs</span>  <span class="c1"># ruff: ignore[private-member-access]</span>
+    <span class="k">if</span> <span class="p">(</span>
+        <span class="n">rhs</span> <span class="ow">is</span> <span class="kc">None</span>
+        <span class="ow">or</span> <span class="ow">not</span> <span class="n">rhs</span><span class="o">.</span><span class="n">equations_ir_reduce</span>
+        <span class="ow">or</span> <span class="nb">any</span><span class="p">(</span><span class="n">expr</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">for</span> <span class="n">expr</span> <span class="ow">in</span> <span class="n">rhs</span><span class="o">.</span><span class="n">equations_ir_reduce</span><span class="p">)</span>
+    <span class="p">):</span>
+        <span class="n">msg</span> <span class="o">=</span> <span class="s2">"Structural identity requires compiler-produced typed normalized IR"</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+    <span class="n">source</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s2">"kind"</span><span class="p">:</span> <span class="nb">type</span><span class="p">(</span><span class="n">rhs</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="p">,</span>
+        <span class="s2">"state_names"</span><span class="p">:</span> <span class="n">compiled</span><span class="o">.</span><span class="n">state_names</span><span class="p">,</span>
+        <span class="s2">"param_names"</span><span class="p">:</span> <span class="n">compiled</span><span class="o">.</span><span class="n">param_names</span><span class="p">,</span>
+        <span class="s2">"state_templates"</span><span class="p">:</span> <span class="n">rhs</span><span class="o">.</span><span class="n">state_templates</span><span class="p">,</span>
+        <span class="s2">"shaped_params"</span><span class="p">:</span> <span class="n">rhs</span><span class="o">.</span><span class="n">shaped_params</span><span class="p">,</span>
+        <span class="s2">"time_varying_params"</span><span class="p">:</span> <span class="n">rhs</span><span class="o">.</span><span class="n">time_varying_params</span><span class="p">,</span>
+        <span class="s2">"alias_templates"</span><span class="p">:</span> <span class="n">rhs</span><span class="o">.</span><span class="n">alias_templates</span><span class="p">,</span>
+        <span class="s2">"aliases_ir"</span><span class="p">:</span> <span class="n">rhs</span><span class="o">.</span><span class="n">aliases_ir_reduce</span><span class="p">,</span>
+        <span class="s2">"equations_ir"</span><span class="p">:</span> <span class="n">rhs</span><span class="o">.</span><span class="n">equations_ir_reduce</span><span class="p">,</span>
+        <span class="s2">"metadata"</span><span class="p">:</span> <span class="n">rhs</span><span class="o">.</span><span class="n">meta</span><span class="p">,</span>
+        <span class="s2">"reactions_ir"</span><span class="p">:</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">rhs</span><span class="p">,</span> <span class="s2">"reactions_ir"</span><span class="p">,</span> <span class="p">()),</span>
+        <span class="s2">"reaction_gaps"</span><span class="p">:</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">rhs</span><span class="p">,</span> <span class="s2">"reaction_gaps_ir"</span><span class="p">,</span> <span class="p">()),</span>
+        <span class="s2">"observables"</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">compiled</span><span class="o">.</span><span class="n">observables</span><span class="p">),</span>
+        <span class="s2">"template_shapes"</span><span class="p">:</span> <span class="n">compiled</span><span class="o">.</span><span class="n">template_shapes</span><span class="p">,</span>
+        <span class="s2">"block_template_shapes"</span><span class="p">:</span> <span class="n">compiled</span><span class="o">.</span><span class="n">block_template_shapes</span><span class="p">,</span>
+    <span class="p">}</span>
+    <span class="n">encoder</span> <span class="o">=</span> <span class="n">_ManifestEncoder</span><span class="p">()</span>
+    <span class="n">root</span> <span class="o">=</span> <span class="n">encoder</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="n">source</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">_json</span><span class="p">({</span>
+        <span class="s2">"format"</span><span class="p">:</span> <span class="s2">"op-system-structural-model"</span><span class="p">,</span>
+        <span class="s2">"schema_version"</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
+        <span class="s2">"nodes"</span><span class="p">:</span> <span class="n">encoder</span><span class="o">.</span><span class="n">nodes</span><span class="p">,</span>
+        <span class="s2">"root"</span><span class="p">:</span> <span class="n">root</span><span class="p">,</span>
+    <span class="p">})</span>
 </code></pre></div></td></tr></table></div>
             </details>
     </div>
