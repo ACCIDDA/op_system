@@ -54,6 +54,7 @@ def main() -> int:
                 "tests/op_system/test_gauges.py",
                 "tests/op_system/test_state_coordinates.py",
                 "tests/op_system/test_portable_symbolic.py",
+                "tests/op_system/test_scalar_device.py",
                 "-k",
                 args.backend,
                 "-q",

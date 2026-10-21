@@ -37,6 +37,7 @@ from typing import (
 )
 
 import numpy as np
+from array_api_compat import device as _device  # type: ignore[import-untyped]
 from numpy.typing import NDArray
 
 from op_system._array import array_namespace
@@ -983,6 +984,7 @@ def _evaluate_equations(
     env: Mapping[str, object],
     xp: Any,  # ruff: ignore[any-type]
     state_dtype: object | None = None,
+    state_device: object | None = None,
 ) -> Float64Array:
     """Evaluate equation code objects against an environment.
 
@@ -1003,7 +1005,7 @@ def _evaluate_equations(
     array_values = [
         value
         if getattr(value, "dtype", None) is not None
-        else xp.asarray(value, dtype=state_dtype)
+        else xp.asarray(value, dtype=state_dtype, device=state_device)
         for value in out_vals
     ]
     return cast("Float64Array", xp.stack(array_values))
@@ -1045,7 +1047,7 @@ def _make_eval_fn(
         _check_numeric_dtype(xp, getattr(y, "dtype", None))
         y_arr = _validate_state_vector(y, n_state=n_state)
 
-        t_val = xp.asarray(t)
+        t_val = _time_like(t, y_arr)
         env: dict[str, object] = {"np": xp, "t": t_val}
         for s, i in name_to_idx.items():
             env[s] = cast("_Indexable", y_arr)[i]
@@ -1054,7 +1056,9 @@ def _make_eval_fn(
         def _sum_state() -> object:
             values = [v for k, v in env.items() if k in name_to_idx]
             if not values:
-                return xp.asarray(0.0)
+                return xp.asarray(
+                    0.0, dtype=getattr(y, "dtype", None), device=_device(y)
+                )
             return xp.sum(xp.stack(values))
 
         def _sum_prefix(prefix: object) -> object:
@@ -1063,7 +1067,9 @@ def _make_eval_fn(
                 v for k, v in env.items() if k.startswith(pfx) and k in name_to_idx
             ]
             if not values:
-                return xp.asarray(0.0)
+                return xp.asarray(
+                    0.0, dtype=getattr(y, "dtype", None), device=_device(y)
+                )
             return xp.sum(xp.stack(values))
 
         env["sum_state"] = _sum_state
@@ -1075,10 +1081,33 @@ def _make_eval_fn(
             _evaluate_cse_bindings(cse_code, env=env)
 
         return _evaluate_equations(
-            eq_code=eq_code, env=env, xp=xp, state_dtype=getattr(y_arr, "dtype", None)
+            eq_code=eq_code,
+            env=env,
+            xp=xp,
+            state_dtype=getattr(y_arr, "dtype", None),
+            state_device=_device(y_arr),
         )
 
     return eval_fn
+
+
+def _time_like(time: object, reference: object) -> object:
+    """Preserve native time graphs while placing generated scalars with states.
+
+    Returns:
+        A native time binding with the state's dtype and device.
+    """
+    xp = array_namespace(reference)
+    if getattr(time, "dtype", None) is not None:
+        try:
+            same_namespace = array_namespace(time) is xp
+        except TypeError:
+            same_namespace = False
+        if same_namespace:
+            return xp.astype(time, getattr(reference, "dtype", None), copy=False)
+    return xp.asarray(
+        time, dtype=getattr(reference, "dtype", None), device=_device(reference)
+    )
 
 
 _HISTORY_REQUIRED_OPTIONS: dict[str, tuple[str, ...]] = {
