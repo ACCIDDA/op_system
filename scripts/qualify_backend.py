@@ -53,6 +53,7 @@ def main() -> int:
                 "tests/op_system/test_named_kernel_products.py",
                 "tests/op_system/test_gauges.py",
                 "tests/op_system/test_state_coordinates.py",
+                "tests/op_system/test_portable_symbolic.py",
                 "-k",
                 args.backend,
                 "-q",

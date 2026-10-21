@@ -58,6 +58,7 @@ nav:
       - Getting Started: guides/getting-started.md
       - Parameter Declarations: guides/parameter-declarations.md
       - Structural Model Identity: guides/structural-identity.md
+      - Portable IR and Derivatives: guides/portable-ir.md
       - State Representations: guides/state-representations.md
       - Conditional Reaction Balances: guides/reaction-balances.md
       - Latent Observables: guides/latent-observables.md
@@ -83,6 +84,8 @@ nav:
       - Gauges: api-reference/gauges.md
       - Identity: api-reference/identity.md
       - Observables: api-reference/observables.md
+      - Portable: api-reference/portable.md
       - Qualification: api-reference/qualification.md
       - Specs: api-reference/specs.md
+      - Symbolic: api-reference/symbolic.md
       - Validate: api-reference/validate.md

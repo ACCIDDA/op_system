@@ -1,0 +1,228 @@
+{
+  "host": "shared Intel Core Ultra 7 265U; one CPU affinity; native thread limits=1",
+  "repetitions": "one fresh worker per case; seven warm evaluations; advisory only",
+  "cases": [
+    {
+      "analytic_reference": "passed",
+      "backend": "numpy",
+      "dense_entries": 15,
+      "derivative_construction_seconds": 0.002272777957841754,
+      "device": "cpu",
+      "dtype": "float64",
+      "first_evaluation_seconds": 0.10292493796441704,
+      "fixture_sha256": "ab94f34b850cb05152500c52f39ff301c703b53a843aa37f687074e532e5058d",
+      "model": "sha256:79e143e6aef758314f7b08fc987a3da8eddf71e0c286f8736baee8731d8913cb",
+      "parameters": [
+        "a",
+        "b",
+        "gain"
+      ],
+      "source_compile_seconds": 0.00908217899268493,
+      "states": 2,
+      "versions": {
+        "numpy": "2.5.4"
+      },
+      "warm_evaluation_seconds": 6.889301585033536e-05,
+      "warm_repetitions": 7,
+      "whole_worker_peak_rss_mib": 55.96484375
+    },
+    {
+      "analytic_reference": "passed",
+      "backend": "numpy",
+      "dense_entries": 323,
+      "derivative_construction_seconds": 0.02301641198573634,
+      "device": "cpu",
+      "dtype": "float64",
+      "first_evaluation_seconds": 0.09434059198247269,
+      "fixture_sha256": "ab94f34b850cb05152500c52f39ff301c703b53a843aa37f687074e532e5058d",
+      "model": "sha256:227a3a01d011e8cec21535ad988f4bb5a6d5ac9c520aab4a40c72587df27f3c3",
+      "parameters": [
+        "a",
+        "b",
+        "gain"
+      ],
+      "source_compile_seconds": 0.019466660975012928,
+      "states": 16,
+      "versions": {
+        "numpy": "2.5.4"
+      },
+      "warm_evaluation_seconds": 0.0006728500011377037,
+      "warm_repetitions": 7,
+      "whole_worker_peak_rss_mib": 56.3125
+    },
+    {
+      "analytic_reference": "passed",
+      "backend": "numpy",
+      "dense_entries": 1155,
+      "derivative_construction_seconds": 0.04201915400335565,
+      "device": "cpu",
+      "dtype": "float64",
+      "first_evaluation_seconds": 0.09099445096217096,
+      "fixture_sha256": "ab94f34b850cb05152500c52f39ff301c703b53a843aa37f687074e532e5058d",
+      "model": "sha256:d43bef2b94a559544cf758916015103096b176c0bc6f7b3125d1c471db5a1490",
+      "parameters": [
+        "a",
+        "b",
+        "gain"
+      ],
+      "source_compile_seconds": 0.019852721015922725,
+      "states": 32,
+      "versions": {
+        "numpy": "2.5.4"
+      },
+      "warm_evaluation_seconds": 0.002309964969754219,
+      "warm_repetitions": 7,
+      "whole_worker_peak_rss_mib": 56.88671875
+    },
+    {
+      "analytic_reference": "passed",
+      "backend": "jax",
+      "dense_entries": 15,
+      "derivative_construction_seconds": 0.003063499985728413,
+      "device": "cpu",
+      "dtype": "float64",
+      "first_evaluation_seconds": 0.10350048099644482,
+      "fixture_sha256": "ab94f34b850cb05152500c52f39ff301c703b53a843aa37f687074e532e5058d",
+      "model": "sha256:79e143e6aef758314f7b08fc987a3da8eddf71e0c286f8736baee8731d8913cb",
+      "parameters": [
+        "a",
+        "b",
+        "gain"
+      ],
+      "source_compile_seconds": 0.008889593998901546,
+      "states": 2,
+      "versions": {
+        "jax": "0.12.0",
+        "numpy": "2.5.4"
+      },
+      "warm_evaluation_seconds": 0.00010104698594659567,
+      "warm_repetitions": 7,
+      "whole_worker_peak_rss_mib": 217.6484375
+    },
+    {
+      "analytic_reference": "passed",
+      "backend": "jax",
+      "dense_entries": 323,
+      "derivative_construction_seconds": 0.023845867021009326,
+      "device": "cpu",
+      "dtype": "float64",
+      "first_evaluation_seconds": 0.7201739500160329,
+      "fixture_sha256": "ab94f34b850cb05152500c52f39ff301c703b53a843aa37f687074e532e5058d",
+      "model": "sha256:227a3a01d011e8cec21535ad988f4bb5a6d5ac9c520aab4a40c72587df27f3c3",
+      "parameters": [
+        "a",
+        "b",
+        "gain"
+      ],
+      "source_compile_seconds": 0.01393872097833082,
+      "states": 16,
+      "versions": {
+        "jax": "0.12.0",
+        "numpy": "2.5.4"
+      },
+      "warm_evaluation_seconds": 0.0002013400080613792,
+      "warm_repetitions": 7,
+      "whole_worker_peak_rss_mib": 259.18359375
+    },
+    {
+      "analytic_reference": "passed",
+      "backend": "jax",
+      "dense_entries": 1155,
+      "derivative_construction_seconds": 0.11312476103194058,
+      "device": "cpu",
+      "dtype": "float64",
+      "first_evaluation_seconds": 1.408967497991398,
+      "fixture_sha256": "ab94f34b850cb05152500c52f39ff301c703b53a843aa37f687074e532e5058d",
+      "model": "sha256:d43bef2b94a559544cf758916015103096b176c0bc6f7b3125d1c471db5a1490",
+      "parameters": [
+        "a",
+        "b",
+        "gain"
+      ],
+      "source_compile_seconds": 0.02988898300100118,
+      "states": 32,
+      "versions": {
+        "jax": "0.12.0",
+        "numpy": "2.5.4"
+      },
+      "warm_evaluation_seconds": 0.00029148900648579,
+      "warm_repetitions": 7,
+      "whole_worker_peak_rss_mib": 302.31640625
+    },
+    {
+      "analytic_reference": "passed",
+      "backend": "torch",
+      "dense_entries": 15,
+      "derivative_construction_seconds": 0.0036537250271067023,
+      "device": "cpu",
+      "dtype": "float64",
+      "first_evaluation_seconds": 0.012136270990595222,
+      "fixture_sha256": "ab94f34b850cb05152500c52f39ff301c703b53a843aa37f687074e532e5058d",
+      "model": "sha256:79e143e6aef758314f7b08fc987a3da8eddf71e0c286f8736baee8731d8913cb",
+      "parameters": [
+        "a",
+        "b",
+        "gain"
+      ],
+      "source_compile_seconds": 0.01757420302601531,
+      "states": 2,
+      "versions": {
+        "numpy": "2.5.4",
+        "torch": "2.14.1+cpu"
+      },
+      "warm_evaluation_seconds": 0.0001589760067872703,
+      "warm_repetitions": 7,
+      "whole_worker_peak_rss_mib": 232.6328125
+    },
+    {
+      "analytic_reference": "passed",
+      "backend": "torch",
+      "dense_entries": 323,
+      "derivative_construction_seconds": 0.01842460100306198,
+      "device": "cpu",
+      "dtype": "float64",
+      "first_evaluation_seconds": 0.009291463997215033,
+      "fixture_sha256": "ab94f34b850cb05152500c52f39ff301c703b53a843aa37f687074e532e5058d",
+      "model": "sha256:227a3a01d011e8cec21535ad988f4bb5a6d5ac9c520aab4a40c72587df27f3c3",
+      "parameters": [
+        "a",
+        "b",
+        "gain"
+      ],
+      "source_compile_seconds": 0.016518500982783735,
+      "states": 16,
+      "versions": {
+        "numpy": "2.5.4",
+        "torch": "2.14.1+cpu"
+      },
+      "warm_evaluation_seconds": 0.0011989990016445518,
+      "warm_repetitions": 7,
+      "whole_worker_peak_rss_mib": 233.07421875
+    },
+    {
+      "analytic_reference": "passed",
+      "backend": "torch",
+      "dense_entries": 1155,
+      "derivative_construction_seconds": 0.05379905801964924,
+      "device": "cpu",
+      "dtype": "float64",
+      "first_evaluation_seconds": 0.013187110016588122,
+      "fixture_sha256": "ab94f34b850cb05152500c52f39ff301c703b53a843aa37f687074e532e5058d",
+      "model": "sha256:d43bef2b94a559544cf758916015103096b176c0bc6f7b3125d1c471db5a1490",
+      "parameters": [
+        "a",
+        "b",
+        "gain"
+      ],
+      "source_compile_seconds": 0.024105997988954186,
+      "states": 32,
+      "versions": {
+        "numpy": "2.5.4",
+        "torch": "2.14.1+cpu"
+      },
+      "warm_evaluation_seconds": 0.0039013350033201277,
+      "warm_repetitions": 7,
+      "whole_worker_peak_rss_mib": 234.109375
+    }
+  ]
+}

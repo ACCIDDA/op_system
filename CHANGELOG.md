@@ -9,6 +9,13 @@ version; format loosely follows
 
 ### Added
 
+- Export canonical typed IR envelopes with guarded readonly decoding and the
+  existing structural model identity. Add bounded scalar state/parameter and
+  observable derivative matrices with native NumPy/JAX/CPU Torch evaluation,
+  conservative dependencies, dense actions and Julia expression exports with
+  explicit bindings. Keep unsupported tensor/operator/history/gauge compositions
+  and external-tool rank qualification explicit.
+
 - Add opt-in schema-1 structural model manifests and SHA-256 references for
   guarded downstream provenance. Preserve ordered layouts, typed IR, constants,
   observables, operators and gauge/coordinate options; intern shared trees

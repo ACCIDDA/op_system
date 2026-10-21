@@ -75,3 +75,12 @@ versions, assumptions, exact/numerical reference definitions, witness points,
 tolerances, disagreements and censored timeouts. Different rank notions or known
 input assumptions must not be treated as the same calculation. The optional Julia
 consumer remains interoperability work alongside forward/provenance interfaces.
+
+## Portable interfaces delivered
+
+[Portable IR and bounded scalar derivatives](../guides/portable-ir.md) now provide
+typed structural interchange, conservative dependencies, native dense derivative
+matrices and Julia RHS/observable expressions from the same compiler IR. General
+sparse/action, shaped-parameter, operator/history and external structural-tool
+qualification remain separate extensions. This establishes interfaces, not a
+reason to select a Rust normalization implementation.
