@@ -7,6 +7,14 @@ version; format loosely follows
 
 ## [Unreleased]
 
+### Added
+
+- Add opt-in schema-1 structural model manifests and SHA-256 references for
+  guarded downstream provenance. Preserve ordered layouts, typed IR, constants,
+  observables, operators and gauge/coordinate options; intern shared trees
+  without materializing deferred scalar IR. Keep runtime values/settings and
+  Python equality/hash behavior separate (#328).
+
 ### Documentation
 
 - Record compiler/backend execution choices, structural identity and derivative/export
