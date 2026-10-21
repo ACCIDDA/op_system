@@ -33,11 +33,19 @@
          <lastmod>2026-10-21</lastmod>
     </url>
     <url>
+         <loc>https://accidda.github.io/op_system/0.9/api-reference/portable/</loc>
+         <lastmod>2026-10-21</lastmod>
+    </url>
+    <url>
          <loc>https://accidda.github.io/op_system/0.9/api-reference/qualification/</loc>
          <lastmod>2026-10-21</lastmod>
     </url>
     <url>
          <loc>https://accidda.github.io/op_system/0.9/api-reference/specs/</loc>
+         <lastmod>2026-10-21</lastmod>
+    </url>
+    <url>
+         <loc>https://accidda.github.io/op_system/0.9/api-reference/symbolic/</loc>
          <lastmod>2026-10-21</lastmod>
     </url>
     <url>
@@ -134,6 +142,10 @@
     </url>
     <url>
          <loc>https://accidda.github.io/op_system/0.9/guides/parameter-declarations/</loc>
+         <lastmod>2026-10-21</lastmod>
+    </url>
+    <url>
+         <loc>https://accidda.github.io/op_system/0.9/guides/portable-ir/</loc>
          <lastmod>2026-10-21</lastmod>
     </url>
     <url>
