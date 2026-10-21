@@ -9,6 +9,9 @@ version; format loosely follows
 
 ### Documentation
 
+- Record compiler/backend execution choices, structural identity and derivative/export
+  boundaries, representative baseline requirements and the deferred Rust IR experiment.
+
 - Replace issue and pull-request breadcrumbs in guides and API docstrings with
   current behavior, named interfaces and explicit limitations.
 
