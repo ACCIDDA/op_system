@@ -55,3 +55,23 @@ Develop structural identity and forward-consumer contracts early. Derivative and
 IR export work can proceed alongside shared observation/prior interfaces. Qualify
 JAX execution and explicit GPU cases before selecting additional native kernels.
 Revisit Rust normalization only after those measurements and contracts stabilize.
+
+## External-tool reproducibility
+
+The downstream evidence on [#326](https://github.com/ACCIDDA/op_system/issues/326)
+includes rank disagreements and timeouts from manually transcribed external
+models. Their cause remains unresolved. A generated export should remove the
+transcription ambiguity, not assert that an external result is correct.
+
+Preserve stable axis-expanded names and aliases, ordered coordinates, initial
+conditions, known time-varying inputs versus unknown parameters/constants, and
+observables with their measures. Unsupported operations must have explicit
+diagnostics. Bind the schema/emitter version and supported-subset contract to
+the structural identity from [#328](https://github.com/ACCIDDA/op_system/issues/328).
+
+On independent synthetic fixtures, compare exported expression values and
+state/parameter/observable derivatives against the same compiled IR. Retain tool
+versions, assumptions, exact/numerical reference definitions, witness points,
+tolerances, disagreements and censored timeouts. Different rank notions or known
+input assumptions must not be treated as the same calculation. The optional Julia
+consumer remains interoperability work alongside forward/provenance interfaces.
