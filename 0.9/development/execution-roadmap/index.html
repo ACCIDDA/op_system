@@ -1287,6 +1287,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/numba/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Optional Numba
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -1496,6 +1524,34 @@
     
   
     Identity
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api-reference/numba/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Numba
   
 
     
@@ -1834,8 +1890,8 @@ result, rather than silently appearing to use that accelerator.</p>
 <td>Versioned typed serialization and a bounded Julia emitter with explicit supported rational/expression semantics. Export remains separate from normal evaluation.</td>
 </tr>
 <tr>
-<td>Numba experiment</td>
-<td>Optional NumPy-only lowering, chosen after representative baseline measurements; report compilation and amortized execution costs and preserve reference behavior.</td>
+<td>Optional Numba lowering</td>
+<td><a href="../../guides/numba/">Explicit CPU NumPy lowering</a> generates one packed flat-array signature with float32/64 contract checks. Cold compilation, packing and memory remain part of adoption decisions; no solver default changes.</td>
 </tr>
 <tr>
 <td>Rust/PyO3 IR experiment</td>
@@ -1863,8 +1919,8 @@ repeated general broadcasts of already-shaped buffers and records a targeted
 read-only-view optimization. Both source variants use the existing hierarchical
 oracle and a shared harness. Keep these RHS measurements separate from complete
 solver, statistical pipeline and training performance. Optional Numba and Torch
-compilation still require supported lowering/loop contracts and their own
-break-even evidence.</p>
+compilation require distinct contracts. The optional NumPy lowering now records
+packing, cold/warm and memory costs; Torch sequential compilation remains separate.</p>
 <p>First reconcile open work and run the existing hierarchical compiler baseline.
 Develop structural identity and forward-consumer contracts early. Derivative and
 IR export work can proceed alongside shared observation/prior interfaces. Qualify
