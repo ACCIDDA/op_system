@@ -232,8 +232,11 @@ def _patterns(
 
     Returns:
         Ordered conservative state/parameter dependency patterns.
+
+    Raises:
+        ValueError: An output expression or its declared layout is incomplete.
     """
-    reads = []
+    reads: list[tuple[tuple[int, ...], tuple[int, ...], bool]] = []
     for expression in expressions:
         if expression is None or len(reads) >= len(names):
             msg = "Dependency export requires complete output IR/layout"
