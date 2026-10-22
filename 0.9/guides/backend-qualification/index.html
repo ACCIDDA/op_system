@@ -1189,6 +1189,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#scalar-callable-and-strict-compiler-boundary" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Scalar callable and strict compiler boundary
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -1794,6 +1805,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#scalar-callable-and-strict-compiler-boundary" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Scalar callable and strict compiler boundary
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -1950,6 +1972,29 @@ when conversion is needed, preserving their graph edges on Torch 2.6 with the
 minimum compatibility namespace. NumPy/JAX/CuPy conversion rules are unchanged.
 This remains eager/autograd qualification; strict Torch compiler capture is a
 separate version-scoped contract.</p>
+<h2 id="scalar-callable-and-strict-compiler-boundary">Scalar callable and strict compiler boundary<a class="headerlink" href="#scalar-callable-and-strict-compiler-boundary" title="Permanent link">&para;</a></h2>
+<p>Scalar RHS aliases, shared subexpressions, equations and latent observables use
+validated cached expression functions. Runtime calls bind fresh environment
+values as explicit arguments. Constructors evaluate a generated lambda once;
+these numerical calls no longer invoke Python <code>eval</code>. Code objects remain
+available for inspection. The vectorized path reuses the same helper. Reaction
+callbacks retain their separate existing restricted code-object evaluation.</p>
+<p>A regression guard disables runtime <code>eval</code> after constructing a public synthetic
+model, then changes parameters and checks independent RHS/observable values.
+Torch tests check values and first derivatives in float32/64. Strict single-FX-graph
+capture is qualified on Torch 2.14.1; Torch 2.6 retains its eager/AD contract.
+Older strict compilation encounters upstream namespace-helper limitations and is
+not covered by this new capture qualification. FX capture here uses an inspection
+backend; native solver-loop acceleration requires separate engine evidence.</p>
+<p>The <a href="../../assets/scalar-callables/paired.json.gz">paired scalar receipt</a> records
+12 fresh CPU workers: three each for one, two, eight and 32 scalar states, using
+the same normalized model and arrays for the baseline/candidate factories.
+Fifteen alternating pairs of 1000 calls per worker check independent values before
+timing. Candidate/baseline process-median latency ratios are 1.012, 1.029, 1.044
+and 1.051 respectively. This is a small eager scalar-RHS cost for the reusable
+compiler boundary, not an eager speedup claim. The record preserves raw samples,
+source snapshots/hashes, construction times and reproduction code. These paired
+workers do not measure observation latency, complete integration or training.</p>
 
 
 
