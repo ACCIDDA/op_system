@@ -1,0 +1,530 @@
+{
+  "schema": 1,
+  "description": "Fresh serial CPU workers, shared linear ring source and four equal state actions; dense path evaluates four matrices once. No timing thresholds or full-solve claim.",
+  "logical_cpu": 0,
+  "affinity": [
+    0
+  ],
+  "threads": 1,
+  "platform": "Linux-6.17.0-1033-oem-x86_64-with-glibc2.39",
+  "cpu_model": "Intel(R) Core(TM) Ultra 7 265U",
+  "source_base": "2e45ca0fb15d790655a7339ae4585631d7804d82",
+  "source_sha256": {
+    "src/op_system/actions.py": "e5db212feaf672cee3ed84bb09a88d7a0e5c8bc2c17d2c2e18c01a35c970eaf8",
+    "examples/benchmark_symbolic.py": "d016d10b4ed94591961a1e4ccc78c43a4d8c1c9bb796116348c6de6a29362f98"
+  },
+  "records": [
+    {
+      "repeat": 0,
+      "backend": "jax",
+      "states": 32,
+      "implementation": "symbolic",
+      "returncode": 0,
+      "stderr": "",
+      "measurement": {
+        "analytic_reference": "passed",
+        "backend": "jax",
+        "dense_api_entries": 1155,
+        "derivative_construction_seconds": 0.17542687099194154,
+        "device": "cpu",
+        "dtype": "float64",
+        "first_evaluation_seconds": 0.5167638559942134,
+        "fixture_sha256": "d016d10b4ed94591961a1e4ccc78c43a4d8c1c9bb796116348c6de6a29362f98",
+        "implementation": "symbolic",
+        "model": "sha256:d43bef2b94a559544cf758916015103096b176c0bc6f7b3125d1c471db5a1490",
+        "operation": "four-state-actions",
+        "output_entries": 97,
+        "source_compile_seconds": 0.09392536402447149,
+        "states": 32,
+        "versions": {
+          "jax": "0.12.0",
+          "numpy": "2.5.4"
+        },
+        "warm_evaluation_seconds": 4.9875001423060894e-05,
+        "warm_repetitions": 11,
+        "whole_worker_peak_rss_mib": 244.07421875
+      },
+      "worker_seconds": 2.322148578008637
+    },
+    {
+      "repeat": 0,
+      "backend": "jax",
+      "states": 32,
+      "implementation": "native",
+      "returncode": 0,
+      "stderr": "",
+      "measurement": {
+        "analytic_reference": "passed",
+        "backend": "jax",
+        "dense_api_entries": null,
+        "derivative_construction_seconds": 0.09336580301169306,
+        "device": "cpu",
+        "dtype": "float64",
+        "first_evaluation_seconds": 1.0061589920078404,
+        "fixture_sha256": "d016d10b4ed94591961a1e4ccc78c43a4d8c1c9bb796116348c6de6a29362f98",
+        "implementation": "native",
+        "model": "sha256:d43bef2b94a559544cf758916015103096b176c0bc6f7b3125d1c471db5a1490",
+        "operation": "four-state-actions",
+        "output_entries": 97,
+        "source_compile_seconds": 0.09522574004950002,
+        "states": 32,
+        "versions": {
+          "jax": "0.12.0",
+          "numpy": "2.5.4"
+        },
+        "warm_evaluation_seconds": 5.307199899107218e-05,
+        "warm_repetitions": 11,
+        "whole_worker_peak_rss_mib": 268.28125
+      },
+      "worker_seconds": 2.6870950480224565
+    },
+    {
+      "repeat": 0,
+      "backend": "jax",
+      "states": 128,
+      "implementation": "symbolic",
+      "returncode": 0,
+      "stderr": "",
+      "measurement": {
+        "analytic_reference": "passed",
+        "backend": "jax",
+        "dense_api_entries": 16899,
+        "derivative_construction_seconds": 1.0718913529999554,
+        "device": "cpu",
+        "dtype": "float64",
+        "first_evaluation_seconds": 9.705725110019557,
+        "fixture_sha256": "d016d10b4ed94591961a1e4ccc78c43a4d8c1c9bb796116348c6de6a29362f98",
+        "implementation": "symbolic",
+        "model": "sha256:07f5f19e7ffa0cf0fcb7637ae5b9f8e90c6545f86f0b294792609b01c721b0bd",
+        "operation": "four-state-actions",
+        "output_entries": 385,
+        "source_compile_seconds": 0.20027228200342506,
+        "states": 128,
+        "versions": {
+          "jax": "0.12.0",
+          "numpy": "2.5.4"
+        },
+        "warm_evaluation_seconds": 8.964398875832558e-05,
+        "warm_repetitions": 11,
+        "whole_worker_peak_rss_mib": 299.296875
+      },
+      "worker_seconds": 12.501797586970497
+    },
+    {
+      "repeat": 0,
+      "backend": "jax",
+      "states": 128,
+      "implementation": "native",
+      "returncode": 0,
+      "stderr": "",
+      "measurement": {
+        "analytic_reference": "passed",
+        "backend": "jax",
+        "dense_api_entries": null,
+        "derivative_construction_seconds": 0.0639817490009591,
+        "device": "cpu",
+        "dtype": "float64",
+        "first_evaluation_seconds": 4.171059421962127,
+        "fixture_sha256": "d016d10b4ed94591961a1e4ccc78c43a4d8c1c9bb796116348c6de6a29362f98",
+        "implementation": "native",
+        "model": "sha256:07f5f19e7ffa0cf0fcb7637ae5b9f8e90c6545f86f0b294792609b01c721b0bd",
+        "operation": "four-state-actions",
+        "output_entries": 385,
+        "source_compile_seconds": 0.257338127004914,
+        "states": 128,
+        "versions": {
+          "jax": "0.12.0",
+          "numpy": "2.5.4"
+        },
+        "warm_evaluation_seconds": 0.0001576970098540187,
+        "warm_repetitions": 11,
+        "whole_worker_peak_rss_mib": 396.53125
+      },
+      "worker_seconds": 6.2067094829981215
+    },
+    {
+      "repeat": 0,
+      "backend": "torch",
+      "states": 32,
+      "implementation": "symbolic",
+      "returncode": 0,
+      "stderr": "",
+      "measurement": {
+        "analytic_reference": "passed",
+        "backend": "torch",
+        "dense_api_entries": 1155,
+        "derivative_construction_seconds": 0.20308316900627688,
+        "device": "cpu",
+        "dtype": "float64",
+        "first_evaluation_seconds": 0.01449017197592184,
+        "fixture_sha256": "d016d10b4ed94591961a1e4ccc78c43a4d8c1c9bb796116348c6de6a29362f98",
+        "implementation": "symbolic",
+        "model": "sha256:d43bef2b94a559544cf758916015103096b176c0bc6f7b3125d1c471db5a1490",
+        "operation": "four-state-actions",
+        "output_entries": 97,
+        "source_compile_seconds": 0.11243812000611797,
+        "states": 32,
+        "versions": {
+          "numpy": "2.5.4",
+          "torch": "2.14.1+cpu"
+        },
+        "warm_evaluation_seconds": 0.003602574986871332,
+        "warm_repetitions": 11,
+        "whole_worker_peak_rss_mib": 245.359375
+      },
+      "worker_seconds": 3.182959315017797
+    },
+    {
+      "repeat": 0,
+      "backend": "torch",
+      "states": 32,
+      "implementation": "native",
+      "returncode": 0,
+      "stderr": "/tmp/op-stack-delivery/venv/lib/python3.12/site-packages/torch/jit/_script.py:1491: FutureWarning: `torch.jit.script` is deprecated. Please switch to `torch.compile` or `torch.export`.\n  warnings.warn(\n",
+      "measurement": {
+        "analytic_reference": "passed",
+        "backend": "torch",
+        "dense_api_entries": null,
+        "derivative_construction_seconds": 0.1409922789898701,
+        "device": "cpu",
+        "dtype": "float64",
+        "first_evaluation_seconds": 1.7888806069968268,
+        "fixture_sha256": "d016d10b4ed94591961a1e4ccc78c43a4d8c1c9bb796116348c6de6a29362f98",
+        "implementation": "native",
+        "model": "sha256:d43bef2b94a559544cf758916015103096b176c0bc6f7b3125d1c471db5a1490",
+        "operation": "four-state-actions",
+        "output_entries": 97,
+        "source_compile_seconds": 0.09977648296626285,
+        "states": 32,
+        "versions": {
+          "numpy": "2.5.4",
+          "torch": "2.14.1+cpu"
+        },
+        "warm_evaluation_seconds": 0.015576065052300692,
+        "warm_repetitions": 11,
+        "whole_worker_peak_rss_mib": 319.265625
+      },
+      "worker_seconds": 5.605445280030835
+    },
+    {
+      "repeat": 0,
+      "backend": "torch",
+      "states": 128,
+      "implementation": "symbolic",
+      "returncode": 0,
+      "stderr": "",
+      "measurement": {
+        "analytic_reference": "passed",
+        "backend": "torch",
+        "dense_api_entries": 16899,
+        "derivative_construction_seconds": 1.0633067020098679,
+        "device": "cpu",
+        "dtype": "float64",
+        "first_evaluation_seconds": 0.05794403899926692,
+        "fixture_sha256": "d016d10b4ed94591961a1e4ccc78c43a4d8c1c9bb796116348c6de6a29362f98",
+        "implementation": "symbolic",
+        "model": "sha256:07f5f19e7ffa0cf0fcb7637ae5b9f8e90c6545f86f0b294792609b01c721b0bd",
+        "operation": "four-state-actions",
+        "output_entries": 385,
+        "source_compile_seconds": 0.2716263870242983,
+        "states": 128,
+        "versions": {
+          "numpy": "2.5.4",
+          "torch": "2.14.1+cpu"
+        },
+        "warm_evaluation_seconds": 0.055535092018544674,
+        "warm_repetitions": 11,
+        "whole_worker_peak_rss_mib": 275.640625
+      },
+      "worker_seconds": 5.148732843983453
+    },
+    {
+      "repeat": 0,
+      "backend": "torch",
+      "states": 128,
+      "implementation": "native",
+      "returncode": 0,
+      "stderr": "/tmp/op-stack-delivery/venv/lib/python3.12/site-packages/torch/jit/_script.py:1491: FutureWarning: `torch.jit.script` is deprecated. Please switch to `torch.compile` or `torch.export`.\n  warnings.warn(\n",
+      "measurement": {
+        "analytic_reference": "passed",
+        "backend": "torch",
+        "dense_api_entries": null,
+        "derivative_construction_seconds": 0.05747438600519672,
+        "device": "cpu",
+        "dtype": "float64",
+        "first_evaluation_seconds": 2.1638279499602504,
+        "fixture_sha256": "d016d10b4ed94591961a1e4ccc78c43a4d8c1c9bb796116348c6de6a29362f98",
+        "implementation": "native",
+        "model": "sha256:07f5f19e7ffa0cf0fcb7637ae5b9f8e90c6545f86f0b294792609b01c721b0bd",
+        "operation": "four-state-actions",
+        "output_entries": 385,
+        "source_compile_seconds": 0.2659477590350434,
+        "states": 128,
+        "versions": {
+          "numpy": "2.5.4",
+          "torch": "2.14.1+cpu"
+        },
+        "warm_evaluation_seconds": 0.056593160959891975,
+        "warm_repetitions": 11,
+        "whole_worker_peak_rss_mib": 320.44921875
+      },
+      "worker_seconds": 6.57000115403207
+    },
+    {
+      "repeat": 1,
+      "backend": "jax",
+      "states": 32,
+      "implementation": "native",
+      "returncode": 0,
+      "stderr": "",
+      "measurement": {
+        "analytic_reference": "passed",
+        "backend": "jax",
+        "dense_api_entries": null,
+        "derivative_construction_seconds": 0.09201196598587558,
+        "device": "cpu",
+        "dtype": "float64",
+        "first_evaluation_seconds": 0.8280782849760726,
+        "fixture_sha256": "d016d10b4ed94591961a1e4ccc78c43a4d8c1c9bb796116348c6de6a29362f98",
+        "implementation": "native",
+        "model": "sha256:d43bef2b94a559544cf758916015103096b176c0bc6f7b3125d1c471db5a1490",
+        "operation": "four-state-actions",
+        "output_entries": 97,
+        "source_compile_seconds": 0.09147912298794836,
+        "states": 32,
+        "versions": {
+          "jax": "0.12.0",
+          "numpy": "2.5.4"
+        },
+        "warm_evaluation_seconds": 6.29040296189487e-05,
+        "warm_repetitions": 11,
+        "whole_worker_peak_rss_mib": 266.42578125
+      },
+      "worker_seconds": 2.5534785889904015
+    },
+    {
+      "repeat": 1,
+      "backend": "jax",
+      "states": 32,
+      "implementation": "symbolic",
+      "returncode": 0,
+      "stderr": "",
+      "measurement": {
+        "analytic_reference": "passed",
+        "backend": "jax",
+        "dense_api_entries": 1155,
+        "derivative_construction_seconds": 0.17839410802116618,
+        "device": "cpu",
+        "dtype": "float64",
+        "first_evaluation_seconds": 0.4378834550152533,
+        "fixture_sha256": "d016d10b4ed94591961a1e4ccc78c43a4d8c1c9bb796116348c6de6a29362f98",
+        "implementation": "symbolic",
+        "model": "sha256:d43bef2b94a559544cf758916015103096b176c0bc6f7b3125d1c471db5a1490",
+        "operation": "four-state-actions",
+        "output_entries": 97,
+        "source_compile_seconds": 0.08963945199502632,
+        "states": 32,
+        "versions": {
+          "jax": "0.12.0",
+          "numpy": "2.5.4"
+        },
+        "warm_evaluation_seconds": 4.724797327071428e-05,
+        "warm_repetitions": 11,
+        "whole_worker_peak_rss_mib": 244.203125
+      },
+      "worker_seconds": 2.226567626988981
+    },
+    {
+      "repeat": 1,
+      "backend": "jax",
+      "states": 128,
+      "implementation": "native",
+      "returncode": 0,
+      "stderr": "",
+      "measurement": {
+        "analytic_reference": "passed",
+        "backend": "jax",
+        "dense_api_entries": null,
+        "derivative_construction_seconds": 0.06933619099436328,
+        "device": "cpu",
+        "dtype": "float64",
+        "first_evaluation_seconds": 3.8610015889862552,
+        "fixture_sha256": "d016d10b4ed94591961a1e4ccc78c43a4d8c1c9bb796116348c6de6a29362f98",
+        "implementation": "native",
+        "model": "sha256:07f5f19e7ffa0cf0fcb7637ae5b9f8e90c6545f86f0b294792609b01c721b0bd",
+        "operation": "four-state-actions",
+        "output_entries": 385,
+        "source_compile_seconds": 0.20476731698727235,
+        "states": 128,
+        "versions": {
+          "jax": "0.12.0",
+          "numpy": "2.5.4"
+        },
+        "warm_evaluation_seconds": 9.038200369104743e-05,
+        "warm_repetitions": 11,
+        "whole_worker_peak_rss_mib": 390.16015625
+      },
+      "worker_seconds": 5.7163764190045185
+    },
+    {
+      "repeat": 1,
+      "backend": "jax",
+      "states": 128,
+      "implementation": "symbolic",
+      "returncode": 0,
+      "stderr": "",
+      "measurement": {
+        "analytic_reference": "passed",
+        "backend": "jax",
+        "dense_api_entries": 16899,
+        "derivative_construction_seconds": 1.1674487050040625,
+        "device": "cpu",
+        "dtype": "float64",
+        "first_evaluation_seconds": 9.13642167596845,
+        "fixture_sha256": "d016d10b4ed94591961a1e4ccc78c43a4d8c1c9bb796116348c6de6a29362f98",
+        "implementation": "symbolic",
+        "model": "sha256:07f5f19e7ffa0cf0fcb7637ae5b9f8e90c6545f86f0b294792609b01c721b0bd",
+        "operation": "four-state-actions",
+        "output_entries": 385,
+        "source_compile_seconds": 0.21310854598414153,
+        "states": 128,
+        "versions": {
+          "jax": "0.12.0",
+          "numpy": "2.5.4"
+        },
+        "warm_evaluation_seconds": 9.721098467707634e-05,
+        "warm_repetitions": 11,
+        "whole_worker_peak_rss_mib": 299.1015625
+      },
+      "worker_seconds": 12.0789355210145
+    },
+    {
+      "repeat": 1,
+      "backend": "torch",
+      "states": 32,
+      "implementation": "native",
+      "returncode": 0,
+      "stderr": "/tmp/op-stack-delivery/venv/lib/python3.12/site-packages/torch/jit/_script.py:1491: FutureWarning: `torch.jit.script` is deprecated. Please switch to `torch.compile` or `torch.export`.\n  warnings.warn(\n",
+      "measurement": {
+        "analytic_reference": "passed",
+        "backend": "torch",
+        "dense_api_entries": null,
+        "derivative_construction_seconds": 0.1346326069906354,
+        "device": "cpu",
+        "dtype": "float64",
+        "first_evaluation_seconds": 2.015019831014797,
+        "fixture_sha256": "d016d10b4ed94591961a1e4ccc78c43a4d8c1c9bb796116348c6de6a29362f98",
+        "implementation": "native",
+        "model": "sha256:d43bef2b94a559544cf758916015103096b176c0bc6f7b3125d1c471db5a1490",
+        "operation": "four-state-actions",
+        "output_entries": 97,
+        "source_compile_seconds": 0.1175838959752582,
+        "states": 32,
+        "versions": {
+          "numpy": "2.5.4",
+          "torch": "2.14.1+cpu"
+        },
+        "warm_evaluation_seconds": 0.014332410995848477,
+        "warm_repetitions": 11,
+        "whole_worker_peak_rss_mib": 319.19921875
+      },
+      "worker_seconds": 6.056383553019259
+    },
+    {
+      "repeat": 1,
+      "backend": "torch",
+      "states": 32,
+      "implementation": "symbolic",
+      "returncode": 0,
+      "stderr": "",
+      "measurement": {
+        "analytic_reference": "passed",
+        "backend": "torch",
+        "dense_api_entries": 1155,
+        "derivative_construction_seconds": 0.19807787297759205,
+        "device": "cpu",
+        "dtype": "float64",
+        "first_evaluation_seconds": 0.010745958017650992,
+        "fixture_sha256": "d016d10b4ed94591961a1e4ccc78c43a4d8c1c9bb796116348c6de6a29362f98",
+        "implementation": "symbolic",
+        "model": "sha256:d43bef2b94a559544cf758916015103096b176c0bc6f7b3125d1c471db5a1490",
+        "operation": "four-state-actions",
+        "output_entries": 97,
+        "source_compile_seconds": 0.09630415198625997,
+        "states": 32,
+        "versions": {
+          "numpy": "2.5.4",
+          "torch": "2.14.1+cpu"
+        },
+        "warm_evaluation_seconds": 0.007264999963808805,
+        "warm_repetitions": 11,
+        "whole_worker_peak_rss_mib": 245.36328125
+      },
+      "worker_seconds": 3.148762597993482
+    },
+    {
+      "repeat": 1,
+      "backend": "torch",
+      "states": 128,
+      "implementation": "native",
+      "returncode": 0,
+      "stderr": "/tmp/op-stack-delivery/venv/lib/python3.12/site-packages/torch/jit/_script.py:1491: FutureWarning: `torch.jit.script` is deprecated. Please switch to `torch.compile` or `torch.export`.\n  warnings.warn(\n",
+      "measurement": {
+        "analytic_reference": "passed",
+        "backend": "torch",
+        "dense_api_entries": null,
+        "derivative_construction_seconds": 0.06120225402992219,
+        "device": "cpu",
+        "dtype": "float64",
+        "first_evaluation_seconds": 1.8122156760073267,
+        "fixture_sha256": "d016d10b4ed94591961a1e4ccc78c43a4d8c1c9bb796116348c6de6a29362f98",
+        "implementation": "native",
+        "model": "sha256:07f5f19e7ffa0cf0fcb7637ae5b9f8e90c6545f86f0b294792609b01c721b0bd",
+        "operation": "four-state-actions",
+        "output_entries": 385,
+        "source_compile_seconds": 0.2736035860143602,
+        "states": 128,
+        "versions": {
+          "numpy": "2.5.4",
+          "torch": "2.14.1+cpu"
+        },
+        "warm_evaluation_seconds": 0.054899863025639206,
+        "warm_repetitions": 11,
+        "whole_worker_peak_rss_mib": 320.68359375
+      },
+      "worker_seconds": 6.3094781810068525
+    },
+    {
+      "repeat": 1,
+      "backend": "torch",
+      "states": 128,
+      "implementation": "symbolic",
+      "returncode": 0,
+      "stderr": "",
+      "measurement": {
+        "analytic_reference": "passed",
+        "backend": "torch",
+        "dense_api_entries": 16899,
+        "derivative_construction_seconds": 1.0126032219850458,
+        "device": "cpu",
+        "dtype": "float64",
+        "first_evaluation_seconds": 0.11526694399071857,
+        "fixture_sha256": "d016d10b4ed94591961a1e4ccc78c43a4d8c1c9bb796116348c6de6a29362f98",
+        "implementation": "symbolic",
+        "model": "sha256:07f5f19e7ffa0cf0fcb7637ae5b9f8e90c6545f86f0b294792609b01c721b0bd",
+        "operation": "four-state-actions",
+        "output_entries": 385,
+        "source_compile_seconds": 0.25429406302282587,
+        "states": 128,
+        "versions": {
+          "numpy": "2.5.4",
+          "torch": "2.14.1+cpu"
+        },
+        "warm_evaluation_seconds": 0.08898100798251107,
+        "warm_repetitions": 11,
+        "whole_worker_peak_rss_mib": 275.59375
+      },
+      "worker_seconds": 5.156583198986482
+    }
+  ]
+}

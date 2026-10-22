@@ -49,6 +49,7 @@ from op_system._state_string import StateString
 from op_system._typing import Array
 from op_system._validate import ShapeGroup, ValidationReport, validate_spec
 
+from .actions import NativeStateActions, state_actions
 from .balances import (
     BalanceCoverageGap,
     ReactionBalanceLaw,
@@ -68,6 +69,12 @@ from .compile import (
     compile_rhs,
 )
 from .coordinates import CoordinateResult, StateCoordinateView
+from .dependencies import (
+    BlockStructure,
+    DependencyRows,
+    DependencyStructure,
+    dependency_structure,
+)
 from .gauges import (
     GaugeCoordinates,
     GaugeFixMap,
@@ -210,12 +217,15 @@ __all__ = [
     "AxisMeasure",
     "BalanceCoverageGap",
     "BlockAxisInfo",
+    "BlockStructure",
     "BodyEvalFn",
     "CompiledObservable",
     "CompiledReactant",
     "CompiledReaction",
     "CompiledRhs",
     "CoordinateResult",
+    "DependencyRows",
+    "DependencyStructure",
     "DerivativeValues",
     "EvalFn",
     "ExprRhs",
@@ -229,6 +239,7 @@ __all__ = [
     "InvariantCheck",
     "InvariantCoordinate",
     "JuliaExport",
+    "NativeStateActions",
     "NormalizedRhs",
     "ObservableDefinition",
     "ObservableEvalFn",
@@ -263,6 +274,7 @@ __all__ = [
     "axis_kernel_redistribute",
     "compile_rhs",
     "compile_spec",
+    "dependency_structure",
     "export_ir",
     "export_julia",
     "julia_rhs",
@@ -273,6 +285,7 @@ __all__ = [
     "normalize_transitions_rhs",
     "qualify_rhs",
     "reaction_balances",
+    "state_actions",
     "structural_model_json",
     "symbolic_derivatives",
     "validate_axis_kernel_matrix",

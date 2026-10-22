@@ -182,6 +182,8 @@ build-test-core:
 	cp -R examples "${CLEANROOM}/examples"
 	mkdir -p "${CLEANROOM}/docs/guides"
 	cp docs/guides/getting-started.md "${CLEANROOM}/docs/guides/getting-started.md"
+	cp docs/guides/dependency-structure.md "${CLEANROOM}/docs/guides/dependency-structure.md"
+	cp docs/guides/native-actions.md "${CLEANROOM}/docs/guides/native-actions.md"
 	cd "${CLEANROOM}"
 	"${CLEANROOM}/venv/bin/pytest" --import-mode=importlib tests --quiet --exitfirst
 
