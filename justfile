@@ -21,6 +21,12 @@ citation:
 [group('ci')]
 qualify: qualify-numpy qualify-jax qualify-torch
 
+# Optional suitable-CUDA-device qualification; CPU skips cannot pass this target.
+[group('dev')]
+qualify-cupy:
+    uv sync --dev --extra cupy
+    uv run --no-sync python scripts/qualify_backend.py cupy
+
 [group('ci')]
 qualify-numba:
     uv sync --dev --extra numba

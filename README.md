@@ -28,6 +28,8 @@ release identifiers and the software-paper archive plan.
 Required NumPy, JAX, and CPU Torch compiler checks and the tested operations are documented in the
 [backend guide](docs/guides/backend-qualification.md). Run `just qualify`
 alongside the baseline compiler/provider checks when preparing a contribution.
+[CuPy device qualification](docs/guides/cupy.md) has a separate optional CUDA 12
+installation and actual-device command; ordinary CPU skips do not qualify it.
 
 For model authoring, opt into
 [numerical qualification](docs/guides/numerical-qualification.md) with
