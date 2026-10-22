@@ -18,6 +18,11 @@ version; format loosely follows
 
 ### Added
 
+- Add explicit optional NumPy CPU lowering with one eager homogeneous native
+  signature, reusable packed state/parameter layouts and bounded source emission.
+  Qualify float32/64 values, input/error contracts and independent/coupled models
+  against the handwritten oracle; retain cold compilation, packing and memory costs.
+
 - Add opt-in NumPy Python-call profiling to the existing correctness-gated
   hierarchical harness. Keep profiled workers separate from latency samples and
   retain reviewed effective affinity/thread-pool records.

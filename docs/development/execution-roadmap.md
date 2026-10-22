@@ -29,7 +29,7 @@ result, rather than silently appearing to use that accelerator.
 | Structural model identity | [Schema-1 canonical manifests and references](../guides/structural-identity.md) are implemented, including ordered layouts, typed IR, observables, constants and compilation options. Forward consumers must carry this separately from runtime/prior/design identity and compare independently expected provenance. |
 | Derivative exports | Reuse checked dependency structure. State and parameter derivatives and observable derivatives have distinct shapes and meanings. Unsupported IR operations fail explicitly; qualify small dense values/actions independently before general sparse or matrix-free claims. |
 | IR export | Versioned typed serialization and a bounded Julia emitter with explicit supported rational/expression semantics. Export remains separate from normal evaluation. |
-| Numba experiment | Optional NumPy-only lowering, chosen after representative baseline measurements; report compilation and amortized execution costs and preserve reference behavior. |
+| Optional Numba lowering | [Explicit CPU NumPy lowering](../guides/numba.md) generates one packed flat-array signature with float32/64 contract checks. Cold compilation, packing and memory remain part of adoption decisions; no solver default changes. |
 | Rust/PyO3 IR experiment | Deferred private implementation of normalization/tree passes, preserving Python IR/public contracts; enter after compile-time profiles or external-runtime consumers justify it. |
 
 Julia export serves optional external structural-identifiability tools; it does
@@ -57,8 +57,8 @@ repeated general broadcasts of already-shaped buffers and records a targeted
 read-only-view optimization. Both source variants use the existing hierarchical
 oracle and a shared harness. Keep these RHS measurements separate from complete
 solver, statistical pipeline and training performance. Optional Numba and Torch
-compilation still require supported lowering/loop contracts and their own
-break-even evidence.
+compilation require distinct contracts. The optional NumPy lowering now records
+packing, cold/warm and memory costs; Torch sequential compilation remains separate.
 
 First reconcile open work and run the existing hierarchical compiler baseline.
 Develop structural identity and forward-consumer contracts early. Derivative and
