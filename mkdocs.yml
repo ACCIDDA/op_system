@@ -76,6 +76,7 @@ nav:
       - Array Namespaces: guides/array-namespaces.md
       - Backend Qualification: guides/backend-qualification.md
       - CuPy Device Qualification: guides/cupy.md
+      - GPU workstation handoff: guides/gpu-workstation.md
       - Numerical Qualification: guides/numerical-qualification.md
       - Hierarchical Benchmarks: guides/hierarchical-benchmarks.md
       - Evaluator Overhead: guides/evaluator-overhead.md

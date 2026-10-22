@@ -63,3 +63,9 @@ no GPU performance or memory-reduction claim.
 
 Device receipts are added only after the required command completes on actual
 hardware. CPU skips cannot satisfy this section's device acceptance gate.
+
+## Deferred workstation execution
+
+GPU execution is currently on hold. The [workstation handoff](gpu-workstation.md)
+records source revisions, isolated environments, exact commands, required case
+counts, evidence and failure handling for CuPy, JAX and Torch.
