@@ -846,6 +846,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../../guides/native-actions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Native State Actions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../guides/state-representations/" class="md-nav__link">
         
   
@@ -1460,6 +1488,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../../api-reference/actions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Actions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../api-reference/balances/" class="md-nav__link">
         
   
@@ -2030,7 +2086,7 @@ consumer remains interoperability work alongside forward/provenance interfaces.<
 <p><a href="../../guides/portable-ir/">Portable IR and bounded scalar derivatives</a> now provide
 typed structural interchange, conservative dependencies, native dense derivative
 matrices and Julia RHS/observable expressions from the same compiler IR. General
-sparse/action, shaped-parameter, operator/history and external structural-tool
+sparse storage, operator/history and external structural-tool
 qualification remain separate extensions. This establishes interfaces, not a
 reason to select a Rust normalization implementation.</p>
 <p><a href="../../guides/dependency-structure/">Dependency structure</a> additionally exports
@@ -2038,8 +2094,12 @@ bounded conservative state and input-buffer reads, grouped observable layouts an
 immutable snapshots of existing checked block proofs without numerical derivative
 construction. Nonlocal selectors and reductions retain their coupling. Operators,
 history and gauge-fixed execution have explicit unsupported coverage. Dense
-symbolic actions remain unchanged while native derivative-action qualification
-proceeds separately.</p>
+symbolic actions remain unchanged. Optional <a href="../../guides/native-actions/">native JAX/Torch state actions</a>
+now supply RHS and shaped-observable products with checked CPU transforms and
+explicitly rejected operator/history/gauge execution. Measured direct actions
+have higher whole-worker peak RSS and slower median warm timings on the final ring
+fixture; consumers must measure complete solves before adoption. This establishes
+an input boundary for engine operator/Krylov work without changing solver defaults.</p>
 
 
 

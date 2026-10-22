@@ -14,7 +14,7 @@
         <link rel="prev" href="../../guides/numba/">
       
       
-        <link rel="next" href="../balances/">
+        <link rel="next" href="../actions/">
       
       
         
@@ -711,6 +711,34 @@
     
   
     Dependency Structure
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/native-actions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Native State Actions
   
 
     
@@ -1901,6 +1929,45 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#op_system.NativeStateActions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        NativeStateActions
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="NativeStateActions">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#op_system.NativeStateActions.jvp" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        jvp
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#op_system.NativeStateActions.vjp" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        vjp
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#op_system.ObservableDefinition" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2821,6 +2888,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#op_system.state_actions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        state_actions
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#op_system.structural_model_json" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2884,6 +2962,34 @@
   
 </nav>
       
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../actions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Actions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
     </li>
   
 
@@ -3809,6 +3915,45 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#op_system.NativeStateActions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        NativeStateActions
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="NativeStateActions">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#op_system.NativeStateActions.jvp" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        jvp
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#op_system.NativeStateActions.vjp" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        vjp
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#op_system.ObservableDefinition" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -4722,6 +4867,17 @@
     <span class="md-ellipsis">
       
         reaction_balances
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#op_system.state_actions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        state_actions
       
     </span>
   </a>
@@ -8575,6 +8731,348 @@ expression operations, not an external-tool identifiability conclusion.</p>
 
 
 
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="op_system.NativeStateActions" class="doc doc-heading">
+              <code class="highlight language-python"><span class="n">NativeStateActions</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">backend</span><span class="p">,</span> <span class="n">observable</span><span class="p">,</span> <span class="n">state_names</span><span class="p">,</span> <span class="n">parameter_names</span><span class="p">,</span> <span class="n">output_shape</span><span class="p">,</span> <span class="n">_function</span><span class="p">,</span> <span class="n">_transforms</span><span class="p">)</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-dataclass"><code>dataclass</code></small>
+  </span>
+
+<a href="#op_system.NativeStateActions" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+
+
+        <p>Caller-owned JAX/Torch state JVP and transpose/VJP adapters.</p>
+<p>The transform acts directly on a compiled callable, without requesting a
+numerical Jacobian matrix. Forward/reverse AD storage and compiler memory
+remain backend/workload dependent. No state, bound parameter, reverse tape
+or solve cache survives a call. Parameters and time are fixed for the state
+action; separately qualified outer native differentiation can retain them.</p>
+
+
+<p><span class="doc-section-title">Attributes:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code><span title="op_system.NativeStateActions.model">model</span></code></td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="StructuralModelIdentity(schema_version, digest)
+
+  
+      dataclass
+   (op_system.identity.StructuralModelIdentity)" href="../identity/#op_system.identity.StructuralModelIdentity">StructuralModelIdentity</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Existing compiler source identity in natural state coordinates.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="op_system.NativeStateActions.backend">backend</span></code></td>
+            <td>
+                  <code><span title="typing.Literal">Literal</span>[&#39;jax&#39;, &#39;torch&#39;]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Explicit optional native AD backend.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="op_system.NativeStateActions.observable">observable</span></code></td>
+            <td>
+                  <code><span title="str">str</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Named observable, or None for the RHS.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="op_system.NativeStateActions.state_names">state_names</span></code></td>
+            <td>
+                  <code><span title="tuple">tuple</span>[<span title="str">str</span>, ...]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Ordered flat current-state coordinates.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="op_system.NativeStateActions.parameter_names">parameter_names</span></code></td>
+            <td>
+                  <code><span title="tuple">tuple</span>[<span title="str">str</span>, ...]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Required runtime inputs for this target callable.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="op_system.NativeStateActions.output_shape">output_shape</span></code></td>
+            <td>
+                  <code><span title="tuple">tuple</span>[<span title="int">int</span>, ...]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>RHS vector or declared observable shape.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h4 id="op_system.NativeStateActions.jvp" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">jvp</span><span class="p">(</span><span class="n">t</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">tangent</span><span class="p">,</span> <span class="o">**</span><span class="n">parameters</span><span class="p">)</span></code>
+
+<a href="#op_system.NativeStateActions.jvp" class="headerlink" title="Permanent link">&para;</a></h4>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Apply the target's state Jacobian to a flat native tangent.</p>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="object">object</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Native output with the target's declared output shape.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<p><span class="doc-section-title">Raises:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="ValueError">ValueError</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Input names, layout, precision or backend differ.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+            <details class="mkdocstrings-source">
+              <summary>Source code in <code>src/op_system/actions.py</code></summary>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">127</span>
+<span class="normal">128</span>
+<span class="normal">129</span>
+<span class="normal">130</span>
+<span class="normal">131</span>
+<span class="normal">132</span>
+<span class="normal">133</span>
+<span class="normal">134</span>
+<span class="normal">135</span>
+<span class="normal">136</span>
+<span class="normal">137</span>
+<span class="normal">138</span>
+<span class="normal">139</span>
+<span class="normal">140</span>
+<span class="normal">141</span>
+<span class="normal">142</span>
+<span class="normal">143</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">jvp</span><span class="p">(</span>
+    <span class="bp">self</span><span class="p">,</span> <span class="n">t</span><span class="p">:</span> <span class="nb">object</span><span class="p">,</span> <span class="n">y</span><span class="p">:</span> <span class="nb">object</span><span class="p">,</span> <span class="n">tangent</span><span class="p">:</span> <span class="nb">object</span><span class="p">,</span> <span class="o">**</span><span class="n">parameters</span><span class="p">:</span> <span class="nb">object</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">object</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Apply the target's state Jacobian to a flat native tangent.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        Native output with the target's declared output shape.</span>
+
+<span class="sd">    Raises:</span>
+<span class="sd">        ValueError: Input names, layout, precision or backend differ.</span>
+<span class="sd">    """</span>
+    <span class="n">function</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_binding</span><span class="p">(</span><span class="n">t</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">parameters</span><span class="p">)</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">_native</span><span class="p">(</span><span class="n">tangent</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="s2">"tangent"</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">tangent</span><span class="p">,</span> <span class="s2">"shape"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="o">!=</span> <span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">state_names</span><span class="p">),):</span>
+        <span class="n">msg</span> <span class="o">=</span> <span class="s2">"Tangent shape differs from the flat state layout"</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+    <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_transforms</span><span class="o">.</span><span class="n">jvp</span><span class="p">(</span><span class="n">function</span><span class="p">,</span> <span class="p">(</span><span class="n">y</span><span class="p">,),</span> <span class="p">(</span><span class="n">tangent</span><span class="p">,))[</span><span class="mi">1</span><span class="p">]</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h4 id="op_system.NativeStateActions.vjp" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">vjp</span><span class="p">(</span><span class="n">t</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">cotangent</span><span class="p">,</span> <span class="o">**</span><span class="n">parameters</span><span class="p">)</span></code>
+
+<a href="#op_system.NativeStateActions.vjp" class="headerlink" title="Permanent link">&para;</a></h4>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Apply the target's transpose state Jacobian to a native cotangent.</p>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="object">object</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Native flat state cotangent. The reverse pullback is call-local.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<p><span class="doc-section-title">Raises:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="ValueError">ValueError</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Input names, layout, precision or backend differ.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+            <details class="mkdocstrings-source">
+              <summary>Source code in <code>src/op_system/actions.py</code></summary>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">145</span>
+<span class="normal">146</span>
+<span class="normal">147</span>
+<span class="normal">148</span>
+<span class="normal">149</span>
+<span class="normal">150</span>
+<span class="normal">151</span>
+<span class="normal">152</span>
+<span class="normal">153</span>
+<span class="normal">154</span>
+<span class="normal">155</span>
+<span class="normal">156</span>
+<span class="normal">157</span>
+<span class="normal">158</span>
+<span class="normal">159</span>
+<span class="normal">160</span>
+<span class="normal">161</span>
+<span class="normal">162</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">vjp</span><span class="p">(</span>
+    <span class="bp">self</span><span class="p">,</span> <span class="n">t</span><span class="p">:</span> <span class="nb">object</span><span class="p">,</span> <span class="n">y</span><span class="p">:</span> <span class="nb">object</span><span class="p">,</span> <span class="n">cotangent</span><span class="p">:</span> <span class="nb">object</span><span class="p">,</span> <span class="o">**</span><span class="n">parameters</span><span class="p">:</span> <span class="nb">object</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">object</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Apply the target's transpose state Jacobian to a native cotangent.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        Native flat state cotangent. The reverse pullback is call-local.</span>
+
+<span class="sd">    Raises:</span>
+<span class="sd">        ValueError: Input names, layout, precision or backend differ.</span>
+<span class="sd">    """</span>
+    <span class="n">function</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_binding</span><span class="p">(</span><span class="n">t</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">parameters</span><span class="p">)</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">_native</span><span class="p">(</span><span class="n">cotangent</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="s2">"cotangent"</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">cotangent</span><span class="p">,</span> <span class="s2">"shape"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">output_shape</span><span class="p">:</span>
+        <span class="n">msg</span> <span class="o">=</span> <span class="s2">"Cotangent shape differs from the target output layout"</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+    <span class="n">_</span><span class="p">,</span> <span class="n">pullback</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_transforms</span><span class="o">.</span><span class="n">vjp</span><span class="p">(</span><span class="n">function</span><span class="p">,</span> <span class="n">y</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">pullback</span><span class="p">(</span><span class="n">cotangent</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
 
 
 
@@ -15298,8 +15796,7 @@ removed in a future release.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/op_system/__init__.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">140</span>
-<span class="normal">141</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">141</span>
 <span class="normal">142</span>
 <span class="normal">143</span>
 <span class="normal">144</span>
@@ -15357,7 +15854,8 @@ removed in a future release.</p>
 <span class="normal">196</span>
 <span class="normal">197</span>
 <span class="normal">198</span>
-<span class="normal">199</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">compile_spec</span><span class="p">(</span>  <span class="c1"># ruff: ignore[non-empty-init-module]</span>
+<span class="normal">199</span>
+<span class="normal">200</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">compile_spec</span><span class="p">(</span>  <span class="c1"># ruff: ignore[non-empty-init-module]</span>
     <span class="n">spec</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">object</span><span class="p">],</span>
     <span class="o">*</span><span class="p">,</span>
     <span class="n">xp</span><span class="p">:</span> <span class="nb">object</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -19038,6 +19536,322 @@ omitted terms are never assigned zero flux. Propensities are not evaluated.</p>
         <span class="p">),</span>
         <span class="nb">tuple</span><span class="p">(</span><span class="n">compiled</span><span class="o">.</span><span class="n">axis_meta</span><span class="o">.</span><span class="n">items</span><span class="p">()),</span>
         <span class="n">_ASSUMPTIONS</span><span class="p">,</span>
+    <span class="p">)</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="op_system.state_actions" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">state_actions</span><span class="p">(</span><span class="n">compiled</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">backend</span><span class="p">,</span> <span class="n">observable</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
+
+<a href="#op_system.state_actions" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Bind optional native state actions without constructing a dense Jacobian.</p>
+<p>Runtime inputs are homogeneous native float32/64 arrays. Plain real scalar
+time is also accepted. Parameter shapes retain the compiler's validation.
+Array observations use their original declared shape, not a flattened guess.
+The bounded dense symbolic API remains available separately for NumPy.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>compiled</code>
+            </td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="CompiledRhs(state_names, param_names, eval_fn, meta=(lambda: MappingProxyType({}))(), operators=tuple(), factorize_axes=tuple(), block_axes=tuple(), pytree_eval_fn=None, template_shapes=None, block_pytree_eval_fn=None, block_template_shapes=None, history_requirements=tuple(), history_eval_fn=None, body_eval_fn=None, block_history_eval_fn=None, block_body_eval_fn=None, reactions=tuple(), reaction_gaps=tuple(), _rhs=None, param_meta=(lambda: MappingProxyType({}))(), state_meta=(lambda: MappingProxyType({}))(), axis_meta=(lambda: MappingProxyType({}))(), observables=(lambda: MappingProxyType({}))(), gauges=None, gauge_fix=None)
+
+  
+      dataclass
+   (op_system.compile.CompiledRhs)" href="../compile/#op_system.compile.CompiledRhs">CompiledRhs</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Unmodified compiler-produced source in natural coordinates.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>backend</code>
+            </td>
+            <td>
+                  <code><span title="typing.Literal">Literal</span>[&#39;jax&#39;, &#39;torch&#39;]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>JAX or Torch; imported only when explicitly requested.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>observable</code>
+            </td>
+            <td>
+                  <code><span title="str">str</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>One compiled observable name, or None for the RHS.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="NativeStateActions(model, backend, observable, state_names, parameter_names, output_shape, _function, _transforms)
+
+  
+      dataclass
+   (op_system.actions.NativeStateActions)" href="../actions/#op_system.actions.NativeStateActions">NativeStateActions</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Static source/layout adapter with call-local native forward/reverse AD.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<p><span class="doc-section-title">Raises:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="ValueError">ValueError</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Backend, source or requested observable is invalid.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="NotImplementedError">NotImplementedError</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Operators/history/gauge-fixed execution is declared.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="ImportError">ImportError</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The selected optional native backend is unavailable.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+            <details class="mkdocstrings-source">
+              <summary>Source code in <code>src/op_system/actions.py</code></summary>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">165</span>
+<span class="normal">166</span>
+<span class="normal">167</span>
+<span class="normal">168</span>
+<span class="normal">169</span>
+<span class="normal">170</span>
+<span class="normal">171</span>
+<span class="normal">172</span>
+<span class="normal">173</span>
+<span class="normal">174</span>
+<span class="normal">175</span>
+<span class="normal">176</span>
+<span class="normal">177</span>
+<span class="normal">178</span>
+<span class="normal">179</span>
+<span class="normal">180</span>
+<span class="normal">181</span>
+<span class="normal">182</span>
+<span class="normal">183</span>
+<span class="normal">184</span>
+<span class="normal">185</span>
+<span class="normal">186</span>
+<span class="normal">187</span>
+<span class="normal">188</span>
+<span class="normal">189</span>
+<span class="normal">190</span>
+<span class="normal">191</span>
+<span class="normal">192</span>
+<span class="normal">193</span>
+<span class="normal">194</span>
+<span class="normal">195</span>
+<span class="normal">196</span>
+<span class="normal">197</span>
+<span class="normal">198</span>
+<span class="normal">199</span>
+<span class="normal">200</span>
+<span class="normal">201</span>
+<span class="normal">202</span>
+<span class="normal">203</span>
+<span class="normal">204</span>
+<span class="normal">205</span>
+<span class="normal">206</span>
+<span class="normal">207</span>
+<span class="normal">208</span>
+<span class="normal">209</span>
+<span class="normal">210</span>
+<span class="normal">211</span>
+<span class="normal">212</span>
+<span class="normal">213</span>
+<span class="normal">214</span>
+<span class="normal">215</span>
+<span class="normal">216</span>
+<span class="normal">217</span>
+<span class="normal">218</span>
+<span class="normal">219</span>
+<span class="normal">220</span>
+<span class="normal">221</span>
+<span class="normal">222</span>
+<span class="normal">223</span>
+<span class="normal">224</span>
+<span class="normal">225</span>
+<span class="normal">226</span>
+<span class="normal">227</span>
+<span class="normal">228</span>
+<span class="normal">229</span>
+<span class="normal">230</span>
+<span class="normal">231</span>
+<span class="normal">232</span>
+<span class="normal">233</span>
+<span class="normal">234</span>
+<span class="normal">235</span>
+<span class="normal">236</span>
+<span class="normal">237</span>
+<span class="normal">238</span>
+<span class="normal">239</span>
+<span class="normal">240</span>
+<span class="normal">241</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">state_actions</span><span class="p">(</span>
+    <span class="n">compiled</span><span class="p">:</span> <span class="n">CompiledRhs</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">backend</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">"jax"</span><span class="p">,</span> <span class="s2">"torch"</span><span class="p">],</span>
+    <span class="n">observable</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">NativeStateActions</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Bind optional native state actions without constructing a dense Jacobian.</span>
+
+<span class="sd">    Runtime inputs are homogeneous native float32/64 arrays. Plain real scalar</span>
+<span class="sd">    time is also accepted. Parameter shapes retain the compiler's validation.</span>
+<span class="sd">    Array observations use their original declared shape, not a flattened guess.</span>
+<span class="sd">    The bounded dense symbolic API remains available separately for NumPy.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        compiled: Unmodified compiler-produced source in natural coordinates.</span>
+<span class="sd">        backend: JAX or Torch; imported only when explicitly requested.</span>
+<span class="sd">        observable: One compiled observable name, or None for the RHS.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        Static source/layout adapter with call-local native forward/reverse AD.</span>
+
+<span class="sd">    Raises:</span>
+<span class="sd">        ValueError: Backend, source or requested observable is invalid.</span>
+<span class="sd">        NotImplementedError: Operators/history/gauge-fixed execution is declared.</span>
+<span class="sd">        ImportError: The selected optional native backend is unavailable.</span>
+<span class="sd">    """</span>
+    <span class="k">if</span> <span class="n">backend</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">{</span><span class="s2">"jax"</span><span class="p">,</span> <span class="s2">"torch"</span><span class="p">}:</span>
+        <span class="n">msg</span> <span class="o">=</span> <span class="s2">"Native state actions require explicit jax or torch backend"</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+    <span class="n">rhs</span> <span class="o">=</span> <span class="n">compiled</span><span class="o">.</span><span class="n">_rhs</span>  <span class="c1"># ruff: ignore[private-member-access]</span>
+    <span class="k">if</span> <span class="n">rhs</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">msg</span> <span class="o">=</span> <span class="s2">"Native state actions require retained compiler source"</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">rhs</span><span class="o">.</span><span class="n">state_names</span><span class="p">)</span> <span class="o">!=</span> <span class="n">compiled</span><span class="o">.</span><span class="n">state_names</span><span class="p">:</span>
+        <span class="n">msg</span> <span class="o">=</span> <span class="s2">"Native action source and compiled state layouts differ"</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+    <span class="k">if</span> <span class="p">(</span>
+        <span class="n">compiled</span><span class="o">.</span><span class="n">operators</span>
+        <span class="ow">or</span> <span class="n">compiled</span><span class="o">.</span><span class="n">history_requirements</span>
+        <span class="ow">or</span> <span class="n">compiled</span><span class="o">.</span><span class="n">gauge_fix</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+    <span class="p">):</span>
+        <span class="n">msg</span> <span class="o">=</span> <span class="s2">"Native actions currently exclude operators/history/gauge-fixed execution"</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+    <span class="n">model</span> <span class="o">=</span> <span class="n">StructuralModelIdentity</span><span class="o">.</span><span class="n">from_compiled</span><span class="p">(</span><span class="n">compiled</span><span class="p">)</span>
+    <span class="n">function</span><span class="p">:</span> <span class="n">_StateFunction</span> <span class="o">=</span> <span class="n">compiled</span><span class="o">.</span><span class="n">eval_fn</span>
+    <span class="n">shape</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">compiled</span><span class="o">.</span><span class="n">state_names</span><span class="p">),)</span>
+    <span class="n">names</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span>
+        <span class="nb">dict</span><span class="o">.</span><span class="n">fromkeys</span><span class="p">((</span>
+            <span class="o">*</span><span class="n">compiled</span><span class="o">.</span><span class="n">param_names</span><span class="p">,</span>
+            <span class="o">*</span><span class="p">(</span><span class="n">name</span> <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">rhs</span><span class="o">.</span><span class="n">shaped_params</span><span class="p">),</span>
+            <span class="o">*</span><span class="p">(</span><span class="n">name</span> <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">rhs</span><span class="o">.</span><span class="n">time_varying_params</span><span class="p">),</span>
+        <span class="p">))</span>
+    <span class="p">)</span>
+    <span class="k">if</span> <span class="n">observable</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">observable</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">compiled</span><span class="o">.</span><span class="n">observables</span><span class="p">:</span>
+            <span class="n">msg</span> <span class="o">=</span> <span class="s2">"Unknown compiled observable target"</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+        <span class="n">target</span> <span class="o">=</span> <span class="n">compiled</span><span class="o">.</span><span class="n">observables</span><span class="p">[</span><span class="n">observable</span><span class="p">]</span>
+        <span class="n">function</span> <span class="o">=</span> <span class="n">target</span><span class="o">.</span><span class="n">eval_fn</span>
+        <span class="n">shape</span> <span class="o">=</span> <span class="n">target</span><span class="o">.</span><span class="n">output_shape</span>
+        <span class="n">names</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">name</span> <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">target</span><span class="o">.</span><span class="n">parameter_shapes</span><span class="p">)</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">module</span> <span class="o">=</span> <span class="n">import_module</span><span class="p">(</span><span class="n">backend</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">ImportError</span> <span class="k">as</span> <span class="n">error</span><span class="p">:</span>
+        <span class="n">msg</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"Native actions require the optional op_system[</span><span class="si">{</span><span class="n">backend</span><span class="si">}</span><span class="s2">] dependency"</span>
+        <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">error</span>
+    <span class="n">transforms</span> <span class="o">=</span> <span class="n">cast</span><span class="p">(</span><span class="s2">"_Transforms"</span><span class="p">,</span> <span class="n">module</span> <span class="k">if</span> <span class="n">backend</span> <span class="o">==</span> <span class="s2">"jax"</span> <span class="k">else</span> <span class="n">module</span><span class="o">.</span><span class="n">func</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">NativeStateActions</span><span class="p">(</span>
+        <span class="n">model</span><span class="p">,</span>
+        <span class="n">backend</span><span class="p">,</span>
+        <span class="n">observable</span><span class="p">,</span>
+        <span class="n">compiled</span><span class="o">.</span><span class="n">state_names</span><span class="p">,</span>
+        <span class="n">names</span><span class="p">,</span>
+        <span class="n">shape</span><span class="p">,</span>
+        <span class="n">function</span><span class="p">,</span>
+        <span class="n">transforms</span><span class="p">,</span>
     <span class="p">)</span>
 </code></pre></div></td></tr></table></div>
             </details>

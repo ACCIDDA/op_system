@@ -733,6 +733,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../native-actions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Native State Actions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../state-representations/" class="md-nav__link">
         
   
@@ -1438,6 +1466,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../../api-reference/actions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Actions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../api-reference/balances/" class="md-nav__link">
         
   
@@ -1970,6 +2026,13 @@ qualify additional observable operations or devices.</p>
 <p>GPU execution is outside the qualified CPU matrix. The matrix describes
 the tested workload and paths, not every combination of compiler operators,
 backend versions, devices, or automatic differentiation transforms.</p>
+<p><a href="../native-actions/">Native state actions</a> additionally qualify explicit JAX/Torch
+RHS and scalar/array observable JVP/VJP products, JAX JIT/vmap, Torch vmap and
+nonlinear outer state/parameter gradients. A required older-JAX lane runs the
+complete selected suite on JAX/jaxlib 0.4.36, NumPy 2.0.0 and array-api-compat
+1.12.0. This is a named compatibility point alongside current resolution, not
+qualification of every JAX version. Minimum Torch 2.6 executes the same native
+action checks. Required lanes reject optional skips.</p>
 <h2 id="independent-equations-and-structural-checks">Independent equations and structural checks<a class="headerlink" href="#independent-equations-and-structural-checks" title="Permanent link">&para;</a></h2>
 <p><code>benchmarks/hierarchical_model.py</code> defines a synthetic closed three-compartment
 relaxation network. State and a local rate vary by group, while a global gain,

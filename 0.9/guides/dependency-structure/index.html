@@ -14,7 +14,7 @@
         <link rel="prev" href="../portable-ir/">
       
       
-        <link rel="next" href="../state-representations/">
+        <link rel="next" href="../native-actions/">
       
       
         
@@ -791,6 +791,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../native-actions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Native State Actions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../state-representations/" class="md-nav__link">
         
   
@@ -1405,6 +1433,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../../api-reference/actions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Actions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../api-reference/balances/" class="md-nav__link">
         
   
@@ -1889,8 +1945,9 @@ quadratically many edges. Existing
 source normalization, alias/reduction expansion and structural-identity costs
 remain part of export construction. These limits are not a process RSS bound.</p>
 <p>The existing <a href="../portable-ir/">bounded symbolic derivatives</a> still provide dense
-matrices and dense <code>jvp</code>/<code>vjp</code>. General native derivative actions are a separate
-increment. Dependency rows establish potential input reads, not differentiability,
+matrices and dense <code>jvp</code>/<code>vjp</code>. Optional <a href="../native-actions/">native state actions</a>
+have a separate CPU qualification and storage/cost contract.
+Dependency rows establish potential input reads, not differentiability,
 numerical rank, global identifiability or numerical solver adequacy.</p>
 
 

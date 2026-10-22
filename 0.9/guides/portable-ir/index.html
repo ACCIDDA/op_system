@@ -841,6 +841,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../native-actions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Native State Actions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../state-representations/" class="md-nav__link">
         
   
@@ -1455,6 +1483,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../../api-reference/actions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Actions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../api-reference/balances/" class="md-nav__link">
         
   
@@ -2037,7 +2093,7 @@ compact IR can still preserve those constructs for another consumer.</p>
 <p>Default limits are 128 expanded states and 65,536 dense derivative entries.
 <code>jvp</code> and <code>vjp</code> apply that bounded dense state Jacobian; they do not claim
 matrix-free storage. Tangent layouts, namespace and precision must match the
-states. General sparse/action exports remain separate work.</p>
+states. General sparse and operator-aware derivative exports remain separate work.</p>
 <p><code>state_dependencies</code> is conservative IR dependency metadata, independent of
 current fitted values. A coefficient becoming zero does not remove its declared
 state dependency. <code>block_axes</code> repeats the compiler's existing checked block
@@ -2089,6 +2145,10 @@ initialization and, for JAX, JIT compilation; construction follows source model
 compilation, which is recorded separately. Whole-worker peak RSS includes imports
 and source compilation. This fixture neither selects a native compiler rewrite
 nor predicts application performance or the cost of a sensitivity solve.</p>
+<p>Optional <a href="../native-actions/">native state actions</a> provide a separate direct
+JAX/Torch product boundary, including shaped parameters and array observables.
+They preserve the dense API above; their transform, storage and performance
+qualification is documented separately.</p>
 <h2 id="julia-expression-export">Julia expression export<a class="headerlink" href="#julia-expression-export" title="Permanent link">&para;</a></h2>
 <p><code>export_julia</code> returns a <code>JuliaExport</code> record with source identity, emitter schema
 version, ordered state/parameter/observable names, a rational-operation flag and
