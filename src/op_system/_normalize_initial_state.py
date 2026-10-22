@@ -20,6 +20,7 @@ if TYPE_CHECKING:
 from op_system._errors import InvalidRhsSpecError
 from op_system._templates import (
     _apply_template_substitutions,
+    _prepare_template_substitutions,
     build_axis_lookup,
     expand_selector,
 )
@@ -182,6 +183,7 @@ def _expand_initial_state_templates(
     axis_lookup = build_axis_lookup(axes)
     result: dict[str, Any] = {}
     expanded_keys: list[str] = []
+    prepared = _prepare_template_substitutions(template_map, shaped={})
 
     for raw_key, raw_val in initial_state_raw.items():
         if isinstance(raw_val, _NumberABC):
@@ -238,6 +240,7 @@ def _expand_initial_state_templates(
                 val_s,
                 assignment=assignment,
                 template_map=template_map,
+                _prepared=prepared,
             )
 
     if len(expanded_keys) != len(set(expanded_keys)):

@@ -39,7 +39,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from itertools import product
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypeAlias
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
@@ -51,18 +51,6 @@ _STATE_TEMPLATE_RE = re.compile(r"\s*([A-Za-z_][A-Za-z0-9_]*)\[(.+)\]\s*")
 # Matches any "Name[...]" token inside an expression string.
 _INLINE_TEMPLATE_RE = re.compile(r"([A-Za-z_][A-Za-z0-9_]*)\[(.*?)\]")
 
-# Per-``template_map`` cache of pre-parsed, filtered, regex-compiled
-# template keys used by ``_apply_template_substitutions``. Built lazily
-# on first use and keyed by ``id(template_map)`` so batch substitution
-# over many cells against the same mapping pays the parse cost once
-# rather than per cell (issue #145).
-_APPLY_TPL_PREPARSE_CACHE: dict[
-    int,
-    tuple[
-        object,
-        tuple[tuple[str, str, tuple[WildcardToken, ...], re.Pattern[str]], ...],
-    ],
-] = {}
 # Matches any "[...]" fragment to extract placeholder names from rate exprs.
 _PLACEHOLDER_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\[(.*?)\]")
 
@@ -485,11 +473,16 @@ def _render_template_or_literal(name_s: str, assignment: Mapping[str, str]) -> s
     return _render_template_name(base, [wt.axis for wt in wildcards], assignment)
 
 
+_PreparedSubstitutions: TypeAlias = tuple[
+    tuple[str, str, tuple[WildcardToken, ...], re.Pattern[str]], ...
+]
+
+
 def _prepare_template_substitutions(
     template_map: Mapping[str, list[tuple[str, dict[str, str]]]],
     *,
     shaped: Mapping[str, tuple[str, ...]],
-) -> tuple[tuple[str, str, tuple[WildcardToken, ...], re.Pattern[str]], ...]:
+) -> _PreparedSubstitutions:
     """Build the per-``template_map`` prepared substitution table.
 
     Filters out keys with no wildcards and keys whose base collides with
@@ -545,6 +538,7 @@ def _apply_template_substitutions(
     template_map: Mapping[str, list[tuple[str, dict[str, str]]]],
     shaped_params: Mapping[str, tuple[str, ...]] | None = None,
     axis_lookup: Mapping[str, list[str]] | None = None,
+    _prepared: _PreparedSubstitutions | None = None,
 ) -> str:
     """Replace template references in ``expr_s`` using a concrete assignment.
 
@@ -564,16 +558,14 @@ def _apply_template_substitutions(
     expr_out = expr_s
     shaped = shaped_params or {}
 
-    # Pre-parse template keys once per ``template_map`` identity (see
-    # ``_prepare_template_substitutions``). Collapses O(cells *
-    # |template_map|) ``parse_selector`` calls to O(|template_map|) per
-    # normalize call (issue #145).
-    cache_entry = _APPLY_TPL_PREPARSE_CACHE.get(id(template_map))
-    if cache_entry is not None and cache_entry[0] is template_map:
-        prepared = cache_entry[1]
-    else:
-        prepared = _prepare_template_substitutions(template_map, shaped=shaped)
-        _APPLY_TPL_PREPARSE_CACHE[id(template_map)] = (template_map, prepared)
+    # Batch callers own this immutable table. Never pin template maps or their
+    # expanded cell/assignment lists in a process-global identity cache. A table
+    # is specific to both the template keys and shaped-parameter exclusions.
+    prepared = (
+        _prepare_template_substitutions(template_map, shaped=shaped)
+        if _prepared is None
+        else _prepared
+    )
 
     for template_key, base, wildcards, pat in prepared:
         if any(wt.axis not in assignment for wt in wildcards):

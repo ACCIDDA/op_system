@@ -9,6 +9,10 @@ version; format loosely follows
 
 ### Fixed
 
+- Scope prepared template substitutions to their normalization batch, releasing
+  expanded model mappings and respecting shaped-parameter exclusions. Preserve
+  batch reuse while removing the process-global identity cache.
+
 - Avoid general NumPy broadcasting for ordinary buffers already at the required
   shape, preserving read-only views, aliasing and input mutability. Keep other
   shapes, subclasses and namespaces on the existing broadcast path.
