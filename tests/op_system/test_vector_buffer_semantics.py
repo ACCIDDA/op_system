@@ -118,7 +118,7 @@ def test_native_broadcast_values_and_gradients(backend: str, dtype: str) -> None
             np.testing.assert_allclose(da.numpy(), 6.0)
 
 
-def test_jax_foreign_numpy_buffer_still_converts_namespace() -> None:
+def test_jax_foreign_buffer_still_converts_namespace() -> None:
     """A matching NumPy parameter cannot bypass a native broadcast conversion."""
     jax = pytest.importorskip("jax")
     jnp = pytest.importorskip("jax.numpy")
