@@ -1259,6 +1259,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/evaluator-overhead/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Evaluator Overhead
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -1773,8 +1801,10 @@ and <a href="https://github.com/ACCIDDA/op_engine/blob/main/docs/development/exe
 describe cross-package ownership and measurements.</p>
 <h2 id="keep-the-public-numerical-contract">Keep the public numerical contract<a class="headerlink" href="#keep-the-public-numerical-contract" title="Permanent link">&para;</a></h2>
 <p>Retain Python model interfaces and namespace discovery from input arrays. Keep
-NumPy, JAX and CPU Torch qualification. CuPy/CUDA is the next explicit end-to-end
-target, not an implication of Array API compatibility. Sparse operators,
+NumPy, JAX and CPU Torch qualification. Bounded A100 JAX/Torch/CuPy core checks
+and JAX/Torch statistical checks are separately recorded in the
+<a href="https://github.com/ACCIDDA/op_infer/blob/main/docs/cuda-qualification.md">device receipts</a>.
+Their scope does not qualify every operator, solver, estimator or device. Sparse operators,
 compilation, differentiation and device support have separate contracts.</p>
 <p>Generated vectorized expression functions are already cached without per-expression
 runtime <code>eval</code>. Measure normalization, compilation and evaluator layouts before
@@ -1828,6 +1858,13 @@ OP Engine owns numerical observation evaluation/reduction; OP Infer owns shared
 sampling/log-density, censoring and prior semantics. Keep this boundary when
 qualifying a complete compiled simulation-to-observation workflow.</p>
 <h2 id="sequence">Sequence<a class="headerlink" href="#sequence" title="Permanent link">&para;</a></h2>
+<p>The <a href="../../guides/evaluator-overhead/">NumPy evaluator profile</a> now identifies
+repeated general broadcasts of already-shaped buffers and records a targeted
+read-only-view optimization. Both source variants use the existing hierarchical
+oracle and a shared harness. Keep these RHS measurements separate from complete
+solver, statistical pipeline and training performance. Optional Numba and Torch
+compilation still require supported lowering/loop contracts and their own
+break-even evidence.</p>
 <p>First reconcile open work and run the existing hierarchical compiler baseline.
 Develop structural identity and forward-consumer contracts early. Derivative and
 IR export work can proceed alongside shared observation/prior interfaces. Qualify

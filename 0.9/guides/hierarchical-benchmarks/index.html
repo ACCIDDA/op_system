@@ -14,7 +14,7 @@
         <link rel="prev" href="../numerical-qualification/">
       
       
-        <link rel="next" href="../../api-reference/op-system/">
+        <link rel="next" href="../evaluator-overhead/">
       
       
         
@@ -1237,6 +1237,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../evaluator-overhead/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Evaluator Overhead
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -1722,6 +1750,10 @@
 
 
 <h1 id="hierarchical-compiler-benchmarks">Hierarchical compiler benchmarks<a class="headerlink" href="#hierarchical-compiler-benchmarks" title="Permanent link">&para;</a></h1>
+<p>The <a href="../evaluator-overhead/">profiled evaluator comparison</a> measures a later NumPy
+overhead reduction, with separate timing/profiling workers and reviewed effective
+thread-pool records. Use <code>--check-only --profile-calls 1000 --backends numpy</code> for
+Python attribution without labeling profiled execution as ordinary latency.</p>
 <p>The synthetic workload in <code>benchmarks/hierarchical_model.py</code> describes three
 nonlinear relaxation compartments over group and stage axes. Its aliases,
 <code>sum_over</code> reducers, and <code>apply_along</code> stage transport preserve readable model
