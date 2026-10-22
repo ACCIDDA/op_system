@@ -1,5 +1,10 @@
 # Hierarchical compiler benchmarks
 
+The [profiled evaluator comparison](evaluator-overhead.md) measures a later NumPy
+overhead reduction, with separate timing/profiling workers and reviewed effective
+thread-pool records. Use `--check-only --profile-calls 1000 --backends numpy` for
+Python attribution without labeling profiled execution as ordinary latency.
+
 The synthetic workload in `benchmarks/hierarchical_model.py` describes three
 nonlinear relaxation compartments over group and stage axes. Its aliases,
 `sum_over` reducers, and `apply_along` stage transport preserve readable model

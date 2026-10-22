@@ -76,6 +76,7 @@ nav:
       - Backend Qualification: guides/backend-qualification.md
       - Numerical Qualification: guides/numerical-qualification.md
       - Hierarchical Benchmarks: guides/hierarchical-benchmarks.md
+      - Evaluator Overhead: guides/evaluator-overhead.md
   - API Reference:
       - OP System: api-reference/op-system.md
       - Balances: api-reference/balances.md

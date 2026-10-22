@@ -39,13 +39,23 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--check-only", action="store_true", help="qualify without collecting timings"
     )
+    parser.add_argument(
+        "--profile-calls",
+        type=_positive,
+        default=0,
+        help="NumPy Python call profiling in check-only workers; not ordinary timings",
+    )
     parser.add_argument("--output", type=Path, help="JSON file; defaults to stdout")
     parser.add_argument("--worker", action="store_true", help=argparse.SUPPRESS)
     return parser
 
 
 def _worker(
-    case: BenchmarkCase, policy: RepeatPolicy, *, check_only: bool
+    case: BenchmarkCase,
+    policy: RepeatPolicy,
+    *,
+    check_only: bool,
+    profile_calls: int = 0,
 ) -> dict[str, object]:
     command = [
         sys.executable,
@@ -71,6 +81,8 @@ def _worker(
     ]
     if check_only:
         command.append("--check-only")
+    if profile_calls:
+        command.extend(["--profile-calls", str(profile_calls)])
     environment = {
         **os.environ,
         "JAX_PLATFORMS": "cpu",
@@ -126,6 +138,9 @@ def main() -> int:
         ValueError: If an internal worker is given more than one case.
     """
     args = _parser().parse_args()
+    if args.profile_calls and (not args.check_only or args.backends != ["numpy"]):
+        msg = "--profile-calls requires --check-only and --backends numpy"
+        _parser().error(msg)
     policy = RepeatPolicy(args.repeats, args.inner_loops, args.warmups)
     coupled = [False, True] if args.coupling == "both" else [args.coupling == "coupled"]
     cases = [
@@ -140,7 +155,13 @@ def main() -> int:
             raise ValueError(msg)
         print(
             json.dumps(
-                run_case(cases[0], policy, measure=not args.check_only), allow_nan=False
+                run_case(
+                    cases[0],
+                    policy,
+                    measure=not args.check_only,
+                    profile_calls=args.profile_calls,
+                ),
+                allow_nan=False,
             )
         )
         return 0
@@ -148,7 +169,14 @@ def main() -> int:
     for case in cases:
         print(f"Qualifying {case}", file=sys.stderr, flush=True)
         try:
-            results.append(_worker(case, policy, check_only=args.check_only))
+            results.append(
+                _worker(
+                    case,
+                    policy,
+                    check_only=args.check_only,
+                    profile_calls=args.profile_calls,
+                )
+            )
         except subprocess.CalledProcessError as error:
             print(error.stderr, file=sys.stderr)
             return 1
@@ -156,7 +184,11 @@ def main() -> int:
         "schema_version": 1,
         "revision": _revision(),
         "arguments": sys.argv[1:],
-        "mode": "correctness-only" if args.check_only else "timing",
+        "mode": "profiling"
+        if args.profile_calls
+        else "correctness-only"
+        if args.check_only
+        else "timing",
         "execution": "serial isolated CPU processes; one thread requested per worker",
         "cases": results,
     }

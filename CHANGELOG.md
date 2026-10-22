@@ -9,10 +9,18 @@ version; format loosely follows
 
 ### Fixed
 
+- Avoid general NumPy broadcasting for ordinary buffers already at the required
+  shape, preserving read-only views, aliasing and input mutability. Keep other
+  shapes, subclasses and namespaces on the existing broadcast path.
+
 - Keep generated scalar equation/derivative constants on the state's device and
   retain differentiable native time bindings, including minimum supported Torch.
 
 ### Added
+
+- Add opt-in NumPy Python-call profiling to the existing correctness-gated
+  hierarchical harness. Keep profiled workers separate from latency samples and
+  retain reviewed effective affinity/thread-pool records.
 
 - Export canonical typed IR envelopes with guarded readonly decoding and the
   existing structural model identity. Add bounded scalar state/parameter and

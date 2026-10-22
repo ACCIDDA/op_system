@@ -9,8 +9,10 @@ describe cross-package ownership and measurements.
 ## Keep the public numerical contract
 
 Retain Python model interfaces and namespace discovery from input arrays. Keep
-NumPy, JAX and CPU Torch qualification. CuPy/CUDA is the next explicit end-to-end
-target, not an implication of Array API compatibility. Sparse operators,
+NumPy, JAX and CPU Torch qualification. Bounded A100 JAX/Torch/CuPy core checks
+and JAX/Torch statistical checks are separately recorded in the
+[device receipts](https://github.com/ACCIDDA/op_infer/blob/main/docs/cuda-qualification.md).
+Their scope does not qualify every operator, solver, estimator or device. Sparse operators,
 compilation, differentiation and device support have separate contracts.
 
 Generated vectorized expression functions are already cached without per-expression
@@ -49,6 +51,14 @@ sampling/log-density, censoring and prior semantics. Keep this boundary when
 qualifying a complete compiled simulation-to-observation workflow.
 
 ## Sequence
+
+The [NumPy evaluator profile](../guides/evaluator-overhead.md) now identifies
+repeated general broadcasts of already-shaped buffers and records a targeted
+read-only-view optimization. Both source variants use the existing hierarchical
+oracle and a shared harness. Keep these RHS measurements separate from complete
+solver, statistical pipeline and training performance. Optional Numba and Torch
+compilation still require supported lowering/loop contracts and their own
+break-even evidence.
 
 First reconcile open work and run the existing hierarchical compiler baseline.
 Develop structural identity and forward-consumer contracts early. Derivative and

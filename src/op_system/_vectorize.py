@@ -31,6 +31,9 @@ from dataclasses import dataclass
 from itertools import combinations as _comb
 from typing import TYPE_CHECKING, Any, NamedTuple, cast
 
+import numpy as np
+from array_api_compat import numpy as _numpy_namespace  # type: ignore[import-untyped]
+
 from op_system._array import array_namespace
 from op_system._ir import (
     Apply,
@@ -1285,7 +1288,7 @@ def make_vectorized_eval_fn(plan: _VectorPlan) -> EvalFn:  # ruff: ignore[comple
             if getattr(val, "dtype", None) is None:
                 val = xp.asarray(val, dtype=getattr(y_arr, "dtype", None))
             if shape:
-                val = xp.broadcast_to(val, shape)
+                val = _broadcast_buffer(xp, val, shape)
             env[f"{base}_buf"] = val
             # Also expose under the plain base name so that equation IR
             # lowered via the reduce path (which strips axis indices and
@@ -1319,7 +1322,7 @@ def make_vectorized_eval_fn(plan: _VectorPlan) -> EvalFn:  # ruff: ignore[comple
                     if getattr(val, "dtype", None) is not None
                     else xp.asarray(val, dtype=getattr(y_arr, "dtype", None))
                 )
-                arr = xp.broadcast_to(arr_value, grp.vec_shape)
+                arr = _broadcast_buffer(xp, arr_value, grp.vec_shape)
                 bin_results.append(arr)
 
             if not grp.unroll_axes:
@@ -1416,7 +1419,7 @@ def make_pytree_eval_fn(plan: _VectorPlan) -> PytreeEvalFn:  # ruff: ignore[comp
             if getattr(val, "dtype", None) is None:
                 val = xp.asarray(val, dtype=getattr(first_val, "dtype", None))
             if shape:
-                val = xp.broadcast_to(val, shape)
+                val = _broadcast_buffer(xp, val, shape)
             env[f"{base}_buf"] = val
             # Also expose under the plain base name so that equation IR
             # lowered via the reduce path (which strips axis indices and
@@ -1448,7 +1451,7 @@ def make_pytree_eval_fn(plan: _VectorPlan) -> PytreeEvalFn:  # ruff: ignore[comp
                     if getattr(val, "dtype", None) is not None
                     else xp.asarray(val, dtype=getattr(y[grp.base], "dtype", None))
                 )
-                arr = xp.broadcast_to(arr_value, grp.vec_shape)
+                arr = _broadcast_buffer(xp, arr_value, grp.vec_shape)
                 bin_results.append(arr)
 
             if not grp.unroll_axes:
@@ -1465,3 +1468,24 @@ def make_pytree_eval_fn(plan: _VectorPlan) -> PytreeEvalFn:  # ruff: ignore[comp
         return cast("StateDict", result)
 
     return pytree_eval_fn
+
+
+def _broadcast_buffer(
+    xp: Any,  # ruff: ignore[any-type]
+    value: object,
+    shape: tuple[int, ...],
+) -> object:
+    """Keep matching NumPy buffers as readonly views without a general broadcast.
+
+    Other shapes, NumPy subclasses and native namespaces retain their existing
+    broadcast operation. The fast path neither mutates the source's flags nor
+    permits a foreign NumPy parameter to bypass native namespace conversion.
+
+    Returns:
+        A native buffer with the requested shape and normal broadcast mutability.
+    """
+    if xp is _numpy_namespace and type(value) is np.ndarray and value.shape == shape:
+        view = value.view()
+        view.flags.writeable = False
+        return view
+    return xp.broadcast_to(value, shape)
