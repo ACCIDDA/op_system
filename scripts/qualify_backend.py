@@ -53,6 +53,7 @@ def main() -> int:
                 "tests/op_system/test_gauges.py",
                 "tests/op_system/test_state_coordinates.py",
                 "tests/op_system/test_portable_symbolic.py",
+                "tests/op_system/test_dependencies.py",
                 "tests/op_system/test_scalar_device.py",
                 "tests/op_system/test_torch_native_conversion.py",
                 "tests/op_system/test_scalar_callables.py",

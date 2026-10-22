@@ -27,6 +27,11 @@ version; format loosely follows
 
 ### Added
 
+- Export bounded conservative dependency rows from retained compiler IR without
+  numerical derivative construction. Retain pinned selectors, reductions,
+  buffer-parameter and grouped-observable layouts, source identity and immutable
+  existing block proofs. Unsupported coverage remains distinct from empty rows.
+
 - Cache validated scalar RHS and latent-observable expression functions with
   explicit runtime bindings, sharing the vector evaluator helper and preserving
   inspection code. Qualify strict current-Torch FX capture alongside the existing

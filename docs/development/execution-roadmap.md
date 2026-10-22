@@ -94,3 +94,11 @@ matrices and Julia RHS/observable expressions from the same compiler IR. General
 sparse/action, shaped-parameter, operator/history and external structural-tool
 qualification remain separate extensions. This establishes interfaces, not a
 reason to select a Rust normalization implementation.
+
+[Dependency structure](../guides/dependency-structure.md) additionally exports
+bounded conservative state and input-buffer reads, grouped observable layouts and
+immutable snapshots of existing checked block proofs without numerical derivative
+construction. Nonlocal selectors and reductions retain their coupling. Operators,
+history and gauge-fixed execution have explicit unsupported coverage. Dense
+symbolic actions remain unchanged while native derivative-action qualification
+proceeds separately.

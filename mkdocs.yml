@@ -60,6 +60,7 @@ nav:
       - Parameter Declarations: guides/parameter-declarations.md
       - Structural Model Identity: guides/structural-identity.md
       - Portable IR and Derivatives: guides/portable-ir.md
+      - Dependency Structure: guides/dependency-structure.md
       - State Representations: guides/state-representations.md
       - Conditional Reaction Balances: guides/reaction-balances.md
       - Latent Observables: guides/latent-observables.md
@@ -84,6 +85,7 @@ nav:
       - Balances: api-reference/balances.md
       - Compile: api-reference/compile.md
       - Coordinates: api-reference/coordinates.md
+      - Dependencies: api-reference/dependencies.md
       - Gauges: api-reference/gauges.md
       - Identity: api-reference/identity.md
       - Numba: api-reference/numba.md
