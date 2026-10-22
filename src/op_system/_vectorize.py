@@ -26,10 +26,10 @@ import ast
 import math
 import os
 import sys
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from itertools import combinations as _comb
-from typing import TYPE_CHECKING, Any, NamedTuple, Protocol, cast
+from typing import TYPE_CHECKING, Any, Protocol, cast
 
 import numpy as np
 from array_api_compat import numpy as _numpy_namespace  # type: ignore[import-untyped]
@@ -51,15 +51,16 @@ from op_system._ir_lower import (
 )
 from op_system._state_helpers import _bind_quadrature_weights, _bind_sum_state
 from op_system.compile import (
-    _SAFE_BUILTINS,
     _check_numeric_dtype,
+    _compile_bound_expr,
     _Indexable,
     _validate_state_vector,
 )
+from op_system.compile import (
+    _CompiledExpression as _CompiledExpression,  # ruff: ignore[useless-import-alias]
+)
 
 if TYPE_CHECKING:
-    from types import CodeType
-
     from op_system._ir import Expr
     from op_system.compile import EvalFn, Float64Array, PytreeEvalFn, StateDict
     from op_system.specs import NormalizedRhs
@@ -120,62 +121,13 @@ def last_vector_plan_bail_reason() -> str | None:
 # ---------------------------------------------------------------------------
 
 
-class _CompiledExpression(NamedTuple):
-    """Validated generated code and its reusable environment-bound function."""
-
-    code: CodeType
-    function: Callable[..., object]
-    names: tuple[str, ...]
-
-    def __call__(self, env: Mapping[str, object]) -> object:
-        """Evaluate with fresh values, retaining missing-name diagnostics.
-
-        Returns:
-            The generated expression's result.
-
-        Raises:
-            NameError: If a required symbol is missing from the environment.
-        """
-        try:
-            arguments = [env[name] for name in self.names]
-        except KeyError as exc:
-            msg = f"name {exc.args[0]!r} is not defined"
-            raise NameError(msg) from exc
-        return self.function(*arguments)
-
-
 def _compile_vector_expr(tree: ast.Expression, *, filename: str) -> _CompiledExpression:
-    """Compile once; runtime calls bind explicit arguments without eval.
-
-    Retain the original expression code for plan inspection. Parameters remain
-    per-call values rather than mutable function globals, so independent calls
-    cannot overwrite each other's bindings.
+    """Compile validated vector AST with the shared reusable binding function.
 
     Returns:
-        Original code, a reusable function and its required environment names.
+        Original inspection code, callable and ordered free environment names.
     """
-    code = compile(tree, filename=filename, mode="eval")
-    names = tuple(
-        sorted({node.id for node in ast.walk(tree) if isinstance(node, ast.Name)})
-    )
-    function_tree = ast.Expression(
-        body=ast.Lambda(
-            args=ast.arguments(
-                posonlyargs=[],
-                args=[ast.arg(arg=name) for name in names],
-                kwonlyargs=[],
-                kw_defaults=[],
-                defaults=[],
-            ),
-            body=tree.body,
-        )
-    )
-    ast.fix_missing_locations(function_tree)
-    function = eval(  # ruff: ignore[suspicious-eval-usage]
-        compile(function_tree, filename=filename, mode="eval"),
-        {"__builtins__": _SAFE_BUILTINS},
-    )
-    return _CompiledExpression(code, function, names)
+    return _compile_bound_expr(tree, filename=filename)
 
 
 class _ExpressionCompiler(Protocol):

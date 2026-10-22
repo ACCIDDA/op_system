@@ -12,9 +12,10 @@ Contract
 
 Security note
 -------------
-This module uses `eval()` on code objects compiled from user-provided strings.
-To reduce risk, expressions are parsed and validated with a conservative AST
-whitelist, and evaluation runs with empty builtins.
+Expressions are parsed and validated with a conservative AST whitelist.
+RHS and latent-observable expressions use cached functions with explicit runtime
+bindings. Their constructor evaluates a generated lambda once; separate reaction
+callbacks retain their existing restricted code-object evaluation.
 """
 
 from __future__ import annotations
@@ -817,15 +818,73 @@ def _validate_ast(tree: ast.AST, *, expr: str) -> None:
             _validate_call(node.func, expr=expr)
 
 
-def _compile_expr(expr: str, expr_ir: Expr | None = None) -> CodeType:
-    """Parse, validate, and compile an expression into a code object.
+class _CompiledExpression(NamedTuple):
+    """Validated generated code and its reusable environment-bound function."""
+
+    code: CodeType
+    function: Callable[..., object]
+    names: tuple[str, ...]
+
+    def __call__(self, env: Mapping[str, object]) -> object:
+        """Evaluate with fresh values, retaining missing-name diagnostics.
+
+        Returns:
+            The generated expression's result.
+
+        Raises:
+            NameError: If a required symbol is missing from the environment.
+        """
+        try:
+            arguments = [env[name] for name in self.names]
+        except KeyError as exc:
+            msg = f"name {exc.args[0]!r} is not defined"
+            raise NameError(msg) from exc
+        return self.function(*arguments)
+
+
+def _compile_bound_expr(tree: ast.Expression, *, filename: str) -> _CompiledExpression:
+    """Compile once; runtime calls bind explicit arguments without eval.
+
+    Retain the original expression code for plan inspection. Parameters remain
+    per-call values rather than mutable function globals, so independent calls
+    cannot overwrite each other's bindings.
+
+    Returns:
+        Original code, a reusable function and its required environment names.
+    """
+    code = compile(tree, filename=filename, mode="eval")
+    names = tuple(
+        sorted({node.id for node in ast.walk(tree) if isinstance(node, ast.Name)})
+    )
+    function_tree = ast.Expression(
+        body=ast.Lambda(
+            args=ast.arguments(
+                posonlyargs=[],
+                args=[ast.arg(arg=name) for name in names],
+                kwonlyargs=[],
+                kw_defaults=[],
+                defaults=[],
+            ),
+            body=tree.body,
+        )
+    )
+    ast.fix_missing_locations(function_tree)
+    function = eval(  # ruff: ignore[suspicious-eval-usage]
+        compile(function_tree, filename=filename, mode="eval"),
+        {"__builtins__": _SAFE_BUILTINS},
+    )
+    return _CompiledExpression(code, function, names)
+
+
+def _prepare_expr(expr: str, expr_ir: Expr | None = None) -> _CompiledExpression:
+    """Parse, validate, and compile a reusable expression function.
 
     Args:
         expr: Expression string.
         expr_ir: Optional typed IR expression to compile directly.
 
     Returns:
-        Compiled code object.
+        Original inspection code, reusable function and ordered environment names.
     """
     tree = (
         ast.Expression(body=ir_to_ast_expr(expr_ir))
@@ -835,17 +894,26 @@ def _compile_expr(expr: str, expr_ir: Expr | None = None) -> CodeType:
     ast.fix_missing_locations(tree)
     _validate_ast(tree, expr=expr)
     try:
-        return compile(tree, filename="<op_system>", mode="eval")
+        return _compile_bound_expr(tree, filename="<op_system>")
     except (ValueError, TypeError, SyntaxError) as exc:  # pragma: no cover
         _raise_compilation_error(
             detail=f"failed to compile expression {expr!r}: {exc!r}"
         )
 
 
+def _compile_expr(expr: str, expr_ir: Expr | None = None) -> CodeType:
+    """Validate an expression and retain its original inspection code.
+
+    Returns:
+        Validated expression code, preserving the existing private validator API.
+    """
+    return _prepare_expr(expr, expr_ir).code
+
+
 def _collect_alias_code(
     aliases: Mapping[str, str],
     aliases_ir: Mapping[str, Expr] | None = None,
-) -> dict[str, CodeType]:
+) -> dict[str, _CompiledExpression]:
     """Compile alias expressions into code objects.
 
     Args:
@@ -857,7 +925,7 @@ def _collect_alias_code(
     """
     ir_map = aliases_ir or {}
     return {
-        name: _compile_expr(expr, ir_map.get(name)) for name, expr in aliases.items()
+        name: _prepare_expr(expr, ir_map.get(name)) for name, expr in aliases.items()
     }
 
 
@@ -865,7 +933,7 @@ def _collect_eq_code(
     equations: Sequence[str],
     equations_ir: Sequence[Expr | None] | None = None,
     reserved_names: Iterable[str] = (),
-) -> tuple[tuple[tuple[str, CodeType], ...], list[CodeType]]:
+) -> tuple[tuple[tuple[str, _CompiledExpression], ...], list[_CompiledExpression]]:
     """Compile equation expressions into code objects.
 
     Args:
@@ -888,28 +956,24 @@ def _collect_eq_code(
             prefix="__op_system_cse_",
             reserved_names=reserved_names,
         )
-        cse_code = tuple((name, _compile_expr(name, expr)) for name, expr in bindings)
+        cse_code = tuple((name, _prepare_expr(name, expr)) for name, expr in bindings)
         eq_code = [  # ruff: ignore[reimplemented-starmap]
-            _compile_expr(expr_s, expr_ir)
+            _prepare_expr(expr_s, expr_ir)
             for expr_s, expr_ir in zip(equations, rewritten, strict=True)
         ]
         return cse_code, eq_code
-    return (), [_compile_expr(expr) for expr in equations]
+    return (), [_prepare_expr(expr) for expr in equations]
 
 
 def _evaluate_cse_bindings(
-    cse_code: tuple[tuple[str, CodeType], ...],
+    cse_code: tuple[tuple[str, _CompiledExpression], ...],
     *,
     env: dict[str, object],
 ) -> None:
     """Evaluate CSE temporaries into ``env`` before equation evaluation."""
     for name, codeobj in cse_code:
         try:
-            env[name] = eval(  # ruff: ignore[suspicious-eval-usage]
-                codeobj,
-                {"__builtins__": _SAFE_BUILTINS},
-                env,
-            )
+            env[name] = codeobj(env)
         except NameError as exc:
             _raise_parameter_error(detail=f"unknown symbol in CSE binding: {exc!s}")
         except (ValueError, TypeError, ArithmeticError) as exc:
@@ -917,7 +981,7 @@ def _evaluate_cse_bindings(
 
 
 def _resolve_aliases(
-    alias_code: Mapping[str, CodeType],
+    alias_code: Mapping[str, _CompiledExpression],
     *,
     base_env: dict[str, object],
 ) -> dict[str, object]:
@@ -940,11 +1004,7 @@ def _resolve_aliases(
         progressed = False
         for name, codeobj in list(pending.items()):
             try:
-                val = eval(  # ruff: ignore[suspicious-eval-usage]
-                    codeobj,
-                    {"__builtins__": _SAFE_BUILTINS},
-                    {**base_env, **out},
-                )
+                val = codeobj({**base_env, **out})
             except NameError:
                 continue
             except (ValueError, TypeError, ArithmeticError) as exc:
@@ -980,7 +1040,7 @@ def _validate_state_vector(y_arr: object, *, n_state: int) -> object:
 
 def _evaluate_equations(
     *,
-    eq_code: list[CodeType],
+    eq_code: list[_CompiledExpression],
     env: Mapping[str, object],
     xp: Any,  # ruff: ignore[any-type]
     state_dtype: object | None = None,
@@ -995,7 +1055,7 @@ def _evaluate_equations(
     out_vals: list[object] = []
     for codeobj in eq_code:
         try:
-            val = eval(codeobj, {"__builtins__": _SAFE_BUILTINS}, env)  # ruff: ignore[suspicious-eval-usage]
+            val = codeobj(env)
         except NameError as exc:
             _raise_parameter_error(detail=f"unknown symbol in equation: {exc!s}")
         except (ValueError, TypeError, ArithmeticError) as exc:

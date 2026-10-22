@@ -30,9 +30,7 @@ from op_system._ir_lower import UnsupportedIRLoweringError, lower_to_vector_ast
 from op_system._scientific_meta import AxisMeasure, StateDeclaration, _axis_declarations
 
 if TYPE_CHECKING:
-    from types import CodeType
-
-    from op_system.compile import _Indexable
+    from op_system.compile import _CompiledExpression, _Indexable
     from op_system.specs import NormalizedRhs
 
 
@@ -624,7 +622,7 @@ def _reduce_result(
 
 
 def _make_evaluators(
-    code: CodeType, artifact: _ObservableIR, rhs: NormalizedRhs
+    code: _CompiledExpression, artifact: _ObservableIR, rhs: NormalizedRhs
 ) -> tuple[ObservableEvalFn, ObservablePytreeEvalFn]:
     coordinates = _axis_coordinates(rhs)
     parameter_shapes = {
@@ -636,7 +634,7 @@ def _make_evaluators(
         reference, env = _state_environment(t, y, rhs)
         env.update(_parameter_environment(params, parameter_shapes, reference))
         # This is compiler-generated code after the shared restricted-AST validator.
-        result = eval(code, {"__builtins__": {}}, env)  # ruff: ignore[suspicious-eval-usage]
+        result = code(env)
         return _reduce_result(result, reference, artifact, coordinates)
 
     def eval_fn(t: object, y: object, **params: object) -> object:
@@ -708,7 +706,7 @@ def _compile_observables(rhs: NormalizedRhs) -> dict[str, CompiledObservable]:
         return {}
     # The expression validator lives with the RHS compiler. Importing here
     # avoids a module cycle while keeping one shared restricted-AST policy.
-    from op_system.compile import _compile_expr  # ruff: ignore[import-outside-top-level]
+    from op_system.compile import _compile_bound_expr, _compile_expr  # ruff: ignore[import-outside-top-level]
 
     coordinates = _axis_coordinates(rhs)
     result = {}
@@ -736,8 +734,8 @@ def _compile_observables(rhs: NormalizedRhs) -> dict[str, CompiledObservable]:
             ) from error
         tree = ast.Expression(body=body)
         ast.fix_missing_locations(tree)
-        code = compile(
-            tree, filename=f"<op_system_observable:{definition.name}>", mode="eval"
+        code = _compile_bound_expr(
+            tree, filename=f"<op_system_observable:{definition.name}>"
         )
         eval_fn, pytree_eval_fn = _make_evaluators(code, artifact, rhs)
         result[definition.name] = CompiledObservable(
