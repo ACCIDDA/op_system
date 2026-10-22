@@ -49,6 +49,7 @@ from op_system._state_string import StateString
 from op_system._typing import Array
 from op_system._validate import ShapeGroup, ValidationReport, validate_spec
 
+from .actions import NativeStateActions, state_actions
 from .balances import (
     BalanceCoverageGap,
     ReactionBalanceLaw,
@@ -238,6 +239,7 @@ __all__ = [
     "InvariantCheck",
     "InvariantCoordinate",
     "JuliaExport",
+    "NativeStateActions",
     "NormalizedRhs",
     "ObservableDefinition",
     "ObservableEvalFn",
@@ -283,6 +285,7 @@ __all__ = [
     "normalize_transitions_rhs",
     "qualify_rhs",
     "reaction_balances",
+    "state_actions",
     "structural_model_json",
     "symbolic_derivatives",
     "validate_axis_kernel_matrix",

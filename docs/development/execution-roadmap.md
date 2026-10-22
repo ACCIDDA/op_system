@@ -91,7 +91,7 @@ consumer remains interoperability work alongside forward/provenance interfaces.
 [Portable IR and bounded scalar derivatives](../guides/portable-ir.md) now provide
 typed structural interchange, conservative dependencies, native dense derivative
 matrices and Julia RHS/observable expressions from the same compiler IR. General
-sparse/action, shaped-parameter, operator/history and external structural-tool
+sparse storage, operator/history and external structural-tool
 qualification remain separate extensions. This establishes interfaces, not a
 reason to select a Rust normalization implementation.
 
@@ -100,5 +100,9 @@ bounded conservative state and input-buffer reads, grouped observable layouts an
 immutable snapshots of existing checked block proofs without numerical derivative
 construction. Nonlocal selectors and reductions retain their coupling. Operators,
 history and gauge-fixed execution have explicit unsupported coverage. Dense
-symbolic actions remain unchanged while native derivative-action qualification
-proceeds separately.
+symbolic actions remain unchanged. Optional [native JAX/Torch state actions](../guides/native-actions.md)
+now supply RHS and shaped-observable products with checked CPU transforms and
+explicitly rejected operator/history/gauge execution. Measured direct actions
+have higher whole-worker peak RSS and slower median warm timings on the final ring
+fixture; consumers must measure complete solves before adoption. This establishes
+an input boundary for engine operator/Krylov work without changing solver defaults.

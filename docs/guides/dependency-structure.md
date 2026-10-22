@@ -76,6 +76,7 @@ source normalization, alias/reduction expansion and structural-identity costs
 remain part of export construction. These limits are not a process RSS bound.
 
 The existing [bounded symbolic derivatives](portable-ir.md) still provide dense
-matrices and dense `jvp`/`vjp`. General native derivative actions are a separate
-increment. Dependency rows establish potential input reads, not differentiability,
+matrices and dense `jvp`/`vjp`. Optional [native state actions](native-actions.md)
+have a separate CPU qualification and storage/cost contract.
+Dependency rows establish potential input reads, not differentiability,
 numerical rank, global identifiability or numerical solver adequacy.
