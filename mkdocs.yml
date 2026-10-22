@@ -51,6 +51,7 @@ nav:
       - Execution Roadmap: development/execution-roadmap.md
       - Contributing: development/contributing.md
       - Coverage Audit: development/coverage-audit.md
+      - Cache Lifetimes: development/cache-lifetimes.md
       - Code Style: development/code-style.md
       - Creating A Release: development/creating-a-release.md
       - Citation and Archiving: development/citation-and-archiving.md

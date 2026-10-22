@@ -36,6 +36,8 @@ from typing import TYPE_CHECKING, Any, TypeVar, cast
 if TYPE_CHECKING:
     from collections.abc import Collection, Iterable, Iterator, Mapping, Sequence
 
+    from op_system._templates import _PreparedSubstitutions
+
 from op_system._axes import _normalize_axes, _normalize_bracket_key
 from op_system._errors import InvalidRhsSpecError, UnsupportedFeatureError
 from op_system._gauge_declarations import _normalize_gauges
@@ -120,6 +122,7 @@ from op_system._templates import (
     _apply_template_substitutions,
     _build_axis_positions,
     _extract_placeholders_from_expr,
+    _prepare_template_substitutions,
     build_axis_lookup,
     parse_selector,
     render_selector,
@@ -1439,6 +1442,7 @@ def _build_transition_equations_ir(  # ruff: ignore[complex-structure, too-many-
         tuple[str, tuple[Any, ...]], list[str]
     ] = {}
 
+    substitution_plan: _PreparedSubstitutions | None = None
     old_limit = sys.getrecursionlimit()
     needed = max(old_limit, 10_000)
     with _raise_recursion_limit(needed, old_limit):  # ruff: ignore[too-many-nested-blocks]
@@ -1903,12 +1907,17 @@ def _build_transition_equations_ir(  # ruff: ignore[complex-structure, too-many-
                 tr_out["to"] = to_name
                 tr_out["rate"] = rate_string
                 if name_s:
+                    if substitution_plan is None:
+                        substitution_plan = _prepare_template_substitutions(
+                            template_map, shaped=shaped
+                        )
                     tr_out["name"] = _apply_template_substitutions(
                         name_s,
                         assignment=assignment or {},
                         template_map=template_map,
                         shaped_params=shaped,
                         axis_lookup=ax_lookup_dict,
+                        _prepared=substitution_plan,
                     )
                 transitions_expanded_out.append(tr_out)
 
