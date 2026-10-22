@@ -77,6 +77,7 @@ nav:
       - Numerical Qualification: guides/numerical-qualification.md
       - Hierarchical Benchmarks: guides/hierarchical-benchmarks.md
       - Evaluator Overhead: guides/evaluator-overhead.md
+      - Optional Numba: guides/numba.md
   - API Reference:
       - OP System: api-reference/op-system.md
       - Balances: api-reference/balances.md
@@ -84,6 +85,7 @@ nav:
       - Coordinates: api-reference/coordinates.md
       - Gauges: api-reference/gauges.md
       - Identity: api-reference/identity.md
+      - Numba: api-reference/numba.md
       - Observables: api-reference/observables.md
       - Portable: api-reference/portable.md
       - Qualification: api-reference/qualification.md

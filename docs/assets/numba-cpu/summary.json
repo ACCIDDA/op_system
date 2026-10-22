@@ -1,0 +1,330 @@
+[
+  {
+    "case": {
+      "groups": 4,
+      "stages": 2,
+      "coupled": false,
+      "dtype": "float32"
+    },
+    "median_seconds": {
+      "numpy_flat": 6.409204477677122e-05,
+      "numpy_structured": 5.218067497480661e-05,
+      "numpy_control": 6.403372477507218e-05,
+      "numba_kernel": 2.6873749447986484e-06,
+      "numba_evaluate": 6.578740139957518e-06,
+      "numba_pack_parameters": 1.4858579961583018e-05,
+      "numba_pack_all": 2.2625529963988812e-05
+    },
+    "median_within_worker_speedups": {
+      "numba_kernel": 24.337850607726477,
+      "numba_evaluate": 10.020848567726619,
+      "numba_pack_parameters": 4.4632699833543406,
+      "numba_pack_all": 2.324209641436348
+    },
+    "cold_phases_seconds": {
+      "generation": 0.010762383986730129,
+      "optional_import": 0.15863474900834262,
+      "native_compilation": 9.719381142000202
+    },
+    "break_even_calls": {
+      "numba_kernel": 160562,
+      "numba_evaluate": 171123,
+      "numba_pack_parameters": 198527,
+      "numba_pack_all": 334588
+    },
+    "baseline_peak_rss_bytes": 57466880,
+    "native_peak_rss_bytes": 276832256,
+    "native_worker_control_ratios": [
+      1.014007142989371,
+      1.0009107700965998,
+      1.00278283196177
+    ]
+  },
+  {
+    "case": {
+      "groups": 4,
+      "stages": 2,
+      "coupled": false,
+      "dtype": "float64"
+    },
+    "median_seconds": {
+      "numpy_flat": 6.166077015222982e-05,
+      "numpy_structured": 5.0125549896620215e-05,
+      "numpy_control": 6.14933850010857e-05,
+      "numba_kernel": 2.5367600028403104e-06,
+      "numba_evaluate": 6.626149988733232e-06,
+      "numba_pack_parameters": 1.4772624999750406e-05,
+      "numba_pack_all": 2.229872508905828e-05
+    },
+    "median_within_worker_speedups": {
+      "numba_kernel": 24.3068993847233,
+      "numba_evaluate": 9.30567075255988,
+      "numba_pack_parameters": 4.1161604672239855,
+      "numba_pack_all": 2.2137054662140527
+    },
+    "cold_phases_seconds": {
+      "generation": 0.010673229000531137,
+      "optional_import": 0.1594490410061553,
+      "native_compilation": 9.886674610024784
+    },
+    "break_even_calls": {
+      "numba_kernel": 172733,
+      "numba_evaluate": 185788,
+      "numba_pack_parameters": 218404,
+      "numba_pack_all": 377769
+    },
+    "baseline_peak_rss_bytes": 57376768,
+    "native_peak_rss_bytes": 277106688,
+    "native_worker_control_ratios": [
+      1.0027220025559036,
+      1.0034358906812537,
+      1.0044476753591596
+    ]
+  },
+  {
+    "case": {
+      "groups": 4,
+      "stages": 2,
+      "coupled": true,
+      "dtype": "float32"
+    },
+    "median_seconds": {
+      "numpy_flat": 6.559863511938602e-05,
+      "numpy_structured": 5.3253269870765505e-05,
+      "numpy_control": 6.57003399101086e-05,
+      "numba_kernel": 2.7850200422108173e-06,
+      "numba_evaluate": 6.769894971512258e-06,
+      "numba_pack_parameters": 1.6245320148300378e-05,
+      "numba_pack_all": 2.383102983003482e-05
+    },
+    "median_within_worker_speedups": {
+      "numba_kernel": 23.541905974717366,
+      "numba_evaluate": 9.684741084954323,
+      "numba_pack_parameters": 4.038001991992081,
+      "numba_pack_all": 2.231783111458274
+    },
+    "cold_phases_seconds": {
+      "generation": 0.011259321006946266,
+      "optional_import": 0.16040230495855212,
+      "native_compilation": 10.297697453002911
+    },
+    "break_even_calls": {
+      "numba_kernel": 166676,
+      "numba_evaluate": 177979,
+      "numba_pack_parameters": 212910,
+      "numba_pack_all": 360030
+    },
+    "baseline_peak_rss_bytes": 57401344,
+    "native_peak_rss_bytes": 280395776,
+    "native_worker_control_ratios": [
+      0.9954067357008398,
+      0.9984519898852617,
+      0.9994660044616812
+    ]
+  },
+  {
+    "case": {
+      "groups": 4,
+      "stages": 2,
+      "coupled": true,
+      "dtype": "float64"
+    },
+    "median_seconds": {
+      "numpy_flat": 6.373257492668927e-05,
+      "numpy_structured": 5.263105005724356e-05,
+      "numpy_control": 6.385799992131069e-05,
+      "numba_kernel": 2.597089915070683e-06,
+      "numba_evaluate": 6.804364966228605e-06,
+      "numba_pack_parameters": 1.6275699890684338e-05,
+      "numba_pack_all": 2.4027810140978545e-05
+    },
+    "median_within_worker_speedups": {
+      "numba_kernel": 24.426304917570203,
+      "numba_evaluate": 9.561270686212806,
+      "numba_pack_parameters": 3.8998122491665286,
+      "numba_pack_all": 2.209842722229022
+    },
+    "cold_phases_seconds": {
+      "generation": 0.0110233299783431,
+      "optional_import": 0.16021619801176712,
+      "native_compilation": 10.29636614897754
+    },
+    "break_even_calls": {
+      "numba_kernel": 171277,
+      "numba_evaluate": 184154,
+      "numba_pack_parameters": 221207,
+      "numba_pack_all": 363979
+    },
+    "baseline_peak_rss_bytes": 57352192,
+    "native_peak_rss_bytes": 280113152,
+    "native_worker_control_ratios": [
+      1.0008730786247424,
+      0.998499454409895,
+      0.9934121056411712
+    ]
+  },
+  {
+    "case": {
+      "groups": 16,
+      "stages": 8,
+      "coupled": false,
+      "dtype": "float32"
+    },
+    "median_seconds": {
+      "numpy_flat": 6.793711509089917e-05,
+      "numpy_structured": 5.6031059939414264e-05,
+      "numpy_control": 6.804966018535197e-05,
+      "numba_kernel": 6.1457749688997865e-06,
+      "numba_evaluate": 1.0623894922900945e-05,
+      "numba_pack_parameters": 1.862742006778717e-05,
+      "numba_pack_all": 2.6721229951363056e-05
+    },
+    "median_within_worker_speedups": {
+      "numba_kernel": 11.11745786961011,
+      "numba_evaluate": 6.457523146566455,
+      "numba_pack_parameters": 3.647156441615036,
+      "numba_pack_all": 2.1067418231144743
+    },
+    "cold_phases_seconds": {
+      "generation": 0.06946830404922366,
+      "optional_import": 0.11175520997494459,
+      "native_compilation": 9.766485722968355
+    },
+    "break_even_calls": {
+      "numba_kernel": 161458,
+      "numba_evaluate": 173858,
+      "numba_pack_parameters": 202442,
+      "numba_pack_all": 340580
+    },
+    "baseline_peak_rss_bytes": 61677568,
+    "native_peak_rss_bytes": 281034752,
+    "native_worker_control_ratios": [
+      0.9995680406811933,
+      0.9983461328955023,
+      1.0047955248185576
+    ]
+  },
+  {
+    "case": {
+      "groups": 16,
+      "stages": 8,
+      "coupled": false,
+      "dtype": "float64"
+    },
+    "median_seconds": {
+      "numpy_flat": 6.914906000019982e-05,
+      "numpy_structured": 5.6807555083651095e-05,
+      "numpy_control": 6.841958500444889e-05,
+      "numba_kernel": 6.653704913333058e-06,
+      "numba_evaluate": 1.0773819813039154e-05,
+      "numba_pack_parameters": 1.87752497731708e-05,
+      "numba_pack_all": 2.660976490005851e-05
+    },
+    "median_within_worker_speedups": {
+      "numba_kernel": 10.41795601391237,
+      "numba_evaluate": 6.4339302419707645,
+      "numba_pack_parameters": 3.6919884397868046,
+      "numba_pack_all": 2.133411952572695
+    },
+    "cold_phases_seconds": {
+      "generation": 0.06921050796518102,
+      "optional_import": 0.10771315498277545,
+      "native_compilation": 9.75711320497794
+    },
+    "break_even_calls": {
+      "numba_kernel": 158515,
+      "numba_evaluate": 169870,
+      "numba_pack_parameters": 196600,
+      "numba_pack_all": 329133
+    },
+    "baseline_peak_rss_bytes": 61579264,
+    "native_peak_rss_bytes": 281063424,
+    "native_worker_control_ratios": [
+      1.0006217184047674,
+      1.0106617863248293,
+      1.0018848782050902
+    ]
+  },
+  {
+    "case": {
+      "groups": 16,
+      "stages": 8,
+      "coupled": true,
+      "dtype": "float32"
+    },
+    "median_seconds": {
+      "numpy_flat": 7.215424499008805e-05,
+      "numpy_structured": 6.0104075237177314e-05,
+      "numpy_control": 7.210206997115164e-05,
+      "numba_kernel": 6.296384963206947e-06,
+      "numba_evaluate": 1.0818184819072485e-05,
+      "numba_pack_parameters": 2.058531506918371e-05,
+      "numba_pack_all": 2.8369920037221164e-05
+    },
+    "median_within_worker_speedups": {
+      "numba_kernel": 11.445726477513812,
+      "numba_evaluate": 6.714796160704683,
+      "numba_pack_parameters": 3.5057583611024343,
+      "numba_pack_all": 2.1185845838945307
+    },
+    "cold_phases_seconds": {
+      "generation": 0.06795519002480432,
+      "optional_import": 0.11251018301118165,
+      "native_compilation": 10.264497419993859
+    },
+    "break_even_calls": {
+      "numba_kernel": 158819,
+      "numba_evaluate": 170544,
+      "numba_pack_parameters": 202787,
+      "numba_pack_all": 329549
+    },
+    "baseline_peak_rss_bytes": 61612032,
+    "native_peak_rss_bytes": 283881472,
+    "native_worker_control_ratios": [
+      1.0047048471162165,
+      1.001849890045391,
+      0.9995094470218647
+    ]
+  },
+  {
+    "case": {
+      "groups": 16,
+      "stages": 8,
+      "coupled": true,
+      "dtype": "float64"
+    },
+    "median_seconds": {
+      "numpy_flat": 7.20800898852758e-05,
+      "numpy_structured": 6.034666497725994e-05,
+      "numpy_control": 7.190987991634757e-05,
+      "numba_kernel": 6.681790109723806e-06,
+      "numba_evaluate": 1.1056269868277013e-05,
+      "numba_pack_parameters": 2.089226501993835e-05,
+      "numba_pack_all": 2.8685100260190667e-05
+    },
+    "median_within_worker_speedups": {
+      "numba_kernel": 10.787541766745987,
+      "numba_evaluate": 6.549356460040472,
+      "numba_pack_parameters": 3.5043451138055692,
+      "numba_pack_all": 2.1391546399961237
+    },
+    "cold_phases_seconds": {
+      "generation": 0.06694117595907301,
+      "optional_import": 0.10870194900780916,
+      "native_compilation": 10.4271438200376
+    },
+    "break_even_calls": {
+      "numba_kernel": 162123,
+      "numba_evaluate": 173601,
+      "numba_pack_parameters": 205513,
+      "numba_pack_all": 329926
+    },
+    "baseline_peak_rss_bytes": 61603840,
+    "native_peak_rss_bytes": 283762688,
+    "native_worker_control_ratios": [
+      0.9993529507657811,
+      1.003037341436537,
+      1.0023669900314984
+    ]
+  }
+]

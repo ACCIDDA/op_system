@@ -22,6 +22,11 @@ citation:
 qualify: qualify-numpy qualify-jax qualify-torch
 
 [group('ci')]
+qualify-numba:
+    uv sync --dev --extra numba
+    uv run --no-sync python scripts/qualify_backend.py numba
+
+[group('ci')]
 qualify-numpy:
 	uv sync --dev
 	uv run --no-sync python scripts/qualify_backend.py numpy

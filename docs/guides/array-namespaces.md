@@ -35,3 +35,7 @@ arguments and supply arrays of the desired namespace. No replacement
 suggest compile-time selection that the current API does not perform.
 The provider has no namespace-selection `backend` setting; remove a legacy
 setting if present and configure runtime arrays through the consuming engine.
+
+The separate [optional Numba lowering](numba.md) explicitly compiles a bounded
+NumPy CPU signature with packed inputs. It does not select an array namespace
+for normal evaluators or add provider/engine backend configuration.

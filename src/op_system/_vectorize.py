@@ -29,7 +29,7 @@ import sys
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from itertools import combinations as _comb
-from typing import TYPE_CHECKING, Any, NamedTuple, cast
+from typing import TYPE_CHECKING, Any, NamedTuple, Protocol, cast
 
 import numpy as np
 from array_api_compat import numpy as _numpy_namespace  # type: ignore[import-untyped]
@@ -178,6 +178,14 @@ def _compile_vector_expr(tree: ast.Expression, *, filename: str) -> _CompiledExp
     return _CompiledExpression(code, function, names)
 
 
+class _ExpressionCompiler(Protocol):
+    """Optional local consumer of the generated, validated expression AST."""
+
+    def __call__(self, tree: ast.Expression, *, filename: str) -> _CompiledExpression:
+        """Compile an expression without retaining model values."""
+        ...
+
+
 @dataclass(frozen=True, slots=True)
 class _BufferTemplate:
     """Records a templated buffer (state or alias) for the rewriter."""
@@ -253,6 +261,7 @@ class _LoweringContext:
     axis_coords: Mapping[str, tuple[str, ...]] | None
     axis_types: Mapping[str, str] | None
     shaped_param_axes: Mapping[str, tuple[str, ...]] | None
+    compile_expression: _ExpressionCompiler = _compile_vector_expr
 
 
 def _build_history_signal_id_map(
@@ -314,7 +323,7 @@ def _compile_ir_expr(
     tree = ast.Expression(body=body)
     ast.fix_missing_locations(tree)
     try:
-        return _compile_vector_expr(tree, filename=filename)
+        return context.compile_expression(tree, filename=filename)
     except (ValueError, TypeError, SyntaxError):
         return None
 
@@ -666,6 +675,7 @@ def _try_cse_eq_plan(  # ruff: ignore[complex-structure, too-many-return-stateme
     axis_coords: Mapping[str, tuple[str, ...]] | None = None,
     axis_types: Mapping[str, str] | None = None,
     shaped_param_axes: Mapping[str, tuple[str, ...]] | None = None,
+    compile_expression: _ExpressionCompiler = _compile_vector_expr,
 ) -> tuple[tuple[tuple[str, _CompiledExpression], ...], list[_EqGroup]] | None:
     """Build equation groups via template-level CSE across all state templates.
 
@@ -716,6 +726,7 @@ def _try_cse_eq_plan(  # ruff: ignore[complex-structure, too-many-return-stateme
         axis_coords=axis_coords,
         axis_types=axis_types,
         shaped_param_axes=shaped_param_axes,
+        compile_expression=compile_expression,
     )
 
     # Lift the first-cell IR for each template to template form.
@@ -786,6 +797,7 @@ def _vectorize_template_equations(  # ruff: ignore[complex-structure, too-many-b
     axis_coords: Mapping[str, tuple[str, ...]] | None = None,
     axis_types: Mapping[str, str] | None = None,
     shaped_param_axes: Mapping[str, tuple[str, ...]] | None = None,
+    compile_expression: _ExpressionCompiler = _compile_vector_expr,
 ) -> (
     tuple[
         tuple[_CompiledExpression, ...],
@@ -922,9 +934,7 @@ def _vectorize_template_equations(  # ruff: ignore[complex-structure, too-many-b
                     ok = False
                     break
             try:
-                codes.append(
-                    _compile_vector_expr(first_tree, filename="<op_system_vec>")
-                )
+                codes.append(compile_expression(first_tree, filename="<op_system_vec>"))
             except (ValueError, TypeError, SyntaxError):
                 ok = False
                 break
@@ -952,7 +962,11 @@ def _vectorize_template_equations(  # ruff: ignore[complex-structure, too-many-b
 # ---------------------------------------------------------------------------
 
 
-def build_vector_plan(rhs: NormalizedRhs) -> _VectorPlan | None:
+def build_vector_plan(
+    rhs: NormalizedRhs,
+    *,
+    compile_expression: _ExpressionCompiler = _compile_vector_expr,
+) -> _VectorPlan | None:
     """Try to build a vectorized plan for ``rhs``.
 
     Set the ``OP_SYSTEM_DEBUG_VECTOR_PLAN`` environment variable (e.g.
@@ -966,11 +980,13 @@ def build_vector_plan(rhs: NormalizedRhs) -> _VectorPlan | None:
         to the scalar engine.
     """
     _LAST_BAIL_REASON[0] = None
-    return _build_vector_plan_inner(rhs)
+    return _build_vector_plan_inner(rhs, compile_expression=compile_expression)
 
 
 def _build_vector_plan_inner(  # ruff: ignore[complex-structure, too-many-return-statements, too-many-branches, too-many-locals, too-many-statements]
     rhs: NormalizedRhs,
+    *,
+    compile_expression: _ExpressionCompiler,
 ) -> _VectorPlan | None:
     """Vectorized-plan construction body (see ``build_vector_plan``).
 
@@ -1120,7 +1136,7 @@ def _build_vector_plan_inner(  # ruff: ignore[complex-structure, too-many-return
                     f"alias {buf.base!r}: first/last cell trees differ after rewriting"
                 )
                 return None
-            code = _compile_vector_expr(tree, filename="<op_system_vec>")
+            code = compile_expression(tree, filename="<op_system_vec>")
         except (ValueError, RuntimeError, TypeError, SyntaxError) as exc:
             _bail(
                 f"alias {buf.base!r}: rewrite/compile failed:"
@@ -1142,6 +1158,7 @@ def _build_vector_plan_inner(  # ruff: ignore[complex-structure, too-many-return
         axis_coords=axis_coords,
         axis_types=axis_types,
         shaped_param_axes=shaped_param_axes,
+        compile_expression=compile_expression,
     )
 
     if cse_result is not None:
@@ -1162,6 +1179,7 @@ def _build_vector_plan_inner(  # ruff: ignore[complex-structure, too-many-return
                 axis_coords=axis_coords,
                 axis_types=axis_types,
                 shaped_param_axes=shaped_param_axes,
+                compile_expression=compile_expression,
             )
             if result is None:
                 _bail(

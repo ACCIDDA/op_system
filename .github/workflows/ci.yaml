@@ -11,6 +11,34 @@ permissions:
   contents: 'read'
 
 jobs:
+  numba-optional:
+    name: 'optional Numba (${{ matrix.contract }}, ${{ matrix.python }})'
+    runs-on: 'ubuntu-latest'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {contract: 'minimum', python: '3.12'}
+          - {contract: 'current', python: '3.11'}
+          - {contract: 'current', python: '3.12'}
+          - {contract: 'current', python: '3.13'}
+    steps:
+      - uses: 'actions/checkout@v6'
+        with:
+          persist-credentials: false
+      - uses: 'astral-sh/setup-uv@v7'
+        with:
+          python-version: '${{ matrix.python }}'
+      - name: 'Install required optional compiler'
+        run: |
+          uv venv --python '${{ matrix.python }}'
+          if [ '${{ matrix.contract }}' = minimum ]; then
+            uv pip install -e '.[numba]' pytest 'sybil[pytest]>=9.2' 'numba==0.67.0' 'numpy==2.0.2'
+          else
+            uv pip install -e '.[numba]' pytest 'sybil[pytest]>=9.2'
+          fi
+      - name: 'Require native values, layout and errors without skips'
+        run: 'uv run --no-sync python scripts/qualify_backend.py numba'
   torch-minimum:
     name: 'compiler minimum Torch (3.12)'
     runs-on: 'ubuntu-latest'

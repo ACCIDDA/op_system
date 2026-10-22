@@ -18,7 +18,7 @@ def main() -> int:
         Zero only when selected tests execute successfully without skips.
     """
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("backend", choices=["numpy", "jax", "torch"])
+    parser.add_argument("backend", choices=["numpy", "jax", "torch", "numba"])
     args = parser.parse_args()
     # This is a hard dependency check, not pytest.importorskip: missing
     # backends must fail their required job before test collection.
@@ -37,11 +37,10 @@ def main() -> int:
     )
     with tempfile.TemporaryDirectory(prefix="op-system-qualification-") as directory:
         report = Path(directory) / "results.xml"
-        process = subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true]
-            [
-                sys.executable,
-                "-m",
-                "pytest",
+        selected = (
+            ["tests/op_system/test_numba.py"]
+            if args.backend == "numba"
+            else [
                 "tests/op_system/test_backend_qualification.py",
                 "tests/op_system/test_hierarchical_benchmark.py",
                 "tests/op_system/test_parameter_metadata.py",
@@ -57,8 +56,15 @@ def main() -> int:
                 "tests/op_system/test_scalar_device.py",
                 "tests/op_system/test_vector_buffer_semantics.py",
                 "tests/op_system/test_paired_evaluator.py",
-                "-k",
-                args.backend,
+            ]
+        )
+        process = subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true]
+            [
+                sys.executable,
+                "-m",
+                "pytest",
+                *selected,
+                *([] if args.backend == "numba" else ["-k", args.backend]),
                 "-q",
                 "--tb=short",
                 f"--junitxml={report}",
