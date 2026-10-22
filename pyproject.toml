@@ -36,6 +36,7 @@ Issues = "https://github.com/ACCIDDA/op_system/issues"
 Changelog = "https://github.com/ACCIDDA/op_system/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
+benchmark = ["threadpoolctl>=3.6"]
 data = [
     "pandas>=2.2",
     "pyarrow>=16.0",

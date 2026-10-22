@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "scope": "paired NumPy warm RHS factory comparison; same vector plan, compiler sources must otherwise match",
+  "started_at_utc": "2026-10-22T00:33:49.466712+00:00",
+  "cpu_affinity": [
+    0
+  ],
+  "cases": [
+    {
+      "groups": 4,
+      "stages": 2,
+      "coupled": false
+    },
+    {
+      "groups": 4,
+      "stages": 2,
+      "coupled": true
+    },
+    {
+      "groups": 16,
+      "stages": 8,
+      "coupled": false
+    },
+    {
+      "groups": 16,
+      "stages": 8,
+      "coupled": true
+    }
+  ],
+  "fresh_process_repetitions": 3,
+  "within_process_sample_pairs": 15,
+  "calls_per_sample": 200,
+  "timeout_seconds": 120,
+  "paired_harness_sha256": "f3efed44a5bc5ed60c900cf0325489bdf08070a2dce68c5eabbcaa2ea136d0eb",
+  "trigger": "separate-process controls showed substantial shared-host variation; original80records retained",
+  "order": "reverse case order in middle repetition; alternate variants within each worker"
+}

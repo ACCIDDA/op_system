@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import cProfile
 import importlib
 import json
+import operator
 import os
 import platform
 import resource
@@ -195,6 +197,58 @@ def _measure(  # ruff: ignore[too-many-arguments]
     }
 
 
+def _profile(
+    function: Callable[..., Any],
+    state: Any,  # ruff: ignore[any-type]
+    params: Any,  # ruff: ignore[any-type]
+    calls: int,
+) -> dict[str, object]:
+    """Account for NumPy Python calls in a separate correctness-only worker.
+
+    The profiler perturbs execution. Its times identify overhead and must not
+    be presented as ordinary latency or compared with unprofiled samples.
+
+    Returns:
+        Profile totals and the largest self-time rows, with local paths removed.
+    """
+    function(state, params)
+    profiler = cProfile.Profile()
+    profiler.enable()
+    for _ in range(calls):
+        function(state, params)
+    profiler.disable()
+    entries = profiler.getstats()
+    rows = []
+    for entry in entries:
+        code = entry.code
+        filename = "~" if isinstance(code, str) else code.co_filename
+        line = 0 if isinstance(code, str) else code.co_firstlineno
+        name = code if isinstance(code, str) else code.co_name
+        module = Path(filename).name
+        for package in ("op_system", "numpy", "benchmarks"):
+            if f"/{package}/" in filename:
+                module = package + "/" + filename.rsplit(f"/{package}/", 1)[1]
+                break
+        rows.append({
+            "module": module,
+            "line": line,
+            "function": name,
+            "primitive_calls": entry.callcount - entry.reccallcount,
+            "total_calls": entry.callcount,
+            "self_seconds": entry.inlinetime,
+            "cumulative_seconds": entry.totaltime,
+        })
+    return {
+        "evaluator_calls": calls,
+        "accounted_seconds": sum(entry.inlinetime for entry in entries),
+        "total_calls": sum(entry.callcount for entry in entries),
+        "top_self_time": sorted(
+            rows, key=operator.itemgetter("self_seconds"), reverse=True
+        )[:40],
+        "scope": "profiled NumPy RHS only; not unprofiled latency",
+    }
+
+
 def _compile_case(
     case: BenchmarkCase, repeats: int
 ) -> tuple[CompiledRhs, dict[str, object], dict[str, object], int]:
@@ -290,6 +344,11 @@ def _environment(module: Any) -> dict[str, object]:  # ruff: ignore[any-type]
             ),
             processor,
         )
+    try:
+        pools = importlib.import_module("threadpoolctl").threadpool_info()
+    except ImportError:
+        pools = None
+    affinity = getattr(os, "sched_getaffinity", None)
     return {
         "python": platform.python_version(),
         "op_system": version("op_system"),
@@ -299,6 +358,24 @@ def _environment(module: Any) -> dict[str, object]:  # ruff: ignore[any-type]
         "machine": platform.machine(),
         "processor": processor,
         "cpu_count": os.cpu_count(),
+        "cpu_affinity": sorted(affinity(0)) if affinity is not None else None,
+        "observed_thread_pools": [
+            {
+                key: pool[key]
+                for key in (
+                    "internal_api",
+                    "num_threads",
+                    "version",
+                    "prefix",
+                    "architecture",
+                    "threading_layer",
+                )
+                if key in pool
+            }
+            for pool in pools
+        ]
+        if pools is not None
+        else None,
         "thread_settings": {
             name: os.environ.get(name)
             for name in [
@@ -313,7 +390,11 @@ def _environment(module: Any) -> dict[str, object]:  # ruff: ignore[any-type]
 
 
 def run_case(  # ruff: ignore[too-many-locals]
-    case: BenchmarkCase, policy: RepeatPolicy | None = None, *, measure: bool = True
+    case: BenchmarkCase,
+    policy: RepeatPolicy | None = None,
+    *,
+    measure: bool = True,
+    profile_calls: int = 0,
 ) -> dict[str, object]:
     """Qualify a case and optionally measure serial compiler/evaluator costs.
 
@@ -326,6 +407,13 @@ def run_case(  # ruff: ignore[too-many-locals]
         ValueError: If a dimension, backend, precision, or repeat control is invalid.
     """
     policy = policy or RepeatPolicy()
+    if (
+        type(profile_calls) is not int
+        or profile_calls < 0
+        or (profile_calls and (measure or case.backend != "numpy"))
+    ):
+        msg = "Profiling requires nonnegative calls and a NumPy correctness-only worker"
+        raise ValueError(msg)
     if case.backend not in {"numpy", "jax", "torch"} or case.dtype not in {
         "float32",
         "float64",
@@ -380,6 +468,8 @@ def run_case(  # ruff: ignore[too-many-locals]
             if measure
             else None,
         }
+        if profile_calls:
+            results[name]["profile"] = _profile(function, state, params, profile_calls)
     peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
     return {
         "case": case._asdict(),

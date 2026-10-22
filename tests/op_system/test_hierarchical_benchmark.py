@@ -71,3 +71,25 @@ def test_invalid_policy() -> None:
     """No timing run may silently reduce its repeat count to zero."""
     with pytest.raises(ValueError, match="positive"):
         run_case(BenchmarkCase("numpy", 2, 2), RepeatPolicy(0))
+
+
+def test_numpy_profile_is_separate_from_unprofiled_timings() -> None:
+    """Call accounting is opt-in, qualified and excludes local source paths."""
+    result = run_case(BenchmarkCase("numpy", 2, 2), measure=False, profile_calls=3)
+    assert result["status"] == "qualified"
+    evaluators: Any = result["evaluators"]
+    for evaluator in evaluators.values():
+        assert evaluator["timings"] is None
+        profile = evaluator["profile"]
+        assert profile["evaluator_calls"] == 3
+        assert profile["total_calls"] > 3
+        assert profile["accounted_seconds"] > 0
+        assert profile["top_self_time"]
+        assert all(
+            not row["module"].startswith("/") for row in profile["top_self_time"]
+        )
+    json.dumps(result, allow_nan=False)
+    with pytest.raises(ValueError, match="correctness-only"):
+        run_case(BenchmarkCase("numpy", 2, 2), profile_calls=3)
+    with pytest.raises(ValueError, match="correctness-only"):
+        run_case(BenchmarkCase("torch", 2, 2), measure=False, profile_calls=3)
