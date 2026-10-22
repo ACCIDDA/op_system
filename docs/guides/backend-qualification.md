@@ -42,6 +42,14 @@ GPU execution is outside the qualified CPU matrix. The matrix describes
 the tested workload and paths, not every combination of compiler operators,
 backend versions, devices, or automatic differentiation transforms.
 
+[Native state actions](native-actions.md) additionally qualify explicit JAX/Torch
+RHS and scalar/array observable JVP/VJP products, JAX JIT/vmap, Torch vmap and
+nonlinear outer state/parameter gradients. A required older-JAX lane runs the
+complete selected suite on JAX/jaxlib 0.4.36, NumPy 2.0.0 and array-api-compat
+1.12.0. This is a named compatibility point alongside current resolution, not
+qualification of every JAX version. Minimum Torch 2.6 executes the same native
+action checks. Required lanes reject optional skips.
+
 ## Independent equations and structural checks
 
 `benchmarks/hierarchical_model.py` defines a synthetic closed three-compartment

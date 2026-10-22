@@ -27,6 +27,12 @@ version; format loosely follows
 
 ### Added
 
+- Add explicit optional JAX/Torch state JVP and transpose/VJP adapters for
+  compiled RHS and scalar/array observables, preserving source and input layouts.
+  Qualify independent nonlinear products, native transforms and outer gradients;
+  reject operator/history/gauge execution. Retain CPU startup, warm and RSS
+  comparisons without changing defaults or claiming universal memory savings.
+
 - Export bounded conservative dependency rows from retained compiler IR without
   numerical derivative construction. Retain pinned selectors, reductions,
   buffer-parameter and grouped-observable layouts, source identity and immutable

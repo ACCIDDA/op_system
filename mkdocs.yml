@@ -61,6 +61,7 @@ nav:
       - Structural Model Identity: guides/structural-identity.md
       - Portable IR and Derivatives: guides/portable-ir.md
       - Dependency Structure: guides/dependency-structure.md
+      - Native State Actions: guides/native-actions.md
       - State Representations: guides/state-representations.md
       - Conditional Reaction Balances: guides/reaction-balances.md
       - Latent Observables: guides/latent-observables.md
@@ -82,6 +83,7 @@ nav:
       - Optional Numba: guides/numba.md
   - API Reference:
       - OP System: api-reference/op-system.md
+      - Actions: api-reference/actions.md
       - Balances: api-reference/balances.md
       - Compile: api-reference/compile.md
       - Coordinates: api-reference/coordinates.md

@@ -17,11 +17,38 @@ import time
 from contextlib import nullcontext
 from importlib.metadata import version
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from op_system import compile_spec, symbolic_derivatives
+from op_system import (
+    StructuralModelIdentity,
+    compile_spec,
+    state_actions,
+    symbolic_derivatives,
+)
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from op_system.compile import CompiledRhs
+
+
+def _compile_ring(size: int) -> CompiledRhs:
+    """Reuse one ring source for the dense matrices and both action paths.
+
+    Returns:
+        Compiled scalar ring with a named scalar measurement.
+    """
+    names = [f"x{i}" for i in range(size)]
+    return compile_spec({
+        "kind": "expr",
+        "state": names,
+        "equations": {
+            name: f"-a*{name}+b*{names[(i + 1) % size]}" for i, name in enumerate(names)
+        },
+        "observables": {"measurement": {"expr": f"gain*x0+{names[-1]}"}},
+    })
 
 
 def _ready(values: tuple[object, ...]) -> None:
@@ -44,16 +71,8 @@ def _measure(backend: str, size: int) -> dict[str, object]:
     xp: Any = importlib.import_module(
         {"numpy": "numpy", "jax": "jax.numpy", "torch": "torch"}[backend]
     )
-    names = [f"x{i}" for i in range(size)]
     started = time.perf_counter()
-    compiled = compile_spec({
-        "kind": "expr",
-        "state": names,
-        "equations": {
-            name: f"-a*{name}+b*{names[(i + 1) % size]}" for i, name in enumerate(names)
-        },
-        "observables": {"measurement": {"expr": f"gain*x0+{names[-1]}"}},
-    })
+    compiled = _compile_ring(size)
     compile_seconds = time.perf_counter() - started
     started = time.perf_counter()
     artifact = symbolic_derivatives(compiled)
@@ -120,11 +139,147 @@ def _validate(values: tuple[object, ...], state: object, size: int) -> None:
         np.testing.assert_allclose(_host(value), expected, rtol=1e-12, atol=1e-12)
 
 
+def _action_evaluator(
+    compiled: CompiledRhs, backend: str, implementation: str
+) -> Callable[..., tuple[object, ...]]:
+    """Construct one native or dense action boundary on the shared source.
+
+    Returns:
+        Function accepting time, state, three directions and parameter buffers.
+
+    Raises:
+        ValueError: Native actions are requested for the NumPy backend.
+    """
+    if backend == "numpy" and implementation == "native":
+        msg = "Native actions require JAX or Torch"
+        raise ValueError(msg)
+    if implementation == "native":
+        rhs = state_actions(compiled, backend=backend)  # type: ignore[arg-type]
+        observation = state_actions(compiled, backend=backend, observable="measurement")  # type: ignore[arg-type]
+
+        def evaluate(
+            t: object,
+            y: object,
+            directions: tuple[object, ...],
+            parameters: dict[str, object],
+        ) -> tuple[object, ...]:
+            return (
+                rhs.jvp(t, y, directions[0], a=parameters["a"], b=parameters["b"]),
+                rhs.vjp(t, y, directions[1], a=parameters["a"], b=parameters["b"]),
+                observation.jvp(t, y, directions[0], gain=parameters["gain"]),
+                observation.vjp(t, y, directions[2], gain=parameters["gain"]),
+            )
+
+    else:
+        artifact = symbolic_derivatives(compiled)
+
+        def evaluate(
+            t: object,
+            y: object,
+            directions: tuple[object, ...],
+            parameters: dict[str, object],
+        ) -> tuple[object, ...]:
+            values = artifact.evaluate(t, y, **parameters)
+            matrix: Any = values.state
+            observed: Any = values.observable_state
+            v, w, u = directions
+            return matrix @ v, matrix.T @ w, (observed @ v)[0], observed[0] * u
+
+    return evaluate
+
+
+def _validate_actions(values: tuple[object, ...], directions: tuple[Any, ...]) -> None:
+    """Check ring and transpose actions against independent vector arithmetic."""
+    v, w, u = (_host(value) for value in directions)
+    observed = np.zeros(len(v))
+    observed[0], observed[-1] = 2.0, 1.0
+    references = (
+        -0.3 * v + 0.2 * np.roll(v, -1),
+        -0.3 * w + 0.2 * np.roll(w, 1),
+        observed @ v,
+        observed * u,
+    )
+    for value, expected in zip(values, references, strict=True):
+        np.testing.assert_allclose(_host(value), expected, rtol=1e-12, atol=1e-12)
+
+
+def _measure_actions(backend: str, size: int, implementation: str) -> dict[str, object]:
+    """Compare four equal state actions, retaining a single dense evaluation.
+
+    Returns:
+        Timings, independent reference and whole-process memory for one worker.
+    """
+    xp: Any = importlib.import_module(
+        {"numpy": "numpy", "jax": "jax.numpy", "torch": "torch"}[backend]
+    )
+    started = time.perf_counter()
+    compiled = _compile_ring(size)
+    compile_seconds = time.perf_counter() - started
+    started = time.perf_counter()
+    evaluate = _action_evaluator(compiled, backend, implementation)
+
+    construction_seconds = time.perf_counter() - started
+    directions = (
+        xp.asarray(np.linspace(-0.4, 0.6, size), dtype=xp.float64),
+        xp.asarray(np.linspace(0.1, 0.9, size), dtype=xp.float64),
+        xp.asarray(0.7, dtype=xp.float64),
+    )
+    inputs = (
+        xp.asarray(0.5, dtype=xp.float64),
+        xp.asarray(np.linspace(0.5, 1.5, size), dtype=xp.float64),
+        directions,
+        {
+            name: xp.asarray(value, dtype=xp.float64)
+            for name, value in (("a", 0.3), ("b", 0.2), ("gain", 2.0))
+        },
+    )
+    if backend == "jax":
+        evaluate = importlib.import_module("jax").jit(evaluate)
+    started = time.perf_counter()
+    values = evaluate(*inputs)
+    _ready(values)
+    first_seconds = time.perf_counter() - started
+    elapsed = []
+    for _ in range(11):
+        started = time.perf_counter()
+        values = evaluate(*inputs)
+        _ready(values)
+        elapsed.append(time.perf_counter() - started)
+    _validate_actions(values, directions)
+    return {
+        "backend": backend,
+        "implementation": implementation,
+        "operation": "four-state-actions",
+        "states": size,
+        "dtype": "float64",
+        "device": "cpu",
+        "model": StructuralModelIdentity.from_compiled(compiled).digest,
+        "source_compile_seconds": compile_seconds,
+        "derivative_construction_seconds": construction_seconds,
+        "first_evaluation_seconds": first_seconds,
+        "warm_evaluation_seconds": statistics.median(elapsed),
+        "warm_repetitions": len(elapsed),
+        "output_entries": 3 * size + 1,
+        "dense_api_entries": (size + 1) * (size + 3)
+        if implementation == "symbolic"
+        else None,
+        "whole_worker_peak_rss_mib": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+        / 1024,
+        "analytic_reference": "passed",
+    }
+
+
 def main() -> None:
     """Measure one native case, retaining versions and synthetic source identity."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--backend", choices=("numpy", "jax", "torch"), required=True)
-    parser.add_argument("--states", type=int, choices=(2, 16, 32), required=True)
+    parser.add_argument("--states", type=int, choices=(2, 16, 32, 128), required=True)
+    parser.add_argument(
+        "--operation", choices=("matrices", "actions"), default="matrices"
+    )
+    parser.add_argument(
+        "--implementation", choices=("symbolic", "native"), default="symbolic"
+    )
     arguments = parser.parse_args()
     context = nullcontext()
     if arguments.backend == "jax":
@@ -134,7 +289,13 @@ def main() -> None:
             enable = jax.experimental.enable_x64
         context = enable()
     with context:
-        result = _measure(arguments.backend, arguments.states)
+        result = (
+            _measure(arguments.backend, arguments.states)
+            if arguments.operation == "matrices"
+            else _measure_actions(
+                arguments.backend, arguments.states, arguments.implementation
+            )
+        )
     result["versions"] = {name: version(name) for name in ("numpy", arguments.backend)}
     result["fixture_sha256"] = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
     print(json.dumps(result, sort_keys=True))  # ruff: ignore[print]

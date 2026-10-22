@@ -58,6 +58,24 @@ jobs:
         run: |
           uv run --no-sync python -c 'import torch; assert torch.__version__.split("+")[0] == "2.6.0"'
           uv run --no-sync python scripts/qualify_backend.py torch
+  jax-older:
+    name: 'compiler older JAX (3.12)'
+    runs-on: 'ubuntu-latest'
+    steps:
+      - uses: 'actions/checkout@v6'
+        with:
+          persist-credentials: false
+      - uses: 'astral-sh/setup-uv@v7'
+        with:
+          python-version: '3.12'
+      - name: 'Install older native JAX contract'
+        run: |
+          uv venv --python 3.12
+          uv pip install -e . pytest 'sybil[pytest]>=9.2' 'numpy==2.0.0' 'array-api-compat==1.12.0' 'pydantic==2.12.5' 'jax==0.4.36' 'jaxlib==0.4.36'
+      - name: 'Require native transforms without skips'
+        run: |
+          uv run --no-sync python -c 'import jax; assert jax.__version__ == "0.4.36"'
+          uv run --no-sync python scripts/qualify_backend.py jax
   provider-typing:
     name: 'provider-typing'
     runs-on: 'ubuntu-latest'

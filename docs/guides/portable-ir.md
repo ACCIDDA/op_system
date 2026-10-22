@@ -99,7 +99,7 @@ compact IR can still preserve those constructs for another consumer.
 Default limits are 128 expanded states and 65,536 dense derivative entries.
 `jvp` and `vjp` apply that bounded dense state Jacobian; they do not claim
 matrix-free storage. Tangent layouts, namespace and precision must match the
-states. General sparse/action exports remain separate work.
+states. General sparse and operator-aware derivative exports remain separate work.
 
 `state_dependencies` is conservative IR dependency metadata, independent of
 current fitted values. A coefficient becoming zero does not remove its declared
@@ -132,6 +132,11 @@ initialization and, for JAX, JIT compilation; construction follows source model
 compilation, which is recorded separately. Whole-worker peak RSS includes imports
 and source compilation. This fixture neither selects a native compiler rewrite
 nor predicts application performance or the cost of a sensitivity solve.
+
+Optional [native state actions](native-actions.md) provide a separate direct
+JAX/Torch product boundary, including shaped parameters and array observables.
+They preserve the dense API above; their transform, storage and performance
+qualification is documented separately.
 
 ## Julia expression export
 
