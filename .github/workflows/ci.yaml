@@ -57,7 +57,7 @@ jobs:
       - name: 'Require device placement and native derivative graphs'
         run: |
           uv run --no-sync python -c 'import torch; assert torch.__version__.split("+")[0] == "2.6.0"'
-          uv run --no-sync pytest tests/op_system/test_scalar_device.py tests/op_system/test_portable_symbolic.py -k torch -q
+          uv run --no-sync python scripts/qualify_backend.py torch
   provider-typing:
     name: 'provider-typing'
     runs-on: 'ubuntu-latest'

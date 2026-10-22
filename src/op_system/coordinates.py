@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Generic, NamedTuple, TypeVar, cast
 
-from ._array import array_namespace
+from ._array import _asarray, array_namespace
 from ._coordinate_rhs import _quotient_source
 from ._errors import UnsupportedFeatureError
 from ._gauge_fix import _bind_anchors
@@ -70,7 +70,7 @@ def _array_and_mask(
     shape = [1] * len(state.shape)
     shape[axis] = n_states
     mask = xp.asarray(mask_values)
-    return cast("Array", xp.asarray(state)), cast(
+    return cast("Array", _asarray(state, xp)), cast(
         "Array", xp.reshape(mask, tuple(shape))
     )
 
@@ -283,7 +283,7 @@ class StateCoordinateView:
             if not xp.isdtype(value.dtype, "real floating"):
                 msg = "State coordinates require real floating buffers"
                 raise TypeError(msg)
-            current = xp.asarray(value)
+            current = _asarray(value, xp)
             valid = xp.logical_and(valid, xp.all(xp.isfinite(current)))
             if base in self.log_bases:
                 physical = current if encode else xp.exp(current)

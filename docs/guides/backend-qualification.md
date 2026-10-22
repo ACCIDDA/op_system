@@ -107,3 +107,11 @@ in float32/float64. The producer emits static exact integer weights and metadata
 these tests qualify agreement with the represented native RHS, without claiming
 runtime integration accuracy, general stoichiometric inference or spatial and
 operator conservation. See [reaction balances](reaction-balances.md).
+
+Minimum Torch qualification runs the complete required native suite, including
+shaped shared/local parameter gradients, coordinate transforms and vectorized
+scalar-time gradients in float32/64. Already-native tensors use `torch.as_tensor`
+when conversion is needed, preserving their graph edges on Torch 2.6 with the
+minimum compatibility namespace. NumPy/JAX/CuPy conversion rules are unchanged.
+This remains eager/autograd qualification; strict Torch compiler capture is a
+separate version-scoped contract.
