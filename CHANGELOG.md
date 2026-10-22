@@ -27,6 +27,11 @@ version; format loosely follows
 
 ### Added
 
+- Cache validated scalar RHS and latent-observable expression functions with
+  explicit runtime bindings, sharing the vector evaluator helper and preserving
+  inspection code. Qualify strict current-Torch FX capture alongside the existing
+  minimum eager/AD contract; retain paired eager scalar-latency costs.
+
 - Add explicit optional NumPy CPU lowering with one eager homogeneous native
   signature, reusable packed state/parameter layouts and bounded source emission.
   Qualify float32/64 values, input/error contracts and independent/coupled models
