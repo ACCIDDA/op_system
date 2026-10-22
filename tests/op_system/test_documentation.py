@@ -12,6 +12,20 @@ import numpy as np
 ROOT = Path(__file__).resolve().parents[2]
 
 
+def test_dependency_guide_keeps_pinned_and_global_reads() -> None:
+    """The complete published workflow retains nonlocal state and output reads."""
+    blocks = re.findall(
+        r"```python\n(.*?)\n```",
+        (ROOT / "docs/guides/dependency-structure.md").read_text(),
+        re.DOTALL,
+    )
+    namespace: dict[str, Any] = {}
+    for block in blocks:
+        exec(block, namespace)  # ruff: ignore[exec-builtin] - trusted guide
+    assert namespace["record"]["state"]["rows"] == [[0], [0, 1], [0, 2]]
+    assert namespace["record"]["observable_state"]["rows"] == [[0, 1, 2]]
+
+
 def test_readme_quickstart_matches_sir_equations() -> None:
     """The README's actual Python block has an independently computed RHS."""
     blocks = re.findall(

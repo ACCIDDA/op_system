@@ -68,6 +68,12 @@ from .compile import (
     compile_rhs,
 )
 from .coordinates import CoordinateResult, StateCoordinateView
+from .dependencies import (
+    BlockStructure,
+    DependencyRows,
+    DependencyStructure,
+    dependency_structure,
+)
 from .gauges import (
     GaugeCoordinates,
     GaugeFixMap,
@@ -210,12 +216,15 @@ __all__ = [
     "AxisMeasure",
     "BalanceCoverageGap",
     "BlockAxisInfo",
+    "BlockStructure",
     "BodyEvalFn",
     "CompiledObservable",
     "CompiledReactant",
     "CompiledReaction",
     "CompiledRhs",
     "CoordinateResult",
+    "DependencyRows",
+    "DependencyStructure",
     "DerivativeValues",
     "EvalFn",
     "ExprRhs",
@@ -263,6 +272,7 @@ __all__ = [
     "axis_kernel_redistribute",
     "compile_rhs",
     "compile_spec",
+    "dependency_structure",
     "export_ir",
     "export_julia",
     "julia_rhs",
