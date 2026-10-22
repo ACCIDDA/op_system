@@ -9,6 +9,11 @@ version; format loosely follows
 
 ### Fixed
 
+- Preserve gradients of already-native shaped Torch parameters, vectorized time
+  and state-coordinate buffers on minimum supported Torch. Avoid the older
+  compatibility conversion that detaches existing tensors; preserve dtype/device.
+  Require the complete minimum-Torch backend checks with zero skips.
+
 - Scope prepared template substitutions to their normalization batch, releasing
   expanded model mappings and respecting shaped-parameter exclusions. Preserve
   batch reuse while removing the process-global identity cache.

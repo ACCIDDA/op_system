@@ -34,7 +34,7 @@ from typing import TYPE_CHECKING, Any, NamedTuple, Protocol, cast
 import numpy as np
 from array_api_compat import numpy as _numpy_namespace  # type: ignore[import-untyped]
 
-from op_system._array import array_namespace
+from op_system._array import _asarray, array_namespace
 from op_system._ir import (
     Apply,
     HistoryOp,
@@ -1257,7 +1257,7 @@ def make_vectorized_eval_fn(plan: _VectorPlan) -> EvalFn:  # ruff: ignore[comple
         y_arr = _validate_state_vector(y, n_state=n_state)
         y_idx = cast("_Indexable", y_arr)
 
-        t_val: object = xp.asarray(t)
+        t_val: object = _asarray(t, xp)
         env: dict[str, object] = {"np": xp, "t": t_val}
         env.update(params)
         _bind_quadrature_weights(env, y_arr, xp)
@@ -1271,7 +1271,7 @@ def make_vectorized_eval_fn(plan: _VectorPlan) -> EvalFn:  # ruff: ignore[comple
                 env[f"{base}_buf"] = xp.reshape(xp.asarray(vals), shape)
             elif base in params:
                 bare = params[base]
-                env[f"{base}_buf"] = xp.reshape(xp.asarray(bare), shape)
+                env[f"{base}_buf"] = xp.reshape(_asarray(bare, xp), shape)
             else:
                 missing = next(n for n in names if n not in params)
                 msg = (
@@ -1286,7 +1286,7 @@ def make_vectorized_eval_fn(plan: _VectorPlan) -> EvalFn:  # ruff: ignore[comple
                 msg = f"missing shaped param {base!r}: supply as a shape-{shape} array"
                 raise ValueError(msg)
             bare = params[base]
-            env[f"{base}_buf"] = xp.reshape(xp.asarray(bare), shape)
+            env[f"{base}_buf"] = xp.reshape(_asarray(bare, xp), shape)
 
         # Build state buffers via reshape on contiguous slices.
         for tpl in state_templates:
@@ -1392,7 +1392,7 @@ def make_pytree_eval_fn(plan: _VectorPlan) -> PytreeEvalFn:  # ruff: ignore[comp
         xp = array_namespace(first_val)
         _check_numeric_dtype(xp, getattr(first_val, "dtype", None))
 
-        t_val: object = xp.asarray(t)
+        t_val: object = _asarray(t, xp)
         env: dict[str, object] = {"np": xp, "t": t_val}
         env.update(params)
         _bind_quadrature_weights(env, first_val, xp)
@@ -1404,7 +1404,7 @@ def make_pytree_eval_fn(plan: _VectorPlan) -> PytreeEvalFn:  # ruff: ignore[comp
                 env[f"{base}_buf"] = xp.reshape(xp.asarray(vals), shape)
             elif base in params:
                 bare = params[base]
-                env[f"{base}_buf"] = xp.reshape(xp.asarray(bare), shape)
+                env[f"{base}_buf"] = xp.reshape(_asarray(bare, xp), shape)
             else:
                 missing = next(n for n in names if n not in params)
                 msg = (
@@ -1419,7 +1419,7 @@ def make_pytree_eval_fn(plan: _VectorPlan) -> PytreeEvalFn:  # ruff: ignore[comp
                 msg = f"missing shaped param {base!r}: supply as a shape-{shape} array"
                 raise ValueError(msg)
             bare = params[base]
-            env[f"{base}_buf"] = xp.reshape(xp.asarray(bare), shape)
+            env[f"{base}_buf"] = xp.reshape(_asarray(bare, xp), shape)
 
         # Build state buffers DIRECTLY from dict — no slice/reshape needed.
         for tpl in state_templates:
