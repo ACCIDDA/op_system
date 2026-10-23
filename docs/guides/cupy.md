@@ -61,10 +61,10 @@ no GPU performance or memory-reduction claim.
 
 ## Device evidence
 
-The maintainer-authorized workstation run on 23 October 2026 used an NVIDIA
-GeForce RTX 5070 Ti Laptop GPU (Blackwell, compute capability 12.0), driver
-580.173.02 and Python 3.12.12. Its exact pre-evidence-update compiler head was
-`0c1306e5f3276902d2d75e76a12032a23797d103`; the pinned engine and inference
+The final, independently reviewed workstation run on 23 October 2026 used an
+NVIDIA GeForce RTX 5070 Ti Laptop GPU (Blackwell, compute capability 12.0),
+driver 580.173.02 and Python 3.12.12. Its exact compiler head was
+`271fd43d59874c3c910fe180252bb7108c3d52ee`; the pinned engine and inference
 heads were `76edf594f5d4462f9c359482378e662e58668234` and
 `713a2b76119e174dab75290eaf5bff9ffce63af6`. All sources were acquired from
 their GitHub remotes, checked out detached and clean, built as wheels and
@@ -81,20 +81,24 @@ recorded commands exited successfully.
 
 The workstation was compute-idle rather than headless. Only the display server,
 desktop shell and active editor held graphics contexts; there was no competing
-compute context and about 11.1 GiB of device memory was free. Instantaneous GPU
-utilization was 51% before and 10% after the run. These functional checks have
-no timing threshold. Whole-process peak RSS was 450.4/452.0 MiB for the two
-CuPy core lanes, 1001.9/1224.1 MiB for JAX core/statistics and 732.8/1353.6 MiB
+compute context. The before/after snapshots recorded 442/432 MiB of 12,227 MiB
+framebuffer use and 6%/5% instantaneous utilization. These functional checks
+have no timing threshold. Whole-process peak RSS was 451.2/452.2 MiB for the two
+CuPy core lanes, 984.7/1231.2 MiB for JAX core/statistics and 733.0/1354.7 MiB
 for Torch core/statistics. Torch statistics peaked at 0.752 MiB allocated and
 2.0 MiB reserved device memory. Those process and allocator measures have
 different scopes and are not application or training-memory results.
 
-This evidence update changes the PR head, so its results are not the final merge
-receipt. The [workstation handoff](gpu-workstation.md) requires a fresh run and
-independent review of the final head; the sanitized final receipt belongs on
-PR #339 and issue #182, while raw machine records remain private. A repeated,
-nonfatal JAX `hwloc` topology warning is retained with those raw records. CPU
-skips cannot satisfy this device gate, and neither this bounded receipt nor its
-rerun qualifies performance, estimator training, compiled Torch GPU loops,
-Diffrax GPU execution, multiple devices, CUDA 13 CuPy wheels or consumer
-adoption.
+All 40 recorded commands exited successfully; all 17 hosted checks were green,
+and independent review approved the exact source and receipt before
+[PR #339](https://github.com/ACCIDDA/op_system/pull/339) merged and
+[issue #182](https://github.com/ACCIDDA/op_system/issues/182) closed. Earlier
+receipts at `d26a86d` and `0c1306e` are superseded. A separate JAX 0.12 CUDA run
+qualified the held-table gradient fix at exact commit
+`abdc5eebfe1196ee06f27db5ace3409a5f368f15` before
+[PR #345](https://github.com/ACCIDDA/op_system/pull/345) merged. Raw records
+remain private because they contain machine paths and process metadata. A
+repeated, nonfatal JAX `hwloc` topology warning is retained with them. CPU skips
+cannot satisfy this device gate, and the bounded receipts do not qualify
+performance, estimator training, compiled Torch GPU loops, Diffrax GPU
+execution, multiple devices, CUDA 13 CuPy wheels or consumer adoption.

@@ -2,8 +2,8 @@
 
 Domain-agnostic RHS specification + compilation utilities.
 
-Public API (v1)
---------------
+Documented alpha façade
+-----------------------
 Primary user entrypoints:
 - `compile_spec`: Validate, normalize, and compile a RHS specification in one step.
 - `normalize_rhs`: Validate and normalize a YAML-friendly RHS specification.
@@ -16,7 +16,7 @@ Core data structures:
 
 Design guarantees:
 - No dependency on provider/adapters (eg flepimop2).
-- Stable interface for downstream engines.
+- Compatibility changes for downstream engines are recorded in the changelog.
 - Forward-compatible with multiphysics extensions.
 """
 

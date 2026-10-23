@@ -283,8 +283,10 @@ def _normalize_catalysts(
     Raises:
         InvalidRhsSpecError: If ``raw`` is not ``auto`` or a list of mappings.
     """
-    if raw is None or raw == REACTANTS_AUTO:
-        return raw
+    if raw is None:
+        return None
+    if raw == REACTANTS_AUTO:
+        return REACTANTS_AUTO
     if not isinstance(raw, list):
         raise InvalidRhsSpecError(
             detail=f"{field} must be a list or {REACTANTS_AUTO!r}"

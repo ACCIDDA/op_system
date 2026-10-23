@@ -110,11 +110,11 @@ Core uses MIT; the provider uses GPLv3 or later. Preserve the applicable license
 existing attribution when moving or reusing code.
 
 Use the [documentation version selector](https://accidda.github.io/op_system/)
-for released documentation. `main`/the development docs can describe unreleased
-behavior. Find migration notes in the
-[changelog](CHANGELOG.md) and relevant guide; use the exact tag's README and
-source when reproducing a release. The documentation deployment groups releases
-by major/minor, so use the exact source tag for patch-specific behavior.
+for released documentation. `main` publishes only the mutable `dev`
+documentation; each release publishes its full, immutable version. Final
+releases move the `latest` alias, while alpha, beta, and release-candidate
+versions move `pre`. Find migration notes in the [changelog](CHANGELOG.md) and
+relevant guide; use the exact tag's README and source when reproducing a release.
 
 [CITATION.cff](CITATION.cff) records the shared released software and the authors
 already attributed in both package metadata files. Maintainers should review

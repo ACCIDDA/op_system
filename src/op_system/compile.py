@@ -2054,7 +2054,11 @@ def _make_propensity_fn(  # ruff: ignore[too-many-arguments]
 
     def propensity_fn(t: object, y: StateDict, **params: object) -> object:
         _validate_propensity_shapes(y, state_shapes, reaction_name)
-        first_val = y[state_bases[0]] if state_bases else next(iter(params.values()))
+        first_val = (
+            y[state_bases[0]]
+            if state_bases
+            else cast("Float64Array", next(iter(params.values())))
+        )
         xp = array_namespace(first_val)
         env: dict[str, object] = {"np": xp, "t": xp.asarray(t)}
         env.update(params)

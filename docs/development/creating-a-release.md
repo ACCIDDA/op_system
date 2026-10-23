@@ -23,7 +23,9 @@ The release workflow treats them as a single release unit. Both package versions
 
 The release workflow validates that all version declarations match before it builds or publishes anything.
 
-Today that means these two files must contain the same semantic version:
+Today that means these two files must contain the same canonical PEP 440
+version. Production releases use `X.Y.Z` or an explicit `X.Y.ZaN`, `X.Y.ZbN`,
+or `X.Y.ZrcN` version:
 
 - `pyproject.toml`
 - `flepimop2-op_system/pyproject.toml`
@@ -93,7 +95,9 @@ The workflow always publishes in dependency order:
 1. `op_system`
 2. `flepimop2-op_system`
 
-When testing from a branch, keep `create-github-release=false` and `deploy-docs=false`. The reusable docs workflow checks out `main`, so it is not intended for pre-merge branch testing.
+When testing from a branch, keep `create-github-release=false` and
+`deploy-docs=false`. Release documentation is built only from the exact
+`v<version>` tag.
 
 ### PyPI
 
@@ -107,7 +111,10 @@ gh workflow run release.yaml \
   --field deploy-docs=true
 ```
 
-When `create-github-release=true`, the workflow creates a single `vX.Y.Z` GitHub release for the shared package version and uses GitHub's generated release notes.
+When `create-github-release=true`, the workflow creates a single
+`v<version>` GitHub release for the shared package version and uses GitHub's
+generated release notes. A zero major version is not a prerelease: only explicit
+alpha, beta, and release-candidate versions receive GitHub's prerelease flag.
 
 ## 4. Documentation Deployment
 
@@ -115,10 +122,13 @@ The release workflow calls `.github/workflows/gh-pages.yaml` as a reusable workf
 
 That workflow supports two deployment modes:
 
-- `push`: for normal `main` branch documentation updates
-- `release`: for a tagged release, which updates the release alias in `mike`
+- `push`: the exact `main` commit is deployed only to mutable `dev`
+- `release`: the exact tag is deployed to its full immutable version; final
+  releases move `latest`, and alpha, beta, or release-candidate versions move
+  `pre`
 
-If you want to deploy docs manually without running a release, you can dispatch `gh-pages.yaml` directly and choose the deploy mode in the GitHub Actions UI.
+The workflow refuses to overwrite an existing exact version. A manual release
+deployment must provide the corresponding `v<version>` tag in `release-ref`.
 
 ## 5. Trusted Publishing Setup
 
@@ -146,3 +156,8 @@ verify existing arrangements before creating a new record, archive the exact
 shared release, and record a verified version DOI and any distinct concept DOI.
 The paper should identify the tagged software and its independently retained
 benchmark/environment evidence.
+
+After Zenodo ingests a new release, verify its tag, version, creators, licenses,
+source archive, exact DOI, and concept DOI. Submit the published record to the
+ACCIDDA community for curator review. Account linking, repository enablement,
+community submission, and acceptance remain manual operations.

@@ -34,7 +34,10 @@ jobs:
     outputs:
       version: '${{ steps.validate-version.outputs.version }}'
       docs-version: '${{ steps.validate-version.outputs.docs-version }}'
+      docs-alias: '${{ steps.validate-version.outputs.docs-alias }}'
       prerelease: '${{ steps.validate-version.outputs.prerelease }}'
+      release-phase: '${{ steps.validate-version.outputs.release-phase }}'
+      maturity: '${{ steps.validate-version.outputs.maturity }}'
     steps:
       - name: 'Install just'
         uses: 'taiki-e/install-action@v2'
@@ -188,6 +191,7 @@ jobs:
   deploy-docs:
     name: 'Deploy release docs'
     needs:
+      - 'validate'
       - 'create-github-release'
     if: >-
       ${{
@@ -199,4 +203,5 @@ jobs:
     uses: './.github/workflows/gh-pages.yaml'
     with:
       deploy-mode: 'release'
+      release-ref: 'v${{ needs.validate.outputs.version }}'
     secrets: 'inherit'

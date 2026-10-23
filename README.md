@@ -102,7 +102,7 @@ until the next coordinate, with right-continuous changes and constant endpoint
 extrapolation. The same policy applies to flat, PyTree, block, and reaction
 evaluators. Compiled metadata and the flepimop2 provider publish immutable
 forcing coordinates for numerical engines. See the
-[time-indexed parameter guide](https://accidda.github.io/op_system/guides/time-indexed-parameters/)
+[time-indexed parameter guide](https://accidda.github.io/op_system/latest/guides/time-indexed-parameters/)
 for the schema, examples, and exactness conditions.
 
 ## Quick start
@@ -182,7 +182,7 @@ Engines must apply these semantics identically for either velocity sign.
 matrix generator along an axis. `direction: up|down|both` masks destinations;
 continuous axes use target trapezoidal weights; and the currently supported
 `reflecting` boundary truncates out-of-domain jumps without renormalizing or
-losing mass. See the [operator guide](https://accidda.github.io/op_system/guides/operators/)
+losing mass. See the [operator guide](https://accidda.github.io/op_system/latest/guides/operators/)
 for the exact schema, units, and Array-API reference functions.
 
 Use **array namespace** (or **array backend**) for NumPy/JAX/Torch, **engine**
@@ -220,14 +220,14 @@ For diffrax-based ODE solves and NUTS / HMC inference, install the
 `jax-inference` extra above.
 
 For a complete, executable age-structured SEIR model, see the
-[model specification guide](https://accidda.github.io/op_system/guides/getting-started/)
+[model specification guide](https://accidda.github.io/op_system/latest/guides/getting-started/)
 and [checked YAML example](examples/age-seir.yaml). The guide covers state seeds,
 hazard rates, axis/mixing units, expressions, operator metadata, and the current
 constraint boundary.
 
 ## YAML examples
 
-The [YAML guide](https://accidda.github.io/op_system/guides/getting-started/)
+The [YAML guide](https://accidda.github.io/op_system/latest/guides/getting-started/)
 covers templates, axis asymmetry, chains, continuous axes with kernels,
 and hierarchical block models. Selected patterns follow.
 
@@ -476,7 +476,7 @@ Every bin `k` moves to `k + step` at the source bin's rate. `boundary: absorb`
 removes mass shifted off the axis, and `stay` keeps it in the terminal bin.
 The entry lowers once per state, and named entries publish one templated
 reaction per state with an `offsets` field. See the
-[aging-chain guide](https://accidda.github.io/op_system/guides/aging-chains/).
+[aging-chain guide](https://accidda.github.io/op_system/latest/guides/aging-chains/).
 
 ### Continuous axis + kernel
 
@@ -497,7 +497,11 @@ spec:
     u[x]: apply_along(x=xi, K[x=xi] * u[x=xi]) - decay * u[x]
 ```
 
-## Public API
+## Primary façade
+
+This curated import surface is part of the public alpha API. Compatibility
+changes are recorded in the changelog; the generated reference documents the
+larger module-level surface.
 
 ```python
 from op_system import (
@@ -610,3 +614,7 @@ axis plan, and code-style guide.
 | `tests/op_system/` | Compiler, provider, documentation and qualification tests. |
 | `docs/` | mkdocs sources; built site published to GitHub Pages. |
 | `scripts/` | Release validation and API-reference generation helpers. |
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development and review requirements,
+[SECURITY.md](SECURITY.md) for private vulnerability reporting, and
+[CITATION.cff](CITATION.cff) for attribution.
