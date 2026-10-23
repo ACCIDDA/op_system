@@ -307,6 +307,32 @@ def test_jax_tables_remain_trace_pure_under_jit_and_vmap(policy: str) -> None:
     )
 
 
+def test_jax_held_table_gradient_inside_scan_avoids_nested_search_loop() -> None:
+    """Held-table gradients compile without a search loop inside a solver loop."""
+    jax = pytest.importorskip("jax")
+    xp = pytest.importorskip("jax.numpy")
+    compiled = compile_spec(_spec("expr") | {"time_interpolation": "previous"})
+    eval_fn = compiled.pytree_eval_fn
+    assert eval_fn is not None
+    times = xp.asarray([0.2, 0.8, 1.2])
+    state = {"A": xp.ones(2), "B": xp.zeros(2)}
+
+    def objective(grid: object) -> object:
+        def body(total: object, time: object) -> tuple[object, None]:
+            drift = eval_fn(time, state, rate=grid)
+            return total + xp.sum(drift["B"]), None
+
+        return jax.lax.scan(body, xp.asarray(0.0), times)[0]
+
+    grid = xp.asarray([0.0, 3.0, 1.0])
+    gradient = jax.jit(jax.grad(objective))(grid)
+    np.testing.assert_allclose(np.asarray(gradient), [4.0, 2.0, 0.0])
+
+    jaxpr = str(jax.make_jaxpr(jax.grad(objective))(grid))
+    assert "scan[" in jaxpr
+    assert "while[" not in jaxpr
+
+
 @pytest.mark.parametrize("policy", ["linear", "previous"])
 @pytest.mark.parametrize("backend", ["numpy", "jax"])
 def test_block_evaluation_matches_whole_tensor_rates(policy: str, backend: str) -> None:

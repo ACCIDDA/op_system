@@ -1401,9 +1401,15 @@ def _interp_along_axis(  # ruff: ignore[too-many-arguments]
     if n == 1:
         return grid_arr[0]
     t_val = xp.asarray(t)
-    raw_idx = xp.searchsorted(ts_arr, t_val, side="right")
     if interpolation == "previous":
+        # ``searchsorted`` lowers to a loop in JAX.  Nesting that loop inside
+        # an adaptive solver loop prevents XLA from compiling reverse-mode
+        # gradients on CUDA.  Counting the grid points at or before ``t`` is
+        # exactly ``searchsorted(..., side="right")`` for the validated,
+        # strictly increasing time grid and remains trace-pure on each backend.
+        raw_idx = xp.sum(ts_arr <= t_val)
         return grid_arr[xp.clip(raw_idx - 1, 0, n - 1)]
+    raw_idx = xp.searchsorted(ts_arr, t_val, side="right")
     idx_right = xp.clip(raw_idx, 1, n - 1)
     idx_left = idx_right - 1
     t_left = ts_arr[idx_left]
