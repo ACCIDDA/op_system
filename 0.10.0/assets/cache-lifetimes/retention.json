@@ -1,0 +1,193 @@
+{
+  "schema_version": 1,
+  "baseline": {
+    "schema_version": 1,
+    "python": "3.12.14",
+    "scope": "tracemalloc retained bytes after dropping each compiled model and gc.collect; no RSS claim",
+    "warmup_compiles": 3,
+    "state_elements": 64,
+    "measurement_compiles": 30,
+    "specification": {
+      "kind": "expr",
+      "axes": [
+        {
+          "name": "loc",
+          "coords": [
+            "g0",
+            "g1",
+            "g2",
+            "g3",
+            "g4",
+            "g5",
+            "g6",
+            "g7",
+            "g8",
+            "g9",
+            "g10",
+            "g11",
+            "g12",
+            "g13",
+            "g14",
+            "g15",
+            "g16",
+            "g17",
+            "g18",
+            "g19",
+            "g20",
+            "g21",
+            "g22",
+            "g23",
+            "g24",
+            "g25",
+            "g26",
+            "g27",
+            "g28",
+            "g29",
+            "g30",
+            "g31"
+          ]
+        }
+      ],
+      "state": [
+        "X[loc]",
+        "Y[loc]"
+      ],
+      "equations": {
+        "X[loc]": "-k*X[loc]",
+        "Y[loc]": "k*X[loc]"
+      },
+      "initial_state": {
+        "X[loc]": "seed",
+        "Y[loc]": "0"
+      }
+    },
+    "source_hashes": {
+      "_templates.py": "41bf8eb5177ad4d9d7768e7cf14fe7b48cdca06b481ae01061e58c0dc0014748",
+      "_normalize.py": "a84c8cabd170889db683c8cc6caa12d9c6fc34f29eac900d94a05d7db500aa94",
+      "_normalize_initial_state.py": "9d15c066d222b9cc3516c8d8887c2e27dfbc5fa06bee0aab006f87333e44c810"
+    },
+    "measurements": [
+      {
+        "additional_compiles": 1,
+        "retained_python_bytes_above_origin": 20289,
+        "peak_traced_python_bytes": 132653
+      },
+      {
+        "additional_compiles": 5,
+        "retained_python_bytes_above_origin": 101849,
+        "peak_traced_python_bytes": 214213
+      },
+      {
+        "additional_compiles": 10,
+        "retained_python_bytes_above_origin": 203530,
+        "peak_traced_python_bytes": 315894
+      },
+      {
+        "additional_compiles": 20,
+        "retained_python_bytes_above_origin": 408046,
+        "peak_traced_python_bytes": 520410
+      },
+      {
+        "additional_compiles": 30,
+        "retained_python_bytes_above_origin": 610271,
+        "peak_traced_python_bytes": 722635
+      }
+    ]
+  },
+  "candidate": {
+    "schema_version": 1,
+    "python": "3.12.14",
+    "scope": "tracemalloc retained bytes after dropping each compiled model and gc.collect; no RSS claim",
+    "warmup_compiles": 3,
+    "state_elements": 64,
+    "measurement_compiles": 30,
+    "specification": {
+      "kind": "expr",
+      "axes": [
+        {
+          "name": "loc",
+          "coords": [
+            "g0",
+            "g1",
+            "g2",
+            "g3",
+            "g4",
+            "g5",
+            "g6",
+            "g7",
+            "g8",
+            "g9",
+            "g10",
+            "g11",
+            "g12",
+            "g13",
+            "g14",
+            "g15",
+            "g16",
+            "g17",
+            "g18",
+            "g19",
+            "g20",
+            "g21",
+            "g22",
+            "g23",
+            "g24",
+            "g25",
+            "g26",
+            "g27",
+            "g28",
+            "g29",
+            "g30",
+            "g31"
+          ]
+        }
+      ],
+      "state": [
+        "X[loc]",
+        "Y[loc]"
+      ],
+      "equations": {
+        "X[loc]": "-k*X[loc]",
+        "Y[loc]": "k*X[loc]"
+      },
+      "initial_state": {
+        "X[loc]": "seed",
+        "Y[loc]": "0"
+      }
+    },
+    "source_hashes": {
+      "_templates.py": "52eb3f9347d3564d00270c554be6d3d49aa6cf248e07529aed8b5d0f9ec2a20c",
+      "_normalize.py": "0b0e8639ba4feec88bc65bbb51ae98aee438edc7e27133a258cfe0a691a8124a",
+      "_normalize_initial_state.py": "e3aefff5177a537bfa81db4ee9c7e1390deda540bc0c74fb0b7a719f8276e3de"
+    },
+    "measurements": [
+      {
+        "additional_compiles": 1,
+        "retained_python_bytes_above_origin": 190,
+        "peak_traced_python_bytes": 120590
+      },
+      {
+        "additional_compiles": 5,
+        "retained_python_bytes_above_origin": 720,
+        "peak_traced_python_bytes": 121120
+      },
+      {
+        "additional_compiles": 10,
+        "retained_python_bytes_above_origin": 1282,
+        "peak_traced_python_bytes": 121682
+      },
+      {
+        "additional_compiles": 20,
+        "retained_python_bytes_above_origin": 3849,
+        "peak_traced_python_bytes": 124249
+      },
+      {
+        "additional_compiles": 30,
+        "retained_python_bytes_above_origin": 4896,
+        "peak_traced_python_bytes": 125296
+      }
+    ]
+  },
+  "probe_source": "\"\"\"Synthetic repeated-compiler Python retention, separate from allocator RSS.\"\"\"\nimport gc,hashlib,json,pathlib,platform,tracemalloc\nimport op_system\nfrom op_system import compile_spec\nspec={'kind':'expr','axes':[{'name':'loc','coords':[f'g{i}' for i in range(32)]}],\n      'state':['X[loc]','Y[loc]'],\n      'equations':{'X[loc]':'-k*X[loc]','Y[loc]':'k*X[loc]'},\n      'initial_state':{'X[loc]':'seed','Y[loc]':'0'}}\nfor _ in range(3):\n model=compile_spec(spec);assert len(model.state_names)==64\n del model\n gc.collect()\ntracemalloc.start()\ngc.collect();origin=tracemalloc.get_traced_memory()[0]\nrows=[]\nfor i in range(30):\n model=compile_spec(spec);assert len(model.state_names)==64\n del model\n gc.collect()\n if i in (0,4,9,19,29):\n  current,peak=tracemalloc.get_traced_memory();rows.append({'additional_compiles':i+1,'retained_python_bytes_above_origin':current-origin,'peak_traced_python_bytes':peak})\nroot=pathlib.Path(op_system.__file__).parent\nprint(json.dumps({'schema_version':1,'python':platform.python_version(),'scope':'tracemalloc retained bytes after dropping each compiled model and gc.collect; no RSS claim','warmup_compiles':3,'state_elements':64,'measurement_compiles':30,'specification':spec,'source_hashes':{p:hashlib.sha256((root/p).read_bytes()).hexdigest() for p in ('_templates.py','_normalize.py','_normalize_initial_state.py')},'measurements':rows},indent=2))\n",
+  "scope": "Python allocation retention after discarding compiled artifacts; no RSS/solver/training claim"
+}
