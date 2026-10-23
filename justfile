@@ -150,8 +150,9 @@ quality: ci-ruff mypy
 [group('ci')]
 build-check-core:
 	rm -rf dist
-	{{run}} --with build --with twine python -m build --wheel
+	{{run}} --with build --with twine python -m build
 	{{run}} --with twine python -m twine check --strict dist/*
+	{{run}} python scripts/validate_core_artifacts.py dist/*
 
 # Build provider package artifacts and validate metadata
 [group('ci')]
@@ -178,8 +179,11 @@ build-test-core:
 	cp pyproject.toml "${CLEANROOM}/pyproject.toml"
 	cp README.md "${CLEANROOM}/README.md"
 	cp -R tests "${CLEANROOM}/tests"
+	cp -R scripts "${CLEANROOM}/scripts"
 	cp -R benchmarks "${CLEANROOM}/benchmarks"
 	cp -R examples "${CLEANROOM}/examples"
+	mkdir -p "${CLEANROOM}/.github/workflows"
+	cp .github/workflows/gh-pages.yaml .github/workflows/release.yaml "${CLEANROOM}/.github/workflows/"
 	mkdir -p "${CLEANROOM}/docs/guides"
 	cp docs/guides/getting-started.md "${CLEANROOM}/docs/guides/getting-started.md"
 	cp docs/guides/dependency-structure.md "${CLEANROOM}/docs/guides/dependency-structure.md"
@@ -223,10 +227,14 @@ build-all-provider: build-check-provider build-test-provider
 [group('ci')]
 build-all: build-all-core build-all-provider
 
-release-check:
-	{{run}} python scripts/release_validate.py
+release-check-core:
+	{{run}} python scripts/release_validate.py --scope core
 
-release-validate: citation release-check build-all
+release-validate-core: citation release-check-core build-all-core
+
+release-check: release-check-core
+
+release-validate: release-validate-core
 
 # Build API reference for the documentation using `mkdocstrings`
 [group('docs')]

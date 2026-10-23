@@ -41,8 +41,9 @@ to `NamedTuple` for small immutable records, use private helper names, and raise
 specific errors where failure occurs. Add behavior tests that would fail before
 the fix; assert independently expected equations or invariants rather than only
 copying generated expressions. Explain changed public behavior in the docs and
-`CHANGELOG.md` under `Unreleased`. Include migration guidance for a compatibility
-change. Do not bump the shared release version for an ordinary fix.
+`CHANGELOG.md` under `Unreleased`. Provider-only changes belong in
+`flepimop2-op_system/CHANGELOG.md`. Include migration guidance for a
+compatibility change. Do not bump a package version for an ordinary fix.
 
 Run these checks locally **before pushing or opening a PR**:
 
@@ -102,12 +103,14 @@ include an independent reference and tolerances where possible.
 
 ## Releases, documentation, and citation
 
-The two distributions share one version and one `vX.Y.Z` GitHub release. The
-release workflow publishes core before provider. See
-[creating a release](docs/development/creating-a-release.md) for validation and
-publishing; publishing is a separate maintainer action from merging a PR.
-Core uses MIT; the provider uses GPLv3 or later. Preserve the applicable license and
-existing attribution when moving or reusing code.
+The core and provider have independent versions and release lifecycles. The
+repository release workflow publishes only the MIT-licensed core; it cannot
+publish `flepimop2-op-system`. A future provider release requires its own
+reviewed workflow and namespaced tag. See
+[creating a release](docs/development/creating-a-release.md) for core validation
+and publishing; publishing is a separate maintainer action from merging a PR.
+The provider uses GPLv3 or later. Preserve the applicable license and existing
+attribution when moving or reusing code.
 
 Use the [documentation version selector](https://accidda.github.io/op_system/)
 for released documentation. `main` publishes only the mutable `dev`
@@ -116,10 +119,11 @@ releases move the `latest` alias, while alpha, beta, and release-candidate
 versions move `pre`. Find migration notes in the [changelog](CHANGELOG.md) and
 relevant guide; use the exact tag's README and source when reproducing a release.
 
-[CITATION.cff](CITATION.cff) records the shared released software and the authors
-already attributed in both package metadata files. Maintainers should review
-author order/names and release details when these change. Validate it with
-`just citation`; `just ci` and release validation include the same syntax check.
+[CITATION.cff](CITATION.cff) records the released core and the authors already
+attributed in its package metadata. Provider methods should cite the provider
+version separately. Maintainers should review author order, names and release
+details when these change. Validate the core record with `just citation`;
+`just ci` and core release validation include the same syntax check.
 See [citation and archiving](docs/development/citation-and-archiving.md) for
 version-specific citations, the current identifier audit, and the software-paper
 archive plan. Add a preferred paper citation only once its bibliographic record

@@ -2,7 +2,8 @@
 
 `op_system` compiles model definitions. An engine advances state and a provider
 adapts a framework's lifecycle. The MIT core does not import flepimop2; the
-separate GPL `flepimop2-op_system` distribution shares its release version.
+separate GPL `flepimop2-op_system` distribution has an independent release
+version and lifecycle.
 
 ## Model classes and numerical representations
 

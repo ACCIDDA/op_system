@@ -49,18 +49,17 @@ jobs:
         python-version:
           - '3.12'
     permissions:
-      contents: 'write'  # Needed to push to gh-pages
+      contents: 'write'
     steps:
       - name: 'Resolve deployment inputs'
         id: deployment
         run: |
           set -euo pipefail
-          if [ "${EVENT_NAME}" = 'workflow_call' ]; then
-            MODE="${CALL_MODE}"
-          elif [ "${EVENT_NAME}" = 'workflow_dispatch' ] && [ -n "${DISPATCH_MODE}" ]; then
-            MODE="${DISPATCH_MODE}"
-          else
+          MODE="${INPUT_MODE:-push}"
+          RELEASE_REF="${INPUT_RELEASE_REF}"
+          if [ "${EVENT_NAME}" = 'push' ]; then
             MODE='push'
+            RELEASE_REF=''
           fi
           CHECKOUT_REF="${EVENT_SHA}"
           if [ "${MODE}" = 'release' ]; then
@@ -73,17 +72,31 @@ jobs:
           echo "deploy-mode=${MODE}" >> "${GITHUB_OUTPUT}"
           echo "checkout-ref=${CHECKOUT_REF}" >> "${GITHUB_OUTPUT}"
         env:
-          CALL_MODE: '${{ inputs.deploy-mode }}'
-          DISPATCH_MODE: '${{ github.event.inputs.deploy-mode }}'
+          INPUT_MODE: '${{ inputs.deploy-mode }}'
+          INPUT_RELEASE_REF: '${{ inputs.release-ref }}'
           EVENT_NAME: '${{ github.event_name }}'
           EVENT_SHA: '${{ github.sha }}'
-          RELEASE_REF: '${{ inputs.release-ref }}'
+      - name: 'Install just'
+        uses: 'taiki-e/install-action@v2'
+        with:
+          tool: 'just'
       - name: 'Checkout repository'
         uses: 'actions/checkout@v6'
         with:
           fetch-depth: 0
           ref: '${{ steps.deployment.outputs.checkout-ref }}'
           persist-credentials: true
+      - name: 'Require authoritative main for development docs'
+        if: "${{ steps.deployment.outputs.deploy-mode == 'push' }}"
+        run: |
+          set -euo pipefail
+          git fetch origin "${DEFAULT_BRANCH}"
+          if [ "$(git rev-parse HEAD)" != "$(git rev-parse "origin/${DEFAULT_BRANCH}")" ]; then
+            echo 'Development docs require the current default-branch head.' >&2
+            exit 1
+          fi
+        env:
+          DEFAULT_BRANCH: '${{ github.event.repository.default_branch }}'
       - name: 'Fetch gh-pages branch'
         run: |
           git fetch origin gh-pages:gh-pages --depth=1
@@ -91,19 +104,17 @@ jobs:
           git config --global user.email "${ACTOR}@users.noreply.github.com"
         env:
           ACTOR: "${{ github.actor }}"
-      - name: 'Install just'
-        uses: 'taiki-e/install-action@v2'
-        with:
-          tool: 'just'
       - name: 'Setup uv with python ${{ matrix.python-version }}'
-        uses: 'astral-sh/setup-uv@v7'
+        uses: 'astral-sh/setup-uv@v7.2.0'
         with:
           enable-cache: true
           cache-dependency-glob: 'pyproject.toml'
           python-version: '${{ matrix.python-version }}'
       - name: 'Classify op_system version'
         id: classify-version
-        run: 'uv run python scripts/release_validate.py --github-output "${GITHUB_OUTPUT}"'
+        run: >-
+          uv run python scripts/release_validate.py --scope core
+          --github-output "${GITHUB_OUTPUT}"
       - name: 'Build API Reference'
         run: 'just api-reference'
       - name: 'Deploy to GitHub Pages'
@@ -111,25 +122,23 @@ jobs:
           set -euo pipefail
           if [ "${DEPLOY_MODE}" = 'release' ]; then
             EXPECTED_TAG="v${PACKAGE_VERSION}"
+            if [ "${CHECKOUT_REF}" != "${EXPECTED_TAG}" ]; then
+              echo "Release ref must equal ${EXPECTED_TAG}." >&2
+              exit 1
+            fi
             if ! git tag --points-at HEAD --list "${EXPECTED_TAG}" | grep -Fxq "${EXPECTED_TAG}"; then
               echo "Release documentation must be built from ${EXPECTED_TAG}." >&2
               exit 1
             fi
-            VERSION="${PACKAGE_VERSION}"
-            ALIAS="${PACKAGE_DOCS_ALIAS}"
-            if uv run mike list | awk '{print $1}' | grep -Fxq "${VERSION}"; then
-              echo "Documentation version ${VERSION} already exists; exact versions are immutable." >&2
+            if uv run mike list | awk '{print $1}' | grep -Fxq "${PACKAGE_VERSION}"; then
+              echo "Documentation version ${PACKAGE_VERSION} already exists; exact versions are immutable." >&2
               exit 1
             fi
-          else
-            VERSION='dev'
-            ALIAS='dev'
           fi
-          uv run mike deploy \
-            --push --update-aliases \
-            "${VERSION}" "${ALIAS}"
+          uv run python scripts/docs_deploy.py --mode "${DEPLOY_MODE}" --version "${PACKAGE_VERSION}" --alias "${PACKAGE_DOCS_ALIAS}"
         env:
-          DEPLOY_MODE: "${{ steps.deployment.outputs.deploy-mode }}"
+          CHECKOUT_REF: '${{ steps.deployment.outputs.checkout-ref }}'
+          DEPLOY_MODE: '${{ steps.deployment.outputs.deploy-mode }}'
           GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
-          PACKAGE_DOCS_ALIAS: "${{ steps.classify-version.outputs.docs-alias }}"
-          PACKAGE_VERSION: "${{ steps.classify-version.outputs.docs-version }}"
+          PACKAGE_DOCS_ALIAS: '${{ steps.classify-version.outputs.docs-alias }}'
+          PACKAGE_VERSION: '${{ steps.classify-version.outputs.docs-version }}'

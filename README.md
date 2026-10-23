@@ -94,6 +94,10 @@ pip install "op-system[torch]"          # PyTorch runtime support
 pip install "op-system[data]"           # pandas + pyarrow helpers
 ```
 
+The `flepimop2-op-system` provider has an independent release lifecycle. Core
+releases do not publish or update it; record and validate both versions when a
+workflow uses the provider.
+
 ## Time-indexed parameters
 
 Time-indexed parameter tables use linear interpolation by default. Set
