@@ -13,6 +13,10 @@ loosely follows
 
 ### Fixed
 
+- Preserve JAX reverse-mode gradients for held time-indexed parameters inside
+  solver loops by avoiding a nested `searchsorted` loop for `previous`
+  interpolation. Retain a dedicated solver-scan regression check.
+
 - Preserve gradients of already-native shaped Torch parameters, vectorized time
   and state-coordinate buffers on minimum supported Torch. Avoid the older
   compatibility conversion that detaches existing tensors; preserve dtype/device.
@@ -73,6 +77,13 @@ loosely follows
   observables, operators and gauge/coordinate options; intern shared trees
   without materializing deferred scalar IR. Keep runtime values/settings and
   Python equality/hash behavior separate (#328).
+
+### Changed
+
+- Separate the MIT-licensed core and GPL provider release lifecycles. Core
+  releases now build and publish only `op_system`, exclude the provider tree
+  from both core artifact formats, and deploy release documentation from the
+  release tag. Provider releases remain independent and opt in explicitly.
 
 ### Documentation
 
