@@ -121,3 +121,6 @@ exclude = [
 [tool.hatch.build.targets.wheel]
 packages = ["src/op_system"]
 include = ["src/op_system/py.typed"]
+
+[tool.hatch.build.targets.sdist]
+exclude = ["/flepimop2-op_system"]

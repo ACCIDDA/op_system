@@ -13,5 +13,6 @@ runs are separate from that required matrix. The
 contracts those checks protect.
 
 For versioned citations and the software-paper archive plan, see
-[citation and archiving](citation-and-archiving.md). Maintainers publish both
-distributions together through the [release workflow](creating-a-release.md).
+[citation and archiving](citation-and-archiving.md). The
+[release workflow](creating-a-release.md) publishes only the core; the provider
+has a separate lifecycle.

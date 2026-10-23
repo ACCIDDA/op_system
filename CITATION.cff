@@ -1,14 +1,14 @@
 cff-version: "1.2.0"
 message: >-
-  If you use op_system or its flepimop2 provider, please cite this software
-  and record the exact shared release version used in your methods.
+  If you use op_system, please cite this software and record the exact core
+  release version used in your methods. Cite the separately released provider
+  independently when applicable.
 type: software
-title: "op_system: RHS specification compiler and flepimop2 provider"
+title: "op_system: Model specification compiler"
 abstract: >-
   Configuration-based specification, normalization, and compilation of
   deterministic ODE/PDE systems, structured fields and nonlocal terms, with
-  stochastic reaction artifacts, structured/block evaluation and a separately
-  distributed flepimop2 adapter.
+  stochastic reaction artifacts and structured and block evaluation.
 authors:
   - family-names: Macdonald
     given-names: Joshua
@@ -21,9 +21,7 @@ authors:
     email: twillard@unc.edu
 version: "0.9.0"
 date-released: "2026-10-19"
-license:
-  - MIT
-  - GPL-3.0-or-later
+license: MIT
 repository-code: "https://github.com/ACCIDDA/op_system"
 repository-artifact: "https://github.com/ACCIDDA/op_system/releases/tag/v0.9.0"
 url: "https://accidda.github.io/op_system/"

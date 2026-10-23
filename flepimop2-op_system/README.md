@@ -1,6 +1,9 @@
 # flepimop2-op_system
 
 `flepimop2-op_system` provides the `flepimop2` system adapter for `op_system`.
+Provider-specific release notes are maintained in the
+[provider changelog](CHANGELOG.md). Core `op-system` releases have an
+independent lifecycle and do not publish this provider.
 
 It packages the `flepimop2.system.op_system` provider so `flepimop2` can load
 compiled models with spatial or trait-structured fields, nonlocal interactions,
@@ -88,5 +91,5 @@ dependency. Kernel declarations without axes retain their existing scalar
 `params.value` behavior.
 
 The provider source headers grant GPL version 3 **or any later version**
-(`GPL-3.0-or-later`). The standalone core uses MIT. The shared citation records
-both existing grants; preserve the relevant license when reusing code.
+(`GPL-3.0-or-later`). The standalone core uses MIT. Cite each distribution's
+exact released version and preserve the relevant license when reusing code.

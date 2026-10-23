@@ -1,8 +1,10 @@
 # Changelog
 
-All notable changes to `op_system` and `flepimop2-op_system` are documented
-in this file. The two packages are released together under one shared
-version; format loosely follows
+Current and future changes to the `op_system` core are documented here. The
+provider has an independent lifecycle and records its changes in
+[`flepimop2-op_system/CHANGELOG.md`](flepimop2-op_system/CHANGELOG.md).
+Historical entries through 0.9.0 describe the former shared release unit. Format
+loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
