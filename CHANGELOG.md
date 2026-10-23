@@ -9,6 +9,8 @@ loosely follows
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-10-23
+
 ### Fixed
 
 - Preserve gradients of already-native shaped Torch parameters, vectorized time
