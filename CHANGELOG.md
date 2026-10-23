@@ -83,7 +83,8 @@ loosely follows
 - Separate the MIT-licensed core and GPL provider release lifecycles. Core
   releases now build and publish only `op_system`, exclude the provider tree
   from both core artifact formats, and deploy release documentation from the
-  release tag. Provider releases remain independent and opt in explicitly.
+  release tag. A future provider release requires a separately reviewed
+  provider workflow and namespaced tag.
 
 ### Documentation
 
