@@ -36,6 +36,7 @@ Issues = "https://github.com/ACCIDDA/op_system/issues"
 Changelog = "https://github.com/ACCIDDA/op_system/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
+cupy = ["cupy-cuda12x>=14.2,<15"]
 numba = ["numba>=0.67,<0.69"]
 benchmark = ["threadpoolctl>=3.6"]
 data = [

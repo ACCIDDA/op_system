@@ -18,7 +18,10 @@ def main() -> int:
         Zero only when selected tests execute successfully without skips.
     """
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("backend", choices=["numpy", "jax", "torch", "numba"])
+    parser.add_argument("backend", choices=["numpy", "jax", "torch", "numba", "cupy"])
+    parser.add_argument(
+        "--junitxml", type=Path, help="Retain the required executed-case report"
+    )
     args = parser.parse_args()
     # This is a hard dependency check, not pytest.importorskip: missing
     # backends must fail their required job before test collection.
@@ -31,15 +34,31 @@ def main() -> int:
             file=sys.stderr,
         )
         return 1
+    if args.backend == "cupy":
+        try:
+            if module.cuda.runtime.getDeviceCount() < 1:
+                print(
+                    "Required CuPy qualification needs a CUDA device", file=sys.stderr
+                )
+                return 1
+            module.cuda.Device(0).use()
+            module.zeros(1).sum().get()
+        except (OSError, ImportError, module.cuda.runtime.CUDARuntimeError) as exc:
+            print(f"Required CuPy CUDA initialization failed: {exc}", file=sys.stderr)
+            return 1
     print(
         f"Qualifying {args.backend} {module.__version__} on {sys.version.split()[0]}",
         flush=True,
     )
     with tempfile.TemporaryDirectory(prefix="op-system-qualification-") as directory:
-        report = Path(directory) / "results.xml"
+        report = args.junitxml or (Path(directory) / "results.xml")
         selected = (
-            ["tests/op_system/test_numba.py"]
-            if args.backend == "numba"
+            [
+                "tests/op_system/test_cupy_contract.py"
+                if args.backend == "cupy"
+                else "tests/op_system/test_numba.py"
+            ]
+            if args.backend in {"numba", "cupy"}
             else [
                 "tests/op_system/test_backend_qualification.py",
                 "tests/op_system/test_hierarchical_benchmark.py",
@@ -68,7 +87,7 @@ def main() -> int:
                 "-m",
                 "pytest",
                 *selected,
-                *([] if args.backend == "numba" else ["-k", args.backend]),
+                *([] if args.backend in {"numba", "cupy"} else ["-k", args.backend]),
                 "-q",
                 "--tb=short",
                 f"--junitxml={report}",

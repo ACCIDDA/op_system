@@ -43,6 +43,11 @@ version; format loosely follows
   inspection code. Qualify strict current-Torch FX capture alongside the existing
   minimum eager/AD contract; retain paired eager scalar-latency costs.
 
+- Add an explicit optional CuPy CUDA 12 installation extra and ten device-gated
+  compiler contract cases. The required CuPy command checks CUDA execution and
+  rejects skips; standard CPU-suite skips do not constitute GPU qualification.
+  Allow retaining required-backend JUnit reports for device evidence.
+
 - Add explicit optional NumPy CPU lowering with one eager homogeneous native
   signature, reusable packed state/parameter layouts and bounded source emission.
   Qualify float32/64 values, input/error contracts and independent/coupled models

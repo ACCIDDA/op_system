@@ -1,7 +1,7 @@
 # Compiler backend qualification
 
 `op_system` selects its numerical namespace from the input arrays. Optional
-runtime extras install JAX or Torch; installing the compiler alone requires
+runtime extras install JAX, Torch or the explicit CuPy CUDA 12 wheel family; installing the compiler alone requires
 neither. Root compiler qualification is a separate required CI matrix from the
 provider's tests and the baseline compiler test suite.
 
@@ -38,6 +38,8 @@ and Torch float64/float32 autograd. Static measure/coordinate metadata is outsid
 that derivative contract. Broader RHS qualification does not automatically
 qualify additional observable operations or devices.
 
+The separate [CuPy device contract](cupy.md) provides an optional install path
+and a required actual-device command. Its CPU skips are not GPU evidence.
 GPU execution is outside the qualified CPU matrix. The matrix describes
 the tested workload and paths, not every combination of compiler operators,
 backend versions, devices, or automatic differentiation transforms.
