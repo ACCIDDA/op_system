@@ -4,7 +4,7 @@
 
 | Version | Supported |
 |---|---|
-| Latest `0.9.x` release | Yes |
+| Latest `0.10.x` release | Yes |
 | Earlier releases | No |
 | Unreleased `main` | No production support |
 

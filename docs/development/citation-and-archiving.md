@@ -9,11 +9,11 @@ versions required to reproduce the calculation.
 
 For published work, cite the exact core version and verified release URL. The
 current CFF identifies Joshua Macdonald, Carl Pearson and Timothy Willard,
-*op_system: Model specification compiler*, version 0.9.0, released 2026-10-19,
+*op_system: Model specification compiler*, version 0.10.0, released 2026-10-23,
 with the
-[`v0.9.0` release](https://github.com/ACCIDDA/op_system/releases/tag/v0.9.0).
+[`v0.10.0` release](https://github.com/ACCIDDA/op_system/releases/tag/v0.10.0).
 For a development checkout, also record the commit and local modifications.
-Unreleased behavior is not retroactively part of 0.9.0; use the exact tag's CFF,
+Unreleased behavior is not retroactively part of 0.10.0; use the exact tag's CFF,
 source and changelog.
 
 Run `just citation` to validate CFF 1.2.0 syntax and alignment with the core
