@@ -14,7 +14,7 @@
         <link rel="prev" href="../array-namespaces/">
       
       
-        <link rel="next" href="../numerical-qualification/">
+        <link rel="next" href="../cupy/">
       
       
         
@@ -1272,6 +1272,62 @@
   
   
     <li class="md-nav__item">
+      <a href="../cupy/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CuPy Device Qualification
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../gpu-workstation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    GPU workstation handoff
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../numerical-qualification/" class="md-nav__link">
         
   
@@ -1947,7 +2003,7 @@
 
 <h1 id="compiler-backend-qualification">Compiler backend qualification<a class="headerlink" href="#compiler-backend-qualification" title="Permanent link">&para;</a></h1>
 <p><code>op_system</code> selects its numerical namespace from the input arrays. Optional
-runtime extras install JAX or Torch; installing the compiler alone requires
+runtime extras install JAX, Torch or the explicit CuPy CUDA 12 wheel family; installing the compiler alone requires
 neither. Root compiler qualification is a separate required CI matrix from the
 provider's tests and the baseline compiler test suite.</p>
 <p>The required jobs explicitly install NumPy, JAX, or CPU Torch and execute the
@@ -2023,7 +2079,9 @@ nonuniform-grid values, JAX float64 JIT/vmap and state/parameter/time derivative
 and Torch float64/float32 autograd. Static measure/coordinate metadata is outside
 that derivative contract. Broader RHS qualification does not automatically
 qualify additional observable operations or devices.</p>
-<p>GPU execution is outside the qualified CPU matrix. The matrix describes
+<p>The separate <a href="../cupy/">CuPy device contract</a> provides an optional install path
+and a required actual-device command. Its CPU skips are not GPU evidence.
+GPU execution is outside the qualified CPU matrix. The matrix describes
 the tested workload and paths, not every combination of compiler operators,
 backend versions, devices, or automatic differentiation transforms.</p>
 <p><a href="../native-actions/">Native state actions</a> additionally qualify explicit JAX/Torch

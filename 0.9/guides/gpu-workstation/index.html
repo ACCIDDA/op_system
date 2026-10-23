@@ -1,0 +1,2341 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+        <link rel="canonical" href="https://accidda.github.io/op_system/0.9/guides/gpu-workstation/">
+      
+      
+        <link rel="prev" href="../cupy/">
+      
+      
+        <link rel="next" href="../numerical-qualification/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>GPU workstation handoff - op_system Documentation</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.ec1eaa64.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    <body dir="ltr">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#gpu-workstation-handoff" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+          <aside class="md-banner md-banner--warning">
+            <div class="md-banner__inner md-grid md-typeset">
+              
+  You're not viewing the latest version.
+  <a href="../../..">
+    <strong>Click here to go to latest.</strong>
+  </a>
+
+            </div>
+            <script>var el=document.querySelector("[data-md-component=outdated]"),base=new URL("../.."),outdated=__md_get("__outdated",sessionStorage,base);!0===outdated&&el&&(el.hidden=!1)</script>
+          </aside>
+        
+      </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="op_system Documentation" class="md-header__button md-logo" aria-label="op_system Documentation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            op_system Documentation
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              GPU workstation handoff
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/ACCIDDA/op_system" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    ACCIDDA/op_system
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="op_system Documentation" class="md-nav__button md-logo" aria-label="op_system Documentation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    op_system Documentation
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/ACCIDDA/op_system" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    ACCIDDA/op_system
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../capabilities/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Capabilities and example checks
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Development
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Development
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../development/execution-roadmap/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Execution Roadmap
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../development/contributing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Contributing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../development/coverage-audit/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Coverage Audit
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../development/cache-lifetimes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Cache Lifetimes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../development/code-style/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Code Style
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../development/creating-a-release/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Creating A Release
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../development/citation-and-archiving/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Citation and Archiving
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Guides
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../getting-started/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting Started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../parameter-declarations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Parameter Declarations
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../structural-identity/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Structural Model Identity
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../portable-ir/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Portable IR and Derivatives
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../dependency-structure/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dependency Structure
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../native-actions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Native State Actions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../state-representations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    State Representations
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reaction-balances/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Conditional Reaction Balances
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../latent-observables/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Latent Observables
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../expression-selectors/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Expression Selectors
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../named-kernel-products/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Named Kernel Products
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../scaling-gauges/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scaling Gauges
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../log-state-coordinates/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Log State Coordinates
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../global-state-totals/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Global State Totals
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../operators/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Operator Metadata
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../time-indexed-parameters/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Time-indexed Parameters
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../renewal-births/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Renewal Births
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../aging-chains/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Aging Chains
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../batched-models/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Independent Batches
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../array-namespaces/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Array Namespaces
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../backend-qualification/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Backend Qualification
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cupy/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CuPy Device Qualification
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    GPU workstation handoff
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    GPU workstation handoff
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#new-agent-start-here" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        New agent: start here
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#1-capture-exact-source-and-preserve-every-command" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Capture exact source and preserve every command
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-cupy-current-and-minimum-dependency-lanes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. CuPy: current and minimum dependency lanes
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-jax-cuda-and-torch-cuda-reruns" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. JAX CUDA and Torch CUDA reruns
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-check-receipts-and-report" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Check receipts and report
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../numerical-qualification/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Numerical Qualification
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../hierarchical-benchmarks/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Hierarchical Benchmarks
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../evaluator-overhead/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Evaluator Overhead
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../numba/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Optional Numba
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    API Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api-reference/op-system/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    OP System
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api-reference/actions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Actions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api-reference/balances/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Balances
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api-reference/compile/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Compile
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api-reference/coordinates/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Coordinates
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api-reference/dependencies/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dependencies
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api-reference/gauges/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Gauges
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api-reference/identity/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Identity
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api-reference/numba/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Numba
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api-reference/observables/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Observables
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api-reference/portable/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Portable
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api-reference/qualification/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Qualification
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api-reference/specs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Specs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api-reference/symbolic/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Symbolic
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api-reference/validate/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Validate
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#new-agent-start-here" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        New agent: start here
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#1-capture-exact-source-and-preserve-every-command" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Capture exact source and preserve every command
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-cupy-current-and-minimum-dependency-lanes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. CuPy: current and minimum dependency lanes
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-jax-cuda-and-torch-cuda-reruns" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. JAX CUDA and Torch CUDA reruns
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-check-receipts-and-report" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Check receipts and report
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+
+<h1 id="gpu-workstation-handoff">GPU workstation handoff<a class="headerlink" href="#gpu-workstation-handoff" title="Permanent link">&para;</a></h1>
+<h2 id="new-agent-start-here">New agent: start here<a class="headerlink" href="#new-agent-start-here" title="Permanent link">&para;</a></h2>
+<p>The maintainer lifted the device-execution hold on 23 October 2026. The required
+lanes passed on the PR head immediately preceding the committed evidence update;
+the <a href="../cupy/#device-evidence">CuPy guide</a> records that bounded result. Because
+this evidence update changes the source identity, run this procedure once more
+on the final PR head and link its independently reviewed, sanitized receipt from
+the PR and issue before merge. Any later head change requires another rerun.</p>
+<p>The goal is a reproducible device receipt for draft
+<a href="https://github.com/ACCIDDA/op_system/pull/339">op_system PR #339</a> /
+<a href="https://github.com/ACCIDDA/op_system/issues/182">issue #182</a>, plus separate
+JAX/Torch compiler, core-solver and statistical reruns. Keep #339 draft and #182
+open until both CuPy lanes pass and an independent reviewer approves the exact
+source and receipt. Green CPU CI cannot close this device gate.</p>
+<p>Use a new Linux directory, Bash, Python 3.12, <code>uv</code>, Git and authenticated <code>gh</code>.
+Run lanes sequentially on an otherwise idle NVIDIA GPU. Leave application
+configurations, environments, frozen runs, simulation banks and checkpoints
+alone. Do not publish packages, tags or releases; <strong>op_infer must not be uploaded
+to PyPI or TestPyPI</strong>. This procedure does not train an estimator.</p>
+<h2 id="1-capture-exact-source-and-preserve-every-command">1. Capture exact source and preserve every command<a class="headerlink" href="#1-capture-exact-source-and-preserve-every-command" title="Permanent link">&para;</a></h2>
+<p>Run the following in one Bash session. Keep that shell open: later sections use
+its variables and <code>record</code> function. The function records the command, stdout,
+stderr and exit status separately; it
+refuses to overwrite an attempt. A failing command stops the procedure. Keep
+its evidence before diagnosing it and use a new attempt directory for a rerun.</p>
+<pre><code class="language-bash">set -euo pipefail
+mkdir op-gpu-qualification
+cd op-gpu-qualification
+OP_GPU_ROOT=&quot;$PWD&quot;
+OP_GPU_ATTEMPT=&quot;$OP_GPU_ROOT/evidence/$(date -u +%Y%m%dT%H%M%SZ)&quot;
+mkdir source wheels evidence
+mkdir &quot;$OP_GPU_ATTEMPT&quot;
+
+record() {
+    local label=&quot;$1&quot; status
+    shift
+    local prefix=&quot;$OP_GPU_ATTEMPT/$label&quot;
+    if compgen -G &quot;$prefix.*&quot; &gt; /dev/null; then
+        echo &quot;Refusing to overwrite evidence: $prefix&quot; &gt;&amp;2
+        return 1
+    fi
+    printf '%q ' &quot;$@&quot; &gt; &quot;$prefix.command&quot;
+    printf '\n' &gt;&gt; &quot;$prefix.command&quot;
+    if &quot;$@&quot; &gt; &quot;$prefix.stdout&quot; 2&gt; &quot;$prefix.stderr&quot;; then
+        status=0
+    else
+        status=$?
+    fi
+    printf '%s\n' &quot;$status&quot; &gt; &quot;$prefix.exitcode&quot;
+    return &quot;$status&quot;
+}
+
+record hardware-before nvidia-smi -q
+record platform uname -a
+record uv-version uv --version
+OP_GPU_SYSTEM_SHA=&quot;$(gh api repos/ACCIDDA/op_system/pulls/339 --jq .head.sha)&quot;
+printf '%s\n' &quot;$OP_GPU_SYSTEM_SHA&quot; &gt; &quot;$OP_GPU_ATTEMPT/requested-system-head.txt&quot;
+gh repo clone ACCIDDA/op_system source/op_system
+git -C source/op_system fetch origin &quot;$OP_GPU_SYSTEM_SHA&quot;
+git -C source/op_system checkout --detach &quot;$OP_GPU_SYSTEM_SHA&quot;
+gh repo clone ACCIDDA/op_engine source/op_engine
+git -C source/op_engine checkout --detach 76edf594f5d4462f9c359482378e662e58668234
+gh repo clone ACCIDDA/op_infer source/op_infer
+git -C source/op_infer checkout --detach 713a2b76119e174dab75290eaf5bff9ffce63af6
+for repo in op_system op_engine op_infer; do
+    git -C &quot;source/$repo&quot; rev-parse HEAD &gt; &quot;$OP_GPU_ATTEMPT/$repo-commit.txt&quot;
+    git -C &quot;source/$repo&quot; status --porcelain &gt; &quot;$OP_GPU_ATTEMPT/$repo-status.txt&quot;
+    test ! -s &quot;$OP_GPU_ATTEMPT/$repo-status.txt&quot;
+    record &quot;build-$repo&quot; uv build --directory &quot;source/$repo&quot; --wheel --out-dir &quot;$OP_GPU_ROOT/wheels&quot;
+done
+test &quot;$(git -C source/op_system rev-parse HEAD)&quot; = &quot;$OP_GPU_SYSTEM_SHA&quot;
+sha256sum wheels/*.whl &gt; &quot;$OP_GPU_ATTEMPT/wheels.sha256&quot;
+sha256sum source/op_system/examples/cuda_core_contract.py \
+    source/op_system/scripts/qualify_backend.py \
+    source/op_system/tests/op_system/test_cupy_contract.py \
+    source/op_system/docs/guides/gpu-workstation.md \
+    source/op_infer/examples/cuda_statistics.py &gt; &quot;$OP_GPU_ATTEMPT/fixtures.sha256&quot;
+OP_GPU_ENV=(env PYTHONPATH= PYTHONNOUSERSITE=1 CUDA_VISIBLE_DEVICES=0)
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Repository</th>
+<th>Source boundary</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>op_system</td>
+<td>The full PR #339 head captured above; never substitute a moving branch in the receipt.</td>
+</tr>
+<tr>
+<td>op_engine</td>
+<td><code>76edf594f5d4462f9c359482378e662e58668234</code>: includes current fixed loops, Diffrax bridge and checked operator adapters.</td>
+</tr>
+<tr>
+<td>op_infer</td>
+<td><code>713a2b76119e174dab75290eaf5bff9ffce63af6</code>: includes empty-bootstrap handling and committed CUDA statistical fixtures.</td>
+</tr>
+</tbody>
+</table>
+<p>Inspect <code>hardware-before.stdout</code>: GPU model, architecture, driver and available
+memory determine wheel compatibility. Historical A100 receipts do not qualify a
+different GPU. These commands select CUDA 12 wheels. Check the official
+<a href="https://docs.cupy.dev/en/stable/install.html">CuPy</a>,
+<a href="https://docs.jax.dev/en/latest/installation.html">JAX</a> and
+<a href="https://pytorch.org/get-started/locally/">Torch</a> installation requirements before
+installing. If the pinned wheels cannot support this hardware/driver, stop and
+record the incompatibility; propose a separately recorded compatible lane.
+Do not silently substitute CPU wheels or mix CuPy distribution families.</p>
+<p>Use wheel installs, with no editable installs. Verify installed import origins
+for <strong>each</strong> environment using this helper; both the environment prefix and the
+source file locations are preserved. Run commands from <code>$OP_GPU_ROOT</code> except
+where a subshell explicitly changes directory.</p>
+<pre><code class="language-bash">installed_imports() {
+    record &quot;$1-imports&quot; &quot;${OP_GPU_ENV[@]}&quot; &quot;$OP_GPU_ROOT/$1/bin/python&quot; -c '
+import importlib, pathlib, sys
+prefix = pathlib.Path(sys.prefix).resolve()
+for name in (&quot;op_system&quot;, &quot;op_engine&quot;, &quot;op_infer&quot;):
+    path = pathlib.Path(importlib.import_module(name).__file__).resolve()
+    print(name, path)
+    assert prefix in path.parents, (name, path, prefix)
+'
+    record &quot;$1-freeze&quot; uv pip freeze --python &quot;$1/bin/python&quot;
+    record &quot;$1-python&quot; &quot;$1/bin/python&quot; -VV
+}
+</code></pre>
+<h2 id="2-cupy-current-and-minimum-dependency-lanes">2. CuPy: current and minimum dependency lanes<a class="headerlink" href="#2-cupy-current-and-minimum-dependency-lanes" title="Permanent link">&para;</a></h2>
+<pre><code class="language-bash">record install-env-cupy-current uv venv --python 3.12 env-cupy-current
+record install-cupy-current uv pip install --python env-cupy-current/bin/python \
+    'cupy-cuda12x[ctk]==14.2.0' 'numpy==2.5.4' \
+    'array-api-compat==1.15.0' 'pytest==8.4.2' wheels/*.whl
+record install-env-cupy-minimum uv venv --python 3.12 env-cupy-minimum
+record install-cupy-minimum uv pip install --python env-cupy-minimum/bin/python \
+    'cupy-cuda12x[ctk]==14.2.0' 'numpy==2.0.2' \
+    'array-api-compat==1.12.0' 'pydantic==2.12.5' 'pytest==8.4.2' wheels/*.whl
+for lane in current minimum; do
+    installed_imports &quot;env-cupy-$lane&quot;
+    record &quot;cupy-$lane-runtime&quot; &quot;${OP_GPU_ENV[@]}&quot; &quot;env-cupy-$lane/bin/python&quot; -c \
+        'import cupy as c; c.show_config(); assert c.cuda.runtime.getDeviceCount() &gt; 0; print(c.cuda.runtime.getDeviceProperties(0)); print(c.cuda.runtime.driverGetVersion(), c.cuda.runtime.runtimeGetVersion())'
+    (cd source/op_system &amp;&amp; record &quot;cupy-$lane-tests&quot; &quot;${OP_GPU_ENV[@]}&quot; \
+        &quot;$OP_GPU_ROOT/env-cupy-$lane/bin/python&quot; scripts/qualify_backend.py cupy \
+        --junitxml &quot;$OP_GPU_ATTEMPT/cupy-$lane.xml&quot;)
+    record &quot;cupy-$lane-core&quot; &quot;${OP_GPU_ENV[@]}&quot; &quot;env-cupy-$lane/bin/python&quot; \
+        source/op_system/examples/cuda_core_contract.py --backend cupy
+done
+</code></pre>
+<p><code>[ctk]</code> installs the user-space CUDA toolkit; a compatible NVIDIA driver is still
+required. Omitting <code>[ctk]</code> for a workstation-provided toolkit changes the lane
+and must be recorded. The current NumPy pin is a qualification candidate, not a
+claim about CuPy's upstream supported-version matrix. The minimum lane fixes
+the declared NumPy, array-api-compat and Pydantic floors, with current CuPy.</p>
+<p>Each required contract must report <strong>10 passed, zero skipped, zero failures</strong>.
+Each companion core receipt must contain <strong>4 precision/history cases</strong>. CuPy
+native autodiff and op_infer statistical interfaces remain unsupported. Keep
+PR #339 draft and issue #182 open pending independent device receipt review.</p>
+<h2 id="3-jax-cuda-and-torch-cuda-reruns">3. JAX CUDA and Torch CUDA reruns<a class="headerlink" href="#3-jax-cuda-and-torch-cuda-reruns" title="Permanent link">&para;</a></h2>
+<p>The statistical fixture and its
+<a href="https://github.com/ACCIDDA/op_infer/blob/713a2b76119e174dab75290eaf5bff9ffce63af6/docs/cuda-qualification.md">historical A100 qualification</a>
+are separate from this workstation's results. Configure the runtime <strong>before</strong>
+the fixtures. JAX must select a GPU, and Torch must expose a compatible CUDA
+build and architecture. Do not use the CPU Torch wheel index.</p>
+<pre><code class="language-bash">record install-env-jax uv venv --python 3.12 env-jax-cuda
+record install-jax uv pip install --python env-jax-cuda/bin/python \
+    'jax[cuda12]==0.12.0' 'numpyro==0.22.0' 'numpy==2.5.4' \
+    'scipy==1.18.1' wheels/*.whl
+installed_imports env-jax-cuda
+OP_GPU_JAX=(&quot;${OP_GPU_ENV[@]}&quot; JAX_PLATFORMS=cuda XLA_PYTHON_CLIENT_PREALLOCATE=false)
+record jax-runtime &quot;${OP_GPU_JAX[@]}&quot; env-jax-cuda/bin/python -c \
+    'import jax; print(jax.__version__, jax.default_backend(), jax.devices()); assert jax.default_backend() == &quot;gpu&quot;'
+record jax-core &quot;${OP_GPU_JAX[@]}&quot; env-jax-cuda/bin/python \
+    source/op_system/examples/cuda_core_contract.py --backend jax
+record jax-statistics &quot;${OP_GPU_JAX[@]}&quot; env-jax-cuda/bin/python \
+    source/op_infer/examples/cuda_statistics.py --backend jax
+
+record install-env-torch uv venv --python 3.12 env-torch-cuda
+# This pinned Linux PyPI distribution previously supplied its CUDA runtime.
+# Check the actual build and supported architecture; installation alone is insufficient.
+record install-torch uv pip install --python env-torch-cuda/bin/python \
+    'torch==2.14.1' 'numpy==2.5.4' 'scipy==1.18.1' wheels/*.whl
+installed_imports env-torch-cuda
+record torch-runtime &quot;${OP_GPU_ENV[@]}&quot; env-torch-cuda/bin/python -c \
+    'import torch as t; assert t.cuda.is_available(); print(t.__version__, t.version.cuda, t.cuda.get_device_name(0), t.cuda.get_device_capability(0), t.cuda.get_arch_list())'
+record torch-core &quot;${OP_GPU_ENV[@]}&quot; env-torch-cuda/bin/python \
+    source/op_system/examples/cuda_core_contract.py --backend torch
+record torch-statistics &quot;${OP_GPU_ENV[@]}&quot; env-torch-cuda/bin/python \
+    source/op_infer/examples/cuda_statistics.py --backend torch
+record hardware-after nvidia-smi -q
+</code></pre>
+<p>Each core receipt must contain <strong>4 passed float32/64/history cases</strong>. Final-only
+JAX/Torch cases include native first gradients. Each statistical receipt must
+contain <strong>24 passed family/precision cases plus the masked/censored gradient
+check</strong>. The fixture checks 8,192 addressed draws per observation case, independent
+references and replay. Torch additionally checks local/global RNG isolation and
+reports peak allocated/reserved device bytes. Linux process peak RSS includes
+imports and CUDA contexts; keep it distinct from device allocator memory.</p>
+<h2 id="4-check-receipts-and-report">4. Check receipts and report<a class="headerlink" href="#4-check-receipts-and-report" title="Permanent link">&para;</a></h2>
+<p>The fixtures themselves enforce native GPU arrays and numerical checks. This
+additional summary rejects incomplete receipts and checks exact case counts:</p>
+<pre><code class="language-bash">record receipt-check env OP_GPU_ATTEMPT=&quot;$OP_GPU_ATTEMPT&quot; env-jax-cuda/bin/python - &lt;&lt;'PY'
+import json
+import os
+from pathlib import Path
+import xml.etree.ElementTree as ET
+
+root = Path(os.environ[&quot;OP_GPU_ATTEMPT&quot;])
+for path in root.glob(&quot;*.exitcode&quot;):
+    assert path.read_text().strip() == &quot;0&quot;, path
+for lane in (&quot;current&quot;, &quot;minimum&quot;):
+    cases = ET.parse(root / f&quot;cupy-{lane}.xml&quot;).findall(&quot;.//testcase&quot;)
+    assert len(cases) == 10, (lane, len(cases))
+    assert all(not any(c.tag in {&quot;skipped&quot;, &quot;failure&quot;, &quot;error&quot;} for c in case) for case in cases)
+for label, backend in ((&quot;cupy-current&quot;, &quot;cupy&quot;), (&quot;cupy-minimum&quot;, &quot;cupy&quot;), (&quot;jax&quot;, &quot;jax&quot;), (&quot;torch&quot;, &quot;torch&quot;)):
+    result = json.loads((root / f&quot;{label}-core.stdout&quot;).read_text())
+    assert result[&quot;status&quot;] == &quot;passed&quot; and result[&quot;backend&quot;] == backend
+    assert {(c[&quot;dtype&quot;], c[&quot;history&quot;]) for c in result[&quot;cases&quot;]} == {(d, h) for d in (&quot;float32&quot;, &quot;float64&quot;) for h in (False, True)}
+    assert len(result[&quot;cases&quot;]) == 4
+    for case in result[&quot;cases&quot;]:
+        assert case[&quot;values&quot;] == case[&quot;matrices&quot;] == &quot;passed&quot;
+        expected = &quot;not_supported_cupy_autodiff&quot; if backend == &quot;cupy&quot; else (&quot;not_requested_stored_history&quot; if case[&quot;history&quot;] else &quot;passed&quot;)
+        assert case[&quot;autograd&quot;] == expected
+for backend in (&quot;jax&quot;, &quot;torch&quot;):
+    result = json.loads((root / f&quot;{backend}-statistics.stdout&quot;).read_text())
+    assert result[&quot;status&quot;] == result[&quot;masked_censored_gradient&quot;] == &quot;passed&quot;
+    assert result[&quot;backend&quot;] == backend and len(result[&quot;cases&quot;]) == 24
+    observations = [c for c in result[&quot;cases&quot;] if &quot;family&quot; in c]
+    priors = [c for c in result[&quot;cases&quot;] if &quot;prior_family&quot; in c]
+    assert len(observations) == 14 and len(priors) == 10
+    assert all(c[&quot;samples&quot;] == 8192 and c[&quot;density_and_replay&quot;] == &quot;passed&quot; for c in observations)
+    assert all(c[&quot;density&quot;] == &quot;passed&quot; for c in priors)
+print(&quot;Required receipts complete: CuPy 10+10; core 4 per lane; JAX/Torch statistics 24+gradient each&quot;)
+PY
+</code></pre>
+<p>Retain the entire evidence directory, wheels and exact source hashes. Use this
+report template for the maintainer and independent reviewer:</p>
+<ul>
+<li>Exact three commit SHAs, PR head, wheel/fixture hashes, Python and frozen dependencies.</li>
+<li>GPU model/architecture, driver, runtime/build versions, supported wheel architectures and idle-device conditions.</li>
+<li>CuPy current/minimum: executed/passed/skipped/failed counts and JUnit paths.</li>
+<li>Each backend core: four cases, precision/history coverage, gradient status and JSON receipt path.</li>
+<li>JAX/Torch statistics: 24 cases, extra gradient/replay/RNG results and JSON receipt paths.</li>
+<li>Host RSS and available device-memory receipts, labeled by measurement scope.</li>
+<li>Every failed attempt, diagnosis, corrected rerun and exact source/environment delta.</li>
+<li>Qualification scope, remaining gaps and independent reviewer verdict for the exact tested head.</li>
+</ul>
+<p>For driver/runtime mismatch, missing architectures, failed imports, missing GPU,
+OOM, skips or numerical failures, preserve the failure and stop that lane. Do not
+weaken thresholds or substitute CPU execution. Diagnose before making a new,
+clearly labeled attempt. Run the remaining independent lanes only when safe;
+the combined receipt check will intentionally fail until every required lane
+has complete passing evidence. Never overwrite a failed attempt.</p>
+<p>After review, attach a sanitized receipt to the issues and update qualification
+docs. Omit account names, local paths and environment secrets from public
+artifacts. If the PR head changes, qualify the new head before approval/merge.
+No speedup or application calibration claim follows from these checks. This
+scope excludes training, Torch compiled GPU loops, Diffrax GPU execution,
+new native state-action helpers, and SciPy's eager CPU banded/GMRES adapters.
+Those need their own qualification. Timing/default studies also need a separate
+protocol with synchronized cold/first/warm phases and memory measurements.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": [], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"provider": "mike"}}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+    
+  </body>
+</html>
