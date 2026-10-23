@@ -1,0 +1,253 @@
+{
+  "schema_version": 1,
+  "started_at_utc": "2026-10-22T00:24:40.201906+00:00",
+  "scope": "synthetic hierarchical RHS evaluation; no solver/estimator or CUDA performance claim",
+  "sources": {
+    "baseline": {
+      "git_commit": "ad3c28ac63e9af3b1210413a764b44a9c9bd2074",
+      "files_sha256": {
+        "src/op_system/__init__.py": "38915e4dc32fdd4fa7892aa6b26c99f72264f5cfb378873ddef795138ba21561",
+        "src/op_system/_array.py": "d456c0e28f7f6c9fe7aea3f44ef03b102fee0f9ee0e22fdbe5c647f2b43c3f3f",
+        "src/op_system/_axes.py": "8ab01c594a7b9665eee928ec0e4e88afbb23dc99c10415895cadda23fad915ff",
+        "src/op_system/_axis_kernel.py": "7a98a6c8b46463662bf986889171cda29b182813f8a5973dc1d8afb92810f1d9",
+        "src/op_system/_block_axes.py": "25b4981114555f487fe90372f1c65888db89ef71834bee4a9aa4f3091d0c9128",
+        "src/op_system/_constraints.py": "04c71e192d164c4dd33170365e780b5078065deb03981c0255bb2778d99d164c",
+        "src/op_system/_coordinate_rhs.py": "ce593e2aa68f68fd64619de6f783265db667158276692068a891de2fbf5874c6",
+        "src/op_system/_errors.py": "20774b32fc996c21cb85a2571228eedd1ca6ad9b5bd44e76c520f500f58ed1b4",
+        "src/op_system/_gauge_algebra.py": "564b36218d922c8a6fa9226acf44ac5b60d1f9430152289e5e540c6587e7145f",
+        "src/op_system/_gauge_analysis.py": "2dab9f6deb5677c660685d0f3c0b548fc3cf5a056c31764feac3d1e98f523ee4",
+        "src/op_system/_gauge_declarations.py": "c5455fba3cb542eba15c0f35cc7ccfe138d42850aa100f5c019485f610177958",
+        "src/op_system/_gauge_fix.py": "56193a6655c0e8682913cc7f24882e964641720e4d2b4581f732b823a577110d",
+        "src/op_system/_gauge_homogeneity.py": "8540fa74be61f866d918d78bdb943f5c37e2ea87dc5f763adfdab1828e33b42d",
+        "src/op_system/_helpers.py": "7561221a9e43676e4cdfbd88167d162dee6c749fd502b3e591fb76c2f1d86fca",
+        "src/op_system/_identifer_string.py": "3a841f6a91f7e1069c8e9b66a454f696b716044ae47524ba7a3804cd4e6f0590",
+        "src/op_system/_infer_reactants.py": "a089ad5a977340bfc6ead2dc25a687cb86a5f80d1845929a5f67837e58607b27",
+        "src/op_system/_ir.py": "45cd0e16d196e559e14f4b5d89a93d09e7d3320138eaa7e6977754569fc4f053",
+        "src/op_system/_ir_expand.py": "a3a3d7024ad79c46910e75ddb3f7328c8b21547108253ce7c9e98df092bc5e66",
+        "src/op_system/_ir_lower.py": "135861581ca5a9b61ba3e3678d7325fc238a36d2f452ceacdeacfa62c6907a44",
+        "src/op_system/_ir_templates.py": "6e978b807014c51307a612f0a19ddbe3e8b30d92c8f4d897e5c13e369d893f86",
+        "src/op_system/_jump_integral.py": "f0f3e5bd039294b73e28796d97522b5619fd29a61441a4e8cca4d17a0261571e",
+        "src/op_system/_normalize.py": "a84c8cabd170889db683c8cc6caa12d9c6fc34f29eac900d94a05d7db500aa94",
+        "src/op_system/_normalize_block.py": "d35fe9192b29f3b01ca77d265224b8ab653bacf983a1b7cef788c6e522f97789",
+        "src/op_system/_normalize_chains.py": "cb16783469e19c42b0dab2b30f849ebd6f3017e545abdd9fbbf26acf69c0f0a4",
+        "src/op_system/_normalize_initial_state.py": "9d15c066d222b9cc3516c8d8887c2e27dfbc5fa06bee0aab006f87333e44c810",
+        "src/op_system/_normalize_ir.py": "c86acff5a49509ed1ce4db5c697eccd40091377803f76f067e9effc22339c762",
+        "src/op_system/_normalize_kernels.py": "36ab304ad7c5bdc4a2060bef6c75e48c4ae6a8c062f5f03deb0ac85a557e2cce",
+        "src/op_system/_observables.py": "5ee9ead5158ba567acdaebccf403252e280c394d1da5a7a634fe47f1bdb94269",
+        "src/op_system/_operators.py": "8b98cfe4f5f7cd4790845f481eeca33cf36fab29010ca8875f216662715d20c3",
+        "src/op_system/_parameter_meta.py": "caa7736b4ed6ca616f21f14a0c80d3b5f877c2e1154f2231a79d22db216b2275",
+        "src/op_system/_reactions.py": "add8f5a94462a57af64ca15b2cc8809b96fa32faebbc5849c8a3584c72c00b88",
+        "src/op_system/_scientific_meta.py": "d72fde5767142068b4b2650662d5114d7e4d116ca9e86519853eaf96939b4c9e",
+        "src/op_system/_state_helpers.py": "c54ceb1df550ff4e88e577abf4ab34823813adc4ebf43eb5d5e445d562b66632",
+        "src/op_system/_state_string.py": "e0d6ba9c97ad5d02d4a6d2fcb3e85c66632078cba5fb46dc6454e9d4a20fbcdf",
+        "src/op_system/_symbols.py": "e9c31b34d52f2b5c5ecf6c3e785d3a7e4f0a3dd7fa973d9bf335f98c2a5c6413",
+        "src/op_system/_templates.py": "41bf8eb5177ad4d9d7768e7cf14fe7b48cdca06b481ae01061e58c0dc0014748",
+        "src/op_system/_time.py": "38a1f6d0a338955844417c59700c1cefb6d362d5fd94eefbf7cb5b03b4e2446b",
+        "src/op_system/_typing.py": "33e1e39e8c975c8709e98171f2fcab980cac5143801a2074bdc1869052dd21d9",
+        "src/op_system/_validate.py": "81a1110c833fb05c2556c5cf44b7c19242c6a9b782164e58fc2e2a4836c21032",
+        "src/op_system/_vectorize.py": "e03991541b045ea08ef88ac9d13587899811542c77dc89bbafe98f8d4902e1e8",
+        "src/op_system/balances.py": "5cd374ef565992cf2000ec37d22dd15872091417596c12794c0b8787a27b0db9",
+        "src/op_system/compile.py": "2895b3edbc1b8eac48b6e5ff2fa1a60ec02e8c13e7fdaa9fb9dce4900731e3cd",
+        "src/op_system/coordinates.py": "fbf4c17f05599c43d7824d6eeb29adcbd27eca631f08a1b803ac40d12b5c14f7",
+        "src/op_system/gauges.py": "54f7b06edb7fbf6b5dde6b3f290aeeb451182d294dd711e325ec1b08041c4189",
+        "src/op_system/identity.py": "e78edd17a69c519b47be6b29a0183964ee87addc89f54c10534820f88c339431",
+        "src/op_system/observables.py": "b066e956e5e0a29aec00eece895d9048aa02ecd9598dd598663dc813b0fe7c01",
+        "src/op_system/portable.py": "59f57926d9d1929874d9d4c698d5a0a2c3ddfcd73239cb68966b46780f13dd14",
+        "src/op_system/qualification.py": "584efdbd804ab9c376de258bda9d2b10c36b56826648a36f79129fbb043dfa1c",
+        "src/op_system/specs.py": "77db162da4f3c253d64c2c67b73e42d65e30b013974a5836237e609981757639",
+        "src/op_system/symbolic.py": "98be6de88d2496cea288327f8456837855ec5f6c325f3dfcaf6722abf8614b46",
+        "src/op_system/validate.py": "4a9650ad4b7042ce7925d00ffdcfd3b89cdf613f0b4a1a7af5ff7d026d2b1edc"
+      },
+      "content_sha256": "cd47cf3b87b23958901062150d5c70f901e01817654fe4415d2f58089eae7c7e",
+      "working_tree_dirty": false
+    },
+    "candidate": {
+      "git_commit": "ad3c28ac63e9af3b1210413a764b44a9c9bd2074",
+      "files_sha256": {
+        "src/op_system/__init__.py": "38915e4dc32fdd4fa7892aa6b26c99f72264f5cfb378873ddef795138ba21561",
+        "src/op_system/_array.py": "d456c0e28f7f6c9fe7aea3f44ef03b102fee0f9ee0e22fdbe5c647f2b43c3f3f",
+        "src/op_system/_axes.py": "8ab01c594a7b9665eee928ec0e4e88afbb23dc99c10415895cadda23fad915ff",
+        "src/op_system/_axis_kernel.py": "7a98a6c8b46463662bf986889171cda29b182813f8a5973dc1d8afb92810f1d9",
+        "src/op_system/_block_axes.py": "25b4981114555f487fe90372f1c65888db89ef71834bee4a9aa4f3091d0c9128",
+        "src/op_system/_constraints.py": "04c71e192d164c4dd33170365e780b5078065deb03981c0255bb2778d99d164c",
+        "src/op_system/_coordinate_rhs.py": "ce593e2aa68f68fd64619de6f783265db667158276692068a891de2fbf5874c6",
+        "src/op_system/_errors.py": "20774b32fc996c21cb85a2571228eedd1ca6ad9b5bd44e76c520f500f58ed1b4",
+        "src/op_system/_gauge_algebra.py": "564b36218d922c8a6fa9226acf44ac5b60d1f9430152289e5e540c6587e7145f",
+        "src/op_system/_gauge_analysis.py": "2dab9f6deb5677c660685d0f3c0b548fc3cf5a056c31764feac3d1e98f523ee4",
+        "src/op_system/_gauge_declarations.py": "c5455fba3cb542eba15c0f35cc7ccfe138d42850aa100f5c019485f610177958",
+        "src/op_system/_gauge_fix.py": "56193a6655c0e8682913cc7f24882e964641720e4d2b4581f732b823a577110d",
+        "src/op_system/_gauge_homogeneity.py": "8540fa74be61f866d918d78bdb943f5c37e2ea87dc5f763adfdab1828e33b42d",
+        "src/op_system/_helpers.py": "7561221a9e43676e4cdfbd88167d162dee6c749fd502b3e591fb76c2f1d86fca",
+        "src/op_system/_identifer_string.py": "3a841f6a91f7e1069c8e9b66a454f696b716044ae47524ba7a3804cd4e6f0590",
+        "src/op_system/_infer_reactants.py": "a089ad5a977340bfc6ead2dc25a687cb86a5f80d1845929a5f67837e58607b27",
+        "src/op_system/_ir.py": "45cd0e16d196e559e14f4b5d89a93d09e7d3320138eaa7e6977754569fc4f053",
+        "src/op_system/_ir_expand.py": "a3a3d7024ad79c46910e75ddb3f7328c8b21547108253ce7c9e98df092bc5e66",
+        "src/op_system/_ir_lower.py": "135861581ca5a9b61ba3e3678d7325fc238a36d2f452ceacdeacfa62c6907a44",
+        "src/op_system/_ir_templates.py": "6e978b807014c51307a612f0a19ddbe3e8b30d92c8f4d897e5c13e369d893f86",
+        "src/op_system/_jump_integral.py": "f0f3e5bd039294b73e28796d97522b5619fd29a61441a4e8cca4d17a0261571e",
+        "src/op_system/_normalize.py": "a84c8cabd170889db683c8cc6caa12d9c6fc34f29eac900d94a05d7db500aa94",
+        "src/op_system/_normalize_block.py": "d35fe9192b29f3b01ca77d265224b8ab653bacf983a1b7cef788c6e522f97789",
+        "src/op_system/_normalize_chains.py": "cb16783469e19c42b0dab2b30f849ebd6f3017e545abdd9fbbf26acf69c0f0a4",
+        "src/op_system/_normalize_initial_state.py": "9d15c066d222b9cc3516c8d8887c2e27dfbc5fa06bee0aab006f87333e44c810",
+        "src/op_system/_normalize_ir.py": "c86acff5a49509ed1ce4db5c697eccd40091377803f76f067e9effc22339c762",
+        "src/op_system/_normalize_kernels.py": "36ab304ad7c5bdc4a2060bef6c75e48c4ae6a8c062f5f03deb0ac85a557e2cce",
+        "src/op_system/_observables.py": "5ee9ead5158ba567acdaebccf403252e280c394d1da5a7a634fe47f1bdb94269",
+        "src/op_system/_operators.py": "8b98cfe4f5f7cd4790845f481eeca33cf36fab29010ca8875f216662715d20c3",
+        "src/op_system/_parameter_meta.py": "caa7736b4ed6ca616f21f14a0c80d3b5f877c2e1154f2231a79d22db216b2275",
+        "src/op_system/_reactions.py": "add8f5a94462a57af64ca15b2cc8809b96fa32faebbc5849c8a3584c72c00b88",
+        "src/op_system/_scientific_meta.py": "d72fde5767142068b4b2650662d5114d7e4d116ca9e86519853eaf96939b4c9e",
+        "src/op_system/_state_helpers.py": "c54ceb1df550ff4e88e577abf4ab34823813adc4ebf43eb5d5e445d562b66632",
+        "src/op_system/_state_string.py": "e0d6ba9c97ad5d02d4a6d2fcb3e85c66632078cba5fb46dc6454e9d4a20fbcdf",
+        "src/op_system/_symbols.py": "e9c31b34d52f2b5c5ecf6c3e785d3a7e4f0a3dd7fa973d9bf335f98c2a5c6413",
+        "src/op_system/_templates.py": "41bf8eb5177ad4d9d7768e7cf14fe7b48cdca06b481ae01061e58c0dc0014748",
+        "src/op_system/_time.py": "38a1f6d0a338955844417c59700c1cefb6d362d5fd94eefbf7cb5b03b4e2446b",
+        "src/op_system/_typing.py": "33e1e39e8c975c8709e98171f2fcab980cac5143801a2074bdc1869052dd21d9",
+        "src/op_system/_validate.py": "81a1110c833fb05c2556c5cf44b7c19242c6a9b782164e58fc2e2a4836c21032",
+        "src/op_system/_vectorize.py": "23c505070384994116a3cec396c40368eb01a2333d16fc80a5cd4499066f406d",
+        "src/op_system/balances.py": "5cd374ef565992cf2000ec37d22dd15872091417596c12794c0b8787a27b0db9",
+        "src/op_system/compile.py": "2895b3edbc1b8eac48b6e5ff2fa1a60ec02e8c13e7fdaa9fb9dce4900731e3cd",
+        "src/op_system/coordinates.py": "fbf4c17f05599c43d7824d6eeb29adcbd27eca631f08a1b803ac40d12b5c14f7",
+        "src/op_system/gauges.py": "54f7b06edb7fbf6b5dde6b3f290aeeb451182d294dd711e325ec1b08041c4189",
+        "src/op_system/identity.py": "e78edd17a69c519b47be6b29a0183964ee87addc89f54c10534820f88c339431",
+        "src/op_system/observables.py": "b066e956e5e0a29aec00eece895d9048aa02ecd9598dd598663dc813b0fe7c01",
+        "src/op_system/portable.py": "59f57926d9d1929874d9d4c698d5a0a2c3ddfcd73239cb68966b46780f13dd14",
+        "src/op_system/qualification.py": "584efdbd804ab9c376de258bda9d2b10c36b56826648a36f79129fbb043dfa1c",
+        "src/op_system/specs.py": "77db162da4f3c253d64c2c67b73e42d65e30b013974a5836237e609981757639",
+        "src/op_system/symbolic.py": "98be6de88d2496cea288327f8456837855ec5f6c325f3dfcaf6722abf8614b46",
+        "src/op_system/validate.py": "4a9650ad4b7042ce7925d00ffdcfd3b89cdf613f0b4a1a7af5ff7d026d2b1edc"
+      },
+      "content_sha256": "43edf71c68f556221bf8db40b79c7666df54cb0f9dc706c0076b3eaa38dc0e12",
+      "working_tree_dirty": true
+    }
+  },
+  "shared_harness": {
+    "git_commit": "ad3c28ac63e9af3b1210413a764b44a9c9bd2074",
+    "files_sha256": {
+      "benchmarks/__init__.py": "661f69307ca4891045621e21d82957c8bc3e9d445a96d50e31c435639d4ecdb0",
+      "benchmarks/hierarchical_benchmark.py": "91cb2ab3a488e4d8d1e6bdf99bd8864a097b7906b9e53bd5ec5d52084db01531",
+      "benchmarks/hierarchical_model.py": "dcb797c4ee2b138a5d6833c646ebd1acd4ea7f235969b399dd6facf578ef3348",
+      "scripts/__init__.py": "dfff3deacd2555dae87139562b8bf7d36193449c49767fa2f02c8045b9e95044",
+      "scripts/api-reference.py": "31bca75319db114438f93e8e25ce29cfe93c43c4ea4c20f1ff8084802572ef93",
+      "scripts/benchmark_hierarchical.py": "d79f949d42386b27880d4a49ecbdfd0c4c124f8eeff250dd25154fdd77445416",
+      "scripts/benchmark_named_kernels.py": "e6e9be7e0b75a862b06794f0ac5292746d70ee33a6fe4c5ce605ce5fa6457776",
+      "scripts/citation_metadata.py": "5fcf62fc43ccd6b6835405ce7a3285d94028226939feccfa90b58a53f1bbc744",
+      "scripts/qualify_backend.py": "8123132455adc810fd18689cf801ccc2060b3c135c09bcab8020f1d3cff89740",
+      "scripts/qualify_provider_types.py": "a89d119489890ecda0e46403b22897ba455b28ac2fe48cd466f3c5348d7fca50",
+      "scripts/release_validate.py": "eb0c603325d9a1d20a97a9c0b7d793e15ebd836d63d2531a58c3144b367ef756"
+    },
+    "content_sha256": "729f0a09b6a19353050a019d6ec5ea4d1a03609ff035682417064a08ebc8aa72",
+    "working_tree_dirty": true
+  },
+  "coordinator_sha256": "011f107d312429f445d03500eade1e5d0554907836a750112ea70331655a6869",
+  "cases": [
+    {
+      "backend": "numpy",
+      "groups": 4,
+      "stages": 2,
+      "coupling": "independent",
+      "dtype": "float64"
+    },
+    {
+      "backend": "jax",
+      "groups": 4,
+      "stages": 2,
+      "coupling": "independent",
+      "dtype": "float64"
+    },
+    {
+      "backend": "torch",
+      "groups": 4,
+      "stages": 2,
+      "coupling": "independent",
+      "dtype": "float64"
+    },
+    {
+      "backend": "numpy",
+      "groups": 4,
+      "stages": 2,
+      "coupling": "coupled",
+      "dtype": "float64"
+    },
+    {
+      "backend": "jax",
+      "groups": 4,
+      "stages": 2,
+      "coupling": "coupled",
+      "dtype": "float64"
+    },
+    {
+      "backend": "torch",
+      "groups": 4,
+      "stages": 2,
+      "coupling": "coupled",
+      "dtype": "float64"
+    },
+    {
+      "backend": "numpy",
+      "groups": 16,
+      "stages": 8,
+      "coupling": "independent",
+      "dtype": "float64"
+    },
+    {
+      "backend": "jax",
+      "groups": 16,
+      "stages": 8,
+      "coupling": "independent",
+      "dtype": "float64"
+    },
+    {
+      "backend": "torch",
+      "groups": 16,
+      "stages": 8,
+      "coupling": "independent",
+      "dtype": "float64"
+    },
+    {
+      "backend": "numpy",
+      "groups": 16,
+      "stages": 8,
+      "coupling": "coupled",
+      "dtype": "float64"
+    },
+    {
+      "backend": "jax",
+      "groups": 16,
+      "stages": 8,
+      "coupling": "coupled",
+      "dtype": "float64"
+    },
+    {
+      "backend": "torch",
+      "groups": 16,
+      "stages": 8,
+      "coupling": "coupled",
+      "dtype": "float64"
+    }
+  ],
+  "process_repetitions": 3,
+  "warm_samples": 5,
+  "inner_calls_per_sample": 200,
+  "warmups": 3,
+  "worker_timeout_seconds": 120,
+  "cpu_affinity": [
+    0
+  ],
+  "thread_environment": {
+    "OPENBLAS_NUM_THREADS": "1",
+    "OMP_NUM_THREADS": "1",
+    "MKL_NUM_THREADS": "1",
+    "JAX_ENABLE_X64": "true",
+    "JAX_PLATFORMS": "cpu",
+    "JAX_ENABLE_COMPILATION_CACHE": "false",
+    "PYTHONHASHSEED": "0"
+  },
+  "order": "reverse cases on odd repetition; alternate baseline/candidate order for adjacent paired cases; serial fresh workers",
+  "profiling": "after timings, separate fresh NumPy workers,1000 calls/layout; profiled times are not latency",
+  "limitations": [
+    "shared host; singleton CPU affinity but no exclusive allocation",
+    "three fresh repetitions; descriptive medians, no CI timing threshold",
+    "RHS layouts and derivatives qualify against independent public loop oracle; no new numerical method",
+    "whole-worker peak RSS includes imports/compilation; profiled-worker memory reported separately"
+  ]
+}

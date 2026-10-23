@@ -1,0 +1,5618 @@
+{
+  "schema_version": 1,
+  "separate_process_records": 80,
+  "separate_timing_records": 72,
+  "separate_profile_records": 8,
+  "paired_process_records": 12,
+  "failures_or_timeouts": 0,
+  "aggregation": "warm process medians from five samples; then median across three fresh processes; paired ratios are within-process medians then median across three processes",
+  "separate_timing": [
+    {
+      "backend": "jax",
+      "groups": 4,
+      "stages": 2,
+      "coupling": "coupled",
+      "layout": "handwritten",
+      "baseline": {
+        "warm_process_medians_seconds": [
+          2.5169125001411886e-05,
+          4.155403003096581e-05,
+          2.8022500046063215e-05
+        ],
+        "median_warm_seconds": 2.8022500046063215e-05,
+        "first_seconds": [
+          0.0007449669647030532,
+          0.0011670769890770316,
+          0.0007688790210522711
+        ],
+        "selected_jit_seconds": [
+          0.15945696097332984,
+          0.21809024800313637,
+          0.18791182700078934
+        ],
+        "whole_worker_peak_rss_bytes": [
+          263491584,
+          264126464,
+          264019968
+        ]
+      },
+      "candidate": {
+        "warm_process_medians_seconds": [
+          2.0922515250276775e-05,
+          2.9830849962309e-05,
+          2.7747054991777988e-05
+        ],
+        "median_warm_seconds": 2.7747054991777988e-05,
+        "first_seconds": [
+          0.0006621719803661108,
+          0.0007376690045930445,
+          0.0007303949678316712
+        ],
+        "selected_jit_seconds": [
+          0.143263311998453,
+          0.19070626696338877,
+          0.18363094999222085
+        ],
+        "whole_worker_peak_rss_bytes": [
+          269332480,
+          269619200,
+          269410304
+        ]
+      }
+    },
+    {
+      "backend": "jax",
+      "groups": 4,
+      "stages": 2,
+      "coupling": "coupled",
+      "layout": "flat",
+      "baseline": {
+        "warm_process_medians_seconds": [
+          2.3834144813008606e-05,
+          3.1424780027009546e-05,
+          3.0332610185723753e-05
+        ],
+        "median_warm_seconds": 3.0332610185723753e-05,
+        "first_seconds": [
+          0.0007437440217472613,
+          0.0008019439992494881,
+          0.0010018739849328995
+        ],
+        "selected_jit_seconds": [
+          0.16195218497887254,
+          0.2082194079994224,
+          0.1990271779941395
+        ],
+        "whole_worker_peak_rss_bytes": [
+          263491584,
+          264126464,
+          264019968
+        ]
+      },
+      "candidate": {
+        "warm_process_medians_seconds": [
+          2.7375890058465303e-05,
+          3.320867486763745e-05,
+          3.023030993063003e-05
+        ],
+        "median_warm_seconds": 3.023030993063003e-05,
+        "first_seconds": [
+          0.000704560021404177,
+          0.0007972180028446019,
+          0.0008950160117819905
+        ],
+        "selected_jit_seconds": [
+          0.18259121797746047,
+          0.20809789095073938,
+          0.18844715203158557
+        ],
+        "whole_worker_peak_rss_bytes": [
+          269332480,
+          269619200,
+          269410304
+        ]
+      }
+    },
+    {
+      "backend": "jax",
+      "groups": 4,
+      "stages": 2,
+      "coupling": "coupled",
+      "layout": "structured",
+      "baseline": {
+        "warm_process_medians_seconds": [
+          2.2499909973703325e-05,
+          3.298203489976004e-05,
+          3.2400610216427594e-05
+        ],
+        "median_warm_seconds": 3.2400610216427594e-05,
+        "first_seconds": [
+          0.000657329976093024,
+          0.0008797050104476511,
+          0.000680169032420963
+        ],
+        "selected_jit_seconds": [
+          0.13148057798389345,
+          0.2475566990324296,
+          0.19165732600959018
+        ],
+        "whole_worker_peak_rss_bytes": [
+          263491584,
+          264126464,
+          264019968
+        ]
+      },
+      "candidate": {
+        "warm_process_medians_seconds": [
+          2.465220488375053e-05,
+          3.454493504250422e-05,
+          2.940994512755424e-05
+        ],
+        "median_warm_seconds": 2.940994512755424e-05,
+        "first_seconds": [
+          0.000675044022500515,
+          0.0007591690518893301,
+          0.0006981199840083718
+        ],
+        "selected_jit_seconds": [
+          0.15414800104917958,
+          0.2391243800520897,
+          0.19523027999093756
+        ],
+        "whole_worker_peak_rss_bytes": [
+          269332480,
+          269619200,
+          269410304
+        ]
+      }
+    },
+    {
+      "backend": "jax",
+      "groups": 4,
+      "stages": 2,
+      "coupling": "independent",
+      "layout": "handwritten",
+      "baseline": {
+        "warm_process_medians_seconds": [
+          2.477923990227282e-05,
+          2.8691030165646226e-05,
+          2.5914435100276022e-05
+        ],
+        "median_warm_seconds": 2.5914435100276022e-05,
+        "first_seconds": [
+          0.0007280659629032016,
+          0.0009235029574483633,
+          0.0008606690098531544
+        ],
+        "selected_jit_seconds": [
+          0.1405725070508197,
+          0.17455876799067482,
+          0.14914917602436617
+        ],
+        "whole_worker_peak_rss_bytes": [
+          269524992,
+          269234176,
+          269230080
+        ]
+      },
+      "candidate": {
+        "warm_process_medians_seconds": [
+          2.0093360217288136e-05,
+          3.034450492123142e-05,
+          2.7787100116256624e-05
+        ],
+        "median_warm_seconds": 2.7787100116256624e-05,
+        "first_seconds": [
+          0.0007301270379684865,
+          0.0008153929957188666,
+          0.0007532009622082114
+        ],
+        "selected_jit_seconds": [
+          0.1291759759769775,
+          0.17885367904091254,
+          0.16115098603768274
+        ],
+        "whole_worker_peak_rss_bytes": [
+          274812928,
+          274731008,
+          274735104
+        ]
+      }
+    },
+    {
+      "backend": "jax",
+      "groups": 4,
+      "stages": 2,
+      "coupling": "independent",
+      "layout": "flat",
+      "baseline": {
+        "warm_process_medians_seconds": [
+          2.2516989847645164e-05,
+          3.3226615050807597e-05,
+          3.6145499907433984e-05
+        ],
+        "median_warm_seconds": 3.3226615050807597e-05,
+        "first_seconds": [
+          0.0007406290387734771,
+          0.0007874739822000265,
+          0.0007165969582274556
+        ],
+        "selected_jit_seconds": [
+          0.13484454900026321,
+          0.16560474096331745,
+          0.14927344699390233
+        ],
+        "whole_worker_peak_rss_bytes": [
+          269524992,
+          269234176,
+          269230080
+        ]
+      },
+      "candidate": {
+        "warm_process_medians_seconds": [
+          2.5003659829962998e-05,
+          4.2256595042999835e-05,
+          2.725050027947873e-05
+        ],
+        "median_warm_seconds": 2.725050027947873e-05,
+        "first_seconds": [
+          0.0006968899979256094,
+          0.0006551569676958025,
+          0.0007098430069163442
+        ],
+        "selected_jit_seconds": [
+          0.13354827999137342,
+          0.17288615502184257,
+          0.1520975249586627
+        ],
+        "whole_worker_peak_rss_bytes": [
+          274812928,
+          274731008,
+          274735104
+        ]
+      }
+    },
+    {
+      "backend": "jax",
+      "groups": 4,
+      "stages": 2,
+      "coupling": "independent",
+      "layout": "structured",
+      "baseline": {
+        "warm_process_medians_seconds": [
+          2.0210814836900683e-05,
+          2.9172769864089787e-05,
+          2.7180504985153676e-05
+        ],
+        "median_warm_seconds": 2.7180504985153676e-05,
+        "first_seconds": [
+          0.0006027500494383276,
+          0.0007620750111527741,
+          0.0006485529593192041
+        ],
+        "selected_jit_seconds": [
+          0.11089028196875006,
+          0.15111510700080544,
+          0.15261395502602682
+        ],
+        "whole_worker_peak_rss_bytes": [
+          269524992,
+          269234176,
+          269230080
+        ]
+      },
+      "candidate": {
+        "warm_process_medians_seconds": [
+          2.1970189991407096e-05,
+          3.2598989782854915e-05,
+          2.8817715065088124e-05
+        ],
+        "median_warm_seconds": 2.8817715065088124e-05,
+        "first_seconds": [
+          0.0006313010235317051,
+          0.0006842280272394419,
+          0.0006780190160498023
+        ],
+        "selected_jit_seconds": [
+          0.12470323598245159,
+          0.171034452971071,
+          0.1477724930155091
+        ],
+        "whole_worker_peak_rss_bytes": [
+          274812928,
+          274731008,
+          274735104
+        ]
+      }
+    },
+    {
+      "backend": "jax",
+      "groups": 4,
+      "stages": 2,
+      "coupling": "independent",
+      "layout": "block",
+      "baseline": {
+        "warm_process_medians_seconds": [
+          2.5709255132824183e-05,
+          2.786652505164966e-05,
+          2.79960100306198e-05
+        ],
+        "median_warm_seconds": 2.786652505164966e-05,
+        "first_seconds": [
+          0.0007006460218690336,
+          0.0007019999902695417,
+          0.0007753160316497087
+        ],
+        "selected_jit_seconds": [
+          0.1346393229905516,
+          0.1587585830129683,
+          0.15602617798140272
+        ],
+        "whole_worker_peak_rss_bytes": [
+          269524992,
+          269234176,
+          269230080
+        ]
+      },
+      "candidate": {
+        "warm_process_medians_seconds": [
+          2.0974790095351638e-05,
+          3.791127499425784e-05,
+          2.7274445164948703e-05
+        ],
+        "median_warm_seconds": 2.7274445164948703e-05,
+        "first_seconds": [
+          0.0006430840003304183,
+          0.0007451059645973146,
+          0.0009141810005530715
+        ],
+        "selected_jit_seconds": [
+          0.124733219970949,
+          0.17329649697057903,
+          0.15513385902158916
+        ],
+        "whole_worker_peak_rss_bytes": [
+          274812928,
+          274731008,
+          274735104
+        ]
+      }
+    },
+    {
+      "backend": "jax",
+      "groups": 16,
+      "stages": 8,
+      "coupling": "coupled",
+      "layout": "handwritten",
+      "baseline": {
+        "warm_process_medians_seconds": [
+          2.8467650117818266e-05,
+          2.785944001516327e-05,
+          4.796398017788306e-05
+        ],
+        "median_warm_seconds": 2.8467650117818266e-05,
+        "first_seconds": [
+          0.0017454850021749735,
+          0.0015860950225032866,
+          0.002122933976352215
+        ],
+        "selected_jit_seconds": [
+          0.17032009101239964,
+          0.16504668298875913,
+          0.21919543598778546
+        ],
+        "whole_worker_peak_rss_bytes": [
+          268361728,
+          266870784,
+          268726272
+        ]
+      },
+      "candidate": {
+        "warm_process_medians_seconds": [
+          3.070054488489404e-05,
+          3.904193989001215e-05,
+          4.6974404831416905e-05
+        ],
+        "median_warm_seconds": 3.904193989001215e-05,
+        "first_seconds": [
+          0.0018595349974930286,
+          0.001986847026273608,
+          0.002000025997404009
+        ],
+        "selected_jit_seconds": [
+          0.17892410402419046,
+          0.1888612200273201,
+          0.2175155999721028
+        ],
+        "whole_worker_peak_rss_bytes": [
+          272322560,
+          272285696,
+          274194432
+        ]
+      }
+    },
+    {
+      "backend": "jax",
+      "groups": 16,
+      "stages": 8,
+      "coupling": "coupled",
+      "layout": "flat",
+      "baseline": {
+        "warm_process_medians_seconds": [
+          2.86852999124676e-05,
+          2.7489555068314077e-05,
+          4.4490119908004996e-05
+        ],
+        "median_warm_seconds": 2.86852999124676e-05,
+        "first_seconds": [
+          0.0007003939826972783,
+          0.0006893349927850068,
+          0.0007935879984870553
+        ],
+        "selected_jit_seconds": [
+          0.18048254097811878,
+          0.17453943198779598,
+          0.21892243099864572
+        ],
+        "whole_worker_peak_rss_bytes": [
+          268361728,
+          266870784,
+          268726272
+        ]
+      },
+      "candidate": {
+        "warm_process_medians_seconds": [
+          2.833277016179636e-05,
+          4.409471992403269e-05,
+          4.617245518602431e-05
+        ],
+        "median_warm_seconds": 4.409471992403269e-05,
+        "first_seconds": [
+          0.0006784439901821315,
+          0.0007630879990756512,
+          0.0007901639910414815
+        ],
+        "selected_jit_seconds": [
+          0.1732301309821196,
+          0.29056231502909213,
+          0.23064130096463487
+        ],
+        "whole_worker_peak_rss_bytes": [
+          272322560,
+          272285696,
+          274194432
+        ]
+      }
+    },
+    {
+      "backend": "jax",
+      "groups": 16,
+      "stages": 8,
+      "coupling": "coupled",
+      "layout": "structured",
+      "baseline": {
+        "warm_process_medians_seconds": [
+          2.7827720041386785e-05,
+          2.711463486775756e-05,
+          4.5507384929805996e-05
+        ],
+        "median_warm_seconds": 2.7827720041386785e-05,
+        "first_seconds": [
+          0.0006656809709966183,
+          0.000628292968031019,
+          0.0007572540198452771
+        ],
+        "selected_jit_seconds": [
+          0.1519255990278907,
+          0.14134011999703944,
+          0.2243198219803162
+        ],
+        "whole_worker_peak_rss_bytes": [
+          268361728,
+          266870784,
+          268726272
+        ]
+      },
+      "candidate": {
+        "warm_process_medians_seconds": [
+          2.7319150103721767e-05,
+          3.9807294961065054e-05,
+          4.5634210109710694e-05
+        ],
+        "median_warm_seconds": 3.9807294961065054e-05,
+        "first_seconds": [
+          0.0006222070078365505,
+          0.0007342359749600291,
+          0.0007837499724701047
+        ],
+        "selected_jit_seconds": [
+          0.14210115000605583,
+          0.18952944199554622,
+          0.2219277240219526
+        ],
+        "whole_worker_peak_rss_bytes": [
+          272322560,
+          272285696,
+          274194432
+        ]
+      }
+    },
+    {
+      "backend": "jax",
+      "groups": 16,
+      "stages": 8,
+      "coupling": "independent",
+      "layout": "handwritten",
+      "baseline": {
+        "warm_process_medians_seconds": [
+          3.333335480419919e-05,
+          4.493009008001536e-05,
+          4.5778689964208754e-05
+        ],
+        "median_warm_seconds": 4.493009008001536e-05,
+        "first_seconds": [
+          0.002054831013083458,
+          0.0020963840070180595,
+          0.00201372301671654
+        ],
+        "selected_jit_seconds": [
+          0.15744104504119605,
+          0.19734519603662193,
+          0.19145519798621535
+        ],
+        "whole_worker_peak_rss_bytes": [
+          274403328,
+          274477056,
+          274440192
+        ]
+      },
+      "candidate": {
+        "warm_process_medians_seconds": [
+          4.891933494945988e-05,
+          4.609030991559848e-05,
+          4.129547014599666e-05
+        ],
+        "median_warm_seconds": 4.609030991559848e-05,
+        "first_seconds": [
+          0.0018743639811873436,
+          0.002092589042149484,
+          0.0019476659945212305
+        ],
+        "selected_jit_seconds": [
+          0.16541698097717017,
+          0.20253443002002314,
+          0.17699154099682346
+        ],
+        "whole_worker_peak_rss_bytes": [
+          279842816,
+          279838720,
+          279883776
+        ]
+      }
+    },
+    {
+      "backend": "jax",
+      "groups": 16,
+      "stages": 8,
+      "coupling": "independent",
+      "layout": "flat",
+      "baseline": {
+        "warm_process_medians_seconds": [
+          2.7250640268903226e-05,
+          4.364258493296802e-05,
+          4.696092481026426e-05
+        ],
+        "median_warm_seconds": 4.364258493296802e-05,
+        "first_seconds": [
+          0.0006826529861427844,
+          0.0007975510088726878,
+          0.0007588040316477418
+        ],
+        "selected_jit_seconds": [
+          0.14341750397579744,
+          0.18785444198874757,
+          0.18998122698394582
+        ],
+        "whole_worker_peak_rss_bytes": [
+          274403328,
+          274477056,
+          274440192
+        ]
+      },
+      "candidate": {
+        "warm_process_medians_seconds": [
+          2.6240645092912017e-05,
+          4.675984993809834e-05,
+          4.2910905031021684e-05
+        ],
+        "median_warm_seconds": 4.2910905031021684e-05,
+        "first_seconds": [
+          0.0006518620066344738,
+          0.001085016003344208,
+          0.0007643469725735486
+        ],
+        "selected_jit_seconds": [
+          0.14728775899857283,
+          0.22153085400350392,
+          0.18205485999351367
+        ],
+        "whole_worker_peak_rss_bytes": [
+          279842816,
+          279838720,
+          279883776
+        ]
+      }
+    },
+    {
+      "backend": "jax",
+      "groups": 16,
+      "stages": 8,
+      "coupling": "independent",
+      "layout": "structured",
+      "baseline": {
+        "warm_process_medians_seconds": [
+          2.708485524635762e-05,
+          5.262824997771531e-05,
+          4.4480715005192905e-05
+        ],
+        "median_warm_seconds": 4.4480715005192905e-05,
+        "first_seconds": [
+          0.000627628993242979,
+          0.0010310639627277851,
+          0.0007380160386674106
+        ],
+        "selected_jit_seconds": [
+          0.12294238602044061,
+          0.218313789984677,
+          0.18455244199139997
+        ],
+        "whole_worker_peak_rss_bytes": [
+          274403328,
+          274477056,
+          274440192
+        ]
+      },
+      "candidate": {
+        "warm_process_medians_seconds": [
+          2.655109012266621e-05,
+          5.8329970052000135e-05,
+          4.304283997043967e-05
+        ],
+        "median_warm_seconds": 4.304283997043967e-05,
+        "first_seconds": [
+          0.0006493719993159175,
+          0.0007869029650464654,
+          0.0008522029966115952
+        ],
+        "selected_jit_seconds": [
+          0.12051112001063302,
+          0.19237884698668495,
+          0.17898607900133356
+        ],
+        "whole_worker_peak_rss_bytes": [
+          279842816,
+          279838720,
+          279883776
+        ]
+      }
+    },
+    {
+      "backend": "jax",
+      "groups": 16,
+      "stages": 8,
+      "coupling": "independent",
+      "layout": "block",
+      "baseline": {
+        "warm_process_medians_seconds": [
+          2.7814469940494747e-05,
+          4.778787493705749e-05,
+          4.774629516759887e-05
+        ],
+        "median_warm_seconds": 4.774629516759887e-05,
+        "first_seconds": [
+          0.0006740560056641698,
+          0.0008312260033562779,
+          0.0007578239892609417
+        ],
+        "selected_jit_seconds": [
+          0.14874815696384758,
+          0.1969066410092637,
+          0.22068609402049333
+        ],
+        "whole_worker_peak_rss_bytes": [
+          274403328,
+          274477056,
+          274440192
+        ]
+      },
+      "candidate": {
+        "warm_process_medians_seconds": [
+          3.074092994211242e-05,
+          4.901512496871874e-05,
+          4.141148994676769e-05
+        ],
+        "median_warm_seconds": 4.141148994676769e-05,
+        "first_seconds": [
+          0.000698431977070868,
+          0.0007306560291908681,
+          0.000741336029022932
+        ],
+        "selected_jit_seconds": [
+          0.15815653698518872,
+          0.19979631301248446,
+          0.18831107299774885
+        ],
+        "whole_worker_peak_rss_bytes": [
+          279842816,
+          279838720,
+          279883776
+        ]
+      }
+    },
+    {
+      "backend": "numpy",
+      "groups": 4,
+      "stages": 2,
+      "coupling": "coupled",
+      "layout": "handwritten",
+      "baseline": {
+        "warm_process_medians_seconds": [
+          3.475979494396597e-05,
+          4.2071430070791396e-05,
+          3.600088501116261e-05
+        ],
+        "median_warm_seconds": 3.600088501116261e-05,
+        "first_seconds": [
+          9.45859937928617e-05,
+          0.00014855200424790382,
+          9.707995923236012e-05
+        ],
+        "selected_jit_seconds": [
+          null,
+          null,
+          null
+        ],
+        "whole_worker_peak_rss_bytes": [
+          59396096,
+          59400192,
+          59482112
+        ]
+      },
+      "candidate": {
+        "warm_process_medians_seconds": [
+          3.433504491113126e-05,
+          6.114988995250315e-05,
+          3.630753490142524e-05
+        ],
+        "median_warm_seconds": 3.630753490142524e-05,
+        "first_seconds": [
+          0.00011219899170100689,
+          0.00018112501129508018,
+          0.00010019703768193722
+        ],
+        "selected_jit_seconds": [
+          null,
+          null,
+          null
+        ],
+        "whole_worker_peak_rss_bytes": [
+          59727872,
+          59834368,
+          59715584
+        ]
+      }
+    },
+    {
+      "backend": "numpy",
+      "groups": 4,
+      "stages": 2,
+      "coupling": "coupled",
+      "layout": "flat",
+      "baseline": {
+        "warm_process_medians_seconds": [
+          0.0001121488498756662,
+          0.0001888593702460639,
+          0.00010505782993277534
+        ],
+        "median_warm_seconds": 0.0001121488498756662,
+        "first_seconds": [
+          0.0002937419922091067,
+          0.0004304000176489353,
+          0.00022952101426199079
+        ],
+        "selected_jit_seconds": [
+          null,
+          null,
+          null
+        ],
+        "whole_worker_peak_rss_bytes": [
+          59396096,
+          59400192,
+          59482112
+        ]
+      },
+      "candidate": {
+        "warm_process_medians_seconds": [
+          0.00010218798503046856,
+          0.00013787969015538693,
+          9.780903987120837e-05
+        ],
+        "median_warm_seconds": 0.00010218798503046856,
+        "first_seconds": [
+          0.00015305198030546308,
+          0.0004043930093757808,
+          0.00018899398855865002
+        ],
+        "selected_jit_seconds": [
+          null,
+          null,
+          null
+        ],
+        "whole_worker_peak_rss_bytes": [
+          59727872,
+          59834368,
+          59715584
+        ]
+      }
+    },
+    {
+      "backend": "numpy",
+      "groups": 4,
+      "stages": 2,
+      "coupling": "coupled",
+      "layout": "structured",
+      "baseline": {
+        "warm_process_medians_seconds": [
+          0.00010729042522143572,
+          0.00017418511997675524,
+          7.450305507518351e-05
+        ],
+        "median_warm_seconds": 0.00010729042522143572,
+        "first_seconds": [
+          0.00016020803013816476,
+          0.00020831002620980144,
+          0.0001315720146521926
+        ],
+        "selected_jit_seconds": [
+          null,
+          null,
+          null
+        ],
+        "whole_worker_peak_rss_bytes": [
+          59396096,
+          59400192,
+          59482112
+        ]
+      },
+      "candidate": {
+        "warm_process_medians_seconds": [
+          6.127338012447581e-05,
+          6.533956504426896e-05,
+          8.753961010370404e-05
+        ],
+        "median_warm_seconds": 6.533956504426896e-05,
+        "first_seconds": [
+          8.173199603334069e-05,
+          8.913903729990125e-05,
+          9.546795627102256e-05
+        ],
+        "selected_jit_seconds": [
+          null,
+          null,
+          null
+        ],
+        "whole_worker_peak_rss_bytes": [
+          59727872,
+          59834368,
+          59715584
+        ]
+      }
+    },
+    {
+      "backend": "numpy",
+      "groups": 4,
+      "stages": 2,
+      "coupling": "independent",
+      "layout": "handwritten",
+      "baseline": {
+        "warm_process_medians_seconds": [
+          2.043036511167884e-05,
+          3.831334499409422e-05,
+          3.275655501056462e-05
+        ],
+        "median_warm_seconds": 3.275655501056462e-05,
+        "first_seconds": [
+          5.2680959925055504e-05,
+          0.00014955800725147128,
+          0.0001248930348083377
+        ],
+        "selected_jit_seconds": [
+          null,
+          null,
+          null
+        ],
+        "whole_worker_peak_rss_bytes": [
+          60088320,
+          59527168,
+          59564032
+        ]
+      },
+      "candidate": {
+        "warm_process_medians_seconds": [
+          2.0679004956036805e-05,
+          2.6521859981585295e-05,
+          3.2343394996132704e-05
+        ],
+        "median_warm_seconds": 2.6521859981585295e-05,
+        "first_seconds": [
+          4.747300408780575e-05,
+          7.020100019872189e-05,
+          7.325102342292666e-05
+        ],
+        "selected_jit_seconds": [
+          null,
+          null,
+          null
+        ],
+        "whole_worker_peak_rss_bytes": [
+          59957248,
+          60014592,
+          59920384
+        ]
+      }
+    },
+    {
+      "backend": "numpy",
+      "groups": 4,
+      "stages": 2,
+      "coupling": "independent",
+      "layout": "flat",
+      "baseline": {
+        "warm_process_medians_seconds": [
+          9.31192547432147e-05,
+          0.00015156748500885442,
+          0.0001259860201389529
+        ],
+        "median_warm_seconds": 0.0001259860201389529,
+        "first_seconds": [
+          0.00018550304230302572,
+          0.00029789202380925417,
+          0.00026499800151214004
+        ],
+        "selected_jit_seconds": [
+          null,
+          null,
+          null
+        ],
+        "whole_worker_peak_rss_bytes": [
+          60088320,
+          59527168,
+          59564032
+        ]
+      },
+      "candidate": {
+        "warm_process_medians_seconds": [
+          8.308527496410534e-05,
+          0.00015839730011066422,
+          8.804467011941597e-05
+        ],
+        "median_warm_seconds": 8.804467011941597e-05,
+        "first_seconds": [
+          0.00015430600615218282,
+          0.0002546769683249295,
+          0.00016861996846273541
+        ],
+        "selected_jit_seconds": [
+          null,
+          null,
+          null
+        ],
+        "whole_worker_peak_rss_bytes": [
+          59957248,
+          60014592,
+          59920384
+        ]
+      }
+    },
+    {
+      "backend": "numpy",
+      "groups": 4,
+      "stages": 2,
+      "coupling": "independent",
+      "layout": "structured",
+      "baseline": {
+        "warm_process_medians_seconds": [
+          6.625473499298095e-05,
+          8.177158510079607e-05,
+          8.618201012723147e-05
+        ],
+        "median_warm_seconds": 8.177158510079607e-05,
+        "first_seconds": [
+          8.800404611974955e-05,
+          0.00012705399421975017,
+          0.0001068309647962451
+        ],
+        "selected_jit_seconds": [
+          null,
+          null,
+          null
+        ],
+        "whole_worker_peak_rss_bytes": [
+          60088320,
+          59527168,
+          59564032
+        ]
+      },
+      "candidate": {
+        "warm_process_medians_seconds": [
+          5.929078528424725e-05,
+          8.139873505569995e-05,
+          6.174247013404966e-05
+        ],
+        "median_warm_seconds": 6.174247013404966e-05,
+        "first_seconds": [
+          9.425595635548234e-05,
+          0.00015420798445120454,
+          0.0001053930027410388
+        ],
+        "selected_jit_seconds": [
+          null,
+          null,
+          null
+        ],
+        "whole_worker_peak_rss_bytes": [
+          59957248,
+          60014592,
+          59920384
+        ]
+      }
+    },
+    {
+      "backend": "numpy",
+      "groups": 4,
+      "stages": 2,
+      "coupling": "independent",
+      "layout": "block",
+      "baseline": {
+        "warm_process_medians_seconds": [
+          0.000265454004984349,
+          0.0003104285700828768,
+          0.0003983340601553209
+        ],
+        "median_warm_seconds": 0.0003104285700828768,
+        "first_seconds": [
+          0.00028339604614302516,
+          0.00036023103166371584,
+          0.000326352019328624
+        ],
+        "selected_jit_seconds": [
+          null,
+          null,
+          null
+        ],
+        "whole_worker_peak_rss_bytes": [
+          60088320,
+          59527168,
+          59564032
+        ]
+      },
+      "candidate": {
+        "warm_process_medians_seconds": [
+          0.00025358952989336104,
+          0.0002707665500929579,
+          0.00024352214008104055
+        ],
+        "median_warm_seconds": 0.00025358952989336104,
+        "first_seconds": [
+          0.0002317689941264689,
+          0.00038766098441556096,
+          0.00046841998118907213
+        ],
+        "selected_jit_seconds": [
+          null,
+          null,
+          null
+        ],
+        "whole_worker_peak_rss_bytes": [
+          59957248,
+          60014592,
+          59920384
+        ]
+      }
+    },
+    {
+      "backend": "numpy",
+      "groups": 16,
+      "stages": 8,
+      "coupling": "coupled",
+      "layout": "handwritten",
+      "baseline": {
+        "warm_process_medians_seconds": [
+          2.8158469940535725e-05,
+          4.890156502369791e-05,
+          3.8156835071276877e-05
+        ],
+        "median_warm_seconds": 3.8156835071276877e-05,
+        "first_seconds": [
+          9.04929474927485e-05,
+          0.00013238796964287758,
+          9.999499889090657e-05
+        ],
+        "selected_jit_seconds": [
+          null,
+          null,
+          null
+        ],
+        "whole_worker_peak_rss_bytes": [
+          63987712,
+          63950848,
+          64069632
+        ]
+      },
+      "candidate": {
+        "warm_process_medians_seconds": [
+          2.642225503223017e-05,
+          2.6165659946855157e-05,
+          5.0742110179271546e-05
+        ],
+        "median_warm_seconds": 2.642225503223017e-05,
+        "first_seconds": [
+          6.916897837072611e-05,
+          7.592601468786597e-05,
+          0.00016713200602680445
+        ],
+        "selected_jit_seconds": [
+          null,
+          null,
+          null
+        ],
+        "whole_worker_peak_rss_bytes": [
+          67489792,
+          67461120,
+          67432448
+        ]
+      }
+    },
+    {
+      "backend": "numpy",
+      "groups": 16,
+      "stages": 8,
+      "coupling": "coupled",
+      "layout": "flat",
+      "baseline": {
+        "warm_process_medians_seconds": [
+          0.00010381829488324002,
+          0.00013806757982820272,
+          0.00012361885979771613
+        ],
+        "median_warm_seconds": 0.00012361885979771613,
+        "first_seconds": [
+          0.000157834030687809,
+          0.00020559999393299222,
+          0.0003048679791390896
+        ],
+        "selected_jit_seconds": [
+          null,
+          null,
+          null
+        ],
+        "whole_worker_peak_rss_bytes": [
+          63987712,
+          63950848,
+          64069632
+        ]
+      },
+      "candidate": {
+        "warm_process_medians_seconds": [
+          8.786235994193703e-05,
+          9.724774514324963e-05,
+          0.0001232967249234207
+        ],
+        "median_warm_seconds": 9.724774514324963e-05,
+        "first_seconds": [
+          0.00015938899014145136,
+          0.0001496130134910345,
+          0.0002592900418676436
+        ],
+        "selected_jit_seconds": [
+          null,
+          null,
+          null
+        ],
+        "whole_worker_peak_rss_bytes": [
+          67489792,
+          67461120,
+          67432448
+        ]
+      }
+    },
+    {
+      "backend": "numpy",
+      "groups": 16,
+      "stages": 8,
+      "coupling": "coupled",
+      "layout": "structured",
+      "baseline": {
+        "warm_process_medians_seconds": [
+          7.732006488367916e-05,
+          0.00011619760509347543,
+          8.56938399374485e-05
+        ],
+        "median_warm_seconds": 8.56938399374485e-05,
+        "first_seconds": [
+          0.00012076302664354444,
+          0.0002936149830929935,
+          0.00011089799227192998
+        ],
+        "selected_jit_seconds": [
+          null,
+          null,
+          null
+        ],
+        "whole_worker_peak_rss_bytes": [
+          63987712,
+          63950848,
+          64069632
+        ]
+      },
+      "candidate": {
+        "warm_process_medians_seconds": [
+          6.107582477852702e-05,
+          7.209489500382915e-05,
+          8.093040494713932e-05
+        ],
+        "median_warm_seconds": 7.209489500382915e-05,
+        "first_seconds": [
+          8.911796612665057e-05,
+          9.803602006286383e-05,
+          0.00013053196016699076
+        ],
+        "selected_jit_seconds": [
+          null,
+          null,
+          null
+        ],
+        "whole_worker_peak_rss_bytes": [
+          67489792,
+          67461120,
+          67432448
+        ]
+      }
+    },
+    {
+      "backend": "numpy",
+      "groups": 16,
+      "stages": 8,
+      "coupling": "independent",
+      "layout": "handwritten",
+      "baseline": {
+        "warm_process_medians_seconds": [
+          4.954924981575459e-05,
+          2.935285505373031e-05,
+          3.458825492998585e-05
+        ],
+        "median_warm_seconds": 3.458825492998585e-05,
+        "first_seconds": [
+          0.00016743200831115246,
+          7.492699660360813e-05,
+          7.291499059647322e-05
+        ],
+        "selected_jit_seconds": [
+          null,
+          null,
+          null
+        ],
+        "whole_worker_peak_rss_bytes": [
+          64409600,
+          64368640,
+          64454656
+        ]
+      },
+      "candidate": {
+        "warm_process_medians_seconds": [
+          3.0807569855824114e-05,
+          3.497478493954986e-05,
+          3.5526554856915024e-05
+        ],
+        "median_warm_seconds": 3.497478493954986e-05,
+        "first_seconds": [
+          6.936100544407964e-05,
+          9.823701111599803e-05,
+          7.273495430126786e-05
+        ],
+        "selected_jit_seconds": [
+          null,
+          null,
+          null
+        ],
+        "whole_worker_peak_rss_bytes": [
+          68788224,
+          68845568,
+          68849664
+        ]
+      }
+    },
+    {
+      "backend": "numpy",
+      "groups": 16,
+      "stages": 8,
+      "coupling": "independent",
+      "layout": "flat",
+      "baseline": {
+        "warm_process_medians_seconds": [
+          0.00018124002002878114,
+          0.00010075889003928751,
+          0.00011977054993622004
+        ],
+        "median_warm_seconds": 0.00011977054993622004,
+        "first_seconds": [
+          0.0004594280035234988,
+          0.00021840701811015606,
+          0.0002874810015782714
+        ],
+        "selected_jit_seconds": [
+          null,
+          null,
+          null
+        ],
+        "whole_worker_peak_rss_bytes": [
+          64409600,
+          64368640,
+          64454656
+        ]
+      },
+      "candidate": {
+        "warm_process_medians_seconds": [
+          8.88013350777328e-05,
+          0.00014468974026385695,
+          0.00011378597526345402
+        ],
+        "median_warm_seconds": 0.00011378597526345402,
+        "first_seconds": [
+          0.00021417095558717847,
+          0.0002565879840403795,
+          0.00041580299148336053
+        ],
+        "selected_jit_seconds": [
+          null,
+          null,
+          null
+        ],
+        "whole_worker_peak_rss_bytes": [
+          68788224,
+          68845568,
+          68849664
+        ]
+      }
+    },
+    {
+      "backend": "numpy",
+      "groups": 16,
+      "stages": 8,
+      "coupling": "independent",
+      "layout": "structured",
+      "baseline": {
+        "warm_process_medians_seconds": [
+          8.147305488819257e-05,
+          7.532654504757374e-05,
+          8.630291995359585e-05
+        ],
+        "median_warm_seconds": 8.147305488819257e-05,
+        "first_seconds": [
+          0.00010521401418372989,
+          0.0001044590026140213,
+          0.0001444990048184991
+        ],
+        "selected_jit_seconds": [
+          null,
+          null,
+          null
+        ],
+        "whole_worker_peak_rss_bytes": [
+          64409600,
+          64368640,
+          64454656
+        ]
+      },
+      "candidate": {
+        "warm_process_medians_seconds": [
+          5.980072019156069e-05,
+          6.52177698793821e-05,
+          7.035043003270403e-05
+        ],
+        "median_warm_seconds": 6.52177698793821e-05,
+        "first_seconds": [
+          9.120599133893847e-05,
+          0.0001064449897967279,
+          9.410904021933675e-05
+        ],
+        "selected_jit_seconds": [
+          null,
+          null,
+          null
+        ],
+        "whole_worker_peak_rss_bytes": [
+          68788224,
+          68845568,
+          68849664
+        ]
+      }
+    },
+    {
+      "backend": "numpy",
+      "groups": 16,
+      "stages": 8,
+      "coupling": "independent",
+      "layout": "block",
+      "baseline": {
+        "warm_process_medians_seconds": [
+          0.0009562286949949339,
+          0.0012751434050733224,
+          0.001120418840146158
+        ],
+        "median_warm_seconds": 0.001120418840146158,
+        "first_seconds": [
+          0.0010350800002925098,
+          0.0010528030106797814,
+          0.0010728100314736366
+        ],
+        "selected_jit_seconds": [
+          null,
+          null,
+          null
+        ],
+        "whole_worker_peak_rss_bytes": [
+          64409600,
+          64368640,
+          64454656
+        ]
+      },
+      "candidate": {
+        "warm_process_medians_seconds": [
+          0.0007856301800347865,
+          0.0010238649050006642,
+          0.0009122089899028652
+        ],
+        "median_warm_seconds": 0.0009122089899028652,
+        "first_seconds": [
+          0.0008122239960357547,
+          0.0008310899720527232,
+          0.0010556899942457676
+        ],
+        "selected_jit_seconds": [
+          null,
+          null,
+          null
+        ],
+        "whole_worker_peak_rss_bytes": [
+          68788224,
+          68845568,
+          68849664
+        ]
+      }
+    },
+    {
+      "backend": "torch",
+      "groups": 4,
+      "stages": 2,
+      "coupling": "coupled",
+      "layout": "handwritten",
+      "baseline": {
+        "warm_process_medians_seconds": [
+          4.8875125066842884e-05,
+          9.597736498108133e-05,
+          5.614877998596057e-05
+        ],
+        "median_warm_seconds": 5.614877998596057e-05,
+        "first_seconds": [
+          0.00013520795619115233,
+          0.0002117239637300372,
+          0.00014108698815107346
+        ],
+        "selected_jit_seconds": [
+          null,
+          null,
+          null
+        ],
+        "whole_worker_peak_rss_bytes": [
+          249708544,
+          249614336,
+          249688064
+        ]
+      },
+      "candidate": {
+        "warm_process_medians_seconds": [
+          5.6393494887743145e-05,
+          5.845177511218935e-05,
+          6.124060018919408e-05
+        ],
+        "median_warm_seconds": 5.845177511218935e-05,
+        "first_seconds": [
+          0.00011533702490851283,
+          0.0001257890253327787,
+          0.00017697096336632967
+        ],
+        "selected_jit_seconds": [
+          null,
+          null,
+          null
+        ],
+        "whole_worker_peak_rss_bytes": [
+          258433024,
+          258404352,
+          258326528
+        ]
+      }
+    },
+    {
+      "backend": "torch",
+      "groups": 4,
+      "stages": 2,
+      "coupling": "coupled",
+      "layout": "flat",
+      "baseline": {
+        "warm_process_medians_seconds": [
+          0.00012396665988489985,
+          0.00020062329509528353,
+          0.0001465072948485613
+        ],
+        "median_warm_seconds": 0.0001465072948485613,
+        "first_seconds": [
+          0.0002174390247091651,
+          0.0007041249773465097,
+          0.0003545720246620476
+        ],
+        "selected_jit_seconds": [
+          null,
+          null,
+          null
+        ],
+        "whole_worker_peak_rss_bytes": [
+          249708544,
+          249614336,
+          249688064
+        ]
+      },
+      "candidate": {
+        "warm_process_medians_seconds": [
+          0.00012584084004629403,
+          0.00014660832996014507,
+          0.00014977342012571172
+        ],
+        "median_warm_seconds": 0.00014660832996014507,
+        "first_seconds": [
+          0.0003043990000151098,
+          0.00040808203630149364,
+          0.00040457502473145723
+        ],
+        "selected_jit_seconds": [
+          null,
+          null,
+          null
+        ],
+        "whole_worker_peak_rss_bytes": [
+          258433024,
+          258404352,
+          258326528
+        ]
+      }
+    },
+    {
+      "backend": "torch",
+      "groups": 4,
+      "stages": 2,
+      "coupling": "coupled",
+      "layout": "structured",
+      "baseline": {
+        "warm_process_medians_seconds": [
+          8.230489998823032e-05,
+          0.00010622367495670915,
+          9.597752999980002e-05
+        ],
+        "median_warm_seconds": 9.597752999980002e-05,
+        "first_seconds": [
+          0.0001422869972884655,
+          0.0001775330165401101,
+          0.00017819198546931148
+        ],
+        "selected_jit_seconds": [
+          null,
+          null,
+          null
+        ],
+        "whole_worker_peak_rss_bytes": [
+          249708544,
+          249614336,
+          249688064
+        ]
+      },
+      "candidate": {
+        "warm_process_medians_seconds": [
+          8.403970510698854e-05,
+          8.744026505155489e-05,
+          8.999762503663078e-05
+        ],
+        "median_warm_seconds": 8.744026505155489e-05,
+        "first_seconds": [
+          0.00014800200005993247,
+          0.00016488495748490095,
+          0.0001735579571686685
+        ],
+        "selected_jit_seconds": [
+          null,
+          null,
+          null
+        ],
+        "whole_worker_peak_rss_bytes": [
+          258433024,
+          258404352,
+          258326528
+        ]
+      }
+    },
+    {
+      "backend": "torch",
+      "groups": 4,
+      "stages": 2,
+      "coupling": "independent",
+      "layout": "handwritten",
+      "baseline": {
+        "warm_process_medians_seconds": [
+          4.8705500084906816e-05,
+          5.6749744981061664e-05,
+          5.476333491969854e-05
+        ],
+        "median_warm_seconds": 5.476333491969854e-05,
+        "first_seconds": [
+          0.0001060590147972107,
+          0.00030644796788692474,
+          0.00012470904039219022
+        ],
+        "selected_jit_seconds": [
+          null,
+          null,
+          null
+        ],
+        "whole_worker_peak_rss_bytes": [
+          250286080,
+          250318848,
+          250376192
+        ]
+      },
+      "candidate": {
+        "warm_process_medians_seconds": [
+          4.902122484054416e-05,
+          8.021513000130653e-05,
+          5.49042149214074e-05
+        ],
+        "median_warm_seconds": 5.49042149214074e-05,
+        "first_seconds": [
+          0.00011823198292404413,
+          0.0003008299972862005,
+          0.00011778599582612514
+        ],
+        "selected_jit_seconds": [
+          null,
+          null,
+          null
+        ],
+        "whole_worker_peak_rss_bytes": [
+          258920448,
+          258908160,
+          258965504
+        ]
+      }
+    },
+    {
+      "backend": "torch",
+      "groups": 4,
+      "stages": 2,
+      "coupling": "independent",
+      "layout": "flat",
+      "baseline": {
+        "warm_process_medians_seconds": [
+          0.00012208916014060377,
+          0.00027455153496703133,
+          0.00015335998992668464
+        ],
+        "median_warm_seconds": 0.00015335998992668464,
+        "first_seconds": [
+          0.00021006999304518104,
+          0.0006597600295208395,
+          0.00041307101491838694
+        ],
+        "selected_jit_seconds": [
+          null,
+          null,
+          null
+        ],
+        "whole_worker_peak_rss_bytes": [
+          250286080,
+          250318848,
+          250376192
+        ]
+      },
+      "candidate": {
+        "warm_process_medians_seconds": [
+          0.0001197956400574185,
+          0.00034310357994399965,
+          0.0001893515500705689
+        ],
+        "median_warm_seconds": 0.0001893515500705689,
+        "first_seconds": [
+          0.0003680079826153815,
+          0.000714356021489948,
+          0.0004086009575985372
+        ],
+        "selected_jit_seconds": [
+          null,
+          null,
+          null
+        ],
+        "whole_worker_peak_rss_bytes": [
+          258920448,
+          258908160,
+          258965504
+        ]
+      }
+    },
+    {
+      "backend": "torch",
+      "groups": 4,
+      "stages": 2,
+      "coupling": "independent",
+      "layout": "structured",
+      "baseline": {
+        "warm_process_medians_seconds": [
+          8.190796012058854e-05,
+          0.00013411457010079175,
+          9.856179502094165e-05
+        ],
+        "median_warm_seconds": 9.856179502094165e-05,
+        "first_seconds": [
+          0.00023517000954598188,
+          0.00031040102476254106,
+          0.00018143403576686978
+        ],
+        "selected_jit_seconds": [
+          null,
+          null,
+          null
+        ],
+        "whole_worker_peak_rss_bytes": [
+          250286080,
+          250318848,
+          250376192
+        ]
+      },
+      "candidate": {
+        "warm_process_medians_seconds": [
+          8.212246000766755e-05,
+          0.00019703435013070702,
+          0.00011245338973822072
+        ],
+        "median_warm_seconds": 0.00011245338973822072,
+        "first_seconds": [
+          0.00017500901594758034,
+          0.00026294600684195757,
+          0.000539777975063771
+        ],
+        "selected_jit_seconds": [
+          null,
+          null,
+          null
+        ],
+        "whole_worker_peak_rss_bytes": [
+          258920448,
+          258908160,
+          258965504
+        ]
+      }
+    },
+    {
+      "backend": "torch",
+      "groups": 4,
+      "stages": 2,
+      "coupling": "independent",
+      "layout": "block",
+      "baseline": {
+        "warm_process_medians_seconds": [
+          0.0002776980999624357,
+          0.0005424990749452263,
+          0.0004079124500276521
+        ],
+        "median_warm_seconds": 0.0004079124500276521,
+        "first_seconds": [
+          0.0003619039780460298,
+          0.000912120973225683,
+          0.0008176119881682098
+        ],
+        "selected_jit_seconds": [
+          null,
+          null,
+          null
+        ],
+        "whole_worker_peak_rss_bytes": [
+          250286080,
+          250318848,
+          250376192
+        ]
+      },
+      "candidate": {
+        "warm_process_medians_seconds": [
+          0.00024632047017803416,
+          0.0005956883300677874,
+          0.00030488970020087436
+        ],
+        "median_warm_seconds": 0.00030488970020087436,
+        "first_seconds": [
+          0.00041850301204249263,
+          0.0009297869983129203,
+          0.0008528619655407965
+        ],
+        "selected_jit_seconds": [
+          null,
+          null,
+          null
+        ],
+        "whole_worker_peak_rss_bytes": [
+          258920448,
+          258908160,
+          258965504
+        ]
+      }
+    },
+    {
+      "backend": "torch",
+      "groups": 16,
+      "stages": 8,
+      "coupling": "coupled",
+      "layout": "handwritten",
+      "baseline": {
+        "warm_process_medians_seconds": [
+          4.2887624877039345e-05,
+          4.416884999955073e-05,
+          5.840220517711714e-05
+        ],
+        "median_warm_seconds": 4.416884999955073e-05,
+        "first_seconds": [
+          0.00012757099466398358,
+          0.0001358249573968351,
+          0.0001477799960412085
+        ],
+        "selected_jit_seconds": [
+          null,
+          null,
+          null
+        ],
+        "whole_worker_peak_rss_bytes": [
+          253157376,
+          253087744,
+          253075456
+        ]
+      },
+      "candidate": {
+        "warm_process_medians_seconds": [
+          4.3863895116373896e-05,
+          4.477064008824527e-05,
+          6.013373000314459e-05
+        ],
+        "median_warm_seconds": 4.477064008824527e-05,
+        "first_seconds": [
+          0.00012962601613253355,
+          0.00012736202916130424,
+          0.00013717298861593008
+        ],
+        "selected_jit_seconds": [
+          null,
+          null,
+          null
+        ],
+        "whole_worker_peak_rss_bytes": [
+          261771264,
+          261652480,
+          261844992
+        ]
+      }
+    },
+    {
+      "backend": "torch",
+      "groups": 16,
+      "stages": 8,
+      "coupling": "coupled",
+      "layout": "flat",
+      "baseline": {
+        "warm_process_medians_seconds": [
+          0.00012147389526944607,
+          0.00012854097003582864,
+          0.00014850198989734052
+        ],
+        "median_warm_seconds": 0.00012854097003582864,
+        "first_seconds": [
+          0.00022281496785581112,
+          0.0002167090424336493,
+          0.0003425430040806532
+        ],
+        "selected_jit_seconds": [
+          null,
+          null,
+          null
+        ],
+        "whole_worker_peak_rss_bytes": [
+          253157376,
+          253087744,
+          253075456
+        ]
+      },
+      "candidate": {
+        "warm_process_medians_seconds": [
+          0.00012620283989235758,
+          0.00012180036021163686,
+          0.000145982860121876
+        ],
+        "median_warm_seconds": 0.00012620283989235758,
+        "first_seconds": [
+          0.00020696001593023539,
+          0.0001994339982047677,
+          0.00037550501292571425
+        ],
+        "selected_jit_seconds": [
+          null,
+          null,
+          null
+        ],
+        "whole_worker_peak_rss_bytes": [
+          261771264,
+          261652480,
+          261844992
+        ]
+      }
+    },
+    {
+      "backend": "torch",
+      "groups": 16,
+      "stages": 8,
+      "coupling": "coupled",
+      "layout": "structured",
+      "baseline": {
+        "warm_process_medians_seconds": [
+          8.284708019345999e-05,
+          8.456727984594181e-05,
+          9.443037997698411e-05
+        ],
+        "median_warm_seconds": 8.456727984594181e-05,
+        "first_seconds": [
+          0.00016441295156255364,
+          0.00016865303041413426,
+          0.00016641599358990788
+        ],
+        "selected_jit_seconds": [
+          null,
+          null,
+          null
+        ],
+        "whole_worker_peak_rss_bytes": [
+          253157376,
+          253087744,
+          253075456
+        ]
+      },
+      "candidate": {
+        "warm_process_medians_seconds": [
+          8.324870519572869e-05,
+          8.209077001083642e-05,
+          9.155205509159714e-05
+        ],
+        "median_warm_seconds": 8.324870519572869e-05,
+        "first_seconds": [
+          0.0001435079611837864,
+          0.00017164996825158596,
+          0.00014417897909879684
+        ],
+        "selected_jit_seconds": [
+          null,
+          null,
+          null
+        ],
+        "whole_worker_peak_rss_bytes": [
+          261771264,
+          261652480,
+          261844992
+        ]
+      }
+    },
+    {
+      "backend": "torch",
+      "groups": 16,
+      "stages": 8,
+      "coupling": "independent",
+      "layout": "handwritten",
+      "baseline": {
+        "warm_process_medians_seconds": [
+          5.0718389975372705e-05,
+          6.0333164874464274e-05,
+          5.2981360058765856e-05
+        ],
+        "median_warm_seconds": 5.2981360058765856e-05,
+        "first_seconds": [
+          0.00012100505409762263,
+          0.00015275797341018915,
+          0.0001279090065509081
+        ],
+        "selected_jit_seconds": [
+          null,
+          null,
+          null
+        ],
+        "whole_worker_peak_rss_bytes": [
+          254222336,
+          254263296,
+          254205952
+        ]
+      },
+      "candidate": {
+        "warm_process_medians_seconds": [
+          4.877131490502507e-05,
+          5.032830988056958e-05,
+          5.0882744835689665e-05
+        ],
+        "median_warm_seconds": 5.032830988056958e-05,
+        "first_seconds": [
+          0.00011384300887584686,
+          0.00011170096695423126,
+          0.00013085897080600262
+        ],
+        "selected_jit_seconds": [
+          null,
+          null,
+          null
+        ],
+        "whole_worker_peak_rss_bytes": [
+          262955008,
+          262852608,
+          262950912
+        ]
+      }
+    },
+    {
+      "backend": "torch",
+      "groups": 16,
+      "stages": 8,
+      "coupling": "independent",
+      "layout": "flat",
+      "baseline": {
+        "warm_process_medians_seconds": [
+          0.00013311432499904185,
+          0.00016483123501529918,
+          0.00014016436995007098
+        ],
+        "median_warm_seconds": 0.00014016436995007098,
+        "first_seconds": [
+          0.0002407460124231875,
+          0.00038653897354379296,
+          0.00044333399273455143
+        ],
+        "selected_jit_seconds": [
+          null,
+          null,
+          null
+        ],
+        "whole_worker_peak_rss_bytes": [
+          254222336,
+          254263296,
+          254205952
+        ]
+      },
+      "candidate": {
+        "warm_process_medians_seconds": [
+          0.00011942101496970281,
+          0.00012716006487607955,
+          0.00013012954499572516
+        ],
+        "median_warm_seconds": 0.00012716006487607955,
+        "first_seconds": [
+          0.00027434900403022766,
+          0.0002544440212659538,
+          0.0003899820148944855
+        ],
+        "selected_jit_seconds": [
+          null,
+          null,
+          null
+        ],
+        "whole_worker_peak_rss_bytes": [
+          262955008,
+          262852608,
+          262950912
+        ]
+      }
+    },
+    {
+      "backend": "torch",
+      "groups": 16,
+      "stages": 8,
+      "coupling": "independent",
+      "layout": "structured",
+      "baseline": {
+        "warm_process_medians_seconds": [
+          8.39708448620513e-05,
+          0.00010340901499148459,
+          9.142556984443218e-05
+        ],
+        "median_warm_seconds": 9.142556984443218e-05,
+        "first_seconds": [
+          0.00017280899919569492,
+          0.00018797098891809583,
+          0.00019864400383085012
+        ],
+        "selected_jit_seconds": [
+          null,
+          null,
+          null
+        ],
+        "whole_worker_peak_rss_bytes": [
+          254222336,
+          254263296,
+          254205952
+        ]
+      },
+      "candidate": {
+        "warm_process_medians_seconds": [
+          7.912306988146156e-05,
+          8.851496502757073e-05,
+          9.288383007515222e-05
+        ],
+        "median_warm_seconds": 8.851496502757073e-05,
+        "first_seconds": [
+          0.0001351750106550753,
+          0.00015964900376275182,
+          0.00015463103773072362
+        ],
+        "selected_jit_seconds": [
+          null,
+          null,
+          null
+        ],
+        "whole_worker_peak_rss_bytes": [
+          262955008,
+          262852608,
+          262950912
+        ]
+      }
+    },
+    {
+      "backend": "torch",
+      "groups": 16,
+      "stages": 8,
+      "coupling": "independent",
+      "layout": "block",
+      "baseline": {
+        "warm_process_medians_seconds": [
+          0.00023607286013429984,
+          0.00033796099509345365,
+          0.00034106847509974615
+        ],
+        "median_warm_seconds": 0.00033796099509345365,
+        "first_seconds": [
+          0.0005004149861633778,
+          0.0006531590479426086,
+          0.000825212977360934
+        ],
+        "selected_jit_seconds": [
+          null,
+          null,
+          null
+        ],
+        "whole_worker_peak_rss_bytes": [
+          254222336,
+          254263296,
+          254205952
+        ]
+      },
+      "candidate": {
+        "warm_process_medians_seconds": [
+          0.00023580351495184005,
+          0.0003326564549934119,
+          0.00025444399507250636
+        ],
+        "median_warm_seconds": 0.00025444399507250636,
+        "first_seconds": [
+          0.0003734600031748414,
+          0.00039834599010646343,
+          0.00040404300671070814
+        ],
+        "selected_jit_seconds": [
+          null,
+          null,
+          null
+        ],
+        "whole_worker_peak_rss_bytes": [
+          262955008,
+          262852608,
+          262950912
+        ]
+      }
+    }
+  ],
+  "paired_timing": [
+    {
+      "groups": 4,
+      "stages": 2,
+      "coupled": false,
+      "layout": "handwritten",
+      "warm_process_medians_seconds": {
+        "baseline": [
+          1.791588496416807e-05,
+          1.800787984393537e-05,
+          1.8370845064055176e-05
+        ],
+        "candidate": [
+          1.809061999665573e-05,
+          1.8522815080359577e-05,
+          1.7760165210347623e-05
+        ]
+      },
+      "warm_median_seconds": {
+        "baseline": 1.800787984393537e-05,
+        "candidate": 1.809061999665573e-05
+      },
+      "paired_ratio_process_medians": [
+        0.9898337682041428,
+        0.9917336335503745,
+        1.0071310675988783
+      ],
+      "paired_ratio_median": 0.9917336335503745,
+      "median_paired_latency_reduction": -0.008335268836282328
+    },
+    {
+      "groups": 4,
+      "stages": 2,
+      "coupled": false,
+      "layout": "flat",
+      "warm_process_medians_seconds": {
+        "baseline": [
+          9.053754503838718e-05,
+          9.2748255119659e-05,
+          9.524664987111465e-05
+        ],
+        "candidate": [
+          7.550741982413456e-05,
+          7.620074495207519e-05,
+          7.853624527342617e-05
+        ]
+      },
+      "warm_median_seconds": {
+        "baseline": 9.2748255119659e-05,
+        "candidate": 7.620074495207519e-05
+      },
+      "paired_ratio_process_medians": [
+        1.2019881294669368,
+        1.2210479037209594,
+        1.219109000675798
+      ],
+      "paired_ratio_median": 1.219109000675798,
+      "median_paired_latency_reduction": 0.17972880239120348
+    },
+    {
+      "groups": 4,
+      "stages": 2,
+      "coupled": false,
+      "layout": "structured",
+      "warm_process_medians_seconds": {
+        "baseline": [
+          6.373531999997794e-05,
+          6.774611509172246e-05,
+          6.861123023554683e-05
+        ],
+        "candidate": [
+          4.894723009783775e-05,
+          5.057628994109109e-05,
+          5.148096999619156e-05
+        ]
+      },
+      "warm_median_seconds": {
+        "baseline": 6.774611509172246e-05,
+        "candidate": 5.057628994109109e-05
+      },
+      "paired_ratio_process_medians": [
+        1.3054973275415882,
+        1.3334589678780413,
+        1.327859944534803
+      ],
+      "paired_ratio_median": 1.327859944534803,
+      "median_paired_latency_reduction": 0.24690852818040543
+    },
+    {
+      "groups": 4,
+      "stages": 2,
+      "coupled": true,
+      "layout": "handwritten",
+      "warm_process_medians_seconds": {
+        "baseline": [
+          2.23540049046278e-05,
+          2.2399480221793056e-05,
+          2.1617305174004285e-05
+        ],
+        "candidate": [
+          2.25505797425285e-05,
+          2.253703511087224e-05,
+          2.2137480264063925e-05
+        ]
+      },
+      "warm_median_seconds": {
+        "baseline": 2.23540049046278e-05,
+        "candidate": 2.253703511087224e-05
+      },
+      "paired_ratio_process_medians": [
+        0.9977055391604622,
+        0.9929833100247751,
+        0.9674351527704023
+      ],
+      "paired_ratio_median": 0.9929833100247751,
+      "median_paired_latency_reduction": -0.007066271813823022
+    },
+    {
+      "groups": 4,
+      "stages": 2,
+      "coupled": true,
+      "layout": "flat",
+      "warm_process_medians_seconds": {
+        "baseline": [
+          9.416738495929167e-05,
+          9.39874051255174e-05,
+          9.579243487678468e-05
+        ],
+        "candidate": [
+          7.7105434902478e-05,
+          7.851715490687638e-05,
+          7.885172992246226e-05
+        ]
+      },
+      "warm_median_seconds": {
+        "baseline": 9.416738495929167e-05,
+        "candidate": 7.851715490687638e-05
+      },
+      "paired_ratio_process_medians": [
+        1.2108315293700151,
+        1.199559869038293,
+        1.2224667624611312
+      ],
+      "paired_ratio_median": 1.2108315293700151,
+      "median_paired_latency_reduction": 0.17412127472408068
+    },
+    {
+      "groups": 4,
+      "stages": 2,
+      "coupled": true,
+      "layout": "structured",
+      "warm_process_medians_seconds": {
+        "baseline": [
+          6.583576003322378e-05,
+          6.813691492425277e-05,
+          6.7691445001401e-05
+        ],
+        "candidate": [
+          5.108184006530791e-05,
+          5.324510508216917e-05,
+          5.2879239956382665e-05
+        ]
+      },
+      "warm_median_seconds": {
+        "baseline": 6.7691445001401e-05,
+        "candidate": 5.2879239956382665e-05
+      },
+      "paired_ratio_process_medians": [
+        1.2830499019063009,
+        1.286003879190504,
+        1.2968470282384597
+      ],
+      "paired_ratio_median": 1.286003879190504,
+      "median_paired_latency_reduction": 0.22239736894925521
+    },
+    {
+      "groups": 16,
+      "stages": 8,
+      "coupled": false,
+      "layout": "handwritten",
+      "warm_process_medians_seconds": {
+        "baseline": [
+          1.8771574832499028e-05,
+          1.9414645212236792e-05,
+          1.900480012409389e-05
+        ],
+        "candidate": [
+          1.8981259781867266e-05,
+          2.056054014246911e-05,
+          1.912316511152312e-05
+        ]
+      },
+      "warm_median_seconds": {
+        "baseline": 1.900480012409389e-05,
+        "candidate": 1.912316511152312e-05
+      },
+      "paired_ratio_process_medians": [
+        0.988827221758848,
+        0.9898406799270054,
+        0.9924730044632438
+      ],
+      "paired_ratio_median": 0.9898406799270054,
+      "median_paired_latency_reduction": -0.0102635911808997
+    },
+    {
+      "groups": 16,
+      "stages": 8,
+      "coupled": false,
+      "layout": "flat",
+      "warm_process_medians_seconds": {
+        "baseline": [
+          0.00010207801999058575,
+          9.766496485099197e-05,
+          9.88789348048158e-05
+        ],
+        "candidate": [
+          8.570370497182011e-05,
+          8.258470974396914e-05,
+          8.231308514950796e-05
+        ]
+      },
+      "warm_median_seconds": {
+        "baseline": 9.88789348048158e-05,
+        "candidate": 8.258470974396914e-05
+      },
+      "paired_ratio_process_medians": [
+        1.2017174004589695,
+        1.1876735380301462,
+        1.2005424165094751
+      ],
+      "paired_ratio_median": 1.2005424165094751,
+      "median_paired_latency_reduction": 0.16704317461147555
+    },
+    {
+      "groups": 16,
+      "stages": 8,
+      "coupled": false,
+      "layout": "structured",
+      "warm_process_medians_seconds": {
+        "baseline": [
+          7.245540997246281e-05,
+          7.431659498251974e-05,
+          7.27441449998878e-05
+        ],
+        "candidate": [
+          5.6963899987749754e-05,
+          5.7231549872085454e-05,
+          5.7135130045935515e-05
+        ]
+      },
+      "warm_median_seconds": {
+        "baseline": 7.27441449998878e-05,
+        "candidate": 5.7135130045935515e-05
+      },
+      "paired_ratio_process_medians": [
+        1.2705269735879894,
+        1.287109888410388,
+        1.286941099742068
+      ],
+      "paired_ratio_median": 1.286941099742068,
+      "median_paired_latency_reduction": 0.22296366150679114
+    },
+    {
+      "groups": 16,
+      "stages": 8,
+      "coupled": true,
+      "layout": "handwritten",
+      "warm_process_medians_seconds": {
+        "baseline": [
+          2.3121440026443452e-05,
+          2.2927989775780588e-05,
+          2.3987529857549816e-05
+        ],
+        "candidate": [
+          2.3193570086732507e-05,
+          2.2936865279916672e-05,
+          2.3776110028848053e-05
+        ]
+      },
+      "warm_median_seconds": {
+        "baseline": 2.3121440026443452e-05,
+        "candidate": 2.3193570086732507e-05
+      },
+      "paired_ratio_process_medians": [
+        0.9975434867041093,
+        0.9997485450690676,
+        1.009809156734074
+      ],
+      "paired_ratio_median": 0.9997485450690676,
+      "median_paired_latency_reduction": -0.00025151817641799745
+    },
+    {
+      "groups": 16,
+      "stages": 8,
+      "coupled": true,
+      "layout": "flat",
+      "warm_process_medians_seconds": {
+        "baseline": [
+          0.00010308055498171597,
+          0.00010188082495005802,
+          0.00010389326518634335
+        ],
+        "candidate": [
+          8.589766977820545e-05,
+          8.724807994440198e-05,
+          8.679743012180553e-05
+        ]
+      },
+      "warm_median_seconds": {
+        "baseline": 0.00010308055498171597,
+        "candidate": 8.679743012180553e-05
+      },
+      "paired_ratio_process_medians": [
+        1.1980072958801564,
+        1.1727980891407435,
+        1.2005362915074194
+      ],
+      "paired_ratio_median": 1.1980072958801564,
+      "median_paired_latency_reduction": 0.16528054258190783
+    },
+    {
+      "groups": 16,
+      "stages": 8,
+      "coupled": true,
+      "layout": "structured",
+      "warm_process_medians_seconds": {
+        "baseline": [
+          7.71370850270614e-05,
+          7.461481989594176e-05,
+          7.620737509569154e-05
+        ],
+        "candidate": [
+          6.40603550709784e-05,
+          5.963628500467166e-05,
+          6.115497497376054e-05
+        ]
+      },
+      "warm_median_seconds": {
+        "baseline": 7.620737509569154e-05,
+        "candidate": 6.115497497376054e-05
+      },
+      "paired_ratio_process_medians": [
+        1.2424132905397351,
+        1.2613736766262904,
+        1.2399922208212673
+      ],
+      "paired_ratio_median": 1.2424132905397351,
+      "median_paired_latency_reduction": 0.19511485621215852
+    }
+  ],
+  "profiles": [
+    {
+      "case": {
+        "backend": "numpy",
+        "groups": 4,
+        "stages": 2,
+        "coupling": "independent",
+        "dtype": "float64"
+      },
+      "variant": "baseline",
+      "structured_profile": {
+        "evaluator_calls": 1000,
+        "accounted_seconds": 0.146705641,
+        "total_calls": 205001,
+        "top_self_time": [
+          {
+            "module": "numpy/lib/_stride_tricks_impl.py",
+            "line": 447,
+            "function": "_broadcast_to",
+            "primitive_calls": 6000,
+            "total_calls": 6000,
+            "self_seconds": 0.02196713,
+            "cumulative_seconds": 0.033876811
+          },
+          {
+            "module": "op_system/_vectorize.py",
+            "line": 1366,
+            "function": "pytree_eval_fn",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.018758521,
+            "cumulative_seconds": 0.14450896900000001
+          },
+          {
+            "module": "<op_system_vec>",
+            "line": 1,
+            "function": "<lambda>",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.007833310000000001,
+            "cumulative_seconds": 0.012317275
+          },
+          {
+            "module": "<op_system_vec>",
+            "line": 1,
+            "function": "<lambda>",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.006512914000000001,
+            "cumulative_seconds": 0.017365999
+          },
+          {
+            "module": "~",
+            "line": 0,
+            "function": "<method 'reduce' of 'numpy.ufunc' objects>",
+            "primitive_calls": 4000,
+            "total_calls": 4000,
+            "self_seconds": 0.006290774000000001,
+            "cumulative_seconds": 0.006290774000000001
+          },
+          {
+            "module": "op_system/_vectorize.py",
+            "line": 127,
+            "function": "__call__",
+            "primitive_calls": 6000,
+            "total_calls": 6000,
+            "self_seconds": 0.004894511000000001,
+            "cumulative_seconds": 0.049904027000000004
+          },
+          {
+            "module": "numpy/_core/fromnumeric.py",
+            "line": 66,
+            "function": "_wrapreduction",
+            "primitive_calls": 4000,
+            "total_calls": 4000,
+            "self_seconds": 0.004665328000000001,
+            "cumulative_seconds": 0.011746422000000001
+          },
+          {
+            "module": "numpy/_core/fromnumeric.py",
+            "line": 2342,
+            "function": "sum",
+            "primitive_calls": 4000,
+            "total_calls": 4000,
+            "self_seconds": 0.004090342,
+            "cumulative_seconds": 0.016458709000000002
+          },
+          {
+            "module": "~",
+            "line": 0,
+            "function": "<built-in method numpy.array>",
+            "primitive_calls": 10000,
+            "total_calls": 10000,
+            "self_seconds": 0.004047671,
+            "cumulative_seconds": 0.005857729000000001
+          },
+          {
+            "module": "<op_system_vec>",
+            "line": 1,
+            "function": "<lambda>",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.0035810440000000002,
+            "cumulative_seconds": 0.0035810440000000002
+          },
+          {
+            "module": "~",
+            "line": 0,
+            "function": "<built-in method builtins.any>",
+            "primitive_calls": 6000,
+            "total_calls": 6000,
+            "self_seconds": 0.003171805,
+            "cumulative_seconds": 0.005247244000000001
+          },
+          {
+            "module": "numpy/_core/numerictypes.py",
+            "line": 328,
+            "function": "isdtype",
+            "primitive_calls": 2000,
+            "total_calls": 2000,
+            "self_seconds": 0.003125796,
+            "cumulative_seconds": 0.007633984000000001
+          },
+          {
+            "module": "numpy/_aliases.py",
+            "line": 70,
+            "function": "asarray",
+            "primitive_calls": 4000,
+            "total_calls": 4000,
+            "self_seconds": 0.0029065550000000003,
+            "cumulative_seconds": 0.009721725
+          },
+          {
+            "module": "_helpers.py",
+            "line": 582,
+            "function": "array_namespace",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.002902668,
+            "cumulative_seconds": 0.0044941550000000005
+          },
+          {
+            "module": "~",
+            "line": 0,
+            "function": "<built-in method builtins.getattr>",
+            "primitive_calls": 14000,
+            "total_calls": 14000,
+            "self_seconds": 0.002504119,
+            "cumulative_seconds": 0.002504119
+          },
+          {
+            "module": "_aliases.py",
+            "line": 448,
+            "function": "reshape",
+            "primitive_calls": 3000,
+            "total_calls": 3000,
+            "self_seconds": 0.0024643010000000003,
+            "cumulative_seconds": 0.008100301
+          },
+          {
+            "module": "numpy/lib/_stride_tricks_impl.py",
+            "line": 474,
+            "function": "broadcast_to",
+            "primitive_calls": 6000,
+            "total_calls": 6000,
+            "self_seconds": 0.0024164710000000003,
+            "cumulative_seconds": 0.036293282
+          },
+          {
+            "module": "<op_system_vec>",
+            "line": 1,
+            "function": "<lambda>",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.002356248,
+            "cumulative_seconds": 0.0071768710000000005
+          },
+          {
+            "module": "numpy/_core/numerictypes.py",
+            "line": 309,
+            "function": "_preprocess_dtype",
+            "primitive_calls": 2000,
+            "total_calls": 2000,
+            "self_seconds": 0.0023178310000000002,
+            "cumulative_seconds": 0.0034128780000000003
+          },
+          {
+            "module": "<op_system_vec>",
+            "line": 1,
+            "function": "<lambda>",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.0022938620000000002,
+            "cumulative_seconds": 0.0022938620000000002
+          },
+          {
+            "module": "<op_system_vec>",
+            "line": 1,
+            "function": "<lambda>",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.0022744650000000003,
+            "cumulative_seconds": 0.0022744650000000003
+          },
+          {
+            "module": "benchmarks/hierarchical_benchmark.py",
+            "line": 97,
+            "function": "<lambda>",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.0021638480000000003,
+            "cumulative_seconds": 0.146672817
+          },
+          {
+            "module": "numpy/_core/fromnumeric.py",
+            "line": 48,
+            "function": "_wrapfunc",
+            "primitive_calls": 4000,
+            "total_calls": 4000,
+            "self_seconds": 0.002133135,
+            "cumulative_seconds": 0.00489713
+          },
+          {
+            "module": "numpy/lib/_stride_tricks_impl.py",
+            "line": 452,
+            "function": "<genexpr>",
+            "primitive_calls": 17000,
+            "total_calls": 17000,
+            "self_seconds": 0.002075439,
+            "cumulative_seconds": 0.002075439
+          },
+          {
+            "module": "_internal.py",
+            "line": 33,
+            "function": "wrapped_f",
+            "primitive_calls": 4000,
+            "total_calls": 4000,
+            "self_seconds": 0.0020416,
+            "cumulative_seconds": 0.012715139
+          },
+          {
+            "module": "numpy/lib/_stride_tricks_impl.py",
+            "line": 25,
+            "function": "_maybe_view_as_subclass",
+            "primitive_calls": 6000,
+            "total_calls": 6000,
+            "self_seconds": 0.001776285,
+            "cumulative_seconds": 0.001776285
+          },
+          {
+            "module": "~",
+            "line": 0,
+            "function": "<method 'reshape' of 'numpy.ndarray' objects>",
+            "primitive_calls": 3000,
+            "total_calls": 3000,
+            "self_seconds": 0.001710492,
+            "cumulative_seconds": 0.001710492
+          },
+          {
+            "module": "numpy/lib/_function_base_impl.py",
+            "line": 375,
+            "function": "iterable",
+            "primitive_calls": 6000,
+            "total_calls": 6000,
+            "self_seconds": 0.001693754,
+            "cumulative_seconds": 0.002550765
+          },
+          {
+            "module": "~",
+            "line": 0,
+            "function": "<built-in method builtins.isinstance>",
+            "primitive_calls": 10000,
+            "total_calls": 10000,
+            "self_seconds": 0.001641094,
+            "cumulative_seconds": 0.001641094
+          },
+          {
+            "module": "numpy/_core/fromnumeric.py",
+            "line": 207,
+            "function": "reshape",
+            "primitive_calls": 3000,
+            "total_calls": 3000,
+            "self_seconds": 0.0014353480000000001,
+            "cumulative_seconds": 0.005256918
+          },
+          {
+            "module": "_helpers.py",
+            "line": 701,
+            "function": "_check_device",
+            "primitive_calls": 4000,
+            "total_calls": 4000,
+            "self_seconds": 0.001426626,
+            "cumulative_seconds": 0.002096235
+          },
+          {
+            "module": "enum.py",
+            "line": 202,
+            "function": "__get__",
+            "primitive_calls": 4000,
+            "total_calls": 4000,
+            "self_seconds": 0.0013519010000000002,
+            "cumulative_seconds": 0.001810058
+          },
+          {
+            "module": "op_system/_state_helpers.py",
+            "line": 12,
+            "function": "_bind_quadrature_weights",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.0012375390000000002,
+            "cumulative_seconds": 0.004914547
+          },
+          {
+            "module": "~",
+            "line": 0,
+            "function": "<method '__exit__' of 'numpy.nditer' objects>",
+            "primitive_calls": 6000,
+            "total_calls": 6000,
+            "self_seconds": 0.0011965930000000001,
+            "cumulative_seconds": 0.0011965930000000001
+          },
+          {
+            "module": "op_system/_state_helpers.py",
+            "line": 26,
+            "function": "_bind_sum_state",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.0011839320000000002,
+            "cumulative_seconds": 0.0011839320000000002
+          },
+          {
+            "module": "_aliases.py",
+            "line": 443,
+            "function": "permute_dims",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.0008851950000000001,
+            "cumulative_seconds": 0.0025732380000000003
+          },
+          {
+            "module": "~",
+            "line": 0,
+            "function": "<method 'append' of 'list' objects>",
+            "primitive_calls": 5000,
+            "total_calls": 5000,
+            "self_seconds": 0.000870414,
+            "cumulative_seconds": 0.000870414
+          },
+          {
+            "module": "~",
+            "line": 0,
+            "function": "<built-in method builtins.iter>",
+            "primitive_calls": 6000,
+            "total_calls": 6000,
+            "self_seconds": 0.0008570110000000001,
+            "cumulative_seconds": 0.0008570110000000001
+          },
+          {
+            "module": "~",
+            "line": 0,
+            "function": "<method 'update' of 'set' objects>",
+            "primitive_calls": 2000,
+            "total_calls": 2000,
+            "self_seconds": 0.0008238960000000001,
+            "cumulative_seconds": 0.0008238960000000001
+          },
+          {
+            "module": "~",
+            "line": 0,
+            "function": "<method 'items' of 'dict' objects>",
+            "primitive_calls": 4000,
+            "total_calls": 4000,
+            "self_seconds": 0.0007903200000000001,
+            "cumulative_seconds": 0.0007903200000000001
+          }
+        ],
+        "scope": "profiled NumPy RHS only; not unprofiled latency"
+      }
+    },
+    {
+      "case": {
+        "backend": "numpy",
+        "groups": 4,
+        "stages": 2,
+        "coupling": "independent",
+        "dtype": "float64"
+      },
+      "variant": "candidate",
+      "structured_profile": {
+        "evaluator_calls": 1000,
+        "accounted_seconds": 0.113121334,
+        "total_calls": 146001,
+        "top_self_time": [
+          {
+            "module": "op_system/_vectorize.py",
+            "line": 1369,
+            "function": "pytree_eval_fn",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.016870968,
+            "cumulative_seconds": 0.11090908000000001
+          },
+          {
+            "module": "<op_system_vec>",
+            "line": 1,
+            "function": "<lambda>",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.0076688400000000006,
+            "cumulative_seconds": 0.012185533
+          },
+          {
+            "module": "~",
+            "line": 0,
+            "function": "<method 'reduce' of 'numpy.ufunc' objects>",
+            "primitive_calls": 4000,
+            "total_calls": 4000,
+            "self_seconds": 0.006953952,
+            "cumulative_seconds": 0.006953952
+          },
+          {
+            "module": "<op_system_vec>",
+            "line": 1,
+            "function": "<lambda>",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.006664894,
+            "cumulative_seconds": 0.017906703
+          },
+          {
+            "module": "op_system/_vectorize.py",
+            "line": 1473,
+            "function": "_broadcast_buffer",
+            "primitive_calls": 6000,
+            "total_calls": 6000,
+            "self_seconds": 0.005657402000000001,
+            "cumulative_seconds": 0.007102462
+          },
+          {
+            "module": "op_system/_vectorize.py",
+            "line": 130,
+            "function": "__call__",
+            "primitive_calls": 6000,
+            "total_calls": 6000,
+            "self_seconds": 0.0047846040000000005,
+            "cumulative_seconds": 0.049768145
+          },
+          {
+            "module": "numpy/_core/fromnumeric.py",
+            "line": 66,
+            "function": "_wrapreduction",
+            "primitive_calls": 4000,
+            "total_calls": 4000,
+            "self_seconds": 0.00454007,
+            "cumulative_seconds": 0.012339815
+          },
+          {
+            "module": "numpy/_core/fromnumeric.py",
+            "line": 2342,
+            "function": "sum",
+            "primitive_calls": 4000,
+            "total_calls": 4000,
+            "self_seconds": 0.0038684690000000002,
+            "cumulative_seconds": 0.016801934
+          },
+          {
+            "module": "<op_system_vec>",
+            "line": 1,
+            "function": "<lambda>",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.0033613460000000003,
+            "cumulative_seconds": 0.0033613460000000003
+          },
+          {
+            "module": "numpy/_core/numerictypes.py",
+            "line": 328,
+            "function": "isdtype",
+            "primitive_calls": 2000,
+            "total_calls": 2000,
+            "self_seconds": 0.0030066150000000002,
+            "cumulative_seconds": 0.007391413
+          },
+          {
+            "module": "numpy/_aliases.py",
+            "line": 70,
+            "function": "asarray",
+            "primitive_calls": 4000,
+            "total_calls": 4000,
+            "self_seconds": 0.002861517,
+            "cumulative_seconds": 0.009590154
+          },
+          {
+            "module": "_helpers.py",
+            "line": 582,
+            "function": "array_namespace",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.002855737,
+            "cumulative_seconds": 0.004414579
+          },
+          {
+            "module": "~",
+            "line": 0,
+            "function": "<built-in method numpy.array>",
+            "primitive_calls": 4000,
+            "total_calls": 4000,
+            "self_seconds": 0.002795484,
+            "cumulative_seconds": 0.004504125
+          },
+          {
+            "module": "~",
+            "line": 0,
+            "function": "<built-in method builtins.getattr>",
+            "primitive_calls": 14000,
+            "total_calls": 14000,
+            "self_seconds": 0.002414654,
+            "cumulative_seconds": 0.002414654
+          },
+          {
+            "module": "<op_system_vec>",
+            "line": 1,
+            "function": "<lambda>",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.0023832750000000002,
+            "cumulative_seconds": 0.007145052000000001
+          },
+          {
+            "module": "_aliases.py",
+            "line": 448,
+            "function": "reshape",
+            "primitive_calls": 3000,
+            "total_calls": 3000,
+            "self_seconds": 0.002324395,
+            "cumulative_seconds": 0.007417108
+          },
+          {
+            "module": "<op_system_vec>",
+            "line": 1,
+            "function": "<lambda>",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.002211937,
+            "cumulative_seconds": 0.002211937
+          },
+          {
+            "module": "numpy/_core/numerictypes.py",
+            "line": 309,
+            "function": "_preprocess_dtype",
+            "primitive_calls": 2000,
+            "total_calls": 2000,
+            "self_seconds": 0.002206822,
+            "cumulative_seconds": 0.0032660090000000003
+          },
+          {
+            "module": "benchmarks/hierarchical_benchmark.py",
+            "line": 97,
+            "function": "<lambda>",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.002180146,
+            "cumulative_seconds": 0.113089226
+          },
+          {
+            "module": "<op_system_vec>",
+            "line": 1,
+            "function": "<lambda>",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.00217297,
+            "cumulative_seconds": 0.00217297
+          },
+          {
+            "module": "numpy/_core/fromnumeric.py",
+            "line": 48,
+            "function": "_wrapfunc",
+            "primitive_calls": 4000,
+            "total_calls": 4000,
+            "self_seconds": 0.002003976,
+            "cumulative_seconds": 0.004518626
+          },
+          {
+            "module": "_internal.py",
+            "line": 33,
+            "function": "wrapped_f",
+            "primitive_calls": 4000,
+            "total_calls": 4000,
+            "self_seconds": 0.001996569,
+            "cumulative_seconds": 0.012063864
+          },
+          {
+            "module": "~",
+            "line": 0,
+            "function": "<built-in method builtins.isinstance>",
+            "primitive_calls": 10000,
+            "total_calls": 10000,
+            "self_seconds": 0.001563228,
+            "cumulative_seconds": 0.001563228
+          },
+          {
+            "module": "_helpers.py",
+            "line": 701,
+            "function": "_check_device",
+            "primitive_calls": 4000,
+            "total_calls": 4000,
+            "self_seconds": 0.0014649740000000002,
+            "cumulative_seconds": 0.002224512
+          },
+          {
+            "module": "~",
+            "line": 0,
+            "function": "<method 'view' of 'numpy.ndarray' objects>",
+            "primitive_calls": 6000,
+            "total_calls": 6000,
+            "self_seconds": 0.0014450600000000002,
+            "cumulative_seconds": 0.0014450600000000002
+          },
+          {
+            "module": "~",
+            "line": 0,
+            "function": "<method 'reshape' of 'numpy.ndarray' objects>",
+            "primitive_calls": 3000,
+            "total_calls": 3000,
+            "self_seconds": 0.0014008570000000001,
+            "cumulative_seconds": 0.0014008570000000001
+          },
+          {
+            "module": "numpy/_core/fromnumeric.py",
+            "line": 207,
+            "function": "reshape",
+            "primitive_calls": 3000,
+            "total_calls": 3000,
+            "self_seconds": 0.0013623650000000001,
+            "cumulative_seconds": 0.004739409
+          },
+          {
+            "module": "enum.py",
+            "line": 202,
+            "function": "__get__",
+            "primitive_calls": 4000,
+            "total_calls": 4000,
+            "self_seconds": 0.00128267,
+            "cumulative_seconds": 0.0017086410000000001
+          },
+          {
+            "module": "op_system/_state_helpers.py",
+            "line": 12,
+            "function": "_bind_quadrature_weights",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.001212434,
+            "cumulative_seconds": 0.00473795
+          },
+          {
+            "module": "op_system/_state_helpers.py",
+            "line": 26,
+            "function": "_bind_sum_state",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.001056662,
+            "cumulative_seconds": 0.001056662
+          },
+          {
+            "module": "_aliases.py",
+            "line": 443,
+            "function": "permute_dims",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.0009064710000000001,
+            "cumulative_seconds": 0.002650187
+          },
+          {
+            "module": "~",
+            "line": 0,
+            "function": "<method 'update' of 'set' objects>",
+            "primitive_calls": 2000,
+            "total_calls": 2000,
+            "self_seconds": 0.000862563,
+            "cumulative_seconds": 0.000862563
+          },
+          {
+            "module": "~",
+            "line": 0,
+            "function": "<method 'append' of 'list' objects>",
+            "primitive_calls": 5000,
+            "total_calls": 5000,
+            "self_seconds": 0.0008595320000000001,
+            "cumulative_seconds": 0.0008595320000000001
+          },
+          {
+            "module": "~",
+            "line": 0,
+            "function": "<method 'items' of 'dict' objects>",
+            "primitive_calls": 4000,
+            "total_calls": 4000,
+            "self_seconds": 0.0008457930000000001,
+            "cumulative_seconds": 0.0008457930000000001
+          },
+          {
+            "module": "_helpers.py",
+            "line": 72,
+            "function": "_is_jax_zero_gradient_array",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.000769873,
+            "cumulative_seconds": 0.0008743170000000001
+          },
+          {
+            "module": "~",
+            "line": 0,
+            "function": "<method 'get' of 'dict' objects>",
+            "primitive_calls": 4000,
+            "total_calls": 4000,
+            "self_seconds": 0.000759538,
+            "cumulative_seconds": 0.000759538
+          },
+          {
+            "module": "op_system/compile.py",
+            "line": 104,
+            "function": "_check_numeric_dtype",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.0006956950000000001,
+            "cumulative_seconds": 0.0051351750000000005
+          },
+          {
+            "module": "op_system/_vectorize.py",
+            "line": 1410,
+            "function": "<genexpr>",
+            "primitive_calls": 4000,
+            "total_calls": 4000,
+            "self_seconds": 0.0006004350000000001,
+            "cumulative_seconds": 0.0006004350000000001
+          },
+          {
+            "module": "op_system/_array.py",
+            "line": 12,
+            "function": "array_namespace",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.000572992,
+            "cumulative_seconds": 0.0049875710000000005
+          },
+          {
+            "module": "numpy/_core/fromnumeric.py",
+            "line": 2337,
+            "function": "_sum_dispatcher",
+            "primitive_calls": 4000,
+            "total_calls": 4000,
+            "self_seconds": 0.0005130040000000001,
+            "cumulative_seconds": 0.0005130040000000001
+          }
+        ],
+        "scope": "profiled NumPy RHS only; not unprofiled latency"
+      }
+    },
+    {
+      "case": {
+        "backend": "numpy",
+        "groups": 4,
+        "stages": 2,
+        "coupling": "coupled",
+        "dtype": "float64"
+      },
+      "variant": "candidate",
+      "structured_profile": {
+        "evaluator_calls": 1000,
+        "accounted_seconds": 0.11961685700000001,
+        "total_calls": 152001,
+        "top_self_time": [
+          {
+            "module": "op_system/_vectorize.py",
+            "line": 1369,
+            "function": "pytree_eval_fn",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.017058247000000002,
+            "cumulative_seconds": 0.11745894300000001
+          },
+          {
+            "module": "<op_system_vec>",
+            "line": 1,
+            "function": "<lambda>",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.009230377000000001,
+            "cumulative_seconds": 0.017560952
+          },
+          {
+            "module": "~",
+            "line": 0,
+            "function": "<method 'reduce' of 'numpy.ufunc' objects>",
+            "primitive_calls": 5000,
+            "total_calls": 5000,
+            "self_seconds": 0.0075903360000000005,
+            "cumulative_seconds": 0.0075903360000000005
+          },
+          {
+            "module": "<op_system_vec>",
+            "line": 1,
+            "function": "<lambda>",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.006537188,
+            "cumulative_seconds": 0.017569443
+          },
+          {
+            "module": "op_system/_vectorize.py",
+            "line": 1473,
+            "function": "_broadcast_buffer",
+            "primitive_calls": 6000,
+            "total_calls": 6000,
+            "self_seconds": 0.005873236,
+            "cumulative_seconds": 0.007305004
+          },
+          {
+            "module": "numpy/_core/fromnumeric.py",
+            "line": 66,
+            "function": "_wrapreduction",
+            "primitive_calls": 5000,
+            "total_calls": 5000,
+            "self_seconds": 0.005709039,
+            "cumulative_seconds": 0.014281663000000002
+          },
+          {
+            "module": "op_system/_vectorize.py",
+            "line": 130,
+            "function": "__call__",
+            "primitive_calls": 6000,
+            "total_calls": 6000,
+            "self_seconds": 0.005001266000000001,
+            "cumulative_seconds": 0.054894431
+          },
+          {
+            "module": "numpy/_core/fromnumeric.py",
+            "line": 2342,
+            "function": "sum",
+            "primitive_calls": 5000,
+            "total_calls": 5000,
+            "self_seconds": 0.004917798,
+            "cumulative_seconds": 0.019942879
+          },
+          {
+            "module": "<op_system_vec>",
+            "line": 1,
+            "function": "<lambda>",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.003382004,
+            "cumulative_seconds": 0.003382004
+          },
+          {
+            "module": "numpy/_core/numerictypes.py",
+            "line": 328,
+            "function": "isdtype",
+            "primitive_calls": 2000,
+            "total_calls": 2000,
+            "self_seconds": 0.003075099,
+            "cumulative_seconds": 0.007637538
+          },
+          {
+            "module": "numpy/_aliases.py",
+            "line": 70,
+            "function": "asarray",
+            "primitive_calls": 4000,
+            "total_calls": 4000,
+            "self_seconds": 0.003014821,
+            "cumulative_seconds": 0.00986818
+          },
+          {
+            "module": "~",
+            "line": 0,
+            "function": "<built-in method numpy.array>",
+            "primitive_calls": 4000,
+            "total_calls": 4000,
+            "self_seconds": 0.0028982720000000003,
+            "cumulative_seconds": 0.0046880640000000005
+          },
+          {
+            "module": "_helpers.py",
+            "line": 582,
+            "function": "array_namespace",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.002762857,
+            "cumulative_seconds": 0.004300573
+          },
+          {
+            "module": "~",
+            "line": 0,
+            "function": "<built-in method builtins.getattr>",
+            "primitive_calls": 14000,
+            "total_calls": 14000,
+            "self_seconds": 0.002468782,
+            "cumulative_seconds": 0.002468782
+          },
+          {
+            "module": "_aliases.py",
+            "line": 448,
+            "function": "reshape",
+            "primitive_calls": 3000,
+            "total_calls": 3000,
+            "self_seconds": 0.002448739,
+            "cumulative_seconds": 0.007754428000000001
+          },
+          {
+            "module": "<op_system_vec>",
+            "line": 1,
+            "function": "<lambda>",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.002374745,
+            "cumulative_seconds": 0.006861365
+          },
+          {
+            "module": "numpy/_core/numerictypes.py",
+            "line": 309,
+            "function": "_preprocess_dtype",
+            "primitive_calls": 2000,
+            "total_calls": 2000,
+            "self_seconds": 0.002312415,
+            "cumulative_seconds": 0.0033737840000000003
+          },
+          {
+            "module": "<op_system_vec>",
+            "line": 1,
+            "function": "<lambda>",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.0022831460000000002,
+            "cumulative_seconds": 0.0022831460000000002
+          },
+          {
+            "module": "<op_system_vec>",
+            "line": 1,
+            "function": "<lambda>",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.002236255,
+            "cumulative_seconds": 0.002236255
+          },
+          {
+            "module": "benchmarks/hierarchical_benchmark.py",
+            "line": 97,
+            "function": "<lambda>",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.0021267720000000003,
+            "cumulative_seconds": 0.11958571500000001
+          },
+          {
+            "module": "numpy/_core/fromnumeric.py",
+            "line": 48,
+            "function": "_wrapfunc",
+            "primitive_calls": 4000,
+            "total_calls": 4000,
+            "self_seconds": 0.0020983620000000003,
+            "cumulative_seconds": 0.004706229
+          },
+          {
+            "module": "_internal.py",
+            "line": 33,
+            "function": "wrapped_f",
+            "primitive_calls": 4000,
+            "total_calls": 4000,
+            "self_seconds": 0.002047277,
+            "cumulative_seconds": 0.012527007000000001
+          },
+          {
+            "module": "~",
+            "line": 0,
+            "function": "<built-in method builtins.isinstance>",
+            "primitive_calls": 11000,
+            "total_calls": 11000,
+            "self_seconds": 0.001742229,
+            "cumulative_seconds": 0.001742229
+          },
+          {
+            "module": "~",
+            "line": 0,
+            "function": "<method 'reshape' of 'numpy.ndarray' objects>",
+            "primitive_calls": 3000,
+            "total_calls": 3000,
+            "self_seconds": 0.001455045,
+            "cumulative_seconds": 0.001455045
+          },
+          {
+            "module": "_helpers.py",
+            "line": 701,
+            "function": "_check_device",
+            "primitive_calls": 4000,
+            "total_calls": 4000,
+            "self_seconds": 0.0014432890000000002,
+            "cumulative_seconds": 0.0021652950000000002
+          },
+          {
+            "module": "~",
+            "line": 0,
+            "function": "<method 'view' of 'numpy.ndarray' objects>",
+            "primitive_calls": 6000,
+            "total_calls": 6000,
+            "self_seconds": 0.0014317680000000001,
+            "cumulative_seconds": 0.0014317680000000001
+          },
+          {
+            "module": "numpy/_core/fromnumeric.py",
+            "line": 207,
+            "function": "reshape",
+            "primitive_calls": 3000,
+            "total_calls": 3000,
+            "self_seconds": 0.001427716,
+            "cumulative_seconds": 0.0049266710000000005
+          },
+          {
+            "module": "enum.py",
+            "line": 202,
+            "function": "__get__",
+            "primitive_calls": 4000,
+            "total_calls": 4000,
+            "self_seconds": 0.001360864,
+            "cumulative_seconds": 0.0017897920000000001
+          },
+          {
+            "module": "op_system/_state_helpers.py",
+            "line": 12,
+            "function": "_bind_quadrature_weights",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.001231324,
+            "cumulative_seconds": 0.004966858
+          },
+          {
+            "module": "op_system/_state_helpers.py",
+            "line": 26,
+            "function": "_bind_sum_state",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.0011623410000000001,
+            "cumulative_seconds": 0.0011623410000000001
+          },
+          {
+            "module": "~",
+            "line": 0,
+            "function": "<method 'items' of 'dict' objects>",
+            "primitive_calls": 5000,
+            "total_calls": 5000,
+            "self_seconds": 0.000982288,
+            "cumulative_seconds": 0.000982288
+          },
+          {
+            "module": "~",
+            "line": 0,
+            "function": "<method 'update' of 'set' objects>",
+            "primitive_calls": 2000,
+            "total_calls": 2000,
+            "self_seconds": 0.0009192940000000001,
+            "cumulative_seconds": 0.0009192940000000001
+          },
+          {
+            "module": "_aliases.py",
+            "line": 443,
+            "function": "permute_dims",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.0008803140000000001,
+            "cumulative_seconds": 0.002725302
+          },
+          {
+            "module": "~",
+            "line": 0,
+            "function": "<method 'append' of 'list' objects>",
+            "primitive_calls": 5000,
+            "total_calls": 5000,
+            "self_seconds": 0.000855211,
+            "cumulative_seconds": 0.000855211
+          },
+          {
+            "module": "_helpers.py",
+            "line": 72,
+            "function": "_is_jax_zero_gradient_array",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.000766136,
+            "cumulative_seconds": 0.000872495
+          },
+          {
+            "module": "~",
+            "line": 0,
+            "function": "<method 'get' of 'dict' objects>",
+            "primitive_calls": 4000,
+            "total_calls": 4000,
+            "self_seconds": 0.0007220060000000001,
+            "cumulative_seconds": 0.0007220060000000001
+          },
+          {
+            "module": "op_system/compile.py",
+            "line": 104,
+            "function": "_check_numeric_dtype",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.0007011840000000001,
+            "cumulative_seconds": 0.0051858830000000005
+          },
+          {
+            "module": "numpy/_core/fromnumeric.py",
+            "line": 2337,
+            "function": "_sum_dispatcher",
+            "primitive_calls": 5000,
+            "total_calls": 5000,
+            "self_seconds": 0.0006518250000000001,
+            "cumulative_seconds": 0.0006518250000000001
+          },
+          {
+            "module": "op_system/_array.py",
+            "line": 12,
+            "function": "array_namespace",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.000604692,
+            "cumulative_seconds": 0.004905265000000001
+          },
+          {
+            "module": "op_system/_vectorize.py",
+            "line": 1410,
+            "function": "<genexpr>",
+            "primitive_calls": 4000,
+            "total_calls": 4000,
+            "self_seconds": 0.000586929,
+            "cumulative_seconds": 0.000586929
+          }
+        ],
+        "scope": "profiled NumPy RHS only; not unprofiled latency"
+      }
+    },
+    {
+      "case": {
+        "backend": "numpy",
+        "groups": 4,
+        "stages": 2,
+        "coupling": "coupled",
+        "dtype": "float64"
+      },
+      "variant": "baseline",
+      "structured_profile": {
+        "evaluator_calls": 1000,
+        "accounted_seconds": 0.148305559,
+        "total_calls": 211001,
+        "top_self_time": [
+          {
+            "module": "numpy/lib/_stride_tricks_impl.py",
+            "line": 447,
+            "function": "_broadcast_to",
+            "primitive_calls": 6000,
+            "total_calls": 6000,
+            "self_seconds": 0.020271333000000002,
+            "cumulative_seconds": 0.032013174000000005
+          },
+          {
+            "module": "op_system/_vectorize.py",
+            "line": 1366,
+            "function": "pytree_eval_fn",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.018796737,
+            "cumulative_seconds": 0.14615865
+          },
+          {
+            "module": "<op_system_vec>",
+            "line": 1,
+            "function": "<lambda>",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.009031429,
+            "cumulative_seconds": 0.017252293000000002
+          },
+          {
+            "module": "~",
+            "line": 0,
+            "function": "<method 'reduce' of 'numpy.ufunc' objects>",
+            "primitive_calls": 5000,
+            "total_calls": 5000,
+            "self_seconds": 0.007433828000000001,
+            "cumulative_seconds": 0.007433828000000001
+          },
+          {
+            "module": "<op_system_vec>",
+            "line": 1,
+            "function": "<lambda>",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.006349118000000001,
+            "cumulative_seconds": 0.017006553
+          },
+          {
+            "module": "numpy/_core/fromnumeric.py",
+            "line": 66,
+            "function": "_wrapreduction",
+            "primitive_calls": 5000,
+            "total_calls": 5000,
+            "self_seconds": 0.005628147,
+            "cumulative_seconds": 0.014001855
+          },
+          {
+            "module": "numpy/_core/fromnumeric.py",
+            "line": 2342,
+            "function": "sum",
+            "primitive_calls": 5000,
+            "total_calls": 5000,
+            "self_seconds": 0.004921768,
+            "cumulative_seconds": 0.01965089
+          },
+          {
+            "module": "op_system/_vectorize.py",
+            "line": 127,
+            "function": "__call__",
+            "primitive_calls": 6000,
+            "total_calls": 6000,
+            "self_seconds": 0.004889549,
+            "cumulative_seconds": 0.053820274
+          },
+          {
+            "module": "~",
+            "line": 0,
+            "function": "<built-in method numpy.array>",
+            "primitive_calls": 10000,
+            "total_calls": 10000,
+            "self_seconds": 0.0039299370000000005,
+            "cumulative_seconds": 0.005726158
+          },
+          {
+            "module": "<op_system_vec>",
+            "line": 1,
+            "function": "<lambda>",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.00335809,
+            "cumulative_seconds": 0.00335809
+          },
+          {
+            "module": "numpy/_core/numerictypes.py",
+            "line": 328,
+            "function": "isdtype",
+            "primitive_calls": 2000,
+            "total_calls": 2000,
+            "self_seconds": 0.0031368510000000004,
+            "cumulative_seconds": 0.0077216080000000005
+          },
+          {
+            "module": "~",
+            "line": 0,
+            "function": "<built-in method builtins.any>",
+            "primitive_calls": 6000,
+            "total_calls": 6000,
+            "self_seconds": 0.003127209,
+            "cumulative_seconds": 0.005210426000000001
+          },
+          {
+            "module": "numpy/_aliases.py",
+            "line": 70,
+            "function": "asarray",
+            "primitive_calls": 4000,
+            "total_calls": 4000,
+            "self_seconds": 0.002945959,
+            "cumulative_seconds": 0.009830144
+          },
+          {
+            "module": "_helpers.py",
+            "line": 582,
+            "function": "array_namespace",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.002834234,
+            "cumulative_seconds": 0.004396217
+          },
+          {
+            "module": "~",
+            "line": 0,
+            "function": "<built-in method builtins.getattr>",
+            "primitive_calls": 14000,
+            "total_calls": 14000,
+            "self_seconds": 0.002481904,
+            "cumulative_seconds": 0.002481904
+          },
+          {
+            "module": "_aliases.py",
+            "line": 448,
+            "function": "reshape",
+            "primitive_calls": 3000,
+            "total_calls": 3000,
+            "self_seconds": 0.002445604,
+            "cumulative_seconds": 0.007713816
+          },
+          {
+            "module": "numpy/_core/numerictypes.py",
+            "line": 309,
+            "function": "_preprocess_dtype",
+            "primitive_calls": 2000,
+            "total_calls": 2000,
+            "self_seconds": 0.0023831290000000003,
+            "cumulative_seconds": 0.0034238280000000003
+          },
+          {
+            "module": "numpy/lib/_stride_tricks_impl.py",
+            "line": 474,
+            "function": "broadcast_to",
+            "primitive_calls": 6000,
+            "total_calls": 6000,
+            "self_seconds": 0.002355696,
+            "cumulative_seconds": 0.03436887
+          },
+          {
+            "module": "<op_system_vec>",
+            "line": 1,
+            "function": "<lambda>",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.002276995,
+            "cumulative_seconds": 0.002276995
+          },
+          {
+            "module": "<op_system_vec>",
+            "line": 1,
+            "function": "<lambda>",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.0022631020000000003,
+            "cumulative_seconds": 0.006825088000000001
+          },
+          {
+            "module": "<op_system_vec>",
+            "line": 1,
+            "function": "<lambda>",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.0022117060000000003,
+            "cumulative_seconds": 0.0022117060000000003
+          },
+          {
+            "module": "benchmarks/hierarchical_benchmark.py",
+            "line": 97,
+            "function": "<lambda>",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.002113752,
+            "cumulative_seconds": 0.148272402
+          },
+          {
+            "module": "numpy/_core/fromnumeric.py",
+            "line": 48,
+            "function": "_wrapfunc",
+            "primitive_calls": 4000,
+            "total_calls": 4000,
+            "self_seconds": 0.002103923,
+            "cumulative_seconds": 0.004528821000000001
+          },
+          {
+            "module": "numpy/lib/_stride_tricks_impl.py",
+            "line": 452,
+            "function": "<genexpr>",
+            "primitive_calls": 17000,
+            "total_calls": 17000,
+            "self_seconds": 0.002083217,
+            "cumulative_seconds": 0.002083217
+          },
+          {
+            "module": "_internal.py",
+            "line": 33,
+            "function": "wrapped_f",
+            "primitive_calls": 4000,
+            "total_calls": 4000,
+            "self_seconds": 0.0020547350000000002,
+            "cumulative_seconds": 0.012352287
+          },
+          {
+            "module": "numpy/lib/_stride_tricks_impl.py",
+            "line": 25,
+            "function": "_maybe_view_as_subclass",
+            "primitive_calls": 6000,
+            "total_calls": 6000,
+            "self_seconds": 0.001769216,
+            "cumulative_seconds": 0.001769216
+          },
+          {
+            "module": "~",
+            "line": 0,
+            "function": "<built-in method builtins.isinstance>",
+            "primitive_calls": 11000,
+            "total_calls": 11000,
+            "self_seconds": 0.001715577,
+            "cumulative_seconds": 0.001715577
+          },
+          {
+            "module": "numpy/lib/_function_base_impl.py",
+            "line": 375,
+            "function": "iterable",
+            "primitive_calls": 6000,
+            "total_calls": 6000,
+            "self_seconds": 0.001669698,
+            "cumulative_seconds": 0.002524133
+          },
+          {
+            "module": "_helpers.py",
+            "line": 701,
+            "function": "_check_device",
+            "primitive_calls": 4000,
+            "total_calls": 4000,
+            "self_seconds": 0.001517576,
+            "cumulative_seconds": 0.00229394
+          },
+          {
+            "module": "numpy/_core/fromnumeric.py",
+            "line": 207,
+            "function": "reshape",
+            "primitive_calls": 3000,
+            "total_calls": 3000,
+            "self_seconds": 0.0014486330000000002,
+            "cumulative_seconds": 0.004893988
+          },
+          {
+            "module": "~",
+            "line": 0,
+            "function": "<method 'reshape' of 'numpy.ndarray' objects>",
+            "primitive_calls": 3000,
+            "total_calls": 3000,
+            "self_seconds": 0.0013844150000000002,
+            "cumulative_seconds": 0.0013844150000000002
+          },
+          {
+            "module": "enum.py",
+            "line": 202,
+            "function": "__get__",
+            "primitive_calls": 4000,
+            "total_calls": 4000,
+            "self_seconds": 0.00135617,
+            "cumulative_seconds": 0.0017962210000000002
+          },
+          {
+            "module": "op_system/_state_helpers.py",
+            "line": 12,
+            "function": "_bind_quadrature_weights",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.001222795,
+            "cumulative_seconds": 0.00498217
+          },
+          {
+            "module": "op_system/_state_helpers.py",
+            "line": 26,
+            "function": "_bind_sum_state",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.001176278,
+            "cumulative_seconds": 0.001176278
+          },
+          {
+            "module": "~",
+            "line": 0,
+            "function": "<method '__exit__' of 'numpy.nditer' objects>",
+            "primitive_calls": 6000,
+            "total_calls": 6000,
+            "self_seconds": 0.001102153,
+            "cumulative_seconds": 0.001102153
+          },
+          {
+            "module": "~",
+            "line": 0,
+            "function": "<method 'items' of 'dict' objects>",
+            "primitive_calls": 5000,
+            "total_calls": 5000,
+            "self_seconds": 0.00093988,
+            "cumulative_seconds": 0.00093988
+          },
+          {
+            "module": "~",
+            "line": 0,
+            "function": "<method 'append' of 'list' objects>",
+            "primitive_calls": 5000,
+            "total_calls": 5000,
+            "self_seconds": 0.000903289,
+            "cumulative_seconds": 0.000903289
+          },
+          {
+            "module": "~",
+            "line": 0,
+            "function": "<method 'update' of 'set' objects>",
+            "primitive_calls": 2000,
+            "total_calls": 2000,
+            "self_seconds": 0.000893557,
+            "cumulative_seconds": 0.000893557
+          },
+          {
+            "module": "_aliases.py",
+            "line": 443,
+            "function": "permute_dims",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.0008818470000000001,
+            "cumulative_seconds": 0.002583736
+          },
+          {
+            "module": "~",
+            "line": 0,
+            "function": "<built-in method builtins.iter>",
+            "primitive_calls": 6000,
+            "total_calls": 6000,
+            "self_seconds": 0.0008544350000000001,
+            "cumulative_seconds": 0.0008544350000000001
+          }
+        ],
+        "scope": "profiled NumPy RHS only; not unprofiled latency"
+      }
+    },
+    {
+      "case": {
+        "backend": "numpy",
+        "groups": 16,
+        "stages": 8,
+        "coupling": "independent",
+        "dtype": "float64"
+      },
+      "variant": "baseline",
+      "structured_profile": {
+        "evaluator_calls": 1000,
+        "accounted_seconds": 0.161015933,
+        "total_calls": 205001,
+        "top_self_time": [
+          {
+            "module": "numpy/lib/_stride_tricks_impl.py",
+            "line": 447,
+            "function": "_broadcast_to",
+            "primitive_calls": 6000,
+            "total_calls": 6000,
+            "self_seconds": 0.021842851,
+            "cumulative_seconds": 0.034285086
+          },
+          {
+            "module": "op_system/_vectorize.py",
+            "line": 1366,
+            "function": "pytree_eval_fn",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.020101323,
+            "cumulative_seconds": 0.15860786100000002
+          },
+          {
+            "module": "~",
+            "line": 0,
+            "function": "<method 'reduce' of 'numpy.ufunc' objects>",
+            "primitive_calls": 4000,
+            "total_calls": 4000,
+            "self_seconds": 0.010448658000000001,
+            "cumulative_seconds": 0.010448658000000001
+          },
+          {
+            "module": "<op_system_vec>",
+            "line": 1,
+            "function": "<lambda>",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.009518988,
+            "cumulative_seconds": 0.024192984
+          },
+          {
+            "module": "<op_system_vec>",
+            "line": 1,
+            "function": "<lambda>",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.009047149,
+            "cumulative_seconds": 0.014096426
+          },
+          {
+            "module": "op_system/_vectorize.py",
+            "line": 127,
+            "function": "__call__",
+            "primitive_calls": 6000,
+            "total_calls": 6000,
+            "self_seconds": 0.005111679,
+            "cumulative_seconds": 0.060618317000000005
+          },
+          {
+            "module": "numpy/_core/fromnumeric.py",
+            "line": 66,
+            "function": "_wrapreduction",
+            "primitive_calls": 4000,
+            "total_calls": 4000,
+            "self_seconds": 0.004914839000000001,
+            "cumulative_seconds": 0.016191744
+          },
+          {
+            "module": "numpy/_core/fromnumeric.py",
+            "line": 2342,
+            "function": "sum",
+            "primitive_calls": 4000,
+            "total_calls": 4000,
+            "self_seconds": 0.004314453,
+            "cumulative_seconds": 0.021157368000000003
+          },
+          {
+            "module": "~",
+            "line": 0,
+            "function": "<built-in method numpy.array>",
+            "primitive_calls": 10000,
+            "total_calls": 10000,
+            "self_seconds": 0.0042531140000000005,
+            "cumulative_seconds": 0.006134545000000001
+          },
+          {
+            "module": "<op_system_vec>",
+            "line": 1,
+            "function": "<lambda>",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.00395724,
+            "cumulative_seconds": 0.00395724
+          },
+          {
+            "module": "~",
+            "line": 0,
+            "function": "<built-in method builtins.any>",
+            "primitive_calls": 6000,
+            "total_calls": 6000,
+            "self_seconds": 0.0033667740000000003,
+            "cumulative_seconds": 0.005519214000000001
+          },
+          {
+            "module": "numpy/_core/numerictypes.py",
+            "line": 328,
+            "function": "isdtype",
+            "primitive_calls": 2000,
+            "total_calls": 2000,
+            "self_seconds": 0.0032965860000000002,
+            "cumulative_seconds": 0.008006077
+          },
+          {
+            "module": "numpy/_aliases.py",
+            "line": 70,
+            "function": "asarray",
+            "primitive_calls": 4000,
+            "total_calls": 4000,
+            "self_seconds": 0.003106637,
+            "cumulative_seconds": 0.010283643
+          },
+          {
+            "module": "_helpers.py",
+            "line": 582,
+            "function": "array_namespace",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.0029584150000000003,
+            "cumulative_seconds": 0.0045776060000000006
+          },
+          {
+            "module": "<op_system_vec>",
+            "line": 1,
+            "function": "<lambda>",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.0026842840000000003,
+            "cumulative_seconds": 0.008001125000000001
+          },
+          {
+            "module": "<op_system_vec>",
+            "line": 1,
+            "function": "<lambda>",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.002653463,
+            "cumulative_seconds": 0.002653463
+          },
+          {
+            "module": "<op_system_vec>",
+            "line": 1,
+            "function": "<lambda>",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.0026054000000000003,
+            "cumulative_seconds": 0.0026054000000000003
+          },
+          {
+            "module": "~",
+            "line": 0,
+            "function": "<built-in method builtins.getattr>",
+            "primitive_calls": 14000,
+            "total_calls": 14000,
+            "self_seconds": 0.002602867,
+            "cumulative_seconds": 0.002602867
+          },
+          {
+            "module": "numpy/lib/_stride_tricks_impl.py",
+            "line": 474,
+            "function": "broadcast_to",
+            "primitive_calls": 6000,
+            "total_calls": 6000,
+            "self_seconds": 0.0025587540000000003,
+            "cumulative_seconds": 0.03684384
+          },
+          {
+            "module": "_aliases.py",
+            "line": 448,
+            "function": "reshape",
+            "primitive_calls": 3000,
+            "total_calls": 3000,
+            "self_seconds": 0.002552954,
+            "cumulative_seconds": 0.008165663
+          },
+          {
+            "module": "numpy/_core/numerictypes.py",
+            "line": 309,
+            "function": "_preprocess_dtype",
+            "primitive_calls": 2000,
+            "total_calls": 2000,
+            "self_seconds": 0.002403917,
+            "cumulative_seconds": 0.0035140690000000003
+          },
+          {
+            "module": "benchmarks/hierarchical_benchmark.py",
+            "line": 97,
+            "function": "<lambda>",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.002374966,
+            "cumulative_seconds": 0.16098282700000002
+          },
+          {
+            "module": "numpy/_core/fromnumeric.py",
+            "line": 48,
+            "function": "_wrapfunc",
+            "primitive_calls": 4000,
+            "total_calls": 4000,
+            "self_seconds": 0.002174739,
+            "cumulative_seconds": 0.0048784990000000006
+          },
+          {
+            "module": "numpy/lib/_stride_tricks_impl.py",
+            "line": 452,
+            "function": "<genexpr>",
+            "primitive_calls": 17000,
+            "total_calls": 17000,
+            "self_seconds": 0.0021524400000000003,
+            "cumulative_seconds": 0.0021524400000000003
+          },
+          {
+            "module": "_internal.py",
+            "line": 33,
+            "function": "wrapped_f",
+            "primitive_calls": 4000,
+            "total_calls": 4000,
+            "self_seconds": 0.0021373810000000003,
+            "cumulative_seconds": 0.013028249
+          },
+          {
+            "module": "numpy/lib/_stride_tricks_impl.py",
+            "line": 25,
+            "function": "_maybe_view_as_subclass",
+            "primitive_calls": 6000,
+            "total_calls": 6000,
+            "self_seconds": 0.001850938,
+            "cumulative_seconds": 0.001850938
+          },
+          {
+            "module": "numpy/lib/_function_base_impl.py",
+            "line": 375,
+            "function": "iterable",
+            "primitive_calls": 6000,
+            "total_calls": 6000,
+            "self_seconds": 0.0017495730000000001,
+            "cumulative_seconds": 0.0026718320000000003
+          },
+          {
+            "module": "~",
+            "line": 0,
+            "function": "<built-in method builtins.isinstance>",
+            "primitive_calls": 10000,
+            "total_calls": 10000,
+            "self_seconds": 0.001705373,
+            "cumulative_seconds": 0.001705373
+          },
+          {
+            "module": "_helpers.py",
+            "line": 701,
+            "function": "_check_device",
+            "primitive_calls": 4000,
+            "total_calls": 4000,
+            "self_seconds": 0.0015830780000000001,
+            "cumulative_seconds": 0.002287938
+          },
+          {
+            "module": "~",
+            "line": 0,
+            "function": "<method 'reshape' of 'numpy.ndarray' objects>",
+            "primitive_calls": 3000,
+            "total_calls": 3000,
+            "self_seconds": 0.001568128,
+            "cumulative_seconds": 0.001568128
+          },
+          {
+            "module": "numpy/_core/fromnumeric.py",
+            "line": 207,
+            "function": "reshape",
+            "primitive_calls": 3000,
+            "total_calls": 3000,
+            "self_seconds": 0.0015242060000000002,
+            "cumulative_seconds": 0.005241246000000001
+          },
+          {
+            "module": "enum.py",
+            "line": 202,
+            "function": "__get__",
+            "primitive_calls": 4000,
+            "total_calls": 4000,
+            "self_seconds": 0.001426526,
+            "cumulative_seconds": 0.001881431
+          },
+          {
+            "module": "op_system/_state_helpers.py",
+            "line": 26,
+            "function": "_bind_sum_state",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.001314255,
+            "cumulative_seconds": 0.001314255
+          },
+          {
+            "module": "op_system/_state_helpers.py",
+            "line": 12,
+            "function": "_bind_quadrature_weights",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.001268201,
+            "cumulative_seconds": 0.0051053620000000004
+          },
+          {
+            "module": "~",
+            "line": 0,
+            "function": "<method '__exit__' of 'numpy.nditer' objects>",
+            "primitive_calls": 6000,
+            "total_calls": 6000,
+            "self_seconds": 0.0011547740000000001,
+            "cumulative_seconds": 0.0011547740000000001
+          },
+          {
+            "module": "~",
+            "line": 0,
+            "function": "<built-in method builtins.iter>",
+            "primitive_calls": 6000,
+            "total_calls": 6000,
+            "self_seconds": 0.000922259,
+            "cumulative_seconds": 0.000922259
+          },
+          {
+            "module": "_aliases.py",
+            "line": 443,
+            "function": "permute_dims",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.000916662,
+            "cumulative_seconds": 0.002725205
+          },
+          {
+            "module": "~",
+            "line": 0,
+            "function": "<method 'update' of 'set' objects>",
+            "primitive_calls": 2000,
+            "total_calls": 2000,
+            "self_seconds": 0.0009144390000000001,
+            "cumulative_seconds": 0.0009144390000000001
+          },
+          {
+            "module": "~",
+            "line": 0,
+            "function": "<method 'append' of 'list' objects>",
+            "primitive_calls": 5000,
+            "total_calls": 5000,
+            "self_seconds": 0.0008899330000000001,
+            "cumulative_seconds": 0.0008899330000000001
+          },
+          {
+            "module": "~",
+            "line": 0,
+            "function": "<method 'items' of 'dict' objects>",
+            "primitive_calls": 4000,
+            "total_calls": 4000,
+            "self_seconds": 0.0008282470000000001,
+            "cumulative_seconds": 0.0008282470000000001
+          }
+        ],
+        "scope": "profiled NumPy RHS only; not unprofiled latency"
+      }
+    },
+    {
+      "case": {
+        "backend": "numpy",
+        "groups": 16,
+        "stages": 8,
+        "coupling": "independent",
+        "dtype": "float64"
+      },
+      "variant": "candidate",
+      "structured_profile": {
+        "evaluator_calls": 1000,
+        "accounted_seconds": 0.13635431,
+        "total_calls": 146001,
+        "top_self_time": [
+          {
+            "module": "op_system/_vectorize.py",
+            "line": 1369,
+            "function": "pytree_eval_fn",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.018597828,
+            "cumulative_seconds": 0.133836979
+          },
+          {
+            "module": "~",
+            "line": 0,
+            "function": "<method 'reduce' of 'numpy.ufunc' objects>",
+            "primitive_calls": 4000,
+            "total_calls": 4000,
+            "self_seconds": 0.011457198,
+            "cumulative_seconds": 0.011457198
+          },
+          {
+            "module": "<op_system_vec>",
+            "line": 1,
+            "function": "<lambda>",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.010036118,
+            "cumulative_seconds": 0.025396709
+          },
+          {
+            "module": "<op_system_vec>",
+            "line": 1,
+            "function": "<lambda>",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.009673547000000001,
+            "cumulative_seconds": 0.014888704000000001
+          },
+          {
+            "module": "op_system/_vectorize.py",
+            "line": 1473,
+            "function": "_broadcast_buffer",
+            "primitive_calls": 6000,
+            "total_calls": 6000,
+            "self_seconds": 0.006585279,
+            "cumulative_seconds": 0.008133000000000001
+          },
+          {
+            "module": "op_system/_vectorize.py",
+            "line": 130,
+            "function": "__call__",
+            "primitive_calls": 6000,
+            "total_calls": 6000,
+            "self_seconds": 0.005420882,
+            "cumulative_seconds": 0.064588327
+          },
+          {
+            "module": "numpy/_core/fromnumeric.py",
+            "line": 66,
+            "function": "_wrapreduction",
+            "primitive_calls": 4000,
+            "total_calls": 4000,
+            "self_seconds": 0.005412461,
+            "cumulative_seconds": 0.017729731000000002
+          },
+          {
+            "module": "numpy/_core/fromnumeric.py",
+            "line": 2342,
+            "function": "sum",
+            "primitive_calls": 4000,
+            "total_calls": 4000,
+            "self_seconds": 0.004371047,
+            "cumulative_seconds": 0.022779535
+          },
+          {
+            "module": "<op_system_vec>",
+            "line": 1,
+            "function": "<lambda>",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.004128428,
+            "cumulative_seconds": 0.004128428
+          },
+          {
+            "module": "numpy/_core/numerictypes.py",
+            "line": 328,
+            "function": "isdtype",
+            "primitive_calls": 2000,
+            "total_calls": 2000,
+            "self_seconds": 0.0034298780000000004,
+            "cumulative_seconds": 0.008394937
+          },
+          {
+            "module": "~",
+            "line": 0,
+            "function": "<built-in method numpy.array>",
+            "primitive_calls": 4000,
+            "total_calls": 4000,
+            "self_seconds": 0.0034154140000000003,
+            "cumulative_seconds": 0.005301545
+          },
+          {
+            "module": "numpy/_aliases.py",
+            "line": 70,
+            "function": "asarray",
+            "primitive_calls": 4000,
+            "total_calls": 4000,
+            "self_seconds": 0.0033729890000000003,
+            "cumulative_seconds": 0.011017808
+          },
+          {
+            "module": "_helpers.py",
+            "line": 582,
+            "function": "array_namespace",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.0032265130000000003,
+            "cumulative_seconds": 0.004884182
+          },
+          {
+            "module": "<op_system_vec>",
+            "line": 1,
+            "function": "<lambda>",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.0030537280000000003,
+            "cumulative_seconds": 0.009374337
+          },
+          {
+            "module": "_aliases.py",
+            "line": 448,
+            "function": "reshape",
+            "primitive_calls": 3000,
+            "total_calls": 3000,
+            "self_seconds": 0.002838918,
+            "cumulative_seconds": 0.008756844
+          },
+          {
+            "module": "<op_system_vec>",
+            "line": 1,
+            "function": "<lambda>",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.002706721,
+            "cumulative_seconds": 0.002706721
+          },
+          {
+            "module": "<op_system_vec>",
+            "line": 1,
+            "function": "<lambda>",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.002672546,
+            "cumulative_seconds": 0.002672546
+          },
+          {
+            "module": "numpy/_core/numerictypes.py",
+            "line": 309,
+            "function": "_preprocess_dtype",
+            "primitive_calls": 2000,
+            "total_calls": 2000,
+            "self_seconds": 0.0025636350000000003,
+            "cumulative_seconds": 0.003745654
+          },
+          {
+            "module": "~",
+            "line": 0,
+            "function": "<built-in method builtins.getattr>",
+            "primitive_calls": 14000,
+            "total_calls": 14000,
+            "self_seconds": 0.002536602,
+            "cumulative_seconds": 0.002536602
+          },
+          {
+            "module": "benchmarks/hierarchical_benchmark.py",
+            "line": 97,
+            "function": "<lambda>",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.002485091,
+            "cumulative_seconds": 0.13632207000000002
+          },
+          {
+            "module": "_internal.py",
+            "line": 33,
+            "function": "wrapped_f",
+            "primitive_calls": 4000,
+            "total_calls": 4000,
+            "self_seconds": 0.002231811,
+            "cumulative_seconds": 0.013926959000000001
+          },
+          {
+            "module": "numpy/_core/fromnumeric.py",
+            "line": 48,
+            "function": "_wrapfunc",
+            "primitive_calls": 4000,
+            "total_calls": 4000,
+            "self_seconds": 0.00223158,
+            "cumulative_seconds": 0.005263683
+          },
+          {
+            "module": "~",
+            "line": 0,
+            "function": "<method 'reshape' of 'numpy.ndarray' objects>",
+            "primitive_calls": 3000,
+            "total_calls": 3000,
+            "self_seconds": 0.001836801,
+            "cumulative_seconds": 0.001836801
+          },
+          {
+            "module": "~",
+            "line": 0,
+            "function": "<built-in method builtins.isinstance>",
+            "primitive_calls": 10000,
+            "total_calls": 10000,
+            "self_seconds": 0.0017747610000000001,
+            "cumulative_seconds": 0.0017747610000000001
+          },
+          {
+            "module": "_helpers.py",
+            "line": 701,
+            "function": "_check_device",
+            "primitive_calls": 4000,
+            "total_calls": 4000,
+            "self_seconds": 0.0015539540000000002,
+            "cumulative_seconds": 0.0023432740000000002
+          },
+          {
+            "module": "~",
+            "line": 0,
+            "function": "<method 'view' of 'numpy.ndarray' objects>",
+            "primitive_calls": 6000,
+            "total_calls": 6000,
+            "self_seconds": 0.0015477210000000002,
+            "cumulative_seconds": 0.0015477210000000002
+          },
+          {
+            "module": "numpy/_core/fromnumeric.py",
+            "line": 207,
+            "function": "reshape",
+            "primitive_calls": 3000,
+            "total_calls": 3000,
+            "self_seconds": 0.0015265550000000002,
+            "cumulative_seconds": 0.005534594
+          },
+          {
+            "module": "enum.py",
+            "line": 202,
+            "function": "__get__",
+            "primitive_calls": 4000,
+            "total_calls": 4000,
+            "self_seconds": 0.001441026,
+            "cumulative_seconds": 0.001886131
+          },
+          {
+            "module": "op_system/_state_helpers.py",
+            "line": 12,
+            "function": "_bind_quadrature_weights",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.001399105,
+            "cumulative_seconds": 0.005219057
+          },
+          {
+            "module": "op_system/_state_helpers.py",
+            "line": 26,
+            "function": "_bind_sum_state",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.001296651,
+            "cumulative_seconds": 0.001296651
+          },
+          {
+            "module": "_aliases.py",
+            "line": 443,
+            "function": "permute_dims",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.001035356,
+            "cumulative_seconds": 0.002938304
+          },
+          {
+            "module": "~",
+            "line": 0,
+            "function": "<method 'update' of 'set' objects>",
+            "primitive_calls": 2000,
+            "total_calls": 2000,
+            "self_seconds": 0.000929951,
+            "cumulative_seconds": 0.000929951
+          },
+          {
+            "module": "~",
+            "line": 0,
+            "function": "<method 'append' of 'list' objects>",
+            "primitive_calls": 5000,
+            "total_calls": 5000,
+            "self_seconds": 0.000904591,
+            "cumulative_seconds": 0.000904591
+          },
+          {
+            "module": "~",
+            "line": 0,
+            "function": "<method 'items' of 'dict' objects>",
+            "primitive_calls": 4000,
+            "total_calls": 4000,
+            "self_seconds": 0.000860072,
+            "cumulative_seconds": 0.000860072
+          },
+          {
+            "module": "_helpers.py",
+            "line": 72,
+            "function": "_is_jax_zero_gradient_array",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.0008583950000000001,
+            "cumulative_seconds": 0.0009666770000000001
+          },
+          {
+            "module": "~",
+            "line": 0,
+            "function": "<method 'get' of 'dict' objects>",
+            "primitive_calls": 4000,
+            "total_calls": 4000,
+            "self_seconds": 0.00078932,
+            "cumulative_seconds": 0.00078932
+          },
+          {
+            "module": "op_system/compile.py",
+            "line": 104,
+            "function": "_check_numeric_dtype",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.000762662,
+            "cumulative_seconds": 0.0059797010000000005
+          },
+          {
+            "module": "op_system/_array.py",
+            "line": 12,
+            "function": "array_namespace",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.0006922180000000001,
+            "cumulative_seconds": 0.0055764000000000005
+          },
+          {
+            "module": "op_system/_vectorize.py",
+            "line": 1410,
+            "function": "<genexpr>",
+            "primitive_calls": 4000,
+            "total_calls": 4000,
+            "self_seconds": 0.000620856,
+            "cumulative_seconds": 0.000620856
+          },
+          {
+            "module": "numpy/_core/fromnumeric.py",
+            "line": 2337,
+            "function": "_sum_dispatcher",
+            "primitive_calls": 4000,
+            "total_calls": 4000,
+            "self_seconds": 0.000580593,
+            "cumulative_seconds": 0.000580593
+          }
+        ],
+        "scope": "profiled NumPy RHS only; not unprofiled latency"
+      }
+    },
+    {
+      "case": {
+        "backend": "numpy",
+        "groups": 16,
+        "stages": 8,
+        "coupling": "coupled",
+        "dtype": "float64"
+      },
+      "variant": "candidate",
+      "structured_profile": {
+        "evaluator_calls": 1000,
+        "accounted_seconds": 0.13431405000000002,
+        "total_calls": 152001,
+        "top_self_time": [
+          {
+            "module": "op_system/_vectorize.py",
+            "line": 1369,
+            "function": "pytree_eval_fn",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.018175752,
+            "cumulative_seconds": 0.13196812800000002
+          },
+          {
+            "module": "~",
+            "line": 0,
+            "function": "<method 'reduce' of 'numpy.ufunc' objects>",
+            "primitive_calls": 5000,
+            "total_calls": 5000,
+            "self_seconds": 0.012169361,
+            "cumulative_seconds": 0.012169361
+          },
+          {
+            "module": "<op_system_vec>",
+            "line": 1,
+            "function": "<lambda>",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.010607102,
+            "cumulative_seconds": 0.019753708000000002
+          },
+          {
+            "module": "<op_system_vec>",
+            "line": 1,
+            "function": "<lambda>",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.009694838,
+            "cumulative_seconds": 0.024424635
+          },
+          {
+            "module": "op_system/_vectorize.py",
+            "line": 1473,
+            "function": "_broadcast_buffer",
+            "primitive_calls": 6000,
+            "total_calls": 6000,
+            "self_seconds": 0.006134217,
+            "cumulative_seconds": 0.007691764
+          },
+          {
+            "module": "numpy/_core/fromnumeric.py",
+            "line": 66,
+            "function": "_wrapreduction",
+            "primitive_calls": 5000,
+            "total_calls": 5000,
+            "self_seconds": 0.005806363,
+            "cumulative_seconds": 0.019000693000000003
+          },
+          {
+            "module": "op_system/_vectorize.py",
+            "line": 130,
+            "function": "__call__",
+            "primitive_calls": 6000,
+            "total_calls": 6000,
+            "self_seconds": 0.005219047,
+            "cumulative_seconds": 0.065922255
+          },
+          {
+            "module": "numpy/_core/fromnumeric.py",
+            "line": 2342,
+            "function": "sum",
+            "primitive_calls": 5000,
+            "total_calls": 5000,
+            "self_seconds": 0.005074636,
+            "cumulative_seconds": 0.024819414
+          },
+          {
+            "module": "<op_system_vec>",
+            "line": 1,
+            "function": "<lambda>",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.0038822960000000004,
+            "cumulative_seconds": 0.0038822960000000004
+          },
+          {
+            "module": "numpy/_core/numerictypes.py",
+            "line": 328,
+            "function": "isdtype",
+            "primitive_calls": 2000,
+            "total_calls": 2000,
+            "self_seconds": 0.003278406,
+            "cumulative_seconds": 0.008026173000000001
+          },
+          {
+            "module": "numpy/_aliases.py",
+            "line": 70,
+            "function": "asarray",
+            "primitive_calls": 4000,
+            "total_calls": 4000,
+            "self_seconds": 0.0030945570000000004,
+            "cumulative_seconds": 0.010261915
+          },
+          {
+            "module": "~",
+            "line": 0,
+            "function": "<built-in method numpy.array>",
+            "primitive_calls": 4000,
+            "total_calls": 4000,
+            "self_seconds": 0.003084448,
+            "cumulative_seconds": 0.004902557
+          },
+          {
+            "module": "_helpers.py",
+            "line": 582,
+            "function": "array_namespace",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.002993491,
+            "cumulative_seconds": 0.004568285
+          },
+          {
+            "module": "<op_system_vec>",
+            "line": 1,
+            "function": "<lambda>",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.002661825,
+            "cumulative_seconds": 0.007587931000000001
+          },
+          {
+            "module": "~",
+            "line": 0,
+            "function": "<built-in method builtins.getattr>",
+            "primitive_calls": 14000,
+            "total_calls": 14000,
+            "self_seconds": 0.002568172,
+            "cumulative_seconds": 0.002568172
+          },
+          {
+            "module": "<op_system_vec>",
+            "line": 1,
+            "function": "<lambda>",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.002536057,
+            "cumulative_seconds": 0.002536057
+          },
+          {
+            "module": "<op_system_vec>",
+            "line": 1,
+            "function": "<lambda>",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.002518581,
+            "cumulative_seconds": 0.002518581
+          },
+          {
+            "module": "_aliases.py",
+            "line": 448,
+            "function": "reshape",
+            "primitive_calls": 3000,
+            "total_calls": 3000,
+            "self_seconds": 0.002502353,
+            "cumulative_seconds": 0.008130745
+          },
+          {
+            "module": "numpy/_core/numerictypes.py",
+            "line": 309,
+            "function": "_preprocess_dtype",
+            "primitive_calls": 2000,
+            "total_calls": 2000,
+            "self_seconds": 0.0024785360000000004,
+            "cumulative_seconds": 0.0035546400000000004
+          },
+          {
+            "module": "benchmarks/hierarchical_benchmark.py",
+            "line": 97,
+            "function": "<lambda>",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.0023105630000000003,
+            "cumulative_seconds": 0.134278691
+          },
+          {
+            "module": "numpy/_core/fromnumeric.py",
+            "line": 48,
+            "function": "_wrapfunc",
+            "primitive_calls": 4000,
+            "total_calls": 4000,
+            "self_seconds": 0.002207583,
+            "cumulative_seconds": 0.004925227
+          },
+          {
+            "module": "_internal.py",
+            "line": 33,
+            "function": "wrapped_f",
+            "primitive_calls": 4000,
+            "total_calls": 4000,
+            "self_seconds": 0.0021211610000000003,
+            "cumulative_seconds": 0.012994430000000001
+          },
+          {
+            "module": "~",
+            "line": 0,
+            "function": "<built-in method builtins.isinstance>",
+            "primitive_calls": 11000,
+            "total_calls": 11000,
+            "self_seconds": 0.0017506520000000001,
+            "cumulative_seconds": 0.0017506520000000001
+          },
+          {
+            "module": "~",
+            "line": 0,
+            "function": "<method 'reshape' of 'numpy.ndarray' objects>",
+            "primitive_calls": 3000,
+            "total_calls": 3000,
+            "self_seconds": 0.001603063,
+            "cumulative_seconds": 0.001603063
+          },
+          {
+            "module": "~",
+            "line": 0,
+            "function": "<method 'view' of 'numpy.ndarray' objects>",
+            "primitive_calls": 6000,
+            "total_calls": 6000,
+            "self_seconds": 0.001557547,
+            "cumulative_seconds": 0.001557547
+          },
+          {
+            "module": "_helpers.py",
+            "line": 701,
+            "function": "_check_device",
+            "primitive_calls": 4000,
+            "total_calls": 4000,
+            "self_seconds": 0.0015286940000000001,
+            "cumulative_seconds": 0.0022648010000000003
+          },
+          {
+            "module": "numpy/_core/fromnumeric.py",
+            "line": 207,
+            "function": "reshape",
+            "primitive_calls": 3000,
+            "total_calls": 3000,
+            "self_seconds": 0.0014805780000000002,
+            "cumulative_seconds": 0.005243668
+          },
+          {
+            "module": "enum.py",
+            "line": 202,
+            "function": "__get__",
+            "primitive_calls": 4000,
+            "total_calls": 4000,
+            "self_seconds": 0.0013694240000000002,
+            "cumulative_seconds": 0.001818109
+          },
+          {
+            "module": "op_system/_state_helpers.py",
+            "line": 12,
+            "function": "_bind_quadrature_weights",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.0012958540000000001,
+            "cumulative_seconds": 0.00516091
+          },
+          {
+            "module": "op_system/_state_helpers.py",
+            "line": 26,
+            "function": "_bind_sum_state",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.0012668030000000002,
+            "cumulative_seconds": 0.0012668030000000002
+          },
+          {
+            "module": "~",
+            "line": 0,
+            "function": "<method 'items' of 'dict' objects>",
+            "primitive_calls": 5000,
+            "total_calls": 5000,
+            "self_seconds": 0.0010249690000000001,
+            "cumulative_seconds": 0.0010249690000000001
+          },
+          {
+            "module": "_aliases.py",
+            "line": 443,
+            "function": "permute_dims",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.0009245280000000001,
+            "cumulative_seconds": 0.002742524
+          },
+          {
+            "module": "~",
+            "line": 0,
+            "function": "<method 'update' of 'set' objects>",
+            "primitive_calls": 2000,
+            "total_calls": 2000,
+            "self_seconds": 0.0009185020000000001,
+            "cumulative_seconds": 0.0009185020000000001
+          },
+          {
+            "module": "~",
+            "line": 0,
+            "function": "<method 'append' of 'list' objects>",
+            "primitive_calls": 5000,
+            "total_calls": 5000,
+            "self_seconds": 0.000897994,
+            "cumulative_seconds": 0.000897994
+          },
+          {
+            "module": "_helpers.py",
+            "line": 72,
+            "function": "_is_jax_zero_gradient_array",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.0007933730000000001,
+            "cumulative_seconds": 0.000900238
+          },
+          {
+            "module": "op_system/compile.py",
+            "line": 104,
+            "function": "_check_numeric_dtype",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.0007535360000000001,
+            "cumulative_seconds": 0.005557717
+          },
+          {
+            "module": "~",
+            "line": 0,
+            "function": "<method 'get' of 'dict' objects>",
+            "primitive_calls": 4000,
+            "total_calls": 4000,
+            "self_seconds": 0.0007361070000000001,
+            "cumulative_seconds": 0.0007361070000000001
+          },
+          {
+            "module": "numpy/_core/fromnumeric.py",
+            "line": 2337,
+            "function": "_sum_dispatcher",
+            "primitive_calls": 5000,
+            "total_calls": 5000,
+            "self_seconds": 0.0006603690000000001,
+            "cumulative_seconds": 0.0006603690000000001
+          },
+          {
+            "module": "op_system/_vectorize.py",
+            "line": 1410,
+            "function": "<genexpr>",
+            "primitive_calls": 4000,
+            "total_calls": 4000,
+            "self_seconds": 0.0006412690000000001,
+            "cumulative_seconds": 0.0006412690000000001
+          },
+          {
+            "module": "op_system/_array.py",
+            "line": 12,
+            "function": "array_namespace",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.000633456,
+            "cumulative_seconds": 0.005201741
+          }
+        ],
+        "scope": "profiled NumPy RHS only; not unprofiled latency"
+      }
+    },
+    {
+      "case": {
+        "backend": "numpy",
+        "groups": 16,
+        "stages": 8,
+        "coupling": "coupled",
+        "dtype": "float64"
+      },
+      "variant": "baseline",
+      "structured_profile": {
+        "evaluator_calls": 1000,
+        "accounted_seconds": 0.17411799400000003,
+        "total_calls": 211001,
+        "top_self_time": [
+          {
+            "module": "numpy/lib/_stride_tricks_impl.py",
+            "line": 447,
+            "function": "_broadcast_to",
+            "primitive_calls": 6000,
+            "total_calls": 6000,
+            "self_seconds": 0.024067001,
+            "cumulative_seconds": 0.036805700000000004
+          },
+          {
+            "module": "op_system/_vectorize.py",
+            "line": 1366,
+            "function": "pytree_eval_fn",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.020505574000000002,
+            "cumulative_seconds": 0.171525128
+          },
+          {
+            "module": "~",
+            "line": 0,
+            "function": "<method 'reduce' of 'numpy.ufunc' objects>",
+            "primitive_calls": 5000,
+            "total_calls": 5000,
+            "self_seconds": 0.012599943,
+            "cumulative_seconds": 0.012599943
+          },
+          {
+            "module": "<op_system_vec>",
+            "line": 1,
+            "function": "<lambda>",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.010961637000000002,
+            "cumulative_seconds": 0.020384145000000003
+          },
+          {
+            "module": "<op_system_vec>",
+            "line": 1,
+            "function": "<lambda>",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.009685455,
+            "cumulative_seconds": 0.024729001
+          },
+          {
+            "module": "numpy/_core/fromnumeric.py",
+            "line": 66,
+            "function": "_wrapreduction",
+            "primitive_calls": 5000,
+            "total_calls": 5000,
+            "self_seconds": 0.006095019,
+            "cumulative_seconds": 0.019716053
+          },
+          {
+            "module": "op_system/_vectorize.py",
+            "line": 127,
+            "function": "__call__",
+            "primitive_calls": 6000,
+            "total_calls": 6000,
+            "self_seconds": 0.0053464160000000005,
+            "cumulative_seconds": 0.068682542
+          },
+          {
+            "module": "numpy/_core/fromnumeric.py",
+            "line": 2342,
+            "function": "sum",
+            "primitive_calls": 5000,
+            "total_calls": 5000,
+            "self_seconds": 0.005276591000000001,
+            "cumulative_seconds": 0.02578803
+          },
+          {
+            "module": "~",
+            "line": 0,
+            "function": "<built-in method numpy.array>",
+            "primitive_calls": 10000,
+            "total_calls": 10000,
+            "self_seconds": 0.004544287,
+            "cumulative_seconds": 0.0064334530000000004
+          },
+          {
+            "module": "<op_system_vec>",
+            "line": 1,
+            "function": "<lambda>",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.004214642,
+            "cumulative_seconds": 0.004214642
+          },
+          {
+            "module": "~",
+            "line": 0,
+            "function": "<built-in method builtins.any>",
+            "primitive_calls": 6000,
+            "total_calls": 6000,
+            "self_seconds": 0.0034316340000000002,
+            "cumulative_seconds": 0.0055842520000000005
+          },
+          {
+            "module": "numpy/_core/numerictypes.py",
+            "line": 328,
+            "function": "isdtype",
+            "primitive_calls": 2000,
+            "total_calls": 2000,
+            "self_seconds": 0.0033911320000000003,
+            "cumulative_seconds": 0.008309844
+          },
+          {
+            "module": "numpy/_aliases.py",
+            "line": 70,
+            "function": "asarray",
+            "primitive_calls": 4000,
+            "total_calls": 4000,
+            "self_seconds": 0.003234709,
+            "cumulative_seconds": 0.0107186
+          },
+          {
+            "module": "_helpers.py",
+            "line": 582,
+            "function": "array_namespace",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.0030331530000000002,
+            "cumulative_seconds": 0.004686097
+          },
+          {
+            "module": "<op_system_vec>",
+            "line": 1,
+            "function": "<lambda>",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.0028540030000000004,
+            "cumulative_seconds": 0.008355464
+          },
+          {
+            "module": "<op_system_vec>",
+            "line": 1,
+            "function": "<lambda>",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.002831788,
+            "cumulative_seconds": 0.002831788
+          },
+          {
+            "module": "<op_system_vec>",
+            "line": 1,
+            "function": "<lambda>",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.002821086,
+            "cumulative_seconds": 0.002821086
+          },
+          {
+            "module": "_aliases.py",
+            "line": 448,
+            "function": "reshape",
+            "primitive_calls": 3000,
+            "total_calls": 3000,
+            "self_seconds": 0.0026936060000000003,
+            "cumulative_seconds": 0.008769765
+          },
+          {
+            "module": "numpy/lib/_stride_tricks_impl.py",
+            "line": 474,
+            "function": "broadcast_to",
+            "primitive_calls": 6000,
+            "total_calls": 6000,
+            "self_seconds": 0.002657127,
+            "cumulative_seconds": 0.039462827000000006
+          },
+          {
+            "module": "~",
+            "line": 0,
+            "function": "<built-in method builtins.getattr>",
+            "primitive_calls": 14000,
+            "total_calls": 14000,
+            "self_seconds": 0.0026376940000000003,
+            "cumulative_seconds": 0.0026376940000000003
+          },
+          {
+            "module": "numpy/_core/numerictypes.py",
+            "line": 309,
+            "function": "_preprocess_dtype",
+            "primitive_calls": 2000,
+            "total_calls": 2000,
+            "self_seconds": 0.0025640700000000003,
+            "cumulative_seconds": 0.003705963
+          },
+          {
+            "module": "benchmarks/hierarchical_benchmark.py",
+            "line": 97,
+            "function": "<lambda>",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.0025594100000000002,
+            "cumulative_seconds": 0.174084538
+          },
+          {
+            "module": "_internal.py",
+            "line": 33,
+            "function": "wrapped_f",
+            "primitive_calls": 4000,
+            "total_calls": 4000,
+            "self_seconds": 0.002236834,
+            "cumulative_seconds": 0.013879121000000001
+          },
+          {
+            "module": "numpy/_core/fromnumeric.py",
+            "line": 48,
+            "function": "_wrapfunc",
+            "primitive_calls": 4000,
+            "total_calls": 4000,
+            "self_seconds": 0.002233357,
+            "cumulative_seconds": 0.005316418000000001
+          },
+          {
+            "module": "numpy/lib/_stride_tricks_impl.py",
+            "line": 452,
+            "function": "<genexpr>",
+            "primitive_calls": 17000,
+            "total_calls": 17000,
+            "self_seconds": 0.0021526180000000002,
+            "cumulative_seconds": 0.0021526180000000002
+          },
+          {
+            "module": "~",
+            "line": 0,
+            "function": "<method 'reshape' of 'numpy.ndarray' objects>",
+            "primitive_calls": 3000,
+            "total_calls": 3000,
+            "self_seconds": 0.00191021,
+            "cumulative_seconds": 0.00191021
+          },
+          {
+            "module": "~",
+            "line": 0,
+            "function": "<built-in method builtins.isinstance>",
+            "primitive_calls": 11000,
+            "total_calls": 11000,
+            "self_seconds": 0.001890336,
+            "cumulative_seconds": 0.001890336
+          },
+          {
+            "module": "numpy/lib/_stride_tricks_impl.py",
+            "line": 25,
+            "function": "_maybe_view_as_subclass",
+            "primitive_calls": 6000,
+            "total_calls": 6000,
+            "self_seconds": 0.001890083,
+            "cumulative_seconds": 0.001890083
+          },
+          {
+            "module": "numpy/lib/_function_base_impl.py",
+            "line": 375,
+            "function": "iterable",
+            "primitive_calls": 6000,
+            "total_calls": 6000,
+            "self_seconds": 0.001775302,
+            "cumulative_seconds": 0.002711741
+          },
+          {
+            "module": "numpy/_core/fromnumeric.py",
+            "line": 207,
+            "function": "reshape",
+            "primitive_calls": 3000,
+            "total_calls": 3000,
+            "self_seconds": 0.0015891400000000002,
+            "cumulative_seconds": 0.005693266000000001
+          },
+          {
+            "module": "_helpers.py",
+            "line": 701,
+            "function": "_check_device",
+            "primitive_calls": 4000,
+            "total_calls": 4000,
+            "self_seconds": 0.001588657,
+            "cumulative_seconds": 0.002327392
+          },
+          {
+            "module": "enum.py",
+            "line": 202,
+            "function": "__get__",
+            "primitive_calls": 4000,
+            "total_calls": 4000,
+            "self_seconds": 0.0014244610000000001,
+            "cumulative_seconds": 0.001889166
+          },
+          {
+            "module": "op_system/_state_helpers.py",
+            "line": 12,
+            "function": "_bind_quadrature_weights",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.0013180330000000001,
+            "cumulative_seconds": 0.005229883
+          },
+          {
+            "module": "op_system/_state_helpers.py",
+            "line": 26,
+            "function": "_bind_sum_state",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.0012945690000000002,
+            "cumulative_seconds": 0.0012945690000000002
+          },
+          {
+            "module": "~",
+            "line": 0,
+            "function": "<method '__exit__' of 'numpy.nditer' objects>",
+            "primitive_calls": 6000,
+            "total_calls": 6000,
+            "self_seconds": 0.001275669,
+            "cumulative_seconds": 0.001275669
+          },
+          {
+            "module": "~",
+            "line": 0,
+            "function": "<method 'items' of 'dict' objects>",
+            "primitive_calls": 5000,
+            "total_calls": 5000,
+            "self_seconds": 0.001021091,
+            "cumulative_seconds": 0.001021091
+          },
+          {
+            "module": "_aliases.py",
+            "line": 443,
+            "function": "permute_dims",
+            "primitive_calls": 1000,
+            "total_calls": 1000,
+            "self_seconds": 0.000987658,
+            "cumulative_seconds": 0.002872522
+          },
+          {
+            "module": "~",
+            "line": 0,
+            "function": "<method 'append' of 'list' objects>",
+            "primitive_calls": 5000,
+            "total_calls": 5000,
+            "self_seconds": 0.000979828,
+            "cumulative_seconds": 0.000979828
+          },
+          {
+            "module": "~",
+            "line": 0,
+            "function": "<built-in method builtins.iter>",
+            "primitive_calls": 6000,
+            "total_calls": 6000,
+            "self_seconds": 0.0009364390000000001,
+            "cumulative_seconds": 0.0009364390000000001
+          },
+          {
+            "module": "~",
+            "line": 0,
+            "function": "<method 'update' of 'set' objects>",
+            "primitive_calls": 2000,
+            "total_calls": 2000,
+            "self_seconds": 0.000917556,
+            "cumulative_seconds": 0.000917556
+          }
+        ],
+        "scope": "profiled NumPy RHS only; not unprofiled latency"
+      }
+    }
+  ],
+  "limitations": [
+    "Unchanged separate-process handwritten controls varied substantially: these rows do not support precise causal speedup or cross-backend comparisons.",
+    "Paired follow-up isolates warm flat/structured NumPy RHS factories on one common plan. It does not measure compiler construction, full solver, memory, training or CUDA gains.",
+    "Shared host; three processes per case. Paired samples within each process are not independent replicates. Whole-worker RSS is retained in separate-process rows without a memory-reduction claim."
+  ]
+}
