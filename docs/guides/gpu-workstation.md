@@ -1,20 +1,16 @@
-# GPU workstation handoff
+# GPU workstation requalification procedure
 
-## New agent: start here
+## Recorded qualification and reuse
 
-The maintainer lifted the device-execution hold on 23 October 2026. The required
-lanes passed on the PR head immediately preceding the committed evidence update;
-the [CuPy guide](cupy.md#device-evidence) records that bounded result. Because
-this evidence update changes the source identity, run this procedure once more
-on the final PR head and link its independently reviewed, sanitized receipt from
-the PR and issue before merge. Any later head change requires another rerun.
+The required lanes passed at exact `op_system` commit `271fd43` on 23 October
+2026. Independent review approved the final receipt before PR #339 merged and
+issue #182 closed. The [CuPy guide](cupy.md#device-evidence) records the bounded
+result. Use the procedure below only to qualify a new, explicitly selected
+source revision; a source change requires a new receipt and review.
 
-The goal is a reproducible device receipt for draft
-[op_system PR #339](https://github.com/ACCIDDA/op_system/pull/339) /
-[issue #182](https://github.com/ACCIDDA/op_system/issues/182), plus separate
-JAX/Torch compiler, core-solver and statistical reruns. Keep #339 draft and #182
-open until both CuPy lanes pass and an independent reviewer approves the exact
-source and receipt. Green CPU CI cannot close this device gate.
+The goal is a reproducible device receipt for one selected `op_system` revision,
+plus separate JAX/Torch compiler, core-solver and statistical reruns. Green CPU
+CI cannot substitute for this device gate.
 
 Use a new Linux directory, Bash, Python 3.12, `uv`, Git and authenticated `gh`.
 Run lanes sequentially on an otherwise idle NVIDIA GPU. Leave application
@@ -61,15 +57,21 @@ record() {
 record hardware-before nvidia-smi -q
 record platform uname -a
 record uv-version uv --version
-OP_GPU_SYSTEM_SHA="$(gh api repos/ACCIDDA/op_system/pulls/339 --jq .head.sha)"
+: "${OP_GPU_SYSTEM_SHA:?Set OP_GPU_SYSTEM_SHA to the exact revision under review}"
+OP_GPU_ENGINE_SHA="${OP_GPU_ENGINE_SHA:-76edf594f5d4462f9c359482378e662e58668234}"
+OP_GPU_INFER_SHA="${OP_GPU_INFER_SHA:-713a2b76119e174dab75290eaf5bff9ffce63af6}"
 printf '%s\n' "$OP_GPU_SYSTEM_SHA" > "$OP_GPU_ATTEMPT/requested-system-head.txt"
+printf '%s\n' "$OP_GPU_ENGINE_SHA" > "$OP_GPU_ATTEMPT/requested-engine-head.txt"
+printf '%s\n' "$OP_GPU_INFER_SHA" > "$OP_GPU_ATTEMPT/requested-infer-head.txt"
 gh repo clone ACCIDDA/op_system source/op_system
 git -C source/op_system fetch origin "$OP_GPU_SYSTEM_SHA"
 git -C source/op_system checkout --detach "$OP_GPU_SYSTEM_SHA"
 gh repo clone ACCIDDA/op_engine source/op_engine
-git -C source/op_engine checkout --detach 76edf594f5d4462f9c359482378e662e58668234
+git -C source/op_engine fetch origin "$OP_GPU_ENGINE_SHA"
+git -C source/op_engine checkout --detach "$OP_GPU_ENGINE_SHA"
 gh repo clone ACCIDDA/op_infer source/op_infer
-git -C source/op_infer checkout --detach 713a2b76119e174dab75290eaf5bff9ffce63af6
+git -C source/op_infer fetch origin "$OP_GPU_INFER_SHA"
+git -C source/op_infer checkout --detach "$OP_GPU_INFER_SHA"
 for repo in op_system op_engine op_infer; do
     git -C "source/$repo" rev-parse HEAD > "$OP_GPU_ATTEMPT/$repo-commit.txt"
     git -C "source/$repo" status --porcelain > "$OP_GPU_ATTEMPT/$repo-status.txt"
@@ -77,6 +79,8 @@ for repo in op_system op_engine op_infer; do
     record "build-$repo" uv build --directory "source/$repo" --wheel --out-dir "$OP_GPU_ROOT/wheels"
 done
 test "$(git -C source/op_system rev-parse HEAD)" = "$OP_GPU_SYSTEM_SHA"
+test "$(git -C source/op_engine rev-parse HEAD)" = "$OP_GPU_ENGINE_SHA"
+test "$(git -C source/op_infer rev-parse HEAD)" = "$OP_GPU_INFER_SHA"
 sha256sum wheels/*.whl > "$OP_GPU_ATTEMPT/wheels.sha256"
 sha256sum source/op_system/examples/cuda_core_contract.py \
     source/op_system/scripts/qualify_backend.py \
@@ -88,9 +92,9 @@ OP_GPU_ENV=(env PYTHONPATH= PYTHONNOUSERSITE=1 CUDA_VISIBLE_DEVICES=0)
 
 | Repository | Source boundary |
 | --- | --- |
-| op_system | The full PR #339 head captured above; never substitute a moving branch in the receipt. |
-| op_engine | `76edf594f5d4462f9c359482378e662e58668234`: includes current fixed loops, Diffrax bridge and checked operator adapters. |
-| op_infer | `713a2b76119e174dab75290eaf5bff9ffce63af6`: includes empty-bootstrap handling and committed CUDA statistical fixtures. |
+| op_system | The selected `OP_GPU_SYSTEM_SHA`; never substitute a moving branch in the receipt. |
+| op_engine | The selected `OP_GPU_ENGINE_SHA`. Its recorded default, `76edf594f5d4462f9c359482378e662e58668234`, includes current fixed loops, Diffrax bridge and checked operator adapters. |
+| op_infer | The selected `OP_GPU_INFER_SHA`. Its recorded default, `713a2b76119e174dab75290eaf5bff9ffce63af6`, includes empty-bootstrap handling and committed CUDA statistical fixtures. |
 
 Inspect `hardware-before.stdout`: GPU model, architecture, driver and available
 memory determine wheel compatibility. Historical A100 receipts do not qualify a
@@ -153,8 +157,8 @@ the declared NumPy, array-api-compat and Pydantic floors, with current CuPy.
 
 Each required contract must report **10 passed, zero skipped, zero failures**.
 Each companion core receipt must contain **4 precision/history cases**. CuPy
-native autodiff and op_infer statistical interfaces remain unsupported. Keep
-PR #339 draft and issue #182 open pending independent device receipt review.
+native autodiff and op_infer statistical interfaces remain unsupported. Do not
+approve a new source revision until an independent reviewer checks its receipt.
 
 ## 3. JAX CUDA and Torch CUDA reruns
 
@@ -263,7 +267,8 @@ has complete passing evidence. Never overwrite a failed attempt.
 
 After review, attach a sanitized receipt to the issues and update qualification
 docs. Omit account names, local paths and environment secrets from public
-artifacts. If the PR head changes, qualify the new head before approval/merge.
+artifacts. If any selected source revision changes, qualify the new revision
+before approval or merge.
 No speedup or application calibration claim follows from these checks. This
 scope excludes training, Torch compiled GPU loops, Diffrax GPU execution,
 new native state-action helpers, and SciPy's eager CPU banded/GMRES adapters.

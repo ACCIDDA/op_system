@@ -37,12 +37,13 @@ def _balance(
     derivative: Mapping[str, Array],
     _params: Mapping[str, object],
 ) -> np.ndarray:
-    return (
+    balance = (
         np
         .stack([np.asarray(value) for value in derivative.values()])
         .sum(axis=0)
         .sum(axis=-1)
     )
+    return np.asarray(balance)
 
 
 CLOSED = InvariantCheck(

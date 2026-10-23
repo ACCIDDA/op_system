@@ -7,15 +7,14 @@ metadata files. Core is MIT-licensed; the adapter is GPLv3-or-later licensed. Re
 distribution versions when using the adapter, plus backend and flepimop2 versions
 needed to reproduce the calculation.
 
-For published work, cite the exact version used and its release URL. A citation
-for version 0.7.0 can identify Joshua Macdonald, Carl Pearson, and Timothy Willard,
-*op_system: RHS specification compiler and flepimop2 provider*, version 0.7.0,
-released 2026-10-06, with the
-[v0.7.0 release](https://github.com/ACCIDDA/op_system/releases/tag/v0.7.0).
+For published work, cite the exact version used and its release URL. The current
+CFF identifies Joshua Macdonald, Carl Pearson, and Timothy Willard,
+*op_system: RHS specification compiler and flepimop2 provider*, version 0.9.0,
+released 2026-10-19, with the
+[v0.9.0 release](https://github.com/ACCIDDA/op_system/releases/tag/v0.9.0).
 For a development checkout, also record the commit and any local modifications.
-Do not label unreleased behavior as part of 0.7.0 merely because the package
-version has not yet been bumped. Use the CFF in the tag when one is available;
-the first CFF here documents the already released 0.7.0 metadata.
+Do not label unreleased behavior as part of 0.9.0 merely because the package
+version has not yet been bumped. Use the CFF and source from the exact tag.
 
 Validate syntax with `just citation`, which uses the isolated, pinned
 [cffconvert validator](https://github.com/citation-file-format/cffconvert)
@@ -29,20 +28,17 @@ for reproducibility.
 
 ## Current identifier audit
 
-On 2026-10-13, the repository, publication workflows, and public GitHub release
-notes recorded no archive DOI, `.zenodo.json`, or Zenodo integration instructions.
-A DataCite query for the exact repository URL returned no records; public web
-searches found none. The Zenodo API request timed out. These observations do not
-establish that no archive exists: a maintainer's connected Zenodo account and
-unindexed records cannot be verified from this checkout. No DOI is invented in
-`CITATION.cff`, and the current publication workflow creates GitHub releases and
-package-index artifacts without itself performing an archival deposit.
+On 2026-10-23, the repository had an active Zenodo release webhook, but no
+matching public software record or DOI had been verified for either distribution.
+Do not reproduce or publish the credential-bearing webhook URL. A configured
+hook is not evidence that a particular release was deposited or accepted by a
+community. No DOI is inferred or invented before its record resolves.
 
 ## Software-paper release archive plan
 
-The maintainer has selected the ACCIDDA Zenodo archive for the software-paper
-release. The archival deposit and resolving DOI still need verification. Complete the JOSS readiness milestone before freezing the archive
-release.
+Use the existing ACCIDDA Zenodo community for a verified release record. Community
+submission and curator acceptance are manual account actions; community membership
+does not itself create or own the deposit.
 
 Before a paper release, the release maintainer must check existing archive
 records and the repository's connected archival account. Reuse the established
@@ -57,15 +53,23 @@ The paper release should then follow this sequence:
 
 1. Confirm attribution, licenses, shared version, release date, changelog, and
    citation metadata. Run `just ci`, `just qualify`, and `just release-validate`.
-2. Tag and publish the shared release through the existing workflow. Archive the
+2. Verify the existing Zenodo release hook without exposing its credential. Do
+   not create a duplicate integration or delete and recreate an existing release
+   merely to trigger retroactive ingestion.
+3. Tag and publish the shared release through the existing workflow. Archive the
    exact tagged source for both distributions, their released artifacts, and
    any benchmark JSON/fixtures used for paper claims. Retain the tag/commit,
    checksums, environment versions, and links to versioned docs.
-3. Verify that the archival record resolves and contains that exact release.
-   Record its version DOI in the release notes and citation metadata; if the
-   archive provides a concept DOI, identify it separately as the version series.
-   Use the version DOI for a reproducible software-paper release citation.
-4. Link the verified archive from the paper and release notes. Add a verified
+4. Verify that the archival record resolves and contains that exact release.
+   Record its version DOI in the release notes and in the citation metadata on
+   `main` for the next release; do not rewrite the immutable tagged CFF. If a
+   DOI was reserved and verified before tagging, it may instead be included in
+   that tag's CFF. If the archive provides a concept DOI, identify it separately
+   as the version series. Use the version DOI for a reproducible software-paper
+   release citation.
+5. Submit the published record to the ACCIDDA community and wait for curator
+   acceptance.
+6. Link the verified archive from the paper and release notes. Add a verified
    preferred paper citation when published. Check identifiers and CFF syntax
    again before announcing the release.
 
