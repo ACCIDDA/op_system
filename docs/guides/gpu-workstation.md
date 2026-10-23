@@ -59,7 +59,7 @@ record() {
 record hardware-before nvidia-smi -q
 record platform uname -a
 record uv-version uv --version
-OP_GPU_SYSTEM_SHA="$(gh pr view 339 --repo ACCIDDA/op_system --json headRefOid --jq .headRefOid)"
+OP_GPU_SYSTEM_SHA="$(gh api repos/ACCIDDA/op_system/pulls/339 --jq .head.sha)"
 printf '%s\n' "$OP_GPU_SYSTEM_SHA" > "$OP_GPU_ATTEMPT/requested-system-head.txt"
 gh repo clone ACCIDDA/op_system source/op_system
 git -C source/op_system fetch origin "$OP_GPU_SYSTEM_SHA"
