@@ -61,11 +61,40 @@ no GPU performance or memory-reduction claim.
 
 ## Device evidence
 
-Device receipts are added only after the required command completes on actual
-hardware. CPU skips cannot satisfy this section's device acceptance gate.
+The maintainer-authorized workstation run on 23 October 2026 used an NVIDIA
+GeForce RTX 5070 Ti Laptop GPU (Blackwell, compute capability 12.0), driver
+580.173.02 and Python 3.12.12. Its exact pre-evidence-update compiler head was
+`0c1306e5f3276902d2d75e76a12032a23797d103`; the pinned engine and inference
+heads were `76edf594f5d4462f9c359482378e662e58668234` and
+`713a2b76119e174dab75290eaf5bff9ffce63af6`. All sources were acquired from
+their GitHub remotes, checked out detached and clean, built as wheels and
+imported only from their isolated environments.
 
-## Deferred workstation execution
+CuPy 14.2.0 passed all ten cases with zero skips or failures in both the current
+and minimum dependency lanes. Each CuPy lane and the separate JAX 0.12.0 and
+Torch 2.14.1+cu130 lanes passed all four float32/float64 and retained-history
+core cases. JAX and Torch each passed 14 observation density/replay cases, ten
+prior-density cases and the masked/censored gradient check. Torch additionally
+preserved local/global RNG isolation and rejected a CPU generator for CUDA
+sampling. The recorded validator confirmed every required case and all 40
+recorded commands exited successfully.
 
-GPU execution is currently on hold. The [workstation handoff](gpu-workstation.md)
-records source revisions, isolated environments, exact commands, required case
-counts, evidence and failure handling for CuPy, JAX and Torch.
+The workstation was compute-idle rather than headless. Only the display server,
+desktop shell and active editor held graphics contexts; there was no competing
+compute context and about 11.1 GiB of device memory was free. Instantaneous GPU
+utilization was 51% before and 10% after the run. These functional checks have
+no timing threshold. Whole-process peak RSS was 450.4/452.0 MiB for the two
+CuPy core lanes, 1001.9/1224.1 MiB for JAX core/statistics and 732.8/1353.6 MiB
+for Torch core/statistics. Torch statistics peaked at 0.752 MiB allocated and
+2.0 MiB reserved device memory. Those process and allocator measures have
+different scopes and are not application or training-memory results.
+
+This evidence update changes the PR head, so its results are not the final merge
+receipt. The [workstation handoff](gpu-workstation.md) requires a fresh run and
+independent review of the final head; the sanitized final receipt belongs on
+PR #339 and issue #182, while raw machine records remain private. A repeated,
+nonfatal JAX `hwloc` topology warning is retained with those raw records. CPU
+skips cannot satisfy this device gate, and neither this bounded receipt nor its
+rerun qualifies performance, estimator training, compiled Torch GPU loops,
+Diffrax GPU execution, multiple devices, CUDA 13 CuPy wheels or consumer
+adoption.

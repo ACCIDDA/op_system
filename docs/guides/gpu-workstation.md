@@ -2,10 +2,12 @@
 
 ## New agent: start here
 
-**Device execution is on hold at the maintainer's request.** Read and prepare
-without running GPU jobs or probes. A maintainer request to run this procedure
-in a GPU workstation session lifts that hold for this qualification. Otherwise,
-report readiness and wait. This includes CuPy, Torch and JAX device tests.
+The maintainer lifted the device-execution hold on 23 October 2026. The required
+lanes passed on the PR head immediately preceding the committed evidence update;
+the [CuPy guide](cupy.md#device-evidence) records that bounded result. Because
+this evidence update changes the source identity, run this procedure once more
+on the final PR head and link its independently reviewed, sanitized receipt from
+the PR and issue before merge. Any later head change requires another rerun.
 
 The goal is a reproducible device receipt for draft
 [op_system PR #339](https://github.com/ACCIDDA/op_system/pull/339) /
@@ -22,9 +24,9 @@ to PyPI or TestPyPI**. This procedure does not train an estimator.
 
 ## 1. Capture exact source and preserve every command
 
-After the device hold is lifted, run the following in one Bash session. Keep
-that shell open: later sections use its variables and `record` function. The
-function records the command, stdout, stderr and exit status separately; it
+Run the following in one Bash session. Keep that shell open: later sections use
+its variables and `record` function. The function records the command, stdout,
+stderr and exit status separately; it
 refuses to overwrite an attempt. A failing command stops the procedure. Keep
 its evidence before diagnosing it and use a new attempt directory for a rerun.
 
