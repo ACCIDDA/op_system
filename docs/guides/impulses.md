@@ -81,6 +81,8 @@ this provider route until their solver event contracts are qualified.
 
 This is partial support for issue #353. Table-derived schedules, automatic
 mass-balance verification, state-triggered events and gradients with respect to
-event times remain deferred. Existing balance/export/coordinate tools describe
-the continuous equations; they do not certify or execute the full event process.
+event times remain deferred. Gauge analysis/fixing and transformed state-coordinate views reject event models
+until their map covariance contracts are implemented. Existing balance/export
+tools describe the continuous equations; they do not certify or execute the full
+event process.
 Check conservation of any intended map with an independent invariant fixture.

@@ -176,16 +176,7 @@ def _normalize_impulses(value: object, *, rhs: NormalizedRhs) -> tuple[_ImpulseI
     for raw in value:
         if not isinstance(raw, Mapping) or set(raw) != {"time", "updates"}:
             raise InvalidRhsSpecError(detail="impulse requires time and updates only")
-        time = raw["time"]
-        if (
-            isinstance(time, bool)
-            or not isinstance(time, Real)
-            or not math.isfinite(time)
-            or time <= previous
-        ):
-            raise InvalidRhsSpecError(
-                detail="impulse times must be finite and strictly increasing"
-            )
+        time = _event_time(raw["time"], previous)
         updates = raw["updates"]
         if not isinstance(updates, (list, tuple)) or not updates:
             raise InvalidRhsSpecError(detail="impulse updates must be a nonempty list")
@@ -196,6 +187,32 @@ def _normalize_impulses(value: object, *, rhs: NormalizedRhs) -> tuple[_ImpulseI
         previous = float(time)
         result.append(_ImpulseIR(previous, normalized))
     return tuple(result)
+
+
+def _event_time(value: object, previous: float) -> float:
+    """Validate the actual float representation published to numerical consumers.
+
+    Returns:
+        Finite float strictly greater than the previous published time.
+
+    Raises:
+        InvalidRhsSpecError: If conversion overflows or collapses the time order.
+    """
+    if isinstance(value, bool) or not isinstance(value, Real):
+        raise InvalidRhsSpecError(
+            detail="impulse times must be finite and strictly increasing"
+        )
+    try:
+        time = float(value)
+    except (ValueError, OverflowError) as error:
+        raise InvalidRhsSpecError(
+            detail="impulse times must be finite and strictly increasing"
+        ) from error
+    if not math.isfinite(time) or time <= previous:
+        raise InvalidRhsSpecError(
+            detail="impulse times must be finite and strictly increasing"
+        )
+    return time
 
 
 def _check_updates(

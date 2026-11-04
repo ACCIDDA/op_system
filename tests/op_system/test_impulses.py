@@ -289,3 +289,49 @@ def test_numpy_disjoint_selectors_on_two_axes() -> None:
     result = model.impulses[0].eval_fn(1.0, state, amount=np.array([10.0, 20.0]))
     np.testing.assert_array_equal(result, [11.0, 12.0, 3.0, 2.0])
     assert model.reaction_gaps[-1].reason == "scheduled_state_maps"
+
+
+@pytest.mark.parametrize("times", [[2**53, 2**53 + 1], [10**1000]])
+def test_time_conversion_cannot_collapse_order_or_overflow(times: list[int]) -> None:
+    """Published float times retain strict order even when source integers differ."""
+    spec = _spec()
+    spec["impulses"] = [
+        {
+            "time": time,
+            "updates": [{"target": "x[unit]", "operation": "add", "expr": "1"}],
+        }
+        for time in times
+    ]
+    with pytest.raises(InvalidRhsSpecError, match="finite and strictly increasing"):
+        compile_spec(spec)
+
+
+@pytest.mark.parametrize("mode", ["declared", "detect", "fix"])
+def test_event_covariance_must_be_verified_before_gauge_operations(mode: str) -> None:
+    """A fixed additive event does not share the continuous logistic scale freedom."""
+    spec: dict[str, object] = {
+        "kind": "expr",
+        "state": ["x"],
+        "equations": {"x": "a*x*(1-x/K)"},
+        "observables": {"fraction": {"expr": "x/K"}},
+        "impulses": [
+            {"time": 1.0, "updates": [{"target": "x", "operation": "add", "expr": "1"}]}
+        ],
+    }
+    if mode != "detect":
+        spec["gauges"] = [{"name": "scale", "states": {"x": 1}, "parameters": {"K": 1}}]
+    with pytest.raises(UnsupportedFeatureError, match="impulse"):
+        compile_spec(
+            spec,
+            detect_gauges=mode == "detect",
+            gauge_fix={"K": 1.0} if mode == "fix" else None,
+        )
+
+
+def test_transformed_coordinates_require_an_event_map_contract() -> None:
+    """Applying a physical addition to a log state would silently change its meaning."""
+    spec = _spec()
+    spec["state_metadata"] = {"x": {"scale": "log"}}
+    model = compile_spec(spec)
+    with pytest.raises(UnsupportedFeatureError, match="impulse"):
+        model.coordinate_view()

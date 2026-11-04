@@ -416,11 +416,13 @@ def _build_state_coordinates(natural: CompiledRhs) -> StateCoordinateView:
             template.offset, template.offset + len(template.expanded_names)
         )
     )
-    if indices and (natural.operators or natural.history_requirements):
+    if indices and (
+        natural.operators or natural.history_requirements or natural.impulses
+    ):
         raise UnsupportedFeatureError(
             feature="log state coordinates",
             detail=(
-                "Separate operator/history composition needs "
+                "Separate operator/history/impulse composition needs "
                 "an explicit transformed contract"
             ),
         )
