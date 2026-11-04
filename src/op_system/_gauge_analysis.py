@@ -76,11 +76,17 @@ def _supported(compiled: CompiledRhs, rhs: NormalizedRhs) -> None:
         UnsupportedFeatureError: If full-system verification cannot be claimed.
         InvalidRhsSpecError: If a scaled parameter has a restricted fixed domain.
     """
-    if compiled.operators or compiled.history_requirements or rhs.time_varying_params:
+    if (
+        compiled.operators
+        or compiled.history_requirements
+        or rhs.time_varying_params
+        or compiled.impulses
+    ):
         raise UnsupportedFeatureError(
             feature="scaling gauges",
             detail=(
-                "Operator/history/time-table dynamics need explicit scaling contracts"
+                "Operator/history/time-table/impulse dynamics need "
+                "explicit scaling contracts"
             ),
         )
     for gauge in rhs.meta.get("op_system_gauge_declarations", ()):

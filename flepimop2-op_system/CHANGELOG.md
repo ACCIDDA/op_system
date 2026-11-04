@@ -6,6 +6,11 @@ provider.
 
 ## [Unreleased]
 
+- Forward immutable `impulses`, `impulse_times` and map-only parameter requests.
+  Expose `impulse_rhs` for engines that explicitly validate and execute the
+  schedule. Ordinary steppers reject impulse models, and structured callbacks
+  are withheld, so older engines cannot silently ignore these state maps.
+
 - Replace issue breadcrumbs in the sparse-table provider documentation with
   current supported behavior.
 

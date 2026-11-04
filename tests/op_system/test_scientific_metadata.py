@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, cast
 
 import numpy as np
 import pytest
-from array_api_compat import array_namespace  # type: ignore[import-untyped]
+from array_api_compat import array_namespace
 
 from op_system import AxisDeclaration, AxisMeasure, StateDeclaration, compile_spec
 from op_system._errors import InvalidRhsSpecError

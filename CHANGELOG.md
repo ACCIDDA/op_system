@@ -9,6 +9,21 @@ loosely follows
 
 ## [Unreleased]
 
+### Added
+
+- Compile opt-in static `impulses` with disjoint named-axis selectors and
+  simultaneous add/multiply/set state maps. Publish immutable times, map-only
+  parameter layouts and native NumPy/JAX/Torch evaluators; include schedule
+  definitions in structural identity and trusted pickle reconstruction.
+  Maps return the right-continuous post-event state. Table-driven schedules,
+  automatic balance verification and state-triggered events remain deferred
+  (partial support for #353).
+
+### Fixed
+
+- Remove stale untyped-import suppressions now that current `array-api-compat`
+  releases publish typing metadata.
+
 ## [0.10.0] - 2026-10-23
 
 ### Fixed
