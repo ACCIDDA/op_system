@@ -21,7 +21,7 @@
       
       
       <link rel="icon" href="../../assets/images/favicon.png">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.0">
     
     
       
@@ -29,7 +29,7 @@
       
     
     
-      <link rel="stylesheet" href="../../assets/stylesheets/main.ec1eaa64.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/main.57a0d79d.min.css">
       
       
 
@@ -599,6 +599,34 @@
     
   
     Getting Started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/impulses/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Recorded State Maps
   
 
     
@@ -1591,6 +1619,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#op_system.CompiledImpulse" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CompiledImpulse
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#op_system.CompiledObservable" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1634,6 +1673,17 @@
   
     <nav class="md-nav" aria-label="CompiledRhs">
       <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#op_system.CompiledRhs.impulse_times" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        impulse_times
+      
+    </span>
+  </a>
+  
+</li>
         
           <li class="md-nav__item">
   <a href="#op_system.CompiledRhs.__getstate__" class="md-nav__link">
@@ -1931,6 +1981,17 @@
         
       </ul>
     </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#op_system.ImpulseUpdate" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ImpulseUpdate
+      
+    </span>
+  </a>
   
 </li>
         
@@ -3226,6 +3287,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../impulses/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Impulses
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../numba/" class="md-nav__link">
         
   
@@ -3577,6 +3666,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#op_system.CompiledImpulse" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CompiledImpulse
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#op_system.CompiledObservable" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3620,6 +3720,17 @@
   
     <nav class="md-nav" aria-label="CompiledRhs">
       <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#op_system.CompiledRhs.impulse_times" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        impulse_times
+      
+    </span>
+  </a>
+  
+</li>
         
           <li class="md-nav__item">
   <a href="#op_system.CompiledRhs.__getstate__" class="md-nav__link">
@@ -3917,6 +4028,17 @@
         
       </ul>
     </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#op_system.ImpulseUpdate" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ImpulseUpdate
+      
+    </span>
+  </a>
   
 </li>
         
@@ -5921,6 +6043,134 @@ No second separability analysis is performed by the export.</p>
 
 
 
+<h3 id="op_system.CompiledImpulse" class="doc doc-heading">
+            <code>CompiledImpulse</code>
+
+
+<a href="#op_system.CompiledImpulse" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="typing.NamedTuple">NamedTuple</span></code></p>
+
+
+
+        <p>A static, right-continuous state map with native array evaluators.</p>
+
+
+<p><span class="doc-section-title">Attributes:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code><span title="op_system.CompiledImpulse.time">time</span></code></td>
+            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Finite recorded time, fixed before solving or differentiation.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="op_system.CompiledImpulse.updates">updates</span></code></td>
+            <td>
+                  <code><span title="tuple">tuple</span>[<a class="autorefs autorefs-internal" title="ImpulseUpdate (op_system._impulses.ImpulseUpdate)" href="#op_system.ImpulseUpdate">ImpulseUpdate</a>, ...]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Immutable disjoint update definitions, evaluated simultaneously.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="op_system.CompiledImpulse.parameter_axes">parameter_axes</span></code></td>
+            <td>
+                  <code><span title="tuple">tuple</span>[<span title="tuple">tuple</span>[<span title="str">str</span>, <span title="tuple">tuple</span>[<span title="str">str</span>, ...]], ...]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Required named parameter layouts, separate from the RHS.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="op_system.CompiledImpulse.parameter_shapes">parameter_shapes</span></code></td>
+            <td>
+                  <code><span title="tuple">tuple</span>[<span title="tuple">tuple</span>[<span title="str">str</span>, <span title="tuple">tuple</span>[<span title="int">int</span>, ...]], ...]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Required concrete parameter shapes.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="op_system.CompiledImpulse.eval_fn">eval_fn</span></code></td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="ObservableEvalFn (op_system._observables.ObservableEvalFn)" href="#op_system.ObservableEvalFn">ObservableEvalFn</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Map a complete flat pre-event state to the post-event state.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="op_system.CompiledImpulse.pytree_eval_fn">pytree_eval_fn</span></code></td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="ObservablePytreeEvalFn (op_system._observables.ObservablePytreeEvalFn)" href="#op_system.ObservablePytreeEvalFn">ObservablePytreeEvalFn</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Equivalent map on complete shaped state buffers.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
 <h3 id="op_system.CompiledObservable" class="doc doc-heading">
             <code>CompiledObservable</code>
 
@@ -6240,7 +6490,7 @@ cell is then built from <code>to_axes</code> (copied), <code>pinned</code> (fixe
 
 
 <h3 id="op_system.CompiledRhs" class="doc doc-heading">
-              <code class="highlight language-python"><span class="n">CompiledRhs</span><span class="p">(</span><span class="n">state_names</span><span class="p">,</span> <span class="n">param_names</span><span class="p">,</span> <span class="n">eval_fn</span><span class="p">,</span> <span class="n">meta</span><span class="o">=</span><span class="p">(</span><span class="k">lambda</span><span class="p">:</span> <span class="n">MappingProxyType</span><span class="p">({}))(),</span> <span class="n">operators</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(),</span> <span class="n">factorize_axes</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(),</span> <span class="n">block_axes</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(),</span> <span class="n">pytree_eval_fn</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">template_shapes</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">block_pytree_eval_fn</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">block_template_shapes</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">history_requirements</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(),</span> <span class="n">history_eval_fn</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">body_eval_fn</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">block_history_eval_fn</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">block_body_eval_fn</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">reactions</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(),</span> <span class="n">reaction_gaps</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(),</span> <span class="n">_rhs</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">param_meta</span><span class="o">=</span><span class="p">(</span><span class="k">lambda</span><span class="p">:</span> <span class="n">MappingProxyType</span><span class="p">({}))(),</span> <span class="n">state_meta</span><span class="o">=</span><span class="p">(</span><span class="k">lambda</span><span class="p">:</span> <span class="n">MappingProxyType</span><span class="p">({}))(),</span> <span class="n">axis_meta</span><span class="o">=</span><span class="p">(</span><span class="k">lambda</span><span class="p">:</span> <span class="n">MappingProxyType</span><span class="p">({}))(),</span> <span class="n">observables</span><span class="o">=</span><span class="p">(</span><span class="k">lambda</span><span class="p">:</span> <span class="n">MappingProxyType</span><span class="p">({}))(),</span> <span class="n">gauges</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">gauge_fix</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
+              <code class="highlight language-python"><span class="n">CompiledRhs</span><span class="p">(</span><span class="n">state_names</span><span class="p">,</span> <span class="n">param_names</span><span class="p">,</span> <span class="n">eval_fn</span><span class="p">,</span> <span class="n">meta</span><span class="o">=</span><span class="p">(</span><span class="k">lambda</span><span class="p">:</span> <span class="n">MappingProxyType</span><span class="p">({}))(),</span> <span class="n">operators</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(),</span> <span class="n">factorize_axes</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(),</span> <span class="n">block_axes</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(),</span> <span class="n">pytree_eval_fn</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">template_shapes</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">block_pytree_eval_fn</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">block_template_shapes</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">history_requirements</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(),</span> <span class="n">history_eval_fn</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">body_eval_fn</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">block_history_eval_fn</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">block_body_eval_fn</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">reactions</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(),</span> <span class="n">reaction_gaps</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(),</span> <span class="n">_rhs</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">param_meta</span><span class="o">=</span><span class="p">(</span><span class="k">lambda</span><span class="p">:</span> <span class="n">MappingProxyType</span><span class="p">({}))(),</span> <span class="n">state_meta</span><span class="o">=</span><span class="p">(</span><span class="k">lambda</span><span class="p">:</span> <span class="n">MappingProxyType</span><span class="p">({}))(),</span> <span class="n">axis_meta</span><span class="o">=</span><span class="p">(</span><span class="k">lambda</span><span class="p">:</span> <span class="n">MappingProxyType</span><span class="p">({}))(),</span> <span class="n">observables</span><span class="o">=</span><span class="p">(</span><span class="k">lambda</span><span class="p">:</span> <span class="n">MappingProxyType</span><span class="p">({}))(),</span> <span class="n">gauges</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">gauge_fix</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">impulses</span><span class="o">=</span><span class="p">())</span></code>
 
   <span class="doc doc-labels">
       <small class="doc doc-label doc-label-dataclass"><code>dataclass</code></small>
@@ -6281,6 +6531,28 @@ outputs for identical inputs.</p>
 
 
 
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="op_system.CompiledRhs.impulse_times" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">impulse_times</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+<a href="#op_system.CompiledRhs.impulse_times" class="headerlink" title="Permanent link">&para;</a></h4>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Immutable recorded times; maps return right-continuous post-event states.</p>
+
+    </div>
+
+</div>
 
 
 
@@ -6330,17 +6602,7 @@ via :func:<code>compile_rhs</code>).</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/op_system/compile.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">619</span>
-<span class="normal">620</span>
-<span class="normal">621</span>
-<span class="normal">622</span>
-<span class="normal">623</span>
-<span class="normal">624</span>
-<span class="normal">625</span>
-<span class="normal">626</span>
-<span class="normal">627</span>
-<span class="normal">628</span>
-<span class="normal">629</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">629</span>
 <span class="normal">630</span>
 <span class="normal">631</span>
 <span class="normal">632</span>
@@ -6350,7 +6612,17 @@ via :func:<code>compile_rhs</code>).</p>
 <span class="normal">636</span>
 <span class="normal">637</span>
 <span class="normal">638</span>
-<span class="normal">639</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">__getstate__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="normal">639</span>
+<span class="normal">640</span>
+<span class="normal">641</span>
+<span class="normal">642</span>
+<span class="normal">643</span>
+<span class="normal">644</span>
+<span class="normal">645</span>
+<span class="normal">646</span>
+<span class="normal">647</span>
+<span class="normal">648</span>
+<span class="normal">649</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">__getstate__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
 <span class="w">    </span><span class="sd">"""Return picklable state.</span>
 
 <span class="sd">    The compiled ``eval_fn`` is a closure (and on the vectorized path</span>
@@ -6393,17 +6665,7 @@ via :func:<code>compile_rhs</code>).</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/op_system/compile.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">641</span>
-<span class="normal">642</span>
-<span class="normal">643</span>
-<span class="normal">644</span>
-<span class="normal">645</span>
-<span class="normal">646</span>
-<span class="normal">647</span>
-<span class="normal">648</span>
-<span class="normal">649</span>
-<span class="normal">650</span>
-<span class="normal">651</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">651</span>
 <span class="normal">652</span>
 <span class="normal">653</span>
 <span class="normal">654</span>
@@ -6422,7 +6684,18 @@ via :func:<code>compile_rhs</code>).</p>
 <span class="normal">667</span>
 <span class="normal">668</span>
 <span class="normal">669</span>
-<span class="normal">670</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">__setstate__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="normal">670</span>
+<span class="normal">671</span>
+<span class="normal">672</span>
+<span class="normal">673</span>
+<span class="normal">674</span>
+<span class="normal">675</span>
+<span class="normal">676</span>
+<span class="normal">677</span>
+<span class="normal">678</span>
+<span class="normal">679</span>
+<span class="normal">680</span>
+<span class="normal">681</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">__setstate__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Restore by recompiling from the pickled :class:`NormalizedRhs`."""</span>
     <span class="n">rhs</span> <span class="o">=</span> <span class="n">state</span><span class="p">[</span><span class="s2">"_rhs"</span><span class="p">]</span>
     <span class="n">rebuilt</span> <span class="o">=</span> <span class="n">compile_rhs</span><span class="p">(</span><span class="n">rhs</span><span class="p">)</span>
@@ -6433,6 +6706,7 @@ via :func:<code>compile_rhs</code>).</p>
     <span class="nb">object</span><span class="o">.</span><span class="fm">__setattr__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">"state_meta"</span><span class="p">,</span> <span class="n">rebuilt</span><span class="o">.</span><span class="n">state_meta</span><span class="p">)</span>
     <span class="nb">object</span><span class="o">.</span><span class="fm">__setattr__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">"axis_meta"</span><span class="p">,</span> <span class="n">rebuilt</span><span class="o">.</span><span class="n">axis_meta</span><span class="p">)</span>
     <span class="nb">object</span><span class="o">.</span><span class="fm">__setattr__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">"observables"</span><span class="p">,</span> <span class="n">rebuilt</span><span class="o">.</span><span class="n">observables</span><span class="p">)</span>
+    <span class="nb">object</span><span class="o">.</span><span class="fm">__setattr__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">"impulses"</span><span class="p">,</span> <span class="n">rebuilt</span><span class="o">.</span><span class="n">impulses</span><span class="p">)</span>
     <span class="nb">object</span><span class="o">.</span><span class="fm">__setattr__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">"gauges"</span><span class="p">,</span> <span class="n">rebuilt</span><span class="o">.</span><span class="n">gauges</span><span class="p">)</span>
     <span class="nb">object</span><span class="o">.</span><span class="fm">__setattr__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">"gauge_fix"</span><span class="p">,</span> <span class="n">rebuilt</span><span class="o">.</span><span class="n">gauge_fix</span><span class="p">)</span>
     <span class="nb">object</span><span class="o">.</span><span class="fm">__setattr__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">"eval_fn"</span><span class="p">,</span> <span class="n">rebuilt</span><span class="o">.</span><span class="n">eval_fn</span><span class="p">)</span>
@@ -6528,23 +6802,23 @@ via :func:<code>compile_rhs</code>).</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/op_system/compile.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">601</span>
-<span class="normal">602</span>
-<span class="normal">603</span>
-<span class="normal">604</span>
-<span class="normal">605</span>
-<span class="normal">606</span>
-<span class="normal">607</span>
-<span class="normal">608</span>
-<span class="normal">609</span>
-<span class="normal">610</span>
-<span class="normal">611</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">611</span>
 <span class="normal">612</span>
 <span class="normal">613</span>
 <span class="normal">614</span>
 <span class="normal">615</span>
 <span class="normal">616</span>
-<span class="normal">617</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">bind</span><span class="p">(</span>
+<span class="normal">617</span>
+<span class="normal">618</span>
+<span class="normal">619</span>
+<span class="normal">620</span>
+<span class="normal">621</span>
+<span class="normal">622</span>
+<span class="normal">623</span>
+<span class="normal">624</span>
+<span class="normal">625</span>
+<span class="normal">626</span>
+<span class="normal">627</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">bind</span><span class="p">(</span>
     <span class="bp">self</span><span class="p">,</span> <span class="n">params</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">object</span><span class="p">]</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Callable</span><span class="p">[[</span><span class="nb">object</span><span class="p">,</span> <span class="nb">object</span><span class="p">],</span> <span class="n">Float64Array</span><span class="p">]:</span>
 <span class="w">    </span><span class="sd">"""Bind parameter values and return a 2-arg RHS: rhs(t, y) -&gt; dydt.</span>
@@ -6624,16 +6898,16 @@ via :func:<code>compile_rhs</code>).</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/op_system/compile.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">590</span>
-<span class="normal">591</span>
-<span class="normal">592</span>
-<span class="normal">593</span>
-<span class="normal">594</span>
-<span class="normal">595</span>
-<span class="normal">596</span>
-<span class="normal">597</span>
-<span class="normal">598</span>
-<span class="normal">599</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">coordinate_view</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">StateCoordinateView</span><span class="p">:</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">600</span>
+<span class="normal">601</span>
+<span class="normal">602</span>
+<span class="normal">603</span>
+<span class="normal">604</span>
+<span class="normal">605</span>
+<span class="normal">606</span>
+<span class="normal">607</span>
+<span class="normal">608</span>
+<span class="normal">609</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">coordinate_view</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">StateCoordinateView</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Build deterministic evaluators in the declared state coordinates.</span>
 
 <span class="sd">    Returns:</span>
@@ -8493,6 +8767,101 @@ explicitly select supported record/operation types before evaluation.</p>
     </div>
 
 </div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="op_system.ImpulseUpdate" class="doc doc-heading">
+            <code>ImpulseUpdate</code>
+
+
+<a href="#op_system.ImpulseUpdate" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="typing.NamedTuple">NamedTuple</span></code></p>
+
+
+
+        <p>One disjoint state selection and its pre-event expression.</p>
+
+
+<p><span class="doc-section-title">Attributes:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code><span title="op_system.ImpulseUpdate.target">target</span></code></td>
+            <td>
+                  <code><span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Existing named state selector, including any pinned coordinates.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="op_system.ImpulseUpdate.operation">operation</span></code></td>
+            <td>
+                  <code><span title="typing.Literal">Literal</span>[&#39;add&#39;, &#39;multiply&#39;, &#39;set&#39;]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Add, multiply or replace selected pre-event values.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="op_system.ImpulseUpdate.expression">expression</span></code></td>
+            <td>
+                  <code><span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Pointwise arithmetic expression in the existing state layout.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
 
 
 
@@ -11680,6 +12049,8 @@ source-only transition or an <code>expr</code> spec.</p>
 <li><code>gauge_fix_requires_jump_contract</code>: equation/output covariance
   does not verify a jump process's distribution. Gauge-fixed models
   omit reaction exports until a separate jump contract is supplied.</li>
+<li><code>scheduled_state_maps</code>: static impulses need an impulse-aware
+  solver; reaction callbacks alone omit these state changes.</li>
 <li><code>expr_spec</code>: an <code>expr</code> spec, whose equations are not
   decomposed into transitions.</li>
 </ul>
@@ -11953,7 +12324,7 @@ balance laws or original derivative-affinity claims in solver coordinates.</p>
           <tr class="doc-section-item">
             <td><code><span title="op_system.StateCoordinateView.natural">natural</span></code></td>
             <td>
-                  <code><a class="autorefs autorefs-internal" title="CompiledRhs(state_names, param_names, eval_fn, meta=(lambda: MappingProxyType({}))(), operators=tuple(), factorize_axes=tuple(), block_axes=tuple(), pytree_eval_fn=None, template_shapes=None, block_pytree_eval_fn=None, block_template_shapes=None, history_requirements=tuple(), history_eval_fn=None, body_eval_fn=None, block_history_eval_fn=None, block_body_eval_fn=None, reactions=tuple(), reaction_gaps=tuple(), _rhs=None, param_meta=(lambda: MappingProxyType({}))(), state_meta=(lambda: MappingProxyType({}))(), axis_meta=(lambda: MappingProxyType({}))(), observables=(lambda: MappingProxyType({}))(), gauges=None, gauge_fix=None)
+                  <code><a class="autorefs autorefs-internal" title="CompiledRhs(state_names, param_names, eval_fn, meta=(lambda: MappingProxyType({}))(), operators=tuple(), factorize_axes=tuple(), block_axes=tuple(), pytree_eval_fn=None, template_shapes=None, block_pytree_eval_fn=None, block_template_shapes=None, history_requirements=tuple(), history_eval_fn=None, body_eval_fn=None, block_history_eval_fn=None, block_body_eval_fn=None, reactions=tuple(), reaction_gaps=tuple(), _rhs=None, param_meta=(lambda: MappingProxyType({}))(), state_meta=(lambda: MappingProxyType({}))(), axis_meta=(lambda: MappingProxyType({}))(), observables=(lambda: MappingProxyType({}))(), gauges=None, gauge_fix=None, impulses=())
 
   
       dataclass
@@ -12179,7 +12550,7 @@ balance laws or original derivative-affinity claims in solver coordinates.</p>
       <tbody>
           <tr class="doc-section-item">
             <td>
-                  <code><span title="tuple">tuple</span>[<span title="object">object</span>, <span title="tuple">tuple</span>[<a class="autorefs autorefs-internal" title="CompiledRhs(state_names, param_names, eval_fn, meta=(lambda: MappingProxyType({}))(), operators=tuple(), factorize_axes=tuple(), block_axes=tuple(), pytree_eval_fn=None, template_shapes=None, block_pytree_eval_fn=None, block_template_shapes=None, history_requirements=tuple(), history_eval_fn=None, body_eval_fn=None, block_history_eval_fn=None, block_body_eval_fn=None, reactions=tuple(), reaction_gaps=tuple(), _rhs=None, param_meta=(lambda: MappingProxyType({}))(), state_meta=(lambda: MappingProxyType({}))(), axis_meta=(lambda: MappingProxyType({}))(), observables=(lambda: MappingProxyType({}))(), gauges=None, gauge_fix=None)
+                  <code><span title="tuple">tuple</span>[<span title="object">object</span>, <span title="tuple">tuple</span>[<a class="autorefs autorefs-internal" title="CompiledRhs(state_names, param_names, eval_fn, meta=(lambda: MappingProxyType({}))(), operators=tuple(), factorize_axes=tuple(), block_axes=tuple(), pytree_eval_fn=None, template_shapes=None, block_pytree_eval_fn=None, block_template_shapes=None, history_requirements=tuple(), history_eval_fn=None, body_eval_fn=None, block_history_eval_fn=None, block_body_eval_fn=None, reactions=tuple(), reaction_gaps=tuple(), _rhs=None, param_meta=(lambda: MappingProxyType({}))(), state_meta=(lambda: MappingProxyType({}))(), axis_meta=(lambda: MappingProxyType({}))(), observables=(lambda: MappingProxyType({}))(), gauges=None, gauge_fix=None, impulses=())
 
   
       dataclass
@@ -13755,7 +14126,7 @@ followed immediately by bracketed dimensions like <code>"R[age,vax]"</code>.</p>
                 <code>compiled</code>
             </td>
             <td>
-                  <code><a class="autorefs autorefs-internal" title="CompiledRhs(state_names, param_names, eval_fn, meta=(lambda: MappingProxyType({}))(), operators=tuple(), factorize_axes=tuple(), block_axes=tuple(), pytree_eval_fn=None, template_shapes=None, block_pytree_eval_fn=None, block_template_shapes=None, history_requirements=tuple(), history_eval_fn=None, body_eval_fn=None, block_history_eval_fn=None, block_body_eval_fn=None, reactions=tuple(), reaction_gaps=tuple(), _rhs=None, param_meta=(lambda: MappingProxyType({}))(), state_meta=(lambda: MappingProxyType({}))(), axis_meta=(lambda: MappingProxyType({}))(), observables=(lambda: MappingProxyType({}))(), gauges=None, gauge_fix=None)
+                  <code><a class="autorefs autorefs-internal" title="CompiledRhs(state_names, param_names, eval_fn, meta=(lambda: MappingProxyType({}))(), operators=tuple(), factorize_axes=tuple(), block_axes=tuple(), pytree_eval_fn=None, template_shapes=None, block_pytree_eval_fn=None, block_template_shapes=None, history_requirements=tuple(), history_eval_fn=None, body_eval_fn=None, block_history_eval_fn=None, block_body_eval_fn=None, reactions=tuple(), reaction_gaps=tuple(), _rhs=None, param_meta=(lambda: MappingProxyType({}))(), state_meta=(lambda: MappingProxyType({}))(), axis_meta=(lambda: MappingProxyType({}))(), observables=(lambda: MappingProxyType({}))(), gauges=None, gauge_fix=None, impulses=())
 
   
       dataclass
@@ -15281,7 +15652,7 @@ from the input <code>y</code>. Will be removed in a future release.</p>
       <tbody>
           <tr class="doc-section-item">
             <td>
-                  <code><a class="autorefs autorefs-internal" title="CompiledRhs(state_names, param_names, eval_fn, meta=(lambda: MappingProxyType({}))(), operators=tuple(), factorize_axes=tuple(), block_axes=tuple(), pytree_eval_fn=None, template_shapes=None, block_pytree_eval_fn=None, block_template_shapes=None, history_requirements=tuple(), history_eval_fn=None, body_eval_fn=None, block_history_eval_fn=None, block_body_eval_fn=None, reactions=tuple(), reaction_gaps=tuple(), _rhs=None, param_meta=(lambda: MappingProxyType({}))(), state_meta=(lambda: MappingProxyType({}))(), axis_meta=(lambda: MappingProxyType({}))(), observables=(lambda: MappingProxyType({}))(), gauges=None, gauge_fix=None)
+                  <code><a class="autorefs autorefs-internal" title="CompiledRhs(state_names, param_names, eval_fn, meta=(lambda: MappingProxyType({}))(), operators=tuple(), factorize_axes=tuple(), block_axes=tuple(), pytree_eval_fn=None, template_shapes=None, block_pytree_eval_fn=None, block_template_shapes=None, history_requirements=tuple(), history_eval_fn=None, body_eval_fn=None, block_history_eval_fn=None, block_body_eval_fn=None, reactions=tuple(), reaction_gaps=tuple(), _rhs=None, param_meta=(lambda: MappingProxyType({}))(), state_meta=(lambda: MappingProxyType({}))(), axis_meta=(lambda: MappingProxyType({}))(), observables=(lambda: MappingProxyType({}))(), gauges=None, gauge_fix=None, impulses=())
 
   
       dataclass
@@ -15295,7 +15666,7 @@ from the input <code>y</code>. Will be removed in a future release.</p>
           </tr>
           <tr class="doc-section-item">
             <td>
-                  <code><a class="autorefs autorefs-internal" title="CompiledRhs(state_names, param_names, eval_fn, meta=(lambda: MappingProxyType({}))(), operators=tuple(), factorize_axes=tuple(), block_axes=tuple(), pytree_eval_fn=None, template_shapes=None, block_pytree_eval_fn=None, block_template_shapes=None, history_requirements=tuple(), history_eval_fn=None, body_eval_fn=None, block_history_eval_fn=None, block_body_eval_fn=None, reactions=tuple(), reaction_gaps=tuple(), _rhs=None, param_meta=(lambda: MappingProxyType({}))(), state_meta=(lambda: MappingProxyType({}))(), axis_meta=(lambda: MappingProxyType({}))(), observables=(lambda: MappingProxyType({}))(), gauges=None, gauge_fix=None)
+                  <code><a class="autorefs autorefs-internal" title="CompiledRhs(state_names, param_names, eval_fn, meta=(lambda: MappingProxyType({}))(), operators=tuple(), factorize_axes=tuple(), block_axes=tuple(), pytree_eval_fn=None, template_shapes=None, block_pytree_eval_fn=None, block_template_shapes=None, history_requirements=tuple(), history_eval_fn=None, body_eval_fn=None, block_history_eval_fn=None, block_body_eval_fn=None, reactions=tuple(), reaction_gaps=tuple(), _rhs=None, param_meta=(lambda: MappingProxyType({}))(), state_meta=(lambda: MappingProxyType({}))(), axis_meta=(lambda: MappingProxyType({}))(), observables=(lambda: MappingProxyType({}))(), gauges=None, gauge_fix=None, impulses=())
 
   
       dataclass
@@ -15309,7 +15680,7 @@ from the input <code>y</code>. Will be removed in a future release.</p>
           </tr>
           <tr class="doc-section-item">
             <td>
-                  <code><a class="autorefs autorefs-internal" title="CompiledRhs(state_names, param_names, eval_fn, meta=(lambda: MappingProxyType({}))(), operators=tuple(), factorize_axes=tuple(), block_axes=tuple(), pytree_eval_fn=None, template_shapes=None, block_pytree_eval_fn=None, block_template_shapes=None, history_requirements=tuple(), history_eval_fn=None, body_eval_fn=None, block_history_eval_fn=None, block_body_eval_fn=None, reactions=tuple(), reaction_gaps=tuple(), _rhs=None, param_meta=(lambda: MappingProxyType({}))(), state_meta=(lambda: MappingProxyType({}))(), axis_meta=(lambda: MappingProxyType({}))(), observables=(lambda: MappingProxyType({}))(), gauges=None, gauge_fix=None)
+                  <code><a class="autorefs autorefs-internal" title="CompiledRhs(state_names, param_names, eval_fn, meta=(lambda: MappingProxyType({}))(), operators=tuple(), factorize_axes=tuple(), block_axes=tuple(), pytree_eval_fn=None, template_shapes=None, block_pytree_eval_fn=None, block_template_shapes=None, history_requirements=tuple(), history_eval_fn=None, body_eval_fn=None, block_history_eval_fn=None, block_body_eval_fn=None, reactions=tuple(), reaction_gaps=tuple(), _rhs=None, param_meta=(lambda: MappingProxyType({}))(), state_meta=(lambda: MappingProxyType({}))(), axis_meta=(lambda: MappingProxyType({}))(), observables=(lambda: MappingProxyType({}))(), gauges=None, gauge_fix=None, impulses=())
 
   
       dataclass
@@ -15323,7 +15694,7 @@ from the input <code>y</code>. Will be removed in a future release.</p>
           </tr>
           <tr class="doc-section-item">
             <td>
-                  <code><a class="autorefs autorefs-internal" title="CompiledRhs(state_names, param_names, eval_fn, meta=(lambda: MappingProxyType({}))(), operators=tuple(), factorize_axes=tuple(), block_axes=tuple(), pytree_eval_fn=None, template_shapes=None, block_pytree_eval_fn=None, block_template_shapes=None, history_requirements=tuple(), history_eval_fn=None, body_eval_fn=None, block_history_eval_fn=None, block_body_eval_fn=None, reactions=tuple(), reaction_gaps=tuple(), _rhs=None, param_meta=(lambda: MappingProxyType({}))(), state_meta=(lambda: MappingProxyType({}))(), axis_meta=(lambda: MappingProxyType({}))(), observables=(lambda: MappingProxyType({}))(), gauges=None, gauge_fix=None)
+                  <code><a class="autorefs autorefs-internal" title="CompiledRhs(state_names, param_names, eval_fn, meta=(lambda: MappingProxyType({}))(), operators=tuple(), factorize_axes=tuple(), block_axes=tuple(), pytree_eval_fn=None, template_shapes=None, block_pytree_eval_fn=None, block_template_shapes=None, history_requirements=tuple(), history_eval_fn=None, body_eval_fn=None, block_history_eval_fn=None, block_body_eval_fn=None, reactions=tuple(), reaction_gaps=tuple(), _rhs=None, param_meta=(lambda: MappingProxyType({}))(), state_meta=(lambda: MappingProxyType({}))(), axis_meta=(lambda: MappingProxyType({}))(), observables=(lambda: MappingProxyType({}))(), gauges=None, gauge_fix=None, impulses=())
 
   
       dataclass
@@ -15337,7 +15708,7 @@ from the input <code>y</code>. Will be removed in a future release.</p>
           </tr>
           <tr class="doc-section-item">
             <td>
-                  <code><a class="autorefs autorefs-internal" title="CompiledRhs(state_names, param_names, eval_fn, meta=(lambda: MappingProxyType({}))(), operators=tuple(), factorize_axes=tuple(), block_axes=tuple(), pytree_eval_fn=None, template_shapes=None, block_pytree_eval_fn=None, block_template_shapes=None, history_requirements=tuple(), history_eval_fn=None, body_eval_fn=None, block_history_eval_fn=None, block_body_eval_fn=None, reactions=tuple(), reaction_gaps=tuple(), _rhs=None, param_meta=(lambda: MappingProxyType({}))(), state_meta=(lambda: MappingProxyType({}))(), axis_meta=(lambda: MappingProxyType({}))(), observables=(lambda: MappingProxyType({}))(), gauges=None, gauge_fix=None)
+                  <code><a class="autorefs autorefs-internal" title="CompiledRhs(state_names, param_names, eval_fn, meta=(lambda: MappingProxyType({}))(), operators=tuple(), factorize_axes=tuple(), block_axes=tuple(), pytree_eval_fn=None, template_shapes=None, block_pytree_eval_fn=None, block_template_shapes=None, history_requirements=tuple(), history_eval_fn=None, body_eval_fn=None, block_history_eval_fn=None, block_body_eval_fn=None, reactions=tuple(), reaction_gaps=tuple(), _rhs=None, param_meta=(lambda: MappingProxyType({}))(), state_meta=(lambda: MappingProxyType({}))(), axis_meta=(lambda: MappingProxyType({}))(), observables=(lambda: MappingProxyType({}))(), gauges=None, gauge_fix=None, impulses=())
 
   
       dataclass
@@ -15351,7 +15722,7 @@ from the input <code>y</code>. Will be removed in a future release.</p>
           </tr>
           <tr class="doc-section-item">
             <td>
-                  <code><a class="autorefs autorefs-internal" title="CompiledRhs(state_names, param_names, eval_fn, meta=(lambda: MappingProxyType({}))(), operators=tuple(), factorize_axes=tuple(), block_axes=tuple(), pytree_eval_fn=None, template_shapes=None, block_pytree_eval_fn=None, block_template_shapes=None, history_requirements=tuple(), history_eval_fn=None, body_eval_fn=None, block_history_eval_fn=None, block_body_eval_fn=None, reactions=tuple(), reaction_gaps=tuple(), _rhs=None, param_meta=(lambda: MappingProxyType({}))(), state_meta=(lambda: MappingProxyType({}))(), axis_meta=(lambda: MappingProxyType({}))(), observables=(lambda: MappingProxyType({}))(), gauges=None, gauge_fix=None)
+                  <code><a class="autorefs autorefs-internal" title="CompiledRhs(state_names, param_names, eval_fn, meta=(lambda: MappingProxyType({}))(), operators=tuple(), factorize_axes=tuple(), block_axes=tuple(), pytree_eval_fn=None, template_shapes=None, block_pytree_eval_fn=None, block_template_shapes=None, history_requirements=tuple(), history_eval_fn=None, body_eval_fn=None, block_history_eval_fn=None, block_body_eval_fn=None, reactions=tuple(), reaction_gaps=tuple(), _rhs=None, param_meta=(lambda: MappingProxyType({}))(), state_meta=(lambda: MappingProxyType({}))(), axis_meta=(lambda: MappingProxyType({}))(), observables=(lambda: MappingProxyType({}))(), gauges=None, gauge_fix=None, impulses=())
 
   
       dataclass
@@ -15369,18 +15740,7 @@ from the input <code>y</code>. Will be removed in a future release.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/op_system/compile.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">2574</span>
-<span class="normal">2575</span>
-<span class="normal">2576</span>
-<span class="normal">2577</span>
-<span class="normal">2578</span>
-<span class="normal">2579</span>
-<span class="normal">2580</span>
-<span class="normal">2581</span>
-<span class="normal">2582</span>
-<span class="normal">2583</span>
-<span class="normal">2584</span>
-<span class="normal">2585</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">2585</span>
 <span class="normal">2586</span>
 <span class="normal">2587</span>
 <span class="normal">2588</span>
@@ -15525,7 +15885,24 @@ from the input <code>y</code>. Will be removed in a future release.</p>
 <span class="normal">2727</span>
 <span class="normal">2728</span>
 <span class="normal">2729</span>
-<span class="normal">2730</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">compile_rhs</span><span class="p">(</span>  <span class="c1"># ruff: ignore[too-many-locals]</span>
+<span class="normal">2730</span>
+<span class="normal">2731</span>
+<span class="normal">2732</span>
+<span class="normal">2733</span>
+<span class="normal">2734</span>
+<span class="normal">2735</span>
+<span class="normal">2736</span>
+<span class="normal">2737</span>
+<span class="normal">2738</span>
+<span class="normal">2739</span>
+<span class="normal">2740</span>
+<span class="normal">2741</span>
+<span class="normal">2742</span>
+<span class="normal">2743</span>
+<span class="normal">2744</span>
+<span class="normal">2745</span>
+<span class="normal">2746</span>
+<span class="normal">2747</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">compile_rhs</span><span class="p">(</span>  <span class="c1"># ruff: ignore[too-many-locals]</span>
     <span class="n">rhs</span><span class="p">:</span> <span class="n">NormalizedRhs</span><span class="p">,</span>
     <span class="o">*</span><span class="p">,</span>
     <span class="n">xp</span><span class="p">:</span> <span class="nb">object</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -15665,6 +16042,7 @@ from the input <code>y</code>. Will be removed in a future release.</p>
         <span class="p">),</span>
         <span class="n">operators</span><span class="o">=</span><span class="n">_parse_operator_descriptors</span><span class="p">(</span><span class="n">rhs</span><span class="o">.</span><span class="n">meta</span><span class="p">),</span>
         <span class="n">observables</span><span class="o">=</span><span class="n">MappingProxyType</span><span class="p">(</span><span class="n">_compile_observables</span><span class="p">(</span><span class="n">rhs</span><span class="p">)),</span>
+        <span class="n">impulses</span><span class="o">=</span><span class="n">_compile_impulses</span><span class="p">(</span><span class="n">rhs</span><span class="p">),</span>
         <span class="n">factorize_axes</span><span class="o">=</span><span class="n">_parse_factorize_axes</span><span class="p">(</span><span class="n">rhs</span><span class="o">.</span><span class="n">meta</span><span class="p">),</span>
         <span class="n">block_axes</span><span class="o">=</span><span class="n">block_axes</span><span class="p">,</span>
         <span class="n">pytree_eval_fn</span><span class="o">=</span><span class="n">pytree_eval_fn</span><span class="p">,</span>
@@ -15677,7 +16055,12 @@ from the input <code>y</code>. Will be removed in a future release.</p>
         <span class="n">block_history_eval_fn</span><span class="o">=</span><span class="n">block_history_eval_fn</span><span class="p">,</span>
         <span class="n">block_body_eval_fn</span><span class="o">=</span><span class="n">block_body_eval_fn</span><span class="p">,</span>
         <span class="n">reactions</span><span class="o">=</span><span class="n">reaction_artifacts</span><span class="o">.</span><span class="n">reactions</span><span class="p">,</span>
-        <span class="n">reaction_gaps</span><span class="o">=</span><span class="n">reaction_artifacts</span><span class="o">.</span><span class="n">gaps</span><span class="p">,</span>
+        <span class="n">reaction_gaps</span><span class="o">=</span><span class="n">reaction_artifacts</span><span class="o">.</span><span class="n">gaps</span>
+        <span class="o">+</span> <span class="p">(</span>
+            <span class="p">(</span><span class="n">ReactionGap</span><span class="p">(</span><span class="s2">"impulses"</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="s2">"scheduled_state_maps"</span><span class="p">),)</span>
+            <span class="k">if</span> <span class="n">rhs</span><span class="o">.</span><span class="n">meta</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"op_system_impulses_ir"</span><span class="p">)</span>
+            <span class="k">else</span> <span class="p">()</span>
+        <span class="p">),</span>
         <span class="n">_rhs</span><span class="o">=</span><span class="n">rhs</span><span class="p">,</span>
     <span class="p">)</span>
 
@@ -15820,7 +16203,7 @@ removed in a future release.</p>
       <tbody>
           <tr class="doc-section-item">
 <td><code>CompiledRhs</code></td>            <td>
-                  <code><a class="autorefs autorefs-internal" title="CompiledRhs(state_names, param_names, eval_fn, meta=(lambda: MappingProxyType({}))(), operators=tuple(), factorize_axes=tuple(), block_axes=tuple(), pytree_eval_fn=None, template_shapes=None, block_pytree_eval_fn=None, block_template_shapes=None, history_requirements=tuple(), history_eval_fn=None, body_eval_fn=None, block_history_eval_fn=None, block_body_eval_fn=None, reactions=tuple(), reaction_gaps=tuple(), _rhs=None, param_meta=(lambda: MappingProxyType({}))(), state_meta=(lambda: MappingProxyType({}))(), axis_meta=(lambda: MappingProxyType({}))(), observables=(lambda: MappingProxyType({}))(), gauges=None, gauge_fix=None)
+                  <code><a class="autorefs autorefs-internal" title="CompiledRhs(state_names, param_names, eval_fn, meta=(lambda: MappingProxyType({}))(), operators=tuple(), factorize_axes=tuple(), block_axes=tuple(), pytree_eval_fn=None, template_shapes=None, block_pytree_eval_fn=None, block_template_shapes=None, history_requirements=tuple(), history_eval_fn=None, body_eval_fn=None, block_history_eval_fn=None, block_body_eval_fn=None, reactions=tuple(), reaction_gaps=tuple(), _rhs=None, param_meta=(lambda: MappingProxyType({}))(), state_meta=(lambda: MappingProxyType({}))(), axis_meta=(lambda: MappingProxyType({}))(), observables=(lambda: MappingProxyType({}))(), gauges=None, gauge_fix=None, impulses=())
 
   
       dataclass
@@ -15852,8 +16235,7 @@ removed in a future release.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/op_system/__init__.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">141</span>
-<span class="normal">142</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">142</span>
 <span class="normal">143</span>
 <span class="normal">144</span>
 <span class="normal">145</span>
@@ -15911,7 +16293,8 @@ removed in a future release.</p>
 <span class="normal">197</span>
 <span class="normal">198</span>
 <span class="normal">199</span>
-<span class="normal">200</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">compile_spec</span><span class="p">(</span>  <span class="c1"># ruff: ignore[non-empty-init-module]</span>
+<span class="normal">200</span>
+<span class="normal">201</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">compile_spec</span><span class="p">(</span>  <span class="c1"># ruff: ignore[non-empty-init-module]</span>
     <span class="n">spec</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">object</span><span class="p">],</span>
     <span class="o">*</span><span class="p">,</span>
     <span class="n">xp</span><span class="p">:</span> <span class="nb">object</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -16011,7 +16394,7 @@ and zero runtime coefficients. Only existing checked block axes are copied.</p>
                 <code>compiled</code>
             </td>
             <td>
-                  <code><a class="autorefs autorefs-internal" title="CompiledRhs(state_names, param_names, eval_fn, meta=(lambda: MappingProxyType({}))(), operators=tuple(), factorize_axes=tuple(), block_axes=tuple(), pytree_eval_fn=None, template_shapes=None, block_pytree_eval_fn=None, block_template_shapes=None, history_requirements=tuple(), history_eval_fn=None, body_eval_fn=None, block_history_eval_fn=None, block_body_eval_fn=None, reactions=tuple(), reaction_gaps=tuple(), _rhs=None, param_meta=(lambda: MappingProxyType({}))(), state_meta=(lambda: MappingProxyType({}))(), axis_meta=(lambda: MappingProxyType({}))(), observables=(lambda: MappingProxyType({}))(), gauges=None, gauge_fix=None)
+                  <code><a class="autorefs autorefs-internal" title="CompiledRhs(state_names, param_names, eval_fn, meta=(lambda: MappingProxyType({}))(), operators=tuple(), factorize_axes=tuple(), block_axes=tuple(), pytree_eval_fn=None, template_shapes=None, block_pytree_eval_fn=None, block_template_shapes=None, history_requirements=tuple(), history_eval_fn=None, body_eval_fn=None, block_history_eval_fn=None, block_body_eval_fn=None, reactions=tuple(), reaction_gaps=tuple(), _rhs=None, param_meta=(lambda: MappingProxyType({}))(), state_meta=(lambda: MappingProxyType({}))(), axis_meta=(lambda: MappingProxyType({}))(), observables=(lambda: MappingProxyType({}))(), gauges=None, gauge_fix=None, impulses=())
 
   
       dataclass
@@ -17388,24 +17771,7 @@ target quadrature has been applied.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/op_system/_normalize.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">431</span>
-<span class="normal">432</span>
-<span class="normal">433</span>
-<span class="normal">434</span>
-<span class="normal">435</span>
-<span class="normal">436</span>
-<span class="normal">437</span>
-<span class="normal">438</span>
-<span class="normal">439</span>
-<span class="normal">440</span>
-<span class="normal">441</span>
-<span class="normal">442</span>
-<span class="normal">443</span>
-<span class="normal">444</span>
-<span class="normal">445</span>
-<span class="normal">446</span>
-<span class="normal">447</span>
-<span class="normal">448</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">448</span>
 <span class="normal">449</span>
 <span class="normal">450</span>
 <span class="normal">451</span>
@@ -17626,7 +17992,24 @@ target quadrature has been applied.</p>
 <span class="normal">666</span>
 <span class="normal">667</span>
 <span class="normal">668</span>
-<span class="normal">669</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">normalize_expr_rhs</span><span class="p">(</span><span class="n">spec</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">ExprRhs</span><span class="p">:</span>  <span class="c1"># ruff: ignore[complex-structure, too-many-locals, too-many-statements]</span>
+<span class="normal">669</span>
+<span class="normal">670</span>
+<span class="normal">671</span>
+<span class="normal">672</span>
+<span class="normal">673</span>
+<span class="normal">674</span>
+<span class="normal">675</span>
+<span class="normal">676</span>
+<span class="normal">677</span>
+<span class="normal">678</span>
+<span class="normal">679</span>
+<span class="normal">680</span>
+<span class="normal">681</span>
+<span class="normal">682</span>
+<span class="normal">683</span>
+<span class="normal">684</span>
+<span class="normal">685</span>
+<span class="normal">686</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">normalize_expr_rhs</span><span class="p">(</span><span class="n">spec</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">ExprRhs</span><span class="p">:</span>  <span class="c1"># ruff: ignore[complex-structure, too-many-locals, too-many-statements]</span>
 <span class="w">    </span><span class="sd">"""Normalize an expression-based RHS specification.</span>
 
 <span class="sd">    Args:</span>
@@ -17974,24 +18357,7 @@ target quadrature has been applied.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/op_system/_normalize.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">401</span>
-<span class="normal">402</span>
-<span class="normal">403</span>
-<span class="normal">404</span>
-<span class="normal">405</span>
-<span class="normal">406</span>
-<span class="normal">407</span>
-<span class="normal">408</span>
-<span class="normal">409</span>
-<span class="normal">410</span>
-<span class="normal">411</span>
-<span class="normal">412</span>
-<span class="normal">413</span>
-<span class="normal">414</span>
-<span class="normal">415</span>
-<span class="normal">416</span>
-<span class="normal">417</span>
-<span class="normal">418</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">418</span>
 <span class="normal">419</span>
 <span class="normal">420</span>
 <span class="normal">421</span>
@@ -18001,7 +18367,24 @@ target quadrature has been applied.</p>
 <span class="normal">425</span>
 <span class="normal">426</span>
 <span class="normal">427</span>
-<span class="normal">428</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">normalize_rhs</span><span class="p">(</span><span class="n">spec</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">NormalizedRhs</span><span class="p">:</span>
+<span class="normal">428</span>
+<span class="normal">429</span>
+<span class="normal">430</span>
+<span class="normal">431</span>
+<span class="normal">432</span>
+<span class="normal">433</span>
+<span class="normal">434</span>
+<span class="normal">435</span>
+<span class="normal">436</span>
+<span class="normal">437</span>
+<span class="normal">438</span>
+<span class="normal">439</span>
+<span class="normal">440</span>
+<span class="normal">441</span>
+<span class="normal">442</span>
+<span class="normal">443</span>
+<span class="normal">444</span>
+<span class="normal">445</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">normalize_rhs</span><span class="p">(</span><span class="n">spec</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">NormalizedRhs</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Normalize a RHS specification dict into a backend-facing representation.</span>
 
 <span class="sd">    Args:</span>
@@ -18101,24 +18484,7 @@ target quadrature has been applied.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/op_system/_normalize.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1983</span>
-<span class="normal">1984</span>
-<span class="normal">1985</span>
-<span class="normal">1986</span>
-<span class="normal">1987</span>
-<span class="normal">1988</span>
-<span class="normal">1989</span>
-<span class="normal">1990</span>
-<span class="normal">1991</span>
-<span class="normal">1992</span>
-<span class="normal">1993</span>
-<span class="normal">1994</span>
-<span class="normal">1995</span>
-<span class="normal">1996</span>
-<span class="normal">1997</span>
-<span class="normal">1998</span>
-<span class="normal">1999</span>
-<span class="normal">2000</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">2000</span>
 <span class="normal">2001</span>
 <span class="normal">2002</span>
 <span class="normal">2003</span>
@@ -18506,7 +18872,24 @@ target quadrature has been applied.</p>
 <span class="normal">2385</span>
 <span class="normal">2386</span>
 <span class="normal">2387</span>
-<span class="normal">2388</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">normalize_transitions_rhs</span><span class="p">(</span>  <span class="c1"># ruff: ignore[complex-structure, too-many-branches, too-many-locals, too-many-statements]</span>
+<span class="normal">2388</span>
+<span class="normal">2389</span>
+<span class="normal">2390</span>
+<span class="normal">2391</span>
+<span class="normal">2392</span>
+<span class="normal">2393</span>
+<span class="normal">2394</span>
+<span class="normal">2395</span>
+<span class="normal">2396</span>
+<span class="normal">2397</span>
+<span class="normal">2398</span>
+<span class="normal">2399</span>
+<span class="normal">2400</span>
+<span class="normal">2401</span>
+<span class="normal">2402</span>
+<span class="normal">2403</span>
+<span class="normal">2404</span>
+<span class="normal">2405</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">normalize_transitions_rhs</span><span class="p">(</span>  <span class="c1"># ruff: ignore[complex-structure, too-many-branches, too-many-locals, too-many-statements]</span>
     <span class="n">spec</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TransitionsRhs</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Normalize a transition-based RHS specification (diagram/hazard semantics).</span>
@@ -18948,7 +19331,7 @@ target quadrature has been applied.</p>
                 <code>compiled</code>
             </td>
             <td>
-                  <code><a class="autorefs autorefs-internal" title="CompiledRhs(state_names, param_names, eval_fn, meta=(lambda: MappingProxyType({}))(), operators=tuple(), factorize_axes=tuple(), block_axes=tuple(), pytree_eval_fn=None, template_shapes=None, block_pytree_eval_fn=None, block_template_shapes=None, history_requirements=tuple(), history_eval_fn=None, body_eval_fn=None, block_history_eval_fn=None, block_body_eval_fn=None, reactions=tuple(), reaction_gaps=tuple(), _rhs=None, param_meta=(lambda: MappingProxyType({}))(), state_meta=(lambda: MappingProxyType({}))(), axis_meta=(lambda: MappingProxyType({}))(), observables=(lambda: MappingProxyType({}))(), gauges=None, gauge_fix=None)
+                  <code><a class="autorefs autorefs-internal" title="CompiledRhs(state_names, param_names, eval_fn, meta=(lambda: MappingProxyType({}))(), operators=tuple(), factorize_axes=tuple(), block_axes=tuple(), pytree_eval_fn=None, template_shapes=None, block_pytree_eval_fn=None, block_template_shapes=None, history_requirements=tuple(), history_eval_fn=None, body_eval_fn=None, block_history_eval_fn=None, block_body_eval_fn=None, reactions=tuple(), reaction_gaps=tuple(), _rhs=None, param_meta=(lambda: MappingProxyType({}))(), state_meta=(lambda: MappingProxyType({}))(), axis_meta=(lambda: MappingProxyType({}))(), observables=(lambda: MappingProxyType({}))(), gauges=None, gauge_fix=None, impulses=())
 
   
       dataclass
@@ -19344,7 +19727,7 @@ omitted terms are never assigned zero flux. Propensities are not evaluated.</p>
                 <code>compiled</code>
             </td>
             <td>
-                  <code><a class="autorefs autorefs-internal" title="CompiledRhs(state_names, param_names, eval_fn, meta=(lambda: MappingProxyType({}))(), operators=tuple(), factorize_axes=tuple(), block_axes=tuple(), pytree_eval_fn=None, template_shapes=None, block_pytree_eval_fn=None, block_template_shapes=None, history_requirements=tuple(), history_eval_fn=None, body_eval_fn=None, block_history_eval_fn=None, block_body_eval_fn=None, reactions=tuple(), reaction_gaps=tuple(), _rhs=None, param_meta=(lambda: MappingProxyType({}))(), state_meta=(lambda: MappingProxyType({}))(), axis_meta=(lambda: MappingProxyType({}))(), observables=(lambda: MappingProxyType({}))(), gauges=None, gauge_fix=None)
+                  <code><a class="autorefs autorefs-internal" title="CompiledRhs(state_names, param_names, eval_fn, meta=(lambda: MappingProxyType({}))(), operators=tuple(), factorize_axes=tuple(), block_axes=tuple(), pytree_eval_fn=None, template_shapes=None, block_pytree_eval_fn=None, block_template_shapes=None, history_requirements=tuple(), history_eval_fn=None, body_eval_fn=None, block_history_eval_fn=None, block_body_eval_fn=None, reactions=tuple(), reaction_gaps=tuple(), _rhs=None, param_meta=(lambda: MappingProxyType({}))(), state_meta=(lambda: MappingProxyType({}))(), axis_meta=(lambda: MappingProxyType({}))(), observables=(lambda: MappingProxyType({}))(), gauges=None, gauge_fix=None, impulses=())
 
   
       dataclass
@@ -19633,7 +20016,7 @@ The bounded dense symbolic API remains available separately for NumPy.</p>
                 <code>compiled</code>
             </td>
             <td>
-                  <code><a class="autorefs autorefs-internal" title="CompiledRhs(state_names, param_names, eval_fn, meta=(lambda: MappingProxyType({}))(), operators=tuple(), factorize_axes=tuple(), block_axes=tuple(), pytree_eval_fn=None, template_shapes=None, block_pytree_eval_fn=None, block_template_shapes=None, history_requirements=tuple(), history_eval_fn=None, body_eval_fn=None, block_history_eval_fn=None, block_body_eval_fn=None, reactions=tuple(), reaction_gaps=tuple(), _rhs=None, param_meta=(lambda: MappingProxyType({}))(), state_meta=(lambda: MappingProxyType({}))(), axis_meta=(lambda: MappingProxyType({}))(), observables=(lambda: MappingProxyType({}))(), gauges=None, gauge_fix=None)
+                  <code><a class="autorefs autorefs-internal" title="CompiledRhs(state_names, param_names, eval_fn, meta=(lambda: MappingProxyType({}))(), operators=tuple(), factorize_axes=tuple(), block_axes=tuple(), pytree_eval_fn=None, template_shapes=None, block_pytree_eval_fn=None, block_template_shapes=None, history_requirements=tuple(), history_eval_fn=None, body_eval_fn=None, block_history_eval_fn=None, block_body_eval_fn=None, reactions=tuple(), reaction_gaps=tuple(), _rhs=None, param_meta=(lambda: MappingProxyType({}))(), state_meta=(lambda: MappingProxyType({}))(), axis_meta=(lambda: MappingProxyType({}))(), observables=(lambda: MappingProxyType({}))(), gauges=None, gauge_fix=None, impulses=())
 
   
       dataclass
@@ -19945,7 +20328,7 @@ The bounded dense symbolic API remains available separately for NumPy.</p>
                 <code>compiled</code>
             </td>
             <td>
-                  <code><a class="autorefs autorefs-internal" title="CompiledRhs(state_names, param_names, eval_fn, meta=(lambda: MappingProxyType({}))(), operators=tuple(), factorize_axes=tuple(), block_axes=tuple(), pytree_eval_fn=None, template_shapes=None, block_pytree_eval_fn=None, block_template_shapes=None, history_requirements=tuple(), history_eval_fn=None, body_eval_fn=None, block_history_eval_fn=None, block_body_eval_fn=None, reactions=tuple(), reaction_gaps=tuple(), _rhs=None, param_meta=(lambda: MappingProxyType({}))(), state_meta=(lambda: MappingProxyType({}))(), axis_meta=(lambda: MappingProxyType({}))(), observables=(lambda: MappingProxyType({}))(), gauges=None, gauge_fix=None)
+                  <code><a class="autorefs autorefs-internal" title="CompiledRhs(state_names, param_names, eval_fn, meta=(lambda: MappingProxyType({}))(), operators=tuple(), factorize_axes=tuple(), block_axes=tuple(), pytree_eval_fn=None, template_shapes=None, block_pytree_eval_fn=None, block_template_shapes=None, history_requirements=tuple(), history_eval_fn=None, body_eval_fn=None, block_history_eval_fn=None, block_body_eval_fn=None, reactions=tuple(), reaction_gaps=tuple(), _rhs=None, param_meta=(lambda: MappingProxyType({}))(), state_meta=(lambda: MappingProxyType({}))(), axis_meta=(lambda: MappingProxyType({}))(), observables=(lambda: MappingProxyType({}))(), gauges=None, gauge_fix=None, impulses=())
 
   
       dataclass
@@ -21171,10 +21554,10 @@ orchestration boundary, not inside a traced numerical solve.</p>
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": [], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"provider": "mike"}}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": [], "search": "../../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"provider": "mike"}}</script>
     
     
-      <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
+      <script src="../../assets/javascripts/bundle.c21346df.min.js"></script>
       
     
   </body>
