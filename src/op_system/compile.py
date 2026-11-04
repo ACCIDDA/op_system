@@ -38,7 +38,7 @@ from typing import (
 )
 
 import numpy as np
-from array_api_compat import device as _device  # type: ignore[import-untyped]
+from array_api_compat import device as _device
 from numpy.typing import NDArray
 
 from op_system._array import array_namespace

@@ -32,7 +32,7 @@ from itertools import combinations as _comb
 from typing import TYPE_CHECKING, Any, Protocol, cast
 
 import numpy as np
-from array_api_compat import numpy as _numpy_namespace  # type: ignore[import-untyped]
+from array_api_compat import numpy as _numpy_namespace
 
 from op_system._array import _asarray, array_namespace
 from op_system._ir import (

@@ -9,6 +9,11 @@ loosely follows
 
 ## [Unreleased]
 
+### Fixed
+
+- Remove stale untyped-import suppressions now that current `array-api-compat`
+  releases publish typing metadata.
+
 ## [0.10.0] - 2026-10-23
 
 ### Fixed
