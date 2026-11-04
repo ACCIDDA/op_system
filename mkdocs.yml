@@ -57,6 +57,7 @@ nav:
       - Citation and Archiving: development/citation-and-archiving.md
   - Guides:
       - Getting Started: guides/getting-started.md
+      - Recorded State Maps: guides/impulses.md
       - Parameter Declarations: guides/parameter-declarations.md
       - Structural Model Identity: guides/structural-identity.md
       - Portable IR and Derivatives: guides/portable-ir.md
@@ -92,6 +93,7 @@ nav:
       - Dependencies: api-reference/dependencies.md
       - Gauges: api-reference/gauges.md
       - Identity: api-reference/identity.md
+      - Impulses: api-reference/impulses.md
       - Numba: api-reference/numba.md
       - Observables: api-reference/observables.md
       - Portable: api-reference/portable.md

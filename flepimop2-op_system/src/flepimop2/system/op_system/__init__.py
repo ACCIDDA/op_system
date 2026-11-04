@@ -54,7 +54,7 @@ else:
     from typing_extensions import override
 from pydantic import ConfigDict, Field
 
-from op_system import CompiledReaction, CompiledRhs, compile_spec
+from op_system import CompiledImpulse, CompiledReaction, CompiledRhs, compile_spec
 
 _DISTRIBUTION_NAME = "flepimop2-op-system"
 _UNKNOWN_VERSION = "0+unknown"
@@ -122,6 +122,14 @@ class OpSystemSystem(SystemABC, module="flepimop2.system.op_system"):  # ruff: i
             mixing_kernels=mixing_kernels,
         )
 
+        if compiled.impulses:
+            self.options["impulse_rhs"] = self._make_stepper(
+                compiled=compiled, mixing_kernels=mixing_kernels, allow_impulses=True
+            )
+            self.options["impulses"] = self._make_impulse_steppers(
+                compiled=compiled, mixing_kernels=mixing_kernels
+            )
+
         self._stepper = self._make_stepper(
             compiled=compiled, mixing_kernels=mixing_kernels
         )
@@ -167,6 +175,22 @@ class OpSystemSystem(SystemABC, module="flepimop2.system.op_system"):  # ruff: i
             compiled=compiled,
             mixing_kernels=mixing_kernels,
         )
+        if compiled.impulses:
+            self._stepper_pytree = None
+            self._stepper_block_pytree = None
+            self._stepper_history = None
+            self._stepper_body_eval = None
+            self._stepper_block_history = None
+            self._stepper_block_body_eval = None
+            for option in (
+                "pytree_stepper_fn",
+                "block_pytree_stepper_fn",
+                "history_stepper_fn",
+                "body_eval_fn",
+                "block_history_stepper_fn",
+                "block_body_eval_fn",
+            ):
+                self.options[option] = None
 
     @staticmethod
     def _extract_axis_labels(compiled: CompiledRhs) -> dict[str, tuple[str, ...]]:
@@ -226,6 +250,8 @@ class OpSystemSystem(SystemABC, module="flepimop2.system.op_system"):  # ruff: i
             "time_interpolation": compiled.meta.get("time_interpolation", "linear"),
             "time_coordinates": compiled.meta.get("time_coordinates", ()),
             "forcing_breakpoints": compiled.meta.get("forcing_breakpoints", ()),
+            "impulse_times": compiled.impulse_times,
+            "impulses": (),
             "state_names": compiled.state_names,
             "initial_state": compiled.meta.get("initial_state"),
             "state_shape": shape_dims,
@@ -254,6 +280,7 @@ class OpSystemSystem(SystemABC, module="flepimop2.system.op_system"):  # ruff: i
         *,
         compiled: CompiledRhs,
         mixing_kernels: Mapping[str, np.ndarray],
+        allow_impulses: bool = False,
     ) -> Callable[[np.float64, Array], Array]:
         """Build scalar-vector stepper wrapper around compiled.eval_fn.
 
@@ -267,6 +294,12 @@ class OpSystemSystem(SystemABC, module="flepimop2.system.op_system"):  # ruff: i
             state: Array,
             **kwargs: Any,  # ruff: ignore[any-type]
         ) -> Array:
+            if compiled.impulses and not allow_impulses:
+                msg = (
+                    "This model declares impulses; an impulse-aware engine must "
+                    "validate the schedule and use option('impulse_rhs')."
+                )
+                raise NotImplementedError(msg)
             shape = getattr(state, "shape", None)
             if shape != (n_state,):
                 msg = (
@@ -278,6 +311,26 @@ class OpSystemSystem(SystemABC, module="flepimop2.system.op_system"):  # ruff: i
             return compiled.eval_fn(time, state, **params)
 
         return _stepper
+
+    @staticmethod
+    def _make_impulse_steppers(
+        *, compiled: CompiledRhs, mixing_kernels: Mapping[str, np.ndarray]
+    ) -> tuple[CompiledImpulse, ...]:
+        """Forward recorded maps with the same static parameter binding as the RHS.
+
+        Returns:
+            Immutable records with kernel-aware flat maps.
+        """
+
+        def wrap(event: CompiledImpulse) -> CompiledImpulse:
+            def evaluate(t: object, y: object, **params: object) -> object:
+                return event.eval_fn(
+                    t, y, **OpSystemSystem._merged_params(mixing_kernels, params)
+                )
+
+            return event._replace(eval_fn=evaluate)
+
+        return tuple(wrap(event) for event in compiled.impulses)
 
     @staticmethod
     def _make_reaction_steppers(
@@ -589,6 +642,10 @@ class OpSystemSystem(SystemABC, module="flepimop2.system.op_system"):  # ruff: i
             ):
                 continue
             requests[name] = ParameterRequest(name=name)
+        for event in self._compiled_rhs.impulses:
+            for name, parameter_axes in event.parameter_axes:
+                if name not in mixing_kernel_names:
+                    requests[name] = ParameterRequest(name=name, axes=parameter_axes)
         init_map = (self.options or {}).get("initial_state") or {}
         for entry in init_map.values():
             if isinstance(entry, float):

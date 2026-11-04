@@ -48,6 +48,7 @@ from op_system._helpers import (
     _get_required_str,
     _sorted_unique,
 )
+from op_system._impulses import _normalize_impulses
 from op_system._infer_reactants import REACTANTS_AUTO
 from op_system._ir import (
     Apply,
@@ -226,6 +227,12 @@ def _finish_observables(rhs: _RhsT, spec: Mapping[str, Any]) -> _RhsT:
         The same RHS variant without altering equation parameter requirements.
     """
     observables = _normalize_observables(spec.get("observables"), rhs=rhs)
+    observable_meta = dict(rhs.meta)
+    if observables:
+        observable_meta["op_system_observables_ir"] = observables
+    impulses = _normalize_impulses(
+        spec.get("impulses"), rhs=replace(rhs, meta=observable_meta)
+    )
     known_names = (
         set(rhs.param_names)
         | set(dict(rhs.shaped_params))
@@ -234,7 +241,17 @@ def _finish_observables(rhs: _RhsT, spec: Mapping[str, Any]) -> _RhsT:
     known_names.update(
         name for observable in observables for name, _ in observable.parameter_axes
     )
-    metadata = dict(rhs.meta)
+    known_names.update(
+        name
+        for event in impulses
+        for update in event.updates
+        for name, _ in update.observable.parameter_axes
+    )
+    metadata = observable_meta
+    if impulses:
+        metadata["op_system_impulses_ir"] = impulses
+        metadata["impulse_times"] = tuple(event.time for event in impulses)
+        metadata["impulse_convention"] = "right-continuous"
     metadata.update(
         _parameter_declaration_metadata(
             spec.get("parameters"),

@@ -306,6 +306,8 @@ class ReactionGap:
             - ``gauge_fix_requires_jump_contract``: equation/output covariance
               does not verify a jump process's distribution. Gauge-fixed models
               omit reaction exports until a separate jump contract is supplied.
+            - ``scheduled_state_maps``: static impulses need an impulse-aware
+              solver; reaction callbacks alone omit these state changes.
             - ``expr_spec``: an ``expr`` spec, whose equations are not
               decomposed into transitions.
     """

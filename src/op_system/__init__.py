@@ -84,6 +84,7 @@ from .gauges import (
     ScalingGauge,
 )
 from .identity import StructuralModelIdentity, structural_model_json
+from .impulses import CompiledImpulse, ImpulseUpdate
 from .observables import CompiledObservable, ObservableEvalFn, ObservablePytreeEvalFn
 from .portable import IRRecord, PortableIR, export_ir
 from .qualification import (
@@ -219,6 +220,7 @@ __all__ = [
     "BlockAxisInfo",
     "BlockStructure",
     "BodyEvalFn",
+    "CompiledImpulse",
     "CompiledObservable",
     "CompiledReactant",
     "CompiledReaction",
@@ -236,6 +238,7 @@ __all__ = [
     "GaugeVerification",
     "IRRecord",
     "IdentifierString",
+    "ImpulseUpdate",
     "InvariantCheck",
     "InvariantCoordinate",
     "JuliaExport",

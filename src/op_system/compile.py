@@ -50,6 +50,7 @@ from op_system._block_axes import (
 from op_system._errors import InvalidExpressionError, UnsupportedFeatureError
 from op_system._gauge_analysis import _analyze_gauges
 from op_system._gauge_fix import _fix_gauge
+from op_system._impulses import CompiledImpulse, _compile_impulses
 from op_system._ir import (
     Expr,
     HistoryOp,
@@ -587,6 +588,15 @@ class CompiledRhs:
     gauges: GaugeInfo | None = field(default=None, compare=False, hash=False)
     gauge_fix: GaugeFixMap | None = field(default=None, compare=False, hash=False)
 
+    impulses: tuple[CompiledImpulse, ...] = field(
+        default=(), compare=False, hash=False, repr=False
+    )
+
+    @property
+    def impulse_times(self) -> tuple[float, ...]:
+        """Immutable recorded times; maps return right-continuous post-event states."""
+        return tuple(event.time for event in self.impulses)
+
     def coordinate_view(self) -> StateCoordinateView:
         """Build deterministic evaluators in the declared state coordinates.
 
@@ -649,6 +659,7 @@ class CompiledRhs:
         object.__setattr__(self, "state_meta", rebuilt.state_meta)
         object.__setattr__(self, "axis_meta", rebuilt.axis_meta)
         object.__setattr__(self, "observables", rebuilt.observables)
+        object.__setattr__(self, "impulses", rebuilt.impulses)
         object.__setattr__(self, "gauges", rebuilt.gauges)
         object.__setattr__(self, "gauge_fix", rebuilt.gauge_fix)
         object.__setattr__(self, "eval_fn", rebuilt.eval_fn)
@@ -2711,6 +2722,7 @@ def compile_rhs(  # ruff: ignore[too-many-locals]
         ),
         operators=_parse_operator_descriptors(rhs.meta),
         observables=MappingProxyType(_compile_observables(rhs)),
+        impulses=_compile_impulses(rhs),
         factorize_axes=_parse_factorize_axes(rhs.meta),
         block_axes=block_axes,
         pytree_eval_fn=pytree_eval_fn,
@@ -2723,7 +2735,12 @@ def compile_rhs(  # ruff: ignore[too-many-locals]
         block_history_eval_fn=block_history_eval_fn,
         block_body_eval_fn=block_body_eval_fn,
         reactions=reaction_artifacts.reactions,
-        reaction_gaps=reaction_artifacts.gaps,
+        reaction_gaps=reaction_artifacts.gaps
+        + (
+            (ReactionGap("impulses", None, None, None, "scheduled_state_maps"),)
+            if rhs.meta.get("op_system_impulses_ir")
+            else ()
+        ),
         _rhs=rhs,
     )
 
