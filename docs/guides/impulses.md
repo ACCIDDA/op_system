@@ -45,7 +45,10 @@ whole-axis/subset overlaps) fail during normalization.
 Each update supplies `target`, `operation` and `expr`. `add` adds the expression
 value to the pre-event state, `multiply` multiplies it, and `set` replaces it.
 All expressions see the same pre-event state, regardless of declaration order.
-Unselected coordinates remain unchanged. The input is never mutated.
+Unselected coordinates remain unchanged. Arithmetic is evaluated only at selected
+coordinates, so an invalid value in an unrelated cell cannot contaminate a
+selected map's native gradient. Explicit cross-coordinate references retain their
+meaning. The input is never mutated.
 
 The initial expression subset is pointwise arithmetic and `np.exp`, with scalar
 or named-axis state and parameter references. Literal coordinate references

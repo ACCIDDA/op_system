@@ -335,3 +335,63 @@ def test_transformed_coordinates_require_an_event_map_contract() -> None:
     model = compile_spec(spec)
     with pytest.raises(UnsupportedFeatureError, match="impulse"):
         model.coordinate_view()
+
+
+@pytest.mark.parametrize("backend", ["jax", "torch"])
+@pytest.mark.parametrize("source", ["state", "parameter", "explicit"])
+def test_selected_domains_isolate_native_gradients(backend: str, source: str) -> None:
+    """Unselected zeros never enter reciprocal arithmetic; explicit reads remain."""
+    expressions = {
+        "state": "1/x[unit]",
+        "parameter": "1/gain[unit]",
+        "explicit": "x['b']",
+    }
+    spec: dict[str, object] = {
+        "kind": "expr",
+        "axes": [{"name": "unit", "coords": ["a", "b"]}],
+        "state": ["x[unit]"],
+        "equations": {"x[unit]": "0"},
+        "impulses": [
+            {
+                "time": 1.0,
+                "updates": [
+                    {
+                        "target": "x[unit=a]",
+                        "operation": "set",
+                        "expr": expressions[source],
+                    }
+                ],
+            }
+        ],
+    }
+    event = compile_spec(spec).impulses[0]
+    input_values = [2.0, 3.0] if source == "explicit" else [2.0, 0.0]
+    expected_values = [3.0, 3.0] if source == "explicit" else [0.5, 0.0]
+    expected_gradient = {
+        "state": [-0.25, 1.0],
+        "parameter": [-0.25, 0.0],
+        "explicit": [0.0, 2.0],
+    }[source]
+    if backend == "jax":
+        jax = pytest.importorskip("jax")
+        xp = pytest.importorskip("jax.numpy")
+        argument = xp.asarray(input_values)
+
+        def evaluate(value: object) -> object:
+            return event.eval_fn(
+                1.0, argument if source == "parameter" else value, gain=value
+            )
+
+        np.testing.assert_array_equal(
+            np.asarray(jax.jit(evaluate)(argument)), expected_values
+        )
+        gradient = jax.grad(lambda value: xp.sum(evaluate(value)))(argument)
+        np.testing.assert_array_equal(np.asarray(gradient), expected_gradient)
+    else:
+        torch = pytest.importorskip("torch")
+        argument = torch.tensor(input_values, dtype=torch.float64, requires_grad=True)
+        state = argument.detach() if source == "parameter" else argument
+        output = cast("Any", event.eval_fn(1.0, state, gain=argument))
+        np.testing.assert_array_equal(output.detach().numpy(), expected_values)
+        output.sum().backward()
+        np.testing.assert_array_equal(argument.grad.numpy(), expected_gradient)

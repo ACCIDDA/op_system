@@ -7,12 +7,12 @@ from collections.abc import Mapping
 from dataclasses import replace
 from itertools import product
 from numbers import Real
-from typing import TYPE_CHECKING, Literal, NamedTuple, cast
+from typing import TYPE_CHECKING, Literal, NamedTuple, Protocol, cast
 
 from op_system._array import array_namespace
 from op_system._errors import InvalidRhsSpecError
+from op_system._ir import AxisIndex, walk
 from op_system._ir import Literal as LiteralExpr
-from op_system._ir import walk
 from op_system._observables import (
     CompiledObservable,
     ObservableEvalFn,
@@ -21,11 +21,16 @@ from op_system._observables import (
     _normalize_observables,
     _ObservableIR,
 )
+from op_system._reactions import _apply_axis_substitution
 from op_system._templates import PinnedToken, parse_selector
 
 if TYPE_CHECKING:
     from op_system.compile import _Indexable
     from op_system.specs import NormalizedRhs
+
+
+class _Selectable(Protocol):
+    def __getitem__(self, key: tuple[slice | int, ...]) -> object: ...
 
 
 class ImpulseUpdate(NamedTuple):
@@ -66,6 +71,7 @@ class _ImpulseUpdateIR(NamedTuple):
     definition: ImpulseUpdate
     base: str
     mask: tuple[bool, ...]
+    selection: tuple[int | None, ...]
     observable: _ObservableIR
 
 
@@ -74,11 +80,13 @@ class _ImpulseIR(NamedTuple):
     updates: tuple[_ImpulseUpdateIR, ...]
 
 
-def _target(value: object, rhs: NormalizedRhs) -> tuple[str, tuple[bool, ...]]:
+def _target(
+    value: object, rhs: NormalizedRhs
+) -> tuple[str, tuple[bool, ...], tuple[int | None, ...]]:
     """Resolve a selector without expanding or mutating state expressions.
 
     Returns:
-        State base and flattened mask in its declared axis order.
+        State base, flattened mask and slice indices in declared axis order.
 
     Raises:
         InvalidRhsSpecError: If target, axes or coordinates are unknown.
@@ -107,7 +115,11 @@ def _target(value: object, rhs: NormalizedRhs) -> tuple[str, tuple[bool, ...]]:
         )
         for cell in product(*(coordinates[axis] for axis in template.axes))
     )
-    return base, mask
+    selection = tuple(
+        coordinates[axis].index(pinned[axis]) if axis in pinned else None
+        for axis in template.axes
+    )
+    return base, mask, selection
 
 
 def _update(value: object, rhs: NormalizedRhs, index: int) -> _ImpulseUpdateIR:
@@ -123,7 +135,7 @@ def _update(value: object, rhs: NormalizedRhs, index: int) -> _ImpulseUpdateIR:
         raise InvalidRhsSpecError(
             detail="impulse updates require target, operation and expr only"
         )
-    base, mask = _target(value["target"], rhs)
+    base, mask, selection = _target(value["target"], rhs)
     operation = value["operation"]
     if not isinstance(operation, str) or operation not in {"add", "multiply", "set"}:
         raise InvalidRhsSpecError(
@@ -142,6 +154,20 @@ def _update(value: object, rhs: NormalizedRhs, index: int) -> _ImpulseUpdateIR:
         for node in walk(observable.expression)
     ):
         raise InvalidRhsSpecError(detail="impulse expression literals must be finite")
+    _, tokens = parse_selector(value["target"])
+    pinned = {
+        token.axis: AxisIndex(token.axis, token.coord)
+        for token in tokens
+        if isinstance(token, PinnedToken)
+    }
+    # Pin before lowering, so invalid arithmetic in unselected cells is never
+    # evaluated. Explicit expression coordinates retain their own meaning.
+    observable = observable._replace(
+        expression=_apply_axis_substitution(observable.expression, pinned),
+        definition=observable.definition._replace(
+            axes=tuple(axis for axis in axes if axis not in pinned)
+        ),
+    )
     return _ImpulseUpdateIR(
         ImpulseUpdate(
             value["target"],
@@ -150,6 +176,7 @@ def _update(value: object, rhs: NormalizedRhs, index: int) -> _ImpulseUpdateIR:
         ),
         base,
         mask,
+        selection,
         observable,
     )
 
@@ -249,14 +276,24 @@ def _map_evaluators(
         for update, value in zip(event.updates, evaluated, strict=True):
             reference = y[update.base]
             xp = array_namespace(reference)
+            key = tuple(
+                slice(None) if index is None else index for index in update.selection
+            )
+            selected = cast("_Selectable", reference)[key]
             operation = update.definition.operation
             changed = (
-                xp.add(reference, value)
+                xp.add(selected, value)
                 if operation == "add"
-                else xp.multiply(reference, value)
+                else xp.multiply(selected, value)
                 if operation == "multiply"
                 else value
             )
+            shape = getattr(reference, "shape", ())
+            broadcast_shape = tuple(
+                1 if index is not None else size
+                for index, size in zip(update.selection, shape, strict=True)
+            )
+            changed = xp.reshape(changed, broadcast_shape)
             mask = xp.reshape(
                 xp.asarray(update.mask, dtype=xp.bool),
                 getattr(reference, "shape", None),
