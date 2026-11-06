@@ -43,6 +43,15 @@ uv run python examples/named_kernel_products.py
   It declares compartments, categorical mixing, and initial-state metadata and
   references runtime parameters that the compiler infers; a caller still
   supplies state and parameter values and an engine for time integration.
+- [`frailty_serology.py`](frailty_serology.py) represents a gamma random effect
+  on a catalytic force of infection as a categorical `frailty` axis with fixed
+  generalized Gauss-Laguerre quadrature weights. It exposes a conditional
+  apparent seroprevalence that keeps the axis, which a clustered likelihood
+  needs, and a population-marginal integral. It checks the derivative,
+  conservation, the closed form without seroreversion, and convergence across
+  quadrature orders on analytic states. The shape and order are fixed at
+  compile time; it does not integrate in age or fit data. See
+  [Named latent observables](../docs/guides/latent-observables.md#random-effects-as-quadrature-axes).
 - [`independent_reactions.py`](independent_reactions.py) validates and compiles
   one transfer reaction across two independent replicates, with held forcing
   and a named population observable. It evaluates the same fixed state before

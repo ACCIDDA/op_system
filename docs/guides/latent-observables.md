@@ -141,3 +141,30 @@ cell measures apply the discretization owner's widths/volumes to cell averages.
 For the point-rule reference see [SciPy trapezoid](https://docs.scipy.org/doc/scipy/reference/generated/scipy.integrate.trapezoid.html).
 The compiler evaluates the supplied measures with native products and reductions
 so it does not introduce a SciPy runtime or assume a geometry from cell centers.
+
+## Random effects as quadrature axes
+
+A latent random effect with a known distribution can be represented as a
+categorical axis whose `quadrature` measure carries probability weights.
+[`examples/frailty_serology.py`](https://github.com/ACCIDDA/op_system/blob/main/examples/frailty_serology.py)
+scales a catalytic force of infection by gamma-frailty nodes `z[frailty]`,
+supplied as a shaped runtime parameter. Seronegative and seropositive states
+are declared intensive over that measure.
+
+An observable with `axes: [frailty]` keeps the conditional value at each
+node. An observable with `reduction: {kind: integral, axes: [frailty]}`
+returns the population average. These answer different statistical
+questions. The marginal suits independent individuals drawn from the whole
+population. When observations share a random effect, as in a clustered
+survey, the consumer combines the conditional values: it sums
+log-probabilities within each unit under every node, then takes a
+weighted log-sum-exp over nodes. Averaging first would discard that
+dependence.
+
+Measures are static, so the distribution's shape and the quadrature order are
+fixed when compiling. Estimating the shape requires recompiling, or a future
+interface for dynamic integration. The example assumes time is age for a
+cohort entering seronegative at age zero with time-homogeneous rates. Small
+gamma shapes concentrate nodes near zero, so check convergence across orders
+before relying on a chosen order.
+
