@@ -854,6 +854,24 @@
         
       
       
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Latent Observables
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
       <a href="./" class="md-nav__link md-nav__link--active">
         
   
@@ -870,6 +888,36 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#random-effects-as-quadrature-axes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Random effects as quadrature axes
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
       
     </li>
   
@@ -1909,6 +1957,25 @@
     
   
   
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#random-effects-as-quadrature-axes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Random effects as quadrature axes
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
 </nav>
                   </div>
                 </div>
@@ -2051,6 +2118,28 @@ cell measures apply the discretization owner's widths/volumes to cell averages.
 For the point-rule reference see <a href="https://docs.scipy.org/doc/scipy/reference/generated/scipy.integrate.trapezoid.html">SciPy trapezoid</a>.
 The compiler evaluates the supplied measures with native products and reductions
 so it does not introduce a SciPy runtime or assume a geometry from cell centers.</p>
+<h2 id="random-effects-as-quadrature-axes">Random effects as quadrature axes<a class="headerlink" href="#random-effects-as-quadrature-axes" title="Permanent link">&para;</a></h2>
+<p>A latent random effect with a known distribution can be represented as a
+categorical axis whose <code>quadrature</code> measure carries probability weights.
+<a href="https://github.com/ACCIDDA/op_system/blob/main/examples/frailty_serology.py"><code>examples/frailty_serology.py</code></a>
+scales a catalytic force of infection by gamma-frailty nodes <code>z[frailty]</code>,
+supplied as a shaped runtime parameter. Seronegative and seropositive states
+are declared intensive over that measure.</p>
+<p>An observable with <code>axes: [frailty]</code> keeps the conditional value at each
+node. An observable with <code>reduction: {kind: integral, axes: [frailty]}</code>
+returns the population average. These answer different statistical
+questions. The marginal suits independent individuals drawn from the whole
+population. When observations share a random effect, as in a clustered
+survey, the consumer combines the conditional values: it sums
+log-probabilities within each unit under every node, then takes a
+weighted log-sum-exp over nodes. Averaging first would discard that
+dependence.</p>
+<p>Measures are static, so the distribution's shape and the quadrature order are
+fixed when compiling. Estimating the shape requires recompiling, or a future
+interface for dynamic integration. The example assumes time is age for a
+cohort entering seronegative at age zero with time-homogeneous rates. Small
+gamma shapes concentrate nodes near zero, so check convergence across orders
+before relying on a chosen order.</p>
 
 
 
