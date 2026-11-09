@@ -68,6 +68,7 @@ nav:
       - Latent Observables: guides/latent-observables.md
       - Expression Selectors: guides/expression-selectors.md
       - Named Kernel Products: guides/named-kernel-products.md
+      - Conditional Kernel Artifacts: guides/conditional-kernels.md
       - Scaling Gauges: guides/scaling-gauges.md
       - Log State Coordinates: guides/log-state-coordinates.md
       - Global State Totals: guides/global-state-totals.md

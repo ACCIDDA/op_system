@@ -11,6 +11,11 @@ loosely follows
 
 ### Added
 
+- Add immutable eager conditional-kernel tables retaining named joint host and
+  antigen axes, explicit probability reductions and source/solver provenance.
+  Qualify a two-trait ODE-to-discrete-renewal example and nonlinear averaging
+  counterexample. Automatic compiled model binding remains deferred (#360).
+
 - Compile opt-in static `impulses` with disjoint named-axis selectors and
   simultaneous add/multiply/set state maps. Publish immutable times, map-only
   parameter layouts and native NumPy/JAX/Torch evaluators; include schedule
